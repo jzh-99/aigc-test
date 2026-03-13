@@ -56,7 +56,7 @@ export function useBatches() {
       }))
       console.log('[useBatches] mutate completed, new pages:', newPages[0]?.data[0])
       return newPages
-    }, { revalidate: true })
+    }, { revalidate: false })  // Trust SSE data, don't refetch immediately
   }, [mutate])
 
   return {
