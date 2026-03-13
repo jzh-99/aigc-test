@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Download, Maximize2 } from 'lucide-react'
 import { useBatch } from '@/hooks/use-batches'
 import { downloadImage } from '@/lib/download'
+import { translateTaskError } from '@/lib/error-messages'
 
 interface BatchDetailProps {
   batchId: string | null
@@ -163,7 +164,7 @@ function BatchDetailContent({ batch }: { batch: BatchResponse }) {
                     <div className="text-center px-2">
                       <p>失败</p>
                       {task.error_message && (
-                        <p className="mt-1 line-clamp-2 text-[10px]">{task.error_message}</p>
+                        <p className="mt-1 line-clamp-2 text-[10px]">{translateTaskError(task.error_message)}</p>
                       )}
                     </div>
                   ) : task.status === 'processing' ? '生成中' : '等待中'}
