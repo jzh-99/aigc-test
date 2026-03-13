@@ -1,16 +1,21 @@
 import { useAuthStore } from '@/stores/auth-store'
+import { getErrorMessage, translateError } from './error-messages'
 
 const API_BASE = '/api/v1'
 
 export class ApiError extends Error {
   code: string
   status: number
+  originalMessage: string
 
   constructor(status: number, code: string, message: string) {
-    super(message)
+    // 翻译错误信息为中文
+    const translatedMessage = getErrorMessage(code, translateError(message))
+    super(translatedMessage)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.originalMessage = message
   }
 }
 

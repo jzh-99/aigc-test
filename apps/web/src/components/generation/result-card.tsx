@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Loader2, AlertCircle, Download, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { downloadImage } from '@/lib/download'
+import { translateTaskError } from '@/lib/error-messages'
 import { motion } from 'framer-motion'
 
 const fadeIn = {
@@ -59,7 +60,7 @@ export function ResultCard({ task }: ResultCardProps) {
             <AlertCircle className="h-6 w-6 text-error" />
             <Badge variant="destructive">失败</Badge>
             {task.error_message && (
-              <p className="text-xs text-muted-foreground line-clamp-2">{task.error_message}</p>
+              <p className="text-xs text-muted-foreground line-clamp-2">{translateTaskError(task.error_message)}</p>
             )}
           </div>
         </div>
