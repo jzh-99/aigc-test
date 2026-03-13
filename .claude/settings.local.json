@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(codex mcp-server:*)",
+      "mcp__codex__codex",
+      "Bash(codex:*)",
+      "Bash(pnpm db:migrate:*)",
+      "Bash(curl:*)",
+      "WebSearch",
+      "Bash(npx tsc:*)",
+      "Bash(docker exec:*)",
+      "Bash(npx tsx:*)",
+      "Bash(node:*)",
+      "Bash(pnpm:*)",
+      "Bash(ss:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(rm:*)",
+      "Bash(node_modules/.bin/tsx:*)",
+      "Bash(powershell:*)",
+      "Bash(wmic process:*)",
+      "Bash(python3:*)",
+      "Bash(xargs grep:*)",
+      "Bash(cat:*)",
+      "Bash(ssh:*)"
+    ]
+  }
+}

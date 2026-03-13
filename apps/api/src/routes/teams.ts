@@ -1,0 +1,429 @@
+import type { FastifyInstance } from 'fastify'
+import { getDb } from '@aigc/db'
+import { sql } from 'kysely'
+import crypto from 'node:crypto'
+import { teamRoleGuard } from '../plugins/guards.js'
+import type { InviteMemberRequest, UpdateQuotaRequest, TeamMemberRole } from '@aigc/types'
+import rateLimit from '@fastify/rate-limit'
+
+export async function teamRoutes(app: FastifyInstance): Promise<void> {
+
+  // Rate limit invite endpoint: 20 invites per hour per user
+  await app.register(rateLimit, {
+    max: 20,
+    timeWindow: '1 hour',
+    keyGenerator: (request) => `invite:${request.user?.id ?? request.ip}`,
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      success: false,
+      error: { code: 'RATE_LIMITED', message: '邀请操作过于频繁，请稍后再试' },
+    }),
+  })
+
+  // GET /teams/:id — team info + members + credit balance
+  app.get<{ Params: { id: string } }>('/teams/:id', {
+    preHandler: teamRoleGuard('editor'),
+  }, async (request) => {
+    const db = getDb()
+    const team = await db
+      .selectFrom('teams')
+      .select(['id', 'name', 'owner_id', 'plan_tier', 'created_at'])
+      .where('id', '=', request.params.id)
+      .executeTakeFirstOrThrow()
+
+    const members = await db
+      .selectFrom('team_members')
+      .innerJoin('users', 'users.id', 'team_members.user_id')
+      .select([
+        'users.id as user_id', 'users.email', 'users.username', 'users.avatar_url',
+        'team_members.role', 'team_members.credit_quota', 'team_members.credit_used',
+        'team_members.quota_period', 'team_members.quota_reset_at', 'team_members.joined_at',
+      ])
+      .where('team_members.team_id', '=', request.params.id)
+      .execute()
+
+    const creditAccount = await db
+      .selectFrom('credit_accounts')
+      .select(['balance', 'frozen_credits', 'total_earned', 'total_spent'])
+      .where('owner_type', '=', 'team')
+      .where('team_id', '=', request.params.id)
+      .executeTakeFirst()
+
+    return { ...team, members, credits: creditAccount ?? { balance: 0, frozen_credits: 0, total_earned: 0, total_spent: 0 } }
+  })
+
+  // POST /teams/:id/members — invite member by email
+  app.post<{ Params: { id: string }; Body: InviteMemberRequest }>('/teams/:id/members', {
+    preHandler: teamRoleGuard('owner'),
+    schema: {
+      body: {
+        type: 'object',
+        required: ['email'],
+        properties: {
+          email: { type: 'string', format: 'email', maxLength: 254 },
+          role: { type: 'string', enum: ['editor', 'viewer', 'admin', 'owner'] },
+          workspace_id: { type: 'string', format: 'uuid' },
+          new_workspace_name: { type: 'string', maxLength: 100 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { email, role, workspace_id, new_workspace_name } = request.body
+    const memberRole: TeamMemberRole = (role as TeamMemberRole) ?? 'editor'
+
+    const db = getDb()
+    const teamId = request.params.id
+
+    // Resolve target workspace
+    let targetWsId: string | null = null
+    if (new_workspace_name) {
+      const ws = await db
+        .insertInto('workspaces')
+        .values({
+          team_id: teamId,
+          name: new_workspace_name,
+          created_by: request.user.id,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+      targetWsId = ws.id
+
+      // Add the owner to the new workspace too
+      await db
+        .insertInto('workspace_members')
+        .values({
+          workspace_id: targetWsId,
+          user_id: request.user.id,
+          role: 'admin',
+        })
+        .execute()
+    } else if (workspace_id) {
+      // Verify workspace belongs to this team
+      const ws = await db
+        .selectFrom('workspaces')
+        .select('id')
+        .where('id', '=', workspace_id)
+        .where('team_id', '=', teamId)
+        .executeTakeFirst()
+      if (!ws) return reply.badRequest('工作区不存在或不属于此团队')
+      targetWsId = ws.id
+    }
+
+    // Check if user already exists
+    let user = await db
+      .selectFrom('users')
+      .select(['id', 'email'])
+      .where('email', '=', email)
+      .executeTakeFirst()
+
+    if (!user) {
+      // Create placeholder user
+      const result = await db
+        .insertInto('users')
+        .values({
+          email,
+          username: email.split('@')[0],
+          password_hash: '',  // placeholder, filled on accept-invite
+          role: 'member',
+          status: 'suspended',  // inactive until invite accepted
+          plan_tier: 'free',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+      user = { id: result.id, email }
+    }
+
+    // Check if already a team member
+    const existing = await db
+      .selectFrom('team_members')
+      .select('user_id')
+      .where('team_id', '=', teamId)
+      .where('user_id', '=', user.id)
+      .executeTakeFirst()
+
+    if (existing) {
+      // If user hasn't accepted invite yet (suspended), allow regenerating the invite
+      const targetUser = await db
+        .selectFrom('users')
+        .select(['id', 'status'])
+        .where('id', '=', user.id)
+        .executeTakeFirst()
+
+      if (targetUser?.status === 'suspended') {
+        // Invalidate old invite tokens before creating a new one
+        await db
+          .updateTable('email_verifications')
+          .set({ used_at: sql`NOW()` })
+          .where('user_id', '=', user.id)
+          .where('used_at', 'is', null)
+          .execute()
+
+        const inviteToken = crypto.randomBytes(32).toString('hex')
+        const tokenHash = crypto.createHash('sha256').update(inviteToken).digest('hex')
+
+        await db
+          .insertInto('email_verifications')
+          .values({
+            user_id: user.id,
+            token_hash: tokenHash,
+            type: 'verify_email',
+            expires_at: sql`NOW() + INTERVAL '7 days'`,
+          })
+          .execute()
+
+        return reply.status(200).send({
+          user_id: user.id,
+          email,
+          role: memberRole,
+          invite_token: inviteToken, // SECURITY: Remove once email service sends tokens directly
+          regenerated: true,
+        })
+      }
+
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'ALREADY_MEMBER', message: '该用户已是团队成员' },
+      })
+    }
+
+    // Add to team
+    await db
+      .insertInto('team_members')
+      .values({
+        team_id: teamId,
+        user_id: user.id,
+        role: memberRole,
+        credit_quota: 1000,
+      })
+      .execute()
+
+    // Add to workspace
+    if (targetWsId) {
+      await db
+        .insertInto('workspace_members')
+        .values({
+          workspace_id: targetWsId,
+          user_id: user.id,
+          role: memberRole === 'owner' ? 'admin' : memberRole === 'viewer' ? 'viewer' : 'editor',
+        })
+        .execute()
+    }
+
+    // Create invite token
+    const inviteToken = crypto.randomBytes(32).toString('hex')
+    const tokenHash = crypto.createHash('sha256').update(inviteToken).digest('hex')
+
+    await db
+      .insertInto('email_verifications')
+      .values({
+        user_id: user.id,
+        token_hash: tokenHash,
+        type: 'verify_email',
+        expires_at: sql`NOW() + INTERVAL '7 days'`,
+      })
+      .execute()
+
+    return reply.status(201).send({
+      user_id: user.id,
+      email,
+      role: memberRole,
+      invite_token: inviteToken, // SECURITY: Remove once email service sends tokens directly
+    })
+  })
+
+  // PATCH /teams/:id/members/:uid — update member role, quota, or period
+  app.patch<{ Params: { id: string; uid: string }; Body: { role?: string; credit_quota?: number | null; quota_period?: string | null } }>('/teams/:id/members/:uid', {
+    preHandler: teamRoleGuard('owner'),
+  }, async (request, reply) => {
+    const { role, credit_quota, quota_period } = request.body ?? {}
+    if (role === undefined && credit_quota === undefined && quota_period === undefined) {
+      return reply.badRequest('At least one field (role, credit_quota, quota_period) is required')
+    }
+
+    if (quota_period !== undefined && quota_period !== null && quota_period !== 'weekly' && quota_period !== 'monthly') {
+      return reply.badRequest('quota_period must be "weekly", "monthly", or null')
+    }
+
+    const db = getDb()
+    const updates: Record<string, unknown> = {}
+    if (role !== undefined) updates.role = role
+    if (credit_quota !== undefined) updates.credit_quota = credit_quota
+    if (quota_period !== undefined) {
+      updates.quota_period = quota_period
+      if (quota_period) {
+        // Set first reset date based on period
+        const now = new Date()
+        if (quota_period === 'weekly') {
+          updates.quota_reset_at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
+        } else {
+          updates.quota_reset_at = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
+        }
+      } else {
+        updates.quota_reset_at = null
+      }
+    }
+
+    await db
+      .updateTable('team_members')
+      .set(updates)
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .execute()
+
+    return { success: true }
+  })
+
+  // POST /teams/:id/members/:uid/reset-credits — manually reset member credit_used to 0
+  app.post<{ Params: { id: string; uid: string } }>('/teams/:id/members/:uid/reset-credits', {
+    preHandler: teamRoleGuard('owner'),
+  }, async (request, reply) => {
+    const db = getDb()
+
+    const member = await db
+      .selectFrom('team_members')
+      .select(['credit_used', 'quota_period'])
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .executeTakeFirst()
+
+    if (!member) return reply.notFound('成员不存在')
+
+    const updates: Record<string, unknown> = { credit_used: 0 }
+
+    // If periodic quota is set, recalculate next reset from now
+    if (member.quota_period) {
+      const now = new Date()
+      if (member.quota_period === 'weekly') {
+        updates.quota_reset_at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
+      } else {
+        updates.quota_reset_at = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
+      }
+    }
+
+    await db
+      .updateTable('team_members')
+      .set(updates)
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .execute()
+
+    return { success: true, credit_used: 0 }
+  })
+
+  // DELETE /teams/:id/members/:uid — remove member
+  app.delete<{ Params: { id: string; uid: string } }>('/teams/:id/members/:uid', {
+    preHandler: teamRoleGuard('owner'),
+  }, async (request, reply) => {
+    const db = getDb()
+
+    // Don't allow removing the owner
+    const member = await db
+      .selectFrom('team_members')
+      .select('role')
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .executeTakeFirst()
+
+    if (!member) return reply.notFound('Member not found')
+    if (member.role === 'owner') {
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'CANNOT_REMOVE_OWNER', message: 'Cannot remove the team owner' },
+      })
+    }
+
+    // Check for in-flight generation tasks
+    const pendingBatches = await db
+      .selectFrom('task_batches')
+      .select(db.fn.count('id').as('count'))
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .where('status', 'in', ['pending', 'processing'])
+      .executeTakeFirstOrThrow()
+
+    if (Number(pendingBatches.count) > 0) {
+      return reply.status(409).send({
+        success: false,
+        error: {
+          code: 'HAS_PENDING_TASKS',
+          message: '该成员有进行中的生成任务，请等待任务完成后再移除',
+        },
+      })
+    }
+
+    // Remove from all workspaces in this team
+    const workspaceIds = await db
+      .selectFrom('workspaces')
+      .select('id')
+      .where('team_id', '=', request.params.id)
+      .execute()
+
+    if (workspaceIds.length > 0) {
+      await db
+        .deleteFrom('workspace_members')
+        .where('user_id', '=', request.params.uid)
+        .where('workspace_id', 'in', workspaceIds.map(w => w.id))
+        .execute()
+    }
+
+    await db
+      .deleteFrom('team_members')
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .execute()
+
+    // If user has no remaining teams, suspend the account
+    const remainingTeams = await db
+      .selectFrom('team_members')
+      .select(db.fn.count('team_id').as('count'))
+      .where('user_id', '=', request.params.uid)
+      .executeTakeFirstOrThrow()
+
+    if (Number(remainingTeams.count) === 0) {
+      await db
+        .updateTable('users')
+        .set({ status: 'suspended' })
+        .where('id', '=', request.params.uid)
+        .execute()
+
+      // Revoke all refresh tokens so suspended user can't keep using the app
+      await db
+        .updateTable('refresh_tokens')
+        .set({ revoked_at: sql`NOW()` })
+        .where('user_id', '=', request.params.uid)
+        .where('revoked_at', 'is', null)
+        .execute()
+    }
+
+    return { success: true }
+  })
+
+  // GET /teams/:id/batches — all team generation records
+  app.get<{ Params: { id: string }; Querystring: { cursor?: string; limit?: string } }>('/teams/:id/batches', {
+    preHandler: teamRoleGuard('owner'),
+  }, async (request) => {
+    const db = getDb()
+    const limit = Math.min(parseInt(request.query.limit ?? '20', 10), 100)
+
+    let query = db
+      .selectFrom('task_batches')
+      .selectAll()
+      .where('team_id', '=', request.params.id)
+      .orderBy('created_at', 'desc')
+      .limit(limit + 1)
+
+    if (request.query.cursor) {
+      query = query.where('created_at', '<', request.query.cursor as any)
+    }
+
+    const rows = await query.execute()
+    const hasMore = rows.length > limit
+    const data = hasMore ? rows.slice(0, limit) : rows
+
+    return {
+      data,
+      cursor: hasMore ? String(data[data.length - 1].created_at) : null,
+    }
+  })
+}
