@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.next/
+.turbo/
+*.env
+!.env.example
+.worktrees/
+
+# Stale tsc artifacts in non-src dirs (migrations/scripts run via tsx)
+packages/db/migrations/*.js
+packages/db/migrations/*.d.ts
+packages/db/migrations/*.map
+packages/db/scripts/*.js
+packages/db/scripts/*.d.ts
+packages/db/scripts/*.map

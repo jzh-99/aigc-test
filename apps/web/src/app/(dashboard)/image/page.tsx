@@ -1,0 +1,228 @@
+'use client'
+
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { PromptInput } from '@/components/generation/prompt-input'
+import { ParamsPanel } from '@/components/generation/params-panel'
+import { BatchList, type BatchListHandle } from '@/components/history/batch-list'
+import { BatchDetail } from '@/components/history/batch-detail'
+import { useBatchSSE } from '@/hooks/use-batch-sse'
+import { useGenerationStore } from '@/stores/generation-store'
+import { useAuthStore } from '@/stores/auth-store'
+import { AlertTriangle, FolderX } from 'lucide-react'
+import useSWR from 'swr'
+import type { BatchResponse } from '@aigc/types'
+
+interface TeamMember {
+  user_id: string
+  credit_quota: number | null
+  credit_used: number
+}
+
+interface TeamInfo {
+  credits: { balance: number }
+  members: TeamMember[]
+}
+
+export default function ImagePage() {
+  const batchListRef = useRef<BatchListHandle>(null)
+
+  const [activeBatchIds, setActiveBatchIds] = useState<string[]>([])
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+
+  const resetGeneration = useGenerationStore((s) => s.reset)
+  const user = useAuthStore((s) => s.user)
+  const activeTeam = useAuthStore((s) => s.activeTeam)
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const activeTeamId = useAuthStore((s) => s.activeTeamId)
+  const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
+
+  useEffect(() => {
+    return () => { resetGeneration() }
+  }, [resetGeneration])
+
+  useEffect(() => {
+    setActiveBatchIds([])
+  }, [activeWorkspaceId])
+
+  const handleBatchCreated = useCallback((batch: BatchResponse) => {
+    setActiveBatchIds((prev) => [...prev, batch.id])
+    batchListRef.current?.prepend(batch)   // immediate optimistic insert
+  }, [])
+
+  // Monitor all active batches with SSE
+  useEffect(() => {
+    if (activeBatchIds.length === 0) return
+
+    const controllers: AbortController[] = []
+
+    activeBatchIds.forEach((batchId) => {
+      const controller = new AbortController()
+      controllers.push(controller)
+
+      ;(async () => {
+        try {
+          const { useAuthStore } = await import('@/stores/auth-store')
+          const token = useAuthStore.getState().accessToken
+          const headers: Record<string, string> = {}
+          if (token) headers['Authorization'] = `Bearer ${token}`
+
+          const res = await fetch(`/api/v1/sse/batches/${batchId}`, {
+            headers,
+            credentials: 'include',
+            signal: controller.signal,
+          })
+
+          if (!res.ok || !res.body) return
+
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+
+            let eventName = ''
+            for (const line of lines) {
+              if (line.startsWith('event:')) {
+                eventName = line.slice(6).trim()
+              } else if (line.startsWith('data:') && eventName === 'batch_update') {
+                try {
+                  const batch: BatchResponse = JSON.parse(line.slice(5).trim())
+                  console.log('[SSE] Received update for batch:', batch.id, batch.status, batch.completed_count)
+                  batchListRef.current?.update(batch)
+
+                  const isTerminal =
+                    batch.status === 'completed' ||
+                    batch.status === 'failed' ||
+                    batch.status === 'partial_complete'
+
+                  if (isTerminal) {
+                    console.log('[SSE] Batch terminal, refreshing:', batch.id)
+                    batchListRef.current?.refresh()
+                    setActiveBatchIds((prev) => prev.filter((id) => id !== batch.id))
+                    controller.abort()
+                    return
+                  }
+                } catch {
+                  // ignore malformed JSON
+                }
+                eventName = ''
+              } else if (line === '') {
+                eventName = ''
+              }
+            }
+          }
+        } catch (err: unknown) {
+          if (err instanceof DOMException && err.name === 'AbortError') return
+          console.error('[SSE] Error for batch', batchId, err)
+        }
+      })()
+    })
+
+    return () => {
+      controllers.forEach((c) => c.abort())
+    }
+  }, [activeBatchIds])
+
+  const teamRole = activeTeam()?.role
+  const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
+  const noWorkspace = !activeWorkspaceId
+
+  let lowCredits = false
+  if (!isOwnerOrAdmin && teamData) {
+    const me = teamData.members?.find((m) => m.user_id === user?.id)
+    if (me && me.credit_quota !== null && me.credit_quota !== undefined) {
+      const remaining = me.credit_quota - (me.credit_used ?? 0)
+      if (remaining <= 0) lowCredits = true
+    } else if (teamData.credits.balance <= 0) {
+      lowCredits = true
+    }
+  }
+  if (isOwnerOrAdmin && teamData && teamData.credits.balance <= 0) {
+    lowCredits = true
+  }
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 h-full">
+      {/* Left column — Form */}
+      <div className="w-full lg:w-[400px] shrink-0 space-y-4">
+        {noWorkspace && (
+          <Alert variant="destructive">
+            <FolderX className="h-4 w-4" />
+            <AlertDescription>
+              {isOwnerOrAdmin
+                ? '当前没有可用的工作区。请前往团队管理创建工作区并分配成员。'
+                : '你还没有被分配到任何工作区，请联系团队负责人为你分配工作区后再进行创作。'
+              }
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {lowCredits && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              {isOwnerOrAdmin
+                ? '团队积分余额不足，请充值后再继续生成。'
+                : '你的可用积分已耗尽，请联系团队负责人增加你的积分配额。'
+              }
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">提示词</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PromptInput onBatchCreated={handleBatchCreated} disabled={noWorkspace} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">参数设置</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ParamsPanel />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Right column — History */}
+      <div className="flex-1 min-h-[400px] flex flex-col">
+        <Card className="flex-1 flex flex-col overflow-hidden">
+          <CardHeader className="pb-3 shrink-0">
+            <CardTitle className="text-base flex items-center gap-2">
+              <span>历史记录</span>
+              {activeBatchIds.length > 0 && (
+                <Badge variant="processing" className="text-xs">生成中 ({activeBatchIds.length})</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto">
+            <BatchList
+              ref={batchListRef}
+              onSelect={(batch) => { setSelectedBatchId(batch.id); setDetailOpen(true) }}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <BatchDetail
+        batchId={selectedBatchId}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
+    </div>
+  )
+}

@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* B2「云霞蓝」Color Scheme */
+    --background: 0 0% 100%;          /* #FFFFFF */
+    --foreground: 264 28% 20%;        /* #2D2440 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 264 28% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 264 28% 20%;
+
+    --primary: 216 88% 69%;           /* #6BA3F5 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 87% 68%;          /* #F5A962 */
+    --secondary-foreground: 264 28% 20%;
+
+    --muted: 27 90% 97%;              /* #FEF8F2 warm white */
+    --muted-foreground: 265 22% 63%;  /* #9B8EB5 */
+
+    --accent: 27 90% 97%;             /* #FEF8F2 */
+    --accent-foreground: 264 28% 20%;
+
+    --destructive: 355 82% 70%;       /* #F07080 */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 268 50% 93%;            /* #EDE5F5 */
+    --input: 268 50% 93%;
+    --ring: 216 88% 69%;              /* #6BA3F5 */
+
+    --radius: 0.625rem;
+
+    /* Custom B2 semantic tokens */
+    --surface-warm: 27 90% 97%;       /* #FEF8F2 */
+    --accent-gradient: linear-gradient(135deg, #F5A962, #C89BEC, #6BA3F5);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Gradient utility */
+.gradient-accent {
+  background: linear-gradient(135deg, #F5A962, #C89BEC, #6BA3F5);
+}
+
+.gradient-accent-text {
+  background: linear-gradient(135deg, #F5A962, #C89BEC, #6BA3F5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Scrollbar styling */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
