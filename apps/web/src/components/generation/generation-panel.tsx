@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useGenerate } from '@/hooks/use-generate'
-import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, Plus } from 'lucide-react'
+import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
@@ -191,18 +191,19 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                     </div>
                   </div>
                 ) : (
-                  /* 无参考图 - 显示上传按钮 */
+                  /* 无参考图 - 显示上传框 */
                   <div className="flex items-center h-full">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 gap-1.5"
+                    <div
                       onClick={() => setImageDialogOpen(true)}
+                      className={cn(
+                        'w-20 h-16 rounded-xl border-2 border-dashed transition-all cursor-pointer',
+                        'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50',
+                        'flex flex-col items-center justify-center gap-1'
+                      )}
                     >
-                      <Plus className="h-3.5 w-3.5" />
-                      上传参考图
-                    </Button>
+                      <ImagePlus className="h-6 w-6 text-primary" />
+                      <span className="text-xs font-medium text-primary">上传</span>
+                    </div>
                   </div>
                 )}
               </div>
