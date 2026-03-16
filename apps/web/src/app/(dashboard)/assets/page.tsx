@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
-import { Loader2, Download, Maximize2, Trash2, ImageIcon, VideoIcon, CalendarSearch, X } from 'lucide-react'
+import { Loader2, Download, Trash2, ImageIcon, VideoIcon, CalendarSearch, X } from 'lucide-react'
 import { useAssets, deleteAsset } from '@/hooks/use-assets'
 import type { AssetItem } from '@/hooks/use-assets'
 import { downloadImage } from '@/lib/download'
@@ -46,7 +46,10 @@ function AssetCard({ asset, onEnlarge, onDelete }: AssetCardProps) {
   if (!url) return null
 
   return (
-    <div className="group relative aspect-square rounded-lg overflow-hidden border bg-muted cursor-pointer">
+    <div
+      className="group relative aspect-square rounded-lg overflow-hidden border bg-muted cursor-pointer"
+      onClick={() => onEnlarge(asset)}
+    >
       <Image
         src={url}
         alt={asset.batch.prompt}
@@ -64,14 +67,6 @@ function AssetCard({ asset, onEnlarge, onDelete }: AssetCardProps) {
           </p>
           {/* Action buttons at bottom */}
           <div className="flex justify-end gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 bg-black/50 hover:bg-black/70 text-white border-0"
-              onClick={(e) => { e.stopPropagation(); onEnlarge(asset) }}
-            >
-              <Maximize2 className="h-3.5 w-3.5" />
-            </Button>
             <Button
               size="icon"
               variant="ghost"
@@ -99,8 +94,11 @@ export default function AssetsPage() {
   const [assetType] = useState<'image'>('image') // video TBD
   const [dateFilter, setDateFilter] = useState('')
   const { assets, isLoadingInitial, isLoadingMore, hasMore, loadMore, error, mutate } = useAssets(assetType, dateFilter || undefined)
-  const [lightbox, setLightbox] = useState<AssetItem | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // Flat list of assets with URLs (for lightbox navigation)
+  const viewableAssets = assets.filter((a) => a.storage_url ?? a.original_url)
 
   const handleDelete = async (id: string) => {
     setDeletingId(id)
@@ -115,7 +113,13 @@ export default function AssetsPage() {
     }
   }
 
+  const handleEnlarge = (asset: AssetItem) => {
+    const idx = viewableAssets.findIndex((a) => a.id === asset.id)
+    if (idx !== -1) setLightboxIndex(idx)
+  }
+
   const grouped = groupByDate(assets)
+  const lightboxAsset = lightboxIndex !== null ? viewableAssets[lightboxIndex] : null
 
   return (
     <div className="space-y-6">
@@ -201,7 +205,7 @@ export default function AssetsPage() {
                 <AssetCard
                   key={asset.id}
                   asset={asset}
-                  onEnlarge={setLightbox}
+                  onEnlarge={handleEnlarge}
                   onDelete={handleDelete}
                 />
               )
@@ -220,24 +224,27 @@ export default function AssetsPage() {
       )}
 
       {/* Lightbox */}
-      {lightbox && (() => {
-        const url = lightbox.storage_url ?? lightbox.original_url
+      {lightboxAsset && (() => {
+        const url = lightboxAsset.storage_url ?? lightboxAsset.original_url
         return (
           <ImageLightbox
             url={url!}
-            alt={lightbox.batch.prompt}
-            onClose={() => setLightbox(null)}
+            alt={lightboxAsset.batch.prompt}
+            onClose={() => setLightboxIndex(null)}
+            onPrev={lightboxIndex! > 0 ? () => setLightboxIndex((i) => i! - 1) : undefined}
+            onNext={lightboxIndex! < viewableAssets.length - 1 ? () => setLightboxIndex((i) => i! + 1) : undefined}
             footer={
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm truncate">{lightbox.batch.prompt}</p>
+                  <p className="text-sm truncate">{lightboxAsset.batch.prompt}</p>
                   <p className="text-xs opacity-60 mt-0.5">
-                    {MODEL_DISPLAY_NAMES[lightbox.batch.model] ?? lightbox.batch.model}
+                    {MODEL_DISPLAY_NAMES[lightboxAsset.batch.model] ?? lightboxAsset.batch.model}
                     {' · '}
-                    {new Date(lightbox.created_at).toLocaleString('zh-CN')}
+                    {new Date(lightboxAsset.created_at).toLocaleString('zh-CN')}
+                    {viewableAssets.length > 1 && ` · ${lightboxIndex! + 1} / ${viewableAssets.length}`}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" className="shrink-0 gap-1.5 border-white/20 text-white hover:bg-white/10 hover:text-white" onClick={() => downloadImage(url!)}>
+                <Button size="sm" variant="ghost" className="shrink-0 gap-1.5 text-white hover:bg-white/10 hover:text-white" onClick={() => downloadImage(url!)}>
                   <Download className="h-3.5 w-3.5" />
                   下载
                 </Button>

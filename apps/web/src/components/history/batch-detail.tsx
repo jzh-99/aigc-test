@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Download, Maximize2 } from 'lucide-react'
+import { Download } from 'lucide-react'
 import { useBatch } from '@/hooks/use-batches'
 import { downloadImage } from '@/lib/download'
 import { translateTaskError } from '@/lib/error-messages'
@@ -77,7 +77,12 @@ export function BatchDetail({ batchId, open, onOpenChange }: BatchDetailProps) {
 function BatchDetailContent({ batch }: { batch: BatchResponse }) {
   const status = statusConfig[batch.status] ?? statusConfig.pending
   const time = new Date(batch.created_at)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+
+  // Collect completed tasks that have a URL
+  const completedUrls = batch.tasks
+    .filter((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))
+    .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
 
   return (
     <div className="mt-6 space-y-4">
@@ -124,8 +129,13 @@ function BatchDetailContent({ batch }: { batch: BatchResponse }) {
               const url = task.asset?.storage_url ?? task.asset?.original_url
 
               if (task.status === 'completed' && url) {
+                const urlIndex = completedUrls.indexOf(url)
                 return (
-                  <div key={task.id} className="group relative aspect-square rounded-lg overflow-hidden border">
+                  <div
+                    key={task.id}
+                    className="group relative aspect-square rounded-lg overflow-hidden border cursor-pointer"
+                    onClick={() => setLightboxIndex(urlIndex)}
+                  >
                     <Image
                       src={url}
                       alt=""
@@ -140,15 +150,7 @@ function BatchDetailContent({ batch }: { batch: BatchResponse }) {
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7 bg-background/80 hover:bg-background"
-                          onClick={() => setLightboxUrl(url)}
-                        >
-                          <Maximize2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 bg-background/80 hover:bg-background"
-                          onClick={() => downloadImage(url)}
+                          onClick={(e) => { e.stopPropagation(); downloadImage(url) }}
                         >
                           <Download className="h-3.5 w-3.5" />
                         </Button>
@@ -176,8 +178,13 @@ function BatchDetailContent({ batch }: { batch: BatchResponse }) {
       </div>
 
       {/* Lightbox */}
-      {lightboxUrl && (
-        <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      {lightboxIndex !== null && completedUrls[lightboxIndex] && (
+        <ImageLightbox
+          url={completedUrls[lightboxIndex]}
+          onClose={() => setLightboxIndex(null)}
+          onPrev={lightboxIndex > 0 ? () => setLightboxIndex((i) => i! - 1) : undefined}
+          onNext={lightboxIndex < completedUrls.length - 1 ? () => setLightboxIndex((i) => i! + 1) : undefined}
+        />
       )}
     </div>
   )
