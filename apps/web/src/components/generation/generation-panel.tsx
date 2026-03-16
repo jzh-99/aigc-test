@@ -110,10 +110,10 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const currentModel = MODEL_OPTIONS.find(m => m.value === modelType)
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 h-full">
 
       {/* 提示词区域 + 书签标签 */}
-      <div>
+      <div className="flex flex-col flex-1 min-h-0">
         {/* 书签标签 - 左上角，文件夹切换效果 */}
         <div className="flex items-end">
           <button
@@ -143,12 +143,12 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
           </button>
         </div>
 
-        {/* 提示词卡片 - 与标签无缝连接 */}
+        {/* 提示词卡片 - 与标签无缝连接，填满剩余高度 */}
         {mode === 'image' ? (
-          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4">
-            <div className="space-y-2">
+          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0">
+            <div className="flex flex-col flex-1 min-h-0 gap-2">
               {/* 参考图区域 - 固定高度，保证添加图片前后布局不变 */}
-              <div className="h-[68px]">
+              <div className="h-[68px] shrink-0">
                 {referenceImages.length > 0 ? (
                   <div
                     onClick={() => setImageDialogOpen(true)}
@@ -208,19 +208,21 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                 )}
               </div>
 
-              {/* 提示词输入 */}
-              <Textarea
-                placeholder="描述你想要生成的图片...&#10;&#10;Ctrl+Enter 快速生成"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="min-h-[140px] resize-none"
-                disabled={isGenerating || disabled}
-              />
+              {/* 提示词输入 - 撑满剩余空间 */}
+              <div className="flex-1 min-h-0">
+                <Textarea
+                  placeholder="描述你想要生成的图片...&#10;&#10;Ctrl+Enter 快速生成"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="h-full resize-none"
+                  disabled={isGenerating || disabled}
+                />
+              </div>
             </div>
           </div>
         ) : (
-          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card py-14 text-center text-muted-foreground">
+          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card flex-1 flex flex-col items-center justify-center text-muted-foreground">
             <Video className="h-10 w-10 mx-auto mb-3 opacity-50" />
             <p className="text-base font-medium mb-1">视频生成功能即将推出</p>
             <p className="text-sm">敬请期待...</p>

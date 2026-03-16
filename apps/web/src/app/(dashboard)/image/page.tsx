@@ -178,7 +178,7 @@ export default function ImagePage() {
           </Alert>
         )}
 
-        <div className="flex-1 flex flex-col justify-between">
+        <div className="flex-1 flex flex-col min-h-0">
           <GenerationPanel onBatchCreated={handleBatchCreated} disabled={noWorkspace} />
         </div>
       </div>
