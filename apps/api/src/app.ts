@@ -23,7 +23,7 @@ export async function buildApp() {
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
     },
-    bodyLimit: 10 * 1024 * 1024, // 10 MB — supports base64 reference images
+    bodyLimit: 100 * 1024 * 1024, // 100 MB — supports up to 10 reference images at 20 MB each (base64 overhead ~33%)
   })
 
   await app.register(sensible)
