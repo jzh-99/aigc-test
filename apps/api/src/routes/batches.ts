@@ -140,7 +140,11 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
 
       let query = db
         .selectFrom('task_batches')
-        .selectAll()
+        .select([
+          'id', 'module', 'provider', 'model', 'prompt', 'quantity',
+          'completed_count', 'failed_count', 'status', 'estimated_credits',
+          'actual_credits', 'created_at', 'user_id', 'workspace_id', 'is_deleted',
+        ])
         .where('is_deleted', '=', false)
         .orderBy('created_at', 'desc')
         .orderBy('id', 'desc')
@@ -241,7 +245,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           provider: b.provider,
           model: b.model,
           prompt: b.prompt,
-          params: b.params,
+          params: {},
           quantity: b.quantity,
           completed_count: b.completed_count,
           failed_count: b.failed_count,
