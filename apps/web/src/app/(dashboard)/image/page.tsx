@@ -153,9 +153,9 @@ export default function ImagePage() {
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full">
       {/* Left column — Generation Panel */}
-      <div className="w-full lg:w-[420px] shrink-0 space-y-4">
+      <div className="w-full lg:w-[400px] shrink-0 flex flex-col">
         {noWorkspace && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="mb-4">
             <FolderX className="h-4 w-4" />
             <AlertDescription>
               {isOwnerOrAdmin
@@ -167,7 +167,7 @@ export default function ImagePage() {
         )}
 
         {lowCredits && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="mb-4">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               {isOwnerOrAdmin
@@ -178,11 +178,9 @@ export default function ImagePage() {
           </Alert>
         )}
 
-        <Card>
-          <CardContent className="pt-6">
-            <GenerationPanel onBatchCreated={handleBatchCreated} disabled={noWorkspace} />
-          </CardContent>
-        </Card>
+        <div className="flex-1 flex flex-col justify-between">
+          <GenerationPanel onBatchCreated={handleBatchCreated} disabled={noWorkspace} />
+        </div>
       </div>
 
       {/* Right column — History */}
