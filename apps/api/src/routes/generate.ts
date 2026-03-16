@@ -32,7 +32,7 @@ function sanitizeParams(raw: Record<string, unknown>): Record<string, unknown> {
       sanitized[key] = value
     } else if (Array.isArray(value)) {
       // Arrays (e.g. reference images): allow up to 5 items, truncate strings (except image data)
-      sanitized[key] = value.slice(0, 5).map(v =>
+      sanitized[key] = value.slice(0, 10).map(v =>
         typeof v === 'string' && !isImageKey ? v.slice(0, 2000) : v
       )
     }

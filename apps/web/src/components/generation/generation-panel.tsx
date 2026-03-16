@@ -26,8 +26,8 @@ const MODEL_CREDITS: Record<'gemini' | 'nano-banana-pro', number> = {
   'nano-banana-pro': 10,
 }
 
-const MAX_REF_IMAGES = 5
-const MAX_FILE_MB = 10
+const MAX_REF_IMAGES = 10
+const MAX_FILE_MB = 20
 
 const MODEL_OPTIONS = [
   {
