@@ -76,6 +76,12 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
     // Sanitize params: whitelist keys, validate types
     const params = sanitizeParams(rawParams)
 
+    // Strip image data from params stored in DB — base64 data URIs can be
+    // hundreds of MB and make every batch read/write extremely slow.
+    // The full params (including images) are still passed to the BullMQ job
+    // so the worker can use them for generation.
+    const { image: _imageData, ...paramsForDb } = params as Record<string, unknown> & { image?: unknown }
+
     const db = getDb()
 
     const userId = request.user.id
@@ -271,7 +277,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
           provider: providerModel.providerCode,
           model,
           prompt,
-          params: JSON.stringify(params),
+          params: JSON.stringify(paramsForDb),
           quantity,
           status: 'pending',
           estimated_credits: totalCost,
@@ -319,7 +325,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       provider: providerModel.providerCode,
       model,
       prompt,
-      params,
+      params: paramsForDb,
       quantity,
       completed_count: 0,
       failed_count: 0,

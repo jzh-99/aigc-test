@@ -3,9 +3,10 @@
 import { useRef, useCallback, useState } from 'react'
 import Image from 'next/image'
 import { useGenerationStore } from '@/stores/generation-store'
-import { ImagePlus, Trash2, X } from 'lucide-react'
+import { ImagePlus, Trash2, X, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { ImageLightbox } from '@/components/ui/image-lightbox'
 
 const MAX_IMAGES = 10
 const MAX_SIZE_MB = 20
@@ -28,6 +29,7 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const dragCounterRef = useRef(0)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
@@ -120,6 +122,14 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
                 unoptimized
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors" />
+              {/* 放大按钮 */}
+              <button
+                onClick={() => setLightboxUrl(img.previewUrl)}
+                className="absolute bottom-2 left-2 h-7 w-7 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+              {/* 删除按钮 */}
               <button
                 onClick={() => removeReferenceImage(img.id)}
                 className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
@@ -155,6 +165,10 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
+
+        {lightboxUrl && (
+          <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+        )}
       </div>
     )
   }
