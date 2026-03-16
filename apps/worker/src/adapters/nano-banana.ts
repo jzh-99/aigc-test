@@ -29,7 +29,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     const isGemini = model.startsWith('gemini-3.1-flash-image-preview')
     const useEdits = !isGemini && imageUrls !== null
 
-    const maxRetries = 2
+    const maxRetries = 1
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const result = useEdits
         ? await this.callEdits(model, prompt, extraParams, imageUrls!)
@@ -150,9 +150,9 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
 
   private isRetryable(errorMessage?: string): boolean {
     if (!errorMessage) return false
-    if (!errorMessage.startsWith('API ')) return true
-    const match = errorMessage.match(/^API (\d+):/)
-    if (match && Number(match[1]) >= 500) return true
-    return false
+    // Only retry on timeout / network failures (no HTTP response received).
+    // If the API returned any error response (4xx, 5xx), fail immediately
+    // so the caller sees the full error details without waiting for more attempts.
+    return !errorMessage.startsWith('API ')
   }
 }
