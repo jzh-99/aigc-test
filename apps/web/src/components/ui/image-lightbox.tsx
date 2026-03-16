@@ -1,12 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { ZoomIn, ZoomOut, X } from 'lucide-react'
+import { ZoomIn, ZoomOut, X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface ImageLightboxProps {
   url: string
   alt?: string
   onClose: () => void
+  onPrev?: () => void
+  onNext?: () => void
   footer?: React.ReactNode
 }
 
@@ -14,7 +16,7 @@ const MIN_SCALE = 0.25
 const MAX_SCALE = 4
 const ZOOM_STEP = 0.25
 
-export function ImageLightbox({ url, alt = '', onClose, footer }: ImageLightboxProps) {
+export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }: ImageLightboxProps) {
   const [scale, setScale] = useState(1)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -23,6 +25,9 @@ export function ImageLightbox({ url, alt = '', onClose, footer }: ImageLightboxP
   const zoom = useCallback((delta: number) => {
     setScale((s) => clampScale(Math.round((s + delta) * 100) / 100))
   }, [])
+
+  // Reset zoom when image changes
+  useEffect(() => { setScale(1) }, [url])
 
   // Wheel zoom
   useEffect(() => {
@@ -37,12 +42,16 @@ export function ImageLightbox({ url, alt = '', onClose, footer }: ImageLightboxP
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // Escape to close
+  // Keyboard: Escape, ArrowLeft, ArrowRight
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowLeft') onPrev?.()
+      else if (e.key === 'ArrowRight') onNext?.()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, onPrev, onNext])
 
   const pct = Math.round(scale * 100)
 
@@ -83,31 +92,53 @@ export function ImageLightbox({ url, alt = '', onClose, footer }: ImageLightboxP
         </button>
       </div>
 
-      {/* Image area */}
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-hidden flex items-center justify-center cursor-zoom-in"
-        style={{ cursor: scale >= MAX_SCALE ? 'zoom-out' : 'default' }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={url}
-          alt={alt}
-          style={{
-            transform: `scale(${scale})`,
-            transition: 'transform 0.15s ease',
-            maxWidth: '100%',
-            maxHeight: '100%',
-            objectFit: 'contain',
-            display: 'block',
-          }}
-          draggable={false}
-        />
+      {/* Image area with side nav arrows */}
+      <div className="flex-1 relative flex items-center justify-center min-h-0">
+        {/* Prev button */}
+        {onPrev && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPrev() }}
+            className="absolute left-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/80 transition-colors"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+        )}
+
+        <div
+          ref={containerRef}
+          className="flex-1 h-full overflow-hidden flex items-center justify-center"
+          style={{ cursor: 'default' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={alt}
+            style={{
+              transform: `scale(${scale})`,
+              transition: 'transform 0.15s ease',
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+            draggable={false}
+          />
+        </div>
+
+        {/* Next button */}
+        {onNext && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onNext() }}
+            className="absolute right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/80 transition-colors"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        )}
       </div>
 
       {/* Optional footer */}
       {footer && (
-        <div className="shrink-0 px-4 py-3 text-white/80">
+        <div className="shrink-0 px-4 py-3 text-white/80 border-t border-white/10">
           {footer}
         </div>
       )}
