@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { GenerationPanel } from '@/components/generation/generation-panel'
 import { BatchList, type BatchListHandle } from '@/components/history/batch-list'
 import { BatchDetail } from '@/components/history/batch-detail'
-import { useBatchSSE } from '@/hooks/use-batch-sse'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { AlertTriangle, FolderX } from 'lucide-react'
@@ -28,9 +27,12 @@ interface TeamInfo {
 export default function ImagePage() {
   const batchListRef = useRef<BatchListHandle>(null)
 
-  const [activeBatchIds, setActiveBatchIds] = useState<string[]>([])
+  const [activeBatchCount, setActiveBatchCount] = useState(0)
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+
+  // Each batch gets its own AbortController — independent of other batches
+  const sseControllersRef = useRef<Map<string, AbortController>>(new Map())
 
   const resetGeneration = useGenerationStore((s) => s.reset)
   const user = useAuthStore((s) => s.user)
@@ -44,93 +46,95 @@ export default function ImagePage() {
   }, [resetGeneration])
 
   useEffect(() => {
-    setActiveBatchIds([])
+    setActiveBatchCount(0)
+    sseControllersRef.current.forEach((c) => c.abort())
+    sseControllersRef.current.clear()
   }, [activeWorkspaceId])
 
-  const handleBatchCreated = useCallback((batch: BatchResponse) => {
-    setActiveBatchIds((prev) => [...prev, batch.id])
-    batchListRef.current?.prepend(batch)   // immediate optimistic insert
+  // Abort all connections on unmount
+  useEffect(() => {
+    const controllers = sseControllersRef.current
+    return () => { controllers.forEach((c) => c.abort()) }
   }, [])
 
-  // Monitor all active batches with SSE
-  useEffect(() => {
-    if (activeBatchIds.length === 0) return
+  const handleBatchCreated = useCallback((batch: BatchResponse) => {
+    batchListRef.current?.prepend(batch)
+    setActiveBatchCount((c) => c + 1)
 
-    const controllers: AbortController[] = []
+    const controller = new AbortController()
+    sseControllersRef.current.set(batch.id, controller)
 
-    activeBatchIds.forEach((batchId) => {
-      const controller = new AbortController()
-      controllers.push(controller)
+    ;(async () => {
+      try {
+        const { useAuthStore } = await import('@/stores/auth-store')
+        const token = useAuthStore.getState().accessToken
+        const headers: Record<string, string> = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
 
-      ;(async () => {
-        try {
-          const { useAuthStore } = await import('@/stores/auth-store')
-          const token = useAuthStore.getState().accessToken
-          const headers: Record<string, string> = {}
-          if (token) headers['Authorization'] = `Bearer ${token}`
+        const res = await fetch(`/api/v1/sse/batches/${batch.id}`, {
+          headers,
+          credentials: 'include',
+          signal: controller.signal,
+        })
 
-          const res = await fetch(`/api/v1/sse/batches/${batchId}`, {
-            headers,
-            credentials: 'include',
-            signal: controller.signal,
-          })
+        if (!res.ok || !res.body) {
+          sseControllersRef.current.delete(batch.id)
+          setActiveBatchCount((c) => Math.max(0, c - 1))
+          return
+        }
 
-          if (!res.ok || !res.body) return
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
 
-          const reader = res.body.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
 
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() ?? ''
+          let eventName = ''
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventName = line.slice(6).trim()
+            } else if (line.startsWith('data:') && eventName === 'batch_update') {
+              try {
+                const updated: BatchResponse = JSON.parse(line.slice(5).trim())
+                console.log('[SSE] batch_update:', updated.id, updated.status, updated.completed_count)
+                batchListRef.current?.update(updated)
 
-            let eventName = ''
-            for (const line of lines) {
-              if (line.startsWith('event:')) {
-                eventName = line.slice(6).trim()
-              } else if (line.startsWith('data:') && eventName === 'batch_update') {
-                try {
-                  const batch: BatchResponse = JSON.parse(line.slice(5).trim())
-                  console.log('[SSE] Received update for batch:', batch.id, batch.status, batch.completed_count)
-                  batchListRef.current?.update(batch)
+                const isTerminal =
+                  updated.status === 'completed' ||
+                  updated.status === 'failed' ||
+                  updated.status === 'partial_complete'
 
-                  const isTerminal =
-                    batch.status === 'completed' ||
-                    batch.status === 'failed' ||
-                    batch.status === 'partial_complete'
-
-                  if (isTerminal) {
-                    console.log('[SSE] Batch terminal, refreshing:', batch.id)
-                    batchListRef.current?.refresh()
-                    setActiveBatchIds((prev) => prev.filter((id) => id !== batch.id))
-                    controller.abort()
-                    return
-                  }
-                } catch {
-                  // ignore malformed JSON
+                if (isTerminal) {
+                  // SSE data is authoritative; refresh after a short delay to fetch
+                  // API-enriched fields (e.g. thumbnail_urls) without race conditions
+                  setTimeout(() => { batchListRef.current?.refresh() }, 1500)
+                  sseControllersRef.current.delete(batch.id)
+                  setActiveBatchCount((c) => Math.max(0, c - 1))
+                  return
                 }
-                eventName = ''
-              } else if (line === '') {
-                eventName = ''
+              } catch {
+                // ignore malformed JSON
               }
+              eventName = ''
+            } else if (line === '') {
+              eventName = ''
             }
           }
-        } catch (err: unknown) {
-          if (err instanceof DOMException && err.name === 'AbortError') return
-          console.error('[SSE] Error for batch', batchId, err)
         }
-      })()
-    })
-
-    return () => {
-      controllers.forEach((c) => c.abort())
-    }
-  }, [activeBatchIds])
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        console.error('[SSE] Error for batch', batch.id, err)
+      } finally {
+        sseControllersRef.current.delete(batch.id)
+      }
+    })()
+  }, [])
 
   const teamRole = activeTeam()?.role
   const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
@@ -189,8 +193,8 @@ export default function ImagePage() {
           <CardHeader className="pb-3 shrink-0">
             <CardTitle className="text-base flex items-center gap-2">
               <span>历史记录</span>
-              {activeBatchIds.length > 0 && (
-                <Badge variant="processing" className="text-xs">生成中 ({activeBatchIds.length})</Badge>
+              {activeBatchCount > 0 && (
+                <Badge variant="processing" className="text-xs">生成中 ({activeBatchCount})</Badge>
               )}
             </CardTitle>
           </CardHeader>
