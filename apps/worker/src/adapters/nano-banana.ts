@@ -58,7 +58,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     if (imageUrls && imageUrls.length > 0) body.image = imageUrls
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 60_000)
+    const timeout = setTimeout(() => controller.abort(), 120_000)
     try {
       const res = await fetch(`${this.apiUrl}/v1/images/generations`, {
         method: 'POST',
