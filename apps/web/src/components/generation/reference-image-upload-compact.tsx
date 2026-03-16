@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState } from 'react'
 import Image from 'next/image'
 import { useGenerationStore } from '@/stores/generation-store'
 import { ImagePlus, Trash2, X } from 'lucide-react'
@@ -26,6 +26,8 @@ interface ReferenceImageUploadCompactProps {
 export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImageUploadCompactProps) {
   const { referenceImages, addReferenceImage, removeReferenceImage, clearReferenceImages } = useGenerationStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const dragCounterRef = useRef(0)
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
@@ -45,25 +47,52 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
     if (fileInputRef.current) fileInputRef.current.value = ''
   }, [referenceImages.length, addReferenceImage])
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    handleFiles(e.dataTransfer.files)
-  }, [handleFiles])
+    dragCounterRef.current++
+    if (dragCounterRef.current === 1) setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
   }, [])
 
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setIsDragging(false)
+    await handleFiles(e.dataTransfer.files)
+  }, [handleFiles])
+
   if (expanded) {
-    // 展开模式 - 在对话框中显示
     return (
-      <div>
-        <div className="grid grid-cols-4 gap-3 mb-4">
-          {/* 上传按钮 */}
+      <div
+        className={cn(
+          'relative rounded-xl transition-colors',
+          isDragging && 'bg-primary/5'
+        )}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {/* 拖拽遮罩 */}
+        {isDragging && (
+          <div className="absolute inset-0 rounded-xl z-10 border-2 border-dashed border-primary flex flex-col items-center justify-center gap-2 pointer-events-none bg-primary/5">
+            <ImagePlus className="h-10 w-10 text-primary" />
+            <span className="text-sm font-medium text-primary">松开以添加参考图</span>
+          </div>
+        )}
+
+        <div className={cn('grid grid-cols-4 gap-3 mb-4', isDragging && 'opacity-30')}>
+          {/* 上传按钮格 */}
           {referenceImages.length < MAX_IMAGES && (
             <div
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
               onClick={() => fileInputRef.current?.click()}
               className={cn(
                 'aspect-square rounded-xl border-2 border-dashed transition-all cursor-pointer',
@@ -101,23 +130,22 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
           ))}
         </div>
 
-        <p className="text-xs text-muted-foreground text-center">
-          支持 JPG/PNG • 最多 {MAX_IMAGES} 张 • 单张不超过 {MAX_SIZE_MB}MB
-        </p>
-
-        {referenceImages.length > 0 && (
-          <div className="flex justify-center mt-3">
+        <div className={cn('flex items-center justify-between', isDragging && 'opacity-30')}>
+          <p className="text-xs text-muted-foreground">
+            支持 JPG / PNG · 最多 {MAX_IMAGES} 张 · 单张不超过 {MAX_SIZE_MB}MB · 可直接拖拽到此处
+          </p>
+          {referenceImages.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+              className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0 ml-3"
               onClick={clearReferenceImages}
             >
               <Trash2 className="h-3.5 w-3.5" />
               清空全部
             </Button>
-          </div>
-        )}
+          )}
+        </div>
 
         <input
           ref={fileInputRef}
@@ -131,7 +159,7 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
     )
   }
 
-  // 紧凑模式 - 在提示词框内显示
+  // 紧凑模式 - 在提示词框内显示（保留备用）
   return (
     <>
       <Button
