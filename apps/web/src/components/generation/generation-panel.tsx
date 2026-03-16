@@ -72,6 +72,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const dragCounterRef = useRef(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
     prompt,
@@ -111,6 +112,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
         dataUrl,
       })
     }
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }, [referenceImages.length, addReferenceImage])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -267,17 +269,19 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center h-full">
-                    <div
-                      onClick={() => setImageDialogOpen(true)}
-                      className={cn(
-                        'w-[68px] h-14 rounded-xl border-2 border-dashed transition-all cursor-pointer',
-                        'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50',
-                        'flex flex-col items-center justify-center gap-0.5'
-                      )}
-                    >
-                      <ImagePlus className="h-5 w-5 text-primary" />
-                      <span className="text-xs font-medium text-primary">上传</span>
+                  /* 无参考图 - 横向全宽，直接触发文件选择 */
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className={cn(
+                      'h-full w-full rounded-xl border-2 border-dashed transition-all cursor-pointer',
+                      'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50',
+                      'flex items-center gap-3 px-3'
+                    )}
+                  >
+                    <ImagePlus className="h-6 w-6 text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-primary leading-tight">上传参考图</div>
+                      <div className="text-[11px] text-primary/60 leading-tight mt-0.5">最多 {MAX_REF_IMAGES} 张 · 支持拖拽</div>
                     </div>
                   </div>
                 )}
@@ -457,6 +461,16 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* 隐藏文件选择器 - 无图时直接上传 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handleImageFiles(e.target.files)}
+          />
         </>
       )}
     </div>
