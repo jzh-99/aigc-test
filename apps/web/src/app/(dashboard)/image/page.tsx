@@ -74,30 +74,45 @@ export default function ImagePage() {
     setActiveBatchCount((c) => Math.max(0, c - 1))
   }, [])
 
+  const pollOnce = useCallback(async (batchId: string) => {
+    try {
+      const updated = await apiGet<BatchResponse>(`/batches/${batchId}`)
+      console.log('[Poll]', batchId, updated.status, updated.completed_count, '/', updated.quantity)
+      batchListRef.current?.update(updated)
+
+      if (isTerminalStatus(updated.status)) {
+        stopPolling(batchId)
+        // Short delay so the API has time to populate thumbnail_urls
+        setTimeout(() => { batchListRef.current?.refresh() }, 800)
+      }
+    } catch (err) {
+      console.error('[Poll] Error fetching batch', batchId, err)
+      // Stop polling on error to avoid hammering the API
+      stopPolling(batchId)
+    }
+  }, [stopPolling])
+
   const startPolling = useCallback((batchId: string) => {
     // Avoid duplicate polling for the same batch
     if (pollTimersRef.current.has(batchId)) return
 
-    const timer = setInterval(async () => {
-      try {
-        const updated = await apiGet<BatchResponse>(`/batches/${batchId}`)
-        console.log('[Poll]', batchId, updated.status, updated.completed_count, '/', updated.quantity)
-        batchListRef.current?.update(updated)
-
-        if (isTerminalStatus(updated.status)) {
-          stopPolling(batchId)
-          // Short delay so the API has time to populate thumbnail_urls
-          setTimeout(() => { batchListRef.current?.refresh() }, 800)
-        }
-      } catch (err) {
-        console.error('[Poll] Error fetching batch', batchId, err)
-        // Stop polling on error to avoid hammering the API
-        stopPolling(batchId)
-      }
-    }, POLL_INTERVAL_MS)
-
+    const timer = setInterval(() => pollOnce(batchId), POLL_INTERVAL_MS)
     pollTimersRef.current.set(batchId, timer)
-  }, [stopPolling])
+  }, [pollOnce])
+
+  // When tab becomes visible again, immediately poll all active batches
+  // (browser throttles setInterval to ~1 min in background tabs)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        for (const batchId of pollTimersRef.current.keys()) {
+          pollOnce(batchId)
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [pollOnce])
 
   const handleBatchCreated = useCallback((batch: BatchResponse) => {
     batchListRef.current?.prepend(batch)
