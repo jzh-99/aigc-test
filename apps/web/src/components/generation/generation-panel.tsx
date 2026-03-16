@@ -110,58 +110,62 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const currentModel = MODEL_OPTIONS.find(m => m.value === modelType)
 
   return (
-    <div className="space-y-4">
-      {/* 模式切换 - 极简 */}
-      <div className="flex items-center justify-end">
-        <div className="flex gap-1 p-0.5 bg-muted rounded-md">
+    <div className="flex flex-col gap-3">
+
+      {/* 提示词区域 + 书签标签 */}
+      <div>
+        {/* 书签标签 - 左上角，文件夹切换效果 */}
+        <div className="flex items-end">
           <button
             onClick={() => setMode('image')}
             className={cn(
-              'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all',
+              'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative z-10 -mb-px',
               mode === 'image'
-                ? 'bg-background shadow-sm text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-card border-border text-foreground'
+                : 'bg-muted/60 border-muted text-muted-foreground hover:text-foreground hover:bg-muted'
             )}
           >
-            <ImageIcon className="h-3 w-3" />
+            <ImageIcon className="h-3.5 w-3.5" />
             图片
           </button>
           <button
             onClick={() => setMode('video')}
             disabled
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted-foreground cursor-not-allowed opacity-40"
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
+              mode === 'video'
+                ? 'bg-card border-border text-foreground z-10'
+                : 'bg-muted/60 border-muted text-muted-foreground opacity-40 cursor-not-allowed'
+            )}
           >
-            <Video className="h-3 w-3" />
+            <Video className="h-3.5 w-3.5" />
             视频
           </button>
         </div>
-      </div>
 
-      {mode === 'image' ? (
-        <>
-          {/* 提示词 + 参考图 */}
-          <div className="rounded-xl border bg-card p-5">
-            <div className="space-y-3">
-              {/* 参考图区域 - 固定高度 */}
-              <div className="h-20">
+        {/* 提示词卡片 - 与标签无缝连接 */}
+        {mode === 'image' ? (
+          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4">
+            <div className="space-y-2">
+              {/* 参考图区域 - 固定高度，保证添加图片前后布局不变 */}
+              <div className="h-[68px]">
                 {referenceImages.length > 0 ? (
-                  /* 有参考图 - 显示堆叠预览 */
                   <div
                     onClick={() => setImageDialogOpen(true)}
                     className="cursor-pointer group h-full"
                   >
-                    <div className="flex items-center gap-4 h-full">
-                      {/* 堆叠图片 - 左侧 */}
-                      <div className="relative w-20 h-16 shrink-0">
+                    <div className="flex items-center gap-3 h-full">
+                      {/* 堆叠图片预览 */}
+                      <div className="relative w-16 h-14 shrink-0">
                         {referenceImages.slice(0, 3).map((img, index) => (
                           <div
                             key={img.id}
                             className="absolute rounded-lg border-2 border-background shadow-md overflow-hidden transition-transform group-hover:scale-105"
                             style={{
-                              width: '48px',
-                              height: '48px',
-                              left: `${index * 16}px`,
-                              top: `${index * 4}px`,
+                              width: '44px',
+                              height: '44px',
+                              left: `${index * 14}px`,
+                              top: `${index * 3}px`,
                               zIndex: 3 - index,
                             }}
                           >
@@ -170,14 +174,12 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                               alt=""
                               fill
                               className="object-cover"
-                              sizes="48px"
+                              sizes="44px"
                               unoptimized
                             />
                           </div>
                         ))}
                       </div>
-
-                      {/* 文字信息 - 右侧 */}
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium">
                           {referenceImages.length} 张参考图
@@ -186,22 +188,20 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                           点击查看和管理
                         </div>
                       </div>
-
                       <ImageIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
                     </div>
                   </div>
                 ) : (
-                  /* 无参考图 - 显示上传框 */
                   <div className="flex items-center h-full">
                     <div
                       onClick={() => setImageDialogOpen(true)}
                       className={cn(
-                        'w-20 h-16 rounded-xl border-2 border-dashed transition-all cursor-pointer',
+                        'w-[68px] h-14 rounded-xl border-2 border-dashed transition-all cursor-pointer',
                         'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50',
-                        'flex flex-col items-center justify-center gap-1'
+                        'flex flex-col items-center justify-center gap-0.5'
                       )}
                     >
-                      <ImagePlus className="h-6 w-6 text-primary" />
+                      <ImagePlus className="h-5 w-5 text-primary" />
                       <span className="text-xs font-medium text-primary">上传</span>
                     </div>
                   </div>
@@ -209,31 +209,39 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
               </div>
 
               {/* 提示词输入 */}
-              <div>
-                <Textarea
-                  placeholder="描述你想要生成的图片...&#10;&#10;Ctrl+Enter 快速生成"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className="min-h-[120px] resize-none"
-                  disabled={isGenerating || disabled}
-                />
-              </div>
+              <Textarea
+                placeholder="描述你想要生成的图片...&#10;&#10;Ctrl+Enter 快速生成"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="min-h-[140px] resize-none"
+                disabled={isGenerating || disabled}
+              />
             </div>
           </div>
+        ) : (
+          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card py-14 text-center text-muted-foreground">
+            <Video className="h-10 w-10 mx-auto mb-3 opacity-50" />
+            <p className="text-base font-medium mb-1">视频生成功能即将推出</p>
+            <p className="text-sm">敬请期待...</p>
+          </div>
+        )}
+      </div>
 
-          {/* 生成配置 */}
-          <div className="rounded-xl border bg-card p-5">
-            <div className="space-y-4">
+      {mode === 'image' && (
+        <>
+          {/* 生成配置 - 紧凑间距 */}
+          <div className="rounded-xl border bg-card p-3">
+            <div className="space-y-3">
               {/* 模型选择 */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">模型</Label>
+                <Label className="text-xs text-muted-foreground mb-1 block">模型</Label>
                 <Select
                   value={modelType}
                   onValueChange={(v) => setModelType(v as 'gemini' | 'nano-banana-pro')}
                   disabled={disabled}
                 >
-                  <SelectTrigger className="h-10">
+                  <SelectTrigger className="h-9">
                     <SelectValue>
                       {currentModel?.label}
                     </SelectValue>
@@ -242,15 +250,15 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                     {MODEL_OPTIONS.map((model) => {
                       const Icon = model.icon
                       return (
-                        <SelectItem key={model.value} value={model.value} className="py-3">
+                        <SelectItem key={model.value} value={model.value} className="py-2">
                           <div className="flex items-start gap-3">
-                            <Icon className="h-5 w-5 shrink-0 mt-0.5 text-primary" />
+                            <Icon className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-sm mb-0.5">{model.label}</div>
-                              <div className="text-xs text-muted-foreground leading-relaxed">
+                              <div className="text-xs text-muted-foreground leading-snug">
                                 {model.desc}
                               </div>
-                              <div className="flex items-center gap-1 text-xs font-medium text-primary mt-1">
+                              <div className="flex items-center gap-1 text-xs font-medium text-primary mt-0.5">
                                 <Coins className="h-3 w-3" />
                                 {model.credits} 积分/张
                               </div>
@@ -265,15 +273,15 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
 
               {/* 质量 */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">质量</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <Label className="text-xs text-muted-foreground mb-1 block">质量</Label>
+                <div className="grid grid-cols-3 gap-1.5">
                   {RESOLUTION_OPTIONS.map((res) => (
                     <button
                       key={res.value}
                       onClick={() => setResolution(res.value)}
                       disabled={disabled}
                       className={cn(
-                        'py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all',
+                        'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
                         resolution === res.value
                           ? 'border-primary bg-primary/5 text-primary'
                           : 'border-border hover:border-primary/50',
@@ -288,22 +296,22 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
 
               {/* 画面比例 */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">比例</Label>
-                <div className="grid grid-cols-5 gap-2">
+                <Label className="text-xs text-muted-foreground mb-1 block">比例</Label>
+                <div className="grid grid-cols-5 gap-1.5">
                   {ASPECT_RATIOS.map((ar) => (
                     <button
                       key={ar.value}
                       onClick={() => setAspectRatio(ar.value)}
                       disabled={disabled}
                       className={cn(
-                        'flex flex-col items-center gap-1.5 py-2 px-1 rounded-lg border-2 transition-all',
+                        'flex flex-col items-center gap-1 py-1.5 px-1 rounded-lg border-2 transition-all',
                         aspectRatio === ar.value
                           ? 'border-primary bg-primary/5 text-primary'
                           : 'border-border hover:border-primary/50',
                         disabled && 'opacity-50 cursor-not-allowed'
                       )}
                     >
-                      <div className="flex items-end justify-center h-4">
+                      <div className="flex items-end justify-center h-3.5">
                         <AspectRatioIcon ratio={ar.value} active={aspectRatio === ar.value} />
                       </div>
                       <span className="text-xs font-medium">{ar.label}</span>
@@ -316,13 +324,12 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
 
           {/* 底部操作栏 */}
           <div className="flex items-center gap-3">
-            {/* 数量选择 */}
             <Select
               value={String(quantity)}
               onValueChange={(v) => setQuantity(Number(v))}
               disabled={disabled}
             >
-              <SelectTrigger className="w-[100px] h-10">
+              <SelectTrigger className="w-[90px] h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -334,16 +341,13 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
               </SelectContent>
             </Select>
 
-            {/* 占位符，推动右侧元素 */}
             <div className="flex-1" />
 
-            {/* 积分显示 */}
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
               <span>{estimatedCredits} 积分</span>
             </div>
 
-            {/* 生成按钮 */}
             <Button
               variant="gradient"
               size="lg"
@@ -377,12 +381,6 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
             </DialogContent>
           </Dialog>
         </>
-      ) : (
-        <div className="py-20 text-center text-muted-foreground">
-          <Video className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium mb-2">视频生成功能即将推出</p>
-          <p className="text-sm">敬请期待...</p>
-        </div>
       )}
     </div>
   )
@@ -390,7 +388,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
 
 function AspectRatioIcon({ ratio, active }: { ratio: string; active: boolean }) {
   const [w, h] = ratio.split(':').map(Number)
-  const maxSize = 16
+  const maxSize = 14
   const scale = maxSize / Math.max(w, h)
   const width = Math.round(w * scale)
   const height = Math.round(h * scale)
