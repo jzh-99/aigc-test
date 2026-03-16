@@ -7,8 +7,8 @@ import { ImagePlus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-const MAX_IMAGES = 5
-const MAX_SIZE_MB = 10
+const MAX_IMAGES = 10
+const MAX_SIZE_MB = 20
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
