@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -25,6 +25,9 @@ const MODEL_CREDITS: Record<'gemini' | 'nano-banana-pro', number> = {
   gemini: 5,
   'nano-banana-pro': 10,
 }
+
+const MAX_REF_IMAGES = 5
+const MAX_FILE_MB = 10
 
 const MODEL_OPTIONS = [
   {
@@ -67,6 +70,8 @@ interface GenerationPanelProps {
 export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelProps) {
   const [mode, setMode] = useState<'image' | 'video'>('image')
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const dragCounterRef = useRef(0)
 
   const {
     prompt,
@@ -80,10 +85,55 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
     aspectRatio,
     setAspectRatio,
     referenceImages,
+    addReferenceImage,
     isGenerating
   } = useGenerationStore()
 
   const clearReferenceImages = useGenerationStore((s) => s.clearReferenceImages)
+
+  // Process dropped / selected image files
+  const handleImageFiles = useCallback(async (files: FileList | null) => {
+    if (!files) return
+    for (const file of Array.from(files)) {
+      if (referenceImages.length >= MAX_REF_IMAGES) break
+      if (!file.type.startsWith('image/')) continue
+      if (file.size > MAX_FILE_MB * 1024 * 1024) continue
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      addReferenceImage({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        dataUrl,
+      })
+    }
+  }, [referenceImages.length, addReferenceImage])
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current++
+    if (dragCounterRef.current === 1) setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+  }, [])
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setIsDragging(false)
+    await handleImageFiles(e.dataTransfer.files)
+  }, [handleImageFiles])
 
   const estimatedCredits = (MODEL_CREDITS[modelType] ?? 5) * quantity
   const { generate } = useGenerate()
@@ -145,10 +195,26 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
           </button>
         </div>
 
-        {/* 提示词卡片 - 与标签无缝连接，填满剩余高度 */}
+        {/* 提示词卡片 - 与标签无缝连接，填满剩余高度，支持拖拽上传 */}
         {mode === 'image' ? (
-          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0">
-            <div className="flex flex-col flex-1 min-h-0 gap-2">
+          <div
+            className={cn(
+              'rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 relative transition-colors',
+              isDragging && 'border-primary bg-primary/5'
+            )}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            {/* 拖拽遮罩提示 */}
+            {isDragging && (
+              <div className="absolute inset-0 rounded-b-xl rounded-tr-xl z-10 flex flex-col items-center justify-center gap-2 pointer-events-none">
+                <ImagePlus className="h-10 w-10 text-primary" />
+                <span className="text-sm font-medium text-primary">松开以添加参考图</span>
+              </div>
+            )}
+            <div className={cn('flex flex-col flex-1 min-h-0 gap-2', isDragging && 'opacity-30 pointer-events-none')}>
               {/* 参考图区域 - 固定高度，保证添加图片前后布局不变 */}
               <div className="h-[68px] shrink-0">
                 {referenceImages.length > 0 ? (
