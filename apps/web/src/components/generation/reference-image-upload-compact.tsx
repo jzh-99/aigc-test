@@ -3,7 +3,7 @@
 import { useRef, useCallback } from 'react'
 import Image from 'next/image'
 import { useGenerationStore } from '@/stores/generation-store'
-import { ImagePlus, X } from 'lucide-react'
+import { ImagePlus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -24,7 +24,7 @@ interface ReferenceImageUploadCompactProps {
 }
 
 export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImageUploadCompactProps) {
-  const { referenceImages, addReferenceImage, removeReferenceImage } = useGenerationStore()
+  const { referenceImages, addReferenceImage, removeReferenceImage, clearReferenceImages } = useGenerationStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFiles = useCallback(async (files: FileList | null) => {
@@ -104,6 +104,20 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
         <p className="text-xs text-muted-foreground text-center">
           支持 JPG/PNG • 最多 {MAX_IMAGES} 张 • 单张不超过 {MAX_SIZE_MB}MB
         </p>
+
+        {referenceImages.length > 0 && (
+          <div className="flex justify-center mt-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={clearReferenceImages}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              清空全部
+            </Button>
+          </div>
+        )}
 
         <input
           ref={fileInputRef}

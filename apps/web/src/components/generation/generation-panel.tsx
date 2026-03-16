@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useGenerate } from '@/hooks/use-generate'
-import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus } from 'lucide-react'
+import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2 } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
@@ -82,6 +82,8 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
     referenceImages,
     isGenerating
   } = useGenerationStore()
+
+  const clearReferenceImages = useGenerationStore((s) => s.clearReferenceImages)
 
   const estimatedCredits = (MODEL_CREDITS[modelType] ?? 5) * quantity
   const { generate } = useGenerate()
@@ -189,6 +191,13 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                         </div>
                       </div>
                       <ImageIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); clearReferenceImages() }}
+                        className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                        title="清空全部参考图"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 ) : (
