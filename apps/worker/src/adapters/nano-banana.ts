@@ -1,4 +1,50 @@
+import sharp from 'sharp'
 import type { ImageGenerationAdapter, AdapterGenerateResult } from './base.js'
+
+// Compress reference images before sending to the API to avoid 502 / timeout
+// caused by oversized payloads.
+const MAX_LONG_SIDE = 2048   // resize if either dimension exceeds this
+const JPEG_QUALITY  = 85     // JPEG output quality
+const SKIP_THRESHOLD = 2 * 1024 * 1024  // skip compression if already < 2 MB
+
+/**
+ * Compress an image Buffer to JPEG, resizing if the long side exceeds MAX_LONG_SIDE.
+ * Returns the compressed buffer (always JPEG) and its byte length.
+ */
+async function compressBuffer(input: Buffer): Promise<Buffer> {
+  const image = sharp(input)
+  const { width = 0, height = 0 } = await image.metadata()
+  const longSide = Math.max(width, height)
+  const pipeline = longSide > MAX_LONG_SIDE
+    ? image.resize(MAX_LONG_SIDE, MAX_LONG_SIDE, { fit: 'inside', withoutEnlargement: true })
+    : image
+  return pipeline.jpeg({ quality: JPEG_QUALITY }).toBuffer()
+}
+
+/**
+ * Compress a base64 data URI.  HTTP/HTTPS URLs are returned unchanged
+ * (the API fetches them directly).  Images already under SKIP_THRESHOLD
+ * are also returned unchanged to avoid unnecessary re-encoding.
+ */
+async function compressDataUri(dataUri: string, index: number): Promise<string> {
+  if (!dataUri.startsWith('data:')) return dataUri  // HTTP URL — skip
+
+  const commaIdx = dataUri.indexOf(',')
+  const data = dataUri.slice(commaIdx + 1)
+  const inputBytes = Buffer.from(data, 'base64')
+
+  if (inputBytes.length < SKIP_THRESHOLD) {
+    console.log(`[nano-banana] image[${index}]: ${(inputBytes.length / 1024).toFixed(0)} KB — skip compression`)
+    return dataUri
+  }
+
+  const compressed = await compressBuffer(inputBytes)
+  console.log(
+    `[nano-banana] image[${index}]: ${(inputBytes.length / 1024 / 1024).toFixed(1)} MB → ` +
+    `${(compressed.length / 1024).toFixed(0)} KB (JPEG q${JPEG_QUALITY})`
+  )
+  return `data:image/jpeg;base64,${compressed.toString('base64')}`
+}
 
 export class NanoBananaAdapter implements ImageGenerationAdapter {
   readonly providerCode = 'nano-banana'
@@ -55,7 +101,10 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
   ): Promise<AdapterGenerateResult> {
     const body: Record<string, unknown> = { model, prompt, response_format: 'url' }
     if (extraParams.aspect_ratio) body.aspect_ratio = extraParams.aspect_ratio
-    if (imageUrls && imageUrls.length > 0) body.image = imageUrls
+    if (imageUrls && imageUrls.length > 0) {
+      // Compress data URI images before embedding in JSON body
+      body.image = await Promise.all(imageUrls.map((url, i) => compressDataUri(url, i)))
+    }
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 120_000)
@@ -81,29 +130,38 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     extraParams: Record<string, unknown>,
     imageUrls: string[],
   ): Promise<AdapterGenerateResult> {
-    // Convert each reference image to a Blob (handles data: URIs and HTTP URLs)
+    // Convert each reference image to a compressed Blob
     let imageBlobs: Array<{ blob: Blob; filename: string }>
     try {
       imageBlobs = await Promise.all(
         imageUrls.map(async (url, i) => {
+          let inputBuffer: Buffer
+
           if (url.startsWith('data:')) {
-            // data:[<mediatype>][;base64],<data>
             const commaIdx = url.indexOf(',')
-            const meta = url.slice(0, commaIdx)
             const data = url.slice(commaIdx + 1)
-            const mimeMatch = meta.match(/^data:([^;]+)/)
-            const mime = mimeMatch?.[1] ?? 'image/jpeg'
-            const ext = mime.split('/')[1]?.replace(/\+.*$/, '') ?? 'jpg'
-            const bytes = Buffer.from(data, 'base64')
-            console.log(`[nano-banana] image[${i}]: mime=${mime} dataLen=${data.length} bytesLen=${bytes.length} prefix=${data.slice(0,20)}`)
-            const blob = new Blob([bytes], { type: mime })
-            return { blob, filename: `image_${i + 1}.${ext}` }
+            inputBuffer = Buffer.from(data, 'base64')
+          } else {
+            const res = await fetch(url)
+            if (!res.ok) throw new Error(`Failed to fetch reference image ${i + 1}: ${res.status}`)
+            inputBuffer = Buffer.from(await res.arrayBuffer())
           }
-          const res = await fetch(url)
-          if (!res.ok) throw new Error(`Failed to fetch reference image ${i + 1}: ${res.status}`)
-          const blob = await res.blob()
-          const ext = blob.type.split('/')[1] ?? 'jpg'
-          return { blob, filename: `image_${i + 1}.${ext}` }
+
+          // Compress if large
+          let outBuffer: Buffer
+          if (inputBuffer.length < SKIP_THRESHOLD) {
+            console.log(`[nano-banana] image[${i}]: ${(inputBuffer.length / 1024).toFixed(0)} KB — skip compression`)
+            outBuffer = inputBuffer
+          } else {
+            outBuffer = await compressBuffer(inputBuffer)
+            console.log(
+              `[nano-banana] image[${i}]: ${(inputBuffer.length / 1024 / 1024).toFixed(1)} MB → ` +
+              `${(outBuffer.length / 1024).toFixed(0)} KB (JPEG q${JPEG_QUALITY})`
+            )
+          }
+
+          const blob = new Blob([outBuffer], { type: 'image/jpeg' })
+          return { blob, filename: `image_${i + 1}.jpg` }
         }),
       )
     } catch (err) {
@@ -120,7 +178,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 120_000) // longer timeout for uploads
+    const timeout = setTimeout(() => controller.abort(), 120_000)
     try {
       const res = await fetch(`${this.apiUrl}/v1/images/edits`, {
         method: 'POST',
