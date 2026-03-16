@@ -9,6 +9,7 @@ import { BatchList, type BatchListHandle } from '@/components/history/batch-list
 import { BatchDetail } from '@/components/history/batch-detail'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { apiGet } from '@/lib/api-client'
 import { AlertTriangle, FolderX } from 'lucide-react'
 import useSWR from 'swr'
 import type { BatchResponse } from '@aigc/types'
@@ -24,6 +25,12 @@ interface TeamInfo {
   members: TeamMember[]
 }
 
+const POLL_INTERVAL_MS = 3000
+
+function isTerminalStatus(status: string) {
+  return status === 'completed' || status === 'failed' || status === 'partial_complete'
+}
+
 export default function ImagePage() {
   const batchListRef = useRef<BatchListHandle>(null)
 
@@ -31,8 +38,8 @@ export default function ImagePage() {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
-  // Each batch gets its own AbortController — independent of other batches
-  const sseControllersRef = useRef<Map<string, AbortController>>(new Map())
+  // Map<batchId, intervalId> — each batch polled independently
+  const pollTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
 
   const resetGeneration = useGenerationStore((s) => s.reset)
   const user = useAuthStore((s) => s.user)
@@ -45,96 +52,58 @@ export default function ImagePage() {
     return () => { resetGeneration() }
   }, [resetGeneration])
 
+  // Clear all polls when workspace changes
   useEffect(() => {
+    pollTimersRef.current.forEach(clearInterval)
+    pollTimersRef.current.clear()
     setActiveBatchCount(0)
-    sseControllersRef.current.forEach((c) => c.abort())
-    sseControllersRef.current.clear()
   }, [activeWorkspaceId])
 
-  // Abort all connections on unmount
+  // Clear all polls on unmount
   useEffect(() => {
-    const controllers = sseControllersRef.current
-    return () => { controllers.forEach((c) => c.abort()) }
+    const timers = pollTimersRef.current
+    return () => { timers.forEach(clearInterval); timers.clear() }
   }, [])
+
+  const stopPolling = useCallback((batchId: string) => {
+    const timer = pollTimersRef.current.get(batchId)
+    if (timer !== undefined) {
+      clearInterval(timer)
+      pollTimersRef.current.delete(batchId)
+    }
+    setActiveBatchCount((c) => Math.max(0, c - 1))
+  }, [])
+
+  const startPolling = useCallback((batchId: string) => {
+    // Avoid duplicate polling for the same batch
+    if (pollTimersRef.current.has(batchId)) return
+
+    const timer = setInterval(async () => {
+      try {
+        const updated = await apiGet<BatchResponse>(`/batches/${batchId}`)
+        console.log('[Poll]', batchId, updated.status, updated.completed_count, '/', updated.quantity)
+        batchListRef.current?.update(updated)
+
+        if (isTerminalStatus(updated.status)) {
+          stopPolling(batchId)
+          // Short delay so the API has time to populate thumbnail_urls
+          setTimeout(() => { batchListRef.current?.refresh() }, 800)
+        }
+      } catch (err) {
+        console.error('[Poll] Error fetching batch', batchId, err)
+        // Stop polling on error to avoid hammering the API
+        stopPolling(batchId)
+      }
+    }, POLL_INTERVAL_MS)
+
+    pollTimersRef.current.set(batchId, timer)
+  }, [stopPolling])
 
   const handleBatchCreated = useCallback((batch: BatchResponse) => {
     batchListRef.current?.prepend(batch)
     setActiveBatchCount((c) => c + 1)
-
-    const controller = new AbortController()
-    sseControllersRef.current.set(batch.id, controller)
-
-    ;(async () => {
-      try {
-        const { useAuthStore } = await import('@/stores/auth-store')
-        const token = useAuthStore.getState().accessToken
-        const headers: Record<string, string> = {}
-        if (token) headers['Authorization'] = `Bearer ${token}`
-
-        const res = await fetch(`/api/v1/sse/batches/${batch.id}`, {
-          headers,
-          credentials: 'include',
-          signal: controller.signal,
-        })
-
-        if (!res.ok || !res.body) {
-          sseControllersRef.current.delete(batch.id)
-          setActiveBatchCount((c) => Math.max(0, c - 1))
-          return
-        }
-
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
-
-          let eventName = ''
-          for (const line of lines) {
-            if (line.startsWith('event:')) {
-              eventName = line.slice(6).trim()
-            } else if (line.startsWith('data:') && eventName === 'batch_update') {
-              try {
-                const updated: BatchResponse = JSON.parse(line.slice(5).trim())
-                console.log('[SSE] batch_update:', updated.id, updated.status, updated.completed_count)
-                batchListRef.current?.update(updated)
-
-                const isTerminal =
-                  updated.status === 'completed' ||
-                  updated.status === 'failed' ||
-                  updated.status === 'partial_complete'
-
-                if (isTerminal) {
-                  // SSE data is authoritative; refresh after a short delay to fetch
-                  // API-enriched fields (e.g. thumbnail_urls) without race conditions
-                  setTimeout(() => { batchListRef.current?.refresh() }, 1500)
-                  sseControllersRef.current.delete(batch.id)
-                  setActiveBatchCount((c) => Math.max(0, c - 1))
-                  return
-                }
-              } catch {
-                // ignore malformed JSON
-              }
-              eventName = ''
-            } else if (line === '') {
-              eventName = ''
-            }
-          }
-        }
-      } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        console.error('[SSE] Error for batch', batch.id, err)
-      } finally {
-        sseControllersRef.current.delete(batch.id)
-      }
-    })()
-  }, [])
+    startPolling(batch.id)
+  }, [startPolling])
 
   const teamRole = activeTeam()?.role
   const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
