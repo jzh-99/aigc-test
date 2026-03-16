@@ -141,73 +141,71 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
         <>
           {/* 提示词 + 参考图 */}
           <div className="rounded-xl border bg-card p-5">
-            <div className="space-y-4">
-              {/* 添加参考图按钮 - 左上角 */}
-              <div className="flex items-start justify-between">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5"
-                  onClick={() => setImageDialogOpen(true)}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  添加参考图
-                </Button>
-                {referenceImages.length > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    {referenceImages.length}/5
-                  </span>
+            <div className="space-y-3">
+              {/* 参考图区域 - 固定高度 */}
+              <div className="h-20">
+                {referenceImages.length > 0 ? (
+                  /* 有参考图 - 显示堆叠预览 */
+                  <div
+                    onClick={() => setImageDialogOpen(true)}
+                    className="cursor-pointer group h-full"
+                  >
+                    <div className="flex items-center gap-4 h-full">
+                      {/* 堆叠图片 - 左侧 */}
+                      <div className="relative w-20 h-16 shrink-0">
+                        {referenceImages.slice(0, 3).map((img, index) => (
+                          <div
+                            key={img.id}
+                            className="absolute rounded-lg border-2 border-background shadow-md overflow-hidden transition-transform group-hover:scale-105"
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              left: `${index * 16}px`,
+                              top: `${index * 4}px`,
+                              zIndex: 3 - index,
+                            }}
+                          >
+                            <Image
+                              src={img.previewUrl}
+                              alt=""
+                              fill
+                              className="object-cover"
+                              sizes="48px"
+                              unoptimized
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 文字信息 - 右侧 */}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium">
+                          {referenceImages.length} 张参考图
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          点击查看和管理
+                        </div>
+                      </div>
+
+                      <ImageIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
+                    </div>
+                  </div>
+                ) : (
+                  /* 无参考图 - 显示上传按钮 */
+                  <div className="flex items-center h-full">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1.5"
+                      onClick={() => setImageDialogOpen(true)}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      上传参考图
+                    </Button>
+                  </div>
                 )}
               </div>
-
-              {/* 参考图堆叠预览 */}
-              {referenceImages.length > 0 && (
-                <div
-                  onClick={() => setImageDialogOpen(true)}
-                  className="cursor-pointer group"
-                >
-                  <div className="flex items-center gap-4">
-                    {/* 堆叠图片 - 左侧 */}
-                    <div className="relative w-20 h-16 shrink-0">
-                      {referenceImages.slice(0, 3).map((img, index) => (
-                        <div
-                          key={img.id}
-                          className="absolute rounded-lg border-2 border-background shadow-md overflow-hidden transition-transform group-hover:scale-105"
-                          style={{
-                            width: '48px',
-                            height: '48px',
-                            left: `${index * 16}px`,
-                            top: `${index * 4}px`,
-                            zIndex: 3 - index,
-                          }}
-                        >
-                          <Image
-                            src={img.previewUrl}
-                            alt=""
-                            fill
-                            className="object-cover"
-                            sizes="48px"
-                            unoptimized
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* 文字信息 - 右侧 */}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">
-                        {referenceImages.length} 张参考图
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        点击查看和管理
-                      </div>
-                    </div>
-
-                    <ImageIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
-                  </div>
-                </div>
-              )}
 
               {/* 提示词输入 */}
               <div>
@@ -216,7 +214,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="min-h-[160px] resize-none"
+                  className="min-h-[120px] resize-none"
                   disabled={isGenerating || disabled}
                 />
               </div>
@@ -335,6 +333,9 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
               </SelectContent>
             </Select>
 
+            {/* 占位符，推动右侧元素 */}
+            <div className="flex-1" />
+
             {/* 积分显示 */}
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
@@ -345,7 +346,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
             <Button
               variant="gradient"
               size="lg"
-              className="gap-2 px-8 ml-auto"
+              className="gap-2 px-8"
               onClick={handleGenerate}
               disabled={isGenerating || disabled || !prompt.trim()}
             >
