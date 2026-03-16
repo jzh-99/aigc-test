@@ -4,8 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { PromptInput } from '@/components/generation/prompt-input'
-import { ParamsPanel } from '@/components/generation/params-panel'
+import { GenerationPanel } from '@/components/generation/generation-panel'
 import { BatchList, type BatchListHandle } from '@/components/history/batch-list'
 import { BatchDetail } from '@/components/history/batch-detail'
 import { useBatchSSE } from '@/hooks/use-batch-sse'
@@ -153,8 +152,8 @@ export default function ImagePage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full">
-      {/* Left column — Form */}
-      <div className="w-full lg:w-[400px] shrink-0 space-y-4">
+      {/* Left column — Generation Panel */}
+      <div className="w-full lg:w-[420px] shrink-0 space-y-4">
         {noWorkspace && (
           <Alert variant="destructive">
             <FolderX className="h-4 w-4" />
@@ -180,20 +179,8 @@ export default function ImagePage() {
         )}
 
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">提示词</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PromptInput onBatchCreated={handleBatchCreated} disabled={noWorkspace} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">参数设置</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ParamsPanel />
+          <CardContent className="pt-6">
+            <GenerationPanel onBatchCreated={handleBatchCreated} disabled={noWorkspace} />
           </CardContent>
         </Card>
       </div>
