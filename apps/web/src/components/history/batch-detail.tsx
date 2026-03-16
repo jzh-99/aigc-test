@@ -6,7 +6,7 @@ import type { BatchResponse } from '@aigc/types'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -176,22 +176,9 @@ function BatchDetailContent({ batch }: { batch: BatchResponse }) {
       </div>
 
       {/* Lightbox */}
-      <Dialog open={!!lightboxUrl} onOpenChange={(open) => !open && setLightboxUrl(null)}>
-        <DialogContent className="max-w-4xl p-2">
-          <DialogTitle className="sr-only">图片预览</DialogTitle>
-          {lightboxUrl && (
-            <div className="relative aspect-square w-full">
-              <Image
-                src={lightboxUrl}
-                alt="Generated image"
-                fill
-                className="object-contain"
-                unoptimized
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {lightboxUrl && (
+        <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      )}
     </div>
   )
 }

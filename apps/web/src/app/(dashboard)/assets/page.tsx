@@ -4,8 +4,8 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { Loader2, Download, Maximize2, Trash2, ImageIcon, VideoIcon, CalendarSearch, X } from 'lucide-react'
 import { useAssets, deleteAsset } from '@/hooks/use-assets'
 import type { AssetItem } from '@/hooks/use-assets'
@@ -220,41 +220,32 @@ export default function AssetsPage() {
       )}
 
       {/* Lightbox */}
-      <Dialog open={!!lightbox} onOpenChange={(open) => !open && setLightbox(null)}>
-        <DialogContent className="max-w-4xl p-2">
-          <DialogTitle className="sr-only">图片预览</DialogTitle>
-          {lightbox && (() => {
-            const url = lightbox.storage_url ?? lightbox.original_url
-            return (
-              <div className="space-y-2">
-                <div className="relative aspect-square w-full">
-                  <Image
-                    src={url!}
-                    alt={lightbox.batch.prompt}
-                    fill
-                    className="object-contain"
-                    unoptimized
-                  />
+      {lightbox && (() => {
+        const url = lightbox.storage_url ?? lightbox.original_url
+        return (
+          <ImageLightbox
+            url={url!}
+            alt={lightbox.batch.prompt}
+            onClose={() => setLightbox(null)}
+            footer={
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm truncate">{lightbox.batch.prompt}</p>
+                  <p className="text-xs opacity-60 mt-0.5">
+                    {MODEL_DISPLAY_NAMES[lightbox.batch.model] ?? lightbox.batch.model}
+                    {' · '}
+                    {new Date(lightbox.created_at).toLocaleString('zh-CN')}
+                  </p>
                 </div>
-                <div className="px-2 pb-1 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm truncate text-muted-foreground">{lightbox.batch.prompt}</p>
-                    <p className="text-xs text-muted-foreground/60 mt-0.5">
-                      {MODEL_DISPLAY_NAMES[lightbox.batch.model] ?? lightbox.batch.model}
-                      {' · '}
-                      {new Date(lightbox.created_at).toLocaleString('zh-CN')}
-                    </p>
-                  </div>
-                  <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => downloadImage(url!)}>
-                    <Download className="h-3.5 w-3.5" />
-                    下载
-                  </Button>
-                </div>
+                <Button size="sm" variant="outline" className="shrink-0 gap-1.5 border-white/20 text-white hover:bg-white/10 hover:text-white" onClick={() => downloadImage(url!)}>
+                  <Download className="h-3.5 w-3.5" />
+                  下载
+                </Button>
               </div>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
+            }
+          />
+        )
+      })()}
     </div>
   )
 }
