@@ -98,6 +98,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       await recordFailedAttempt(email)
+      // If user exists but is suspended, reveal that rather than a generic credentials error
+      if (user && user.status !== 'active') {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'ACCOUNT_SUSPENDED', message: '您的账户已被停用，请联系管理员' },
+        })
+      }
       return reply.status(401).send({
         success: false,
         error: { code: 'INVALID_CREDENTIALS', message: '邮箱或密码错误' },
@@ -107,7 +114,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (user.status !== 'active') {
       return reply.status(403).send({
         success: false,
-        error: { code: 'ACCOUNT_SUSPENDED', message: '您的账户已被停用，请联系团队管理员重新邀请' },
+        error: { code: 'ACCOUNT_SUSPENDED', message: '您的账户已被停用，请联系管理员' },
       })
     }
 

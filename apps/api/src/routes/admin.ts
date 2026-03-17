@@ -346,13 +346,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .returning('id')
         .executeTakeFirstOrThrow()
       owner = { id: result.id, email: owner_email, status: 'active' }
-    } else if (owner.status === 'suspended') {
-      // Reactivate suspended user when assigning them as a new team owner
-      await db
-        .updateTable('users')
-        .set({ status: 'active' })
-        .where('id', '=', owner.id)
-        .execute()
+    } else {
+      // User exists — reactivate if suspended, and update password if a new one is provided
+      const updates: Record<string, unknown> = {}
+      if (owner.status === 'suspended') updates.status = 'active'
+      if (owner_password && owner_password.length >= 8) {
+        updates.password_hash = await bcrypt.hash(owner_password, 12)
+      }
+      if (Object.keys(updates).length > 0) {
+        await db.updateTable('users').set(updates).where('id', '=', owner.id).execute()
+      }
     }
 
     // Check owner uniqueness: one active team per owner
