@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -97,6 +97,23 @@ export default function AssetsPage() {
   const { assets, isLoadingInitial, isLoadingMore, hasMore, loadMore, error, mutate } = useAssets(assetType, dateFilter || undefined)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Auto-load more when the sentinel div enters the viewport
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          loadMore()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasMore, isLoadingMore, loadMore])
 
   // Flat list of assets with URLs (for lightbox navigation)
   const viewableAssets = assets.filter((a) => a.storage_url ?? a.original_url)
@@ -215,14 +232,10 @@ export default function AssetsPage() {
         </section>
       ))}
 
-      {hasMore && (
-        <div className="flex justify-center pt-2">
-          <Button variant="outline" onClick={loadMore} disabled={isLoadingMore}>
-            {isLoadingMore ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            加载更多
-          </Button>
-        </div>
-      )}
+      {/* Infinite scroll sentinel */}
+      <div ref={sentinelRef} className="flex justify-center py-2">
+        {isLoadingMore && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+      </div>
 
       {/* Lightbox */}
       {lightboxAsset && (() => {
