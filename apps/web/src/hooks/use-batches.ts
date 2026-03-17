@@ -6,7 +6,7 @@ import { useCallback } from 'react'
 import type { BatchResponse, BatchListResponse } from '@aigc/types'
 import { useAuthStore } from '@/stores/auth-store'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 export function useBatch(batchId: string | null) {
   return useSWR<BatchResponse>(
