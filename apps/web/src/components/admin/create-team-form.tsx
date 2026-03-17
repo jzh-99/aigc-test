@@ -89,7 +89,7 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
                     onChange={() => setTeamType(type)}
                     className="sr-only"
                   />
-                  {type === 'standard' ? '标准版' : '公司A版'}
+                  {type === 'standard' ? '标准版' : '省台版'}
                 </label>
               ))}
             </div>

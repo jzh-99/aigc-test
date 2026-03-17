@@ -126,7 +126,7 @@ export function TeamTable() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{team.name}</span>
                     {team.team_type === 'company_a' && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-400 text-blue-600">公司A</Badge>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-400 text-blue-600">省台</Badge>
                     )}
                     {team.owner_username && (
                       <span className="text-xs text-muted-foreground">组长: {team.owner_username}</span>
@@ -141,7 +141,7 @@ export function TeamTable() {
                   </div>
                 </div>
                 <Button size="sm" variant="outline" className="text-xs" onClick={(e) => { e.stopPropagation(); handleSwitchType(team) }} disabled={switchingTeamId === team.id}>
-                  {switchingTeamId === team.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (team.team_type === 'company_a' ? '切换标准版' : '切换公司A')}
+                  {switchingTeamId === team.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (team.team_type === 'company_a' ? '切换标准版' : '切换省台版')}
                 </Button>
                 <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setTopupTeam({ id: team.id, name: team.name, balance: team.balance }) }}>
                   <Coins className="h-3.5 w-3.5 mr-1" />
