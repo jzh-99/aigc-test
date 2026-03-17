@@ -11,15 +11,17 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Download } from 'lucide-react'
+import { Download, RotateCcw, Check } from 'lucide-react'
 import { useBatch } from '@/hooks/use-batches'
 import { downloadImage } from '@/lib/download'
 import { translateTaskError } from '@/lib/error-messages'
+import { useGenerationStore } from '@/stores/generation-store'
 
 interface BatchDetailProps {
   batchId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onApplied?: () => void
 }
 
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
@@ -39,7 +41,7 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
   failed: { label: '失败', variant: 'destructive' },
 }
 
-export function BatchDetail({ batchId, open, onOpenChange }: BatchDetailProps) {
+export function BatchDetail({ batchId, open, onOpenChange, onApplied }: BatchDetailProps) {
   const { data: batch, isLoading } = useBatch(open ? batchId : null)
 
   return (
@@ -67,17 +69,27 @@ export function BatchDetail({ batchId, open, onOpenChange }: BatchDetailProps) {
             </div>
           </div>
         ) : (
-          <BatchDetailContent batch={batch} />
+          <BatchDetailContent batch={batch} onClose={() => onOpenChange(false)} onApplied={onApplied} />
         )}
       </SheetContent>
     </Sheet>
   )
 }
 
-function BatchDetailContent({ batch }: { batch: BatchResponse }) {
+function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchResponse; onClose: () => void; onApplied?: () => void }) {
+  const applyBatch = useGenerationStore((s) => s.applyBatch)
   const status = statusConfig[batch.status] ?? statusConfig.pending
   const time = new Date(batch.created_at)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [applied, setApplied] = useState(false)
+
+  function handleApply() {
+    applyBatch(batch)
+    setApplied(true)
+    setTimeout(() => setApplied(false), 1500)
+    onApplied?.()
+    onClose()
+  }
 
   // Collect completed tasks that have a URL
   const completedUrls = batch.tasks
@@ -115,6 +127,20 @@ function BatchDetailContent({ batch }: { batch: BatchResponse }) {
           <p className="font-medium">{time.toLocaleString('zh-CN')}</p>
         </div>
       </div>
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={handleApply}
+        disabled={applied}
+      >
+        {applied ? (
+          <><Check className="h-4 w-4 mr-2 text-green-500" />已填入</>
+        ) : (
+          <><RotateCcw className="h-4 w-4 mr-2" />复用此配置</>
+        )}
+      </Button>
 
       <Separator />
 
