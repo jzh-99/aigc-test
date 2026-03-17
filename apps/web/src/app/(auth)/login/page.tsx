@@ -11,7 +11,6 @@ import { useGenerationStore } from '@/stores/generation-store'
 import { apiPost, ApiError } from '@/lib/api-client'
 import type { AuthResponse, LoginRequest } from '@aigc/types'
 import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import Link from 'next/link'
 
 export default function LoginPage() {
@@ -21,6 +20,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [suspended, setSuspended] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -28,6 +28,7 @@ export default function LoginPage() {
     if (!email || !password) return
 
     setLoading(true)
+    setErrorMsg(null)
     setSuspended(false)
     try {
       const res = await apiPost<AuthResponse>('/auth/login', { email, password } satisfies LoginRequest)
@@ -39,10 +40,10 @@ export default function LoginPage() {
         if (err.code === 'ACCOUNT_SUSPENDED') {
           setSuspended(true)
         } else {
-          toast.error(err.message)
+          setErrorMsg(err.message)
         }
       } else {
-        toast.error('登录失败，请稍后重试')
+        setErrorMsg('登录失败，请稍后重试')
       }
     } finally {
       setLoading(false)
@@ -62,6 +63,11 @@ export default function LoginPage() {
             <p className="mt-1 text-muted-foreground">
               您已被移出所有团队，账户已自动停用。请联系团队管理员重新发送邀请链接以恢复使用。
             </p>
+          </div>
+        )}
+        {errorMsg && (
+          <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {errorMsg}
           </div>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
