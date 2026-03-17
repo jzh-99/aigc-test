@@ -8,12 +8,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TopupDialog } from './topup-dialog'
+import { AdminPasswordDialog } from './admin-password-dialog'
+import { TrashDrawer } from './trash-drawer'
 import {
   Coins, ChevronDown, ChevronRight, Users, FolderOpen,
-  Image as ImageIcon, Loader2,
+  Image as ImageIcon, Loader2, Trash2, KeyRound, Trash,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { apiPatch } from '@/lib/api-client'
+import { apiPatch, apiDelete, ApiError } from '@/lib/api-client'
+import { toast } from 'sonner'
 
 interface Team {
   id: string
@@ -79,17 +82,42 @@ export function TeamTable() {
   const [topupTeam, setTopupTeam] = useState<{ id: string; name: string; balance: number } | null>(null)
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null)
   const [switchingTeamId, setSwitchingTeamId] = useState<string | null>(null)
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null)
+  const [passwordUserId, setPasswordUserId] = useState<string | null>(null)
+  const [trashOpen, setTrashOpen] = useState(false)
 
   async function handleSwitchType(team: Team) {
     const newType = team.team_type === 'company_a' ? 'standard' : 'company_a'
     setSwitchingTeamId(team.id)
+    // Optimistic update
+    mutate(
+      (prev) => prev
+        ? { data: prev.data.map(t => t.id === team.id ? { ...t, team_type: newType } : t) }
+        : prev,
+      false
+    )
     try {
       await apiPatch(`/admin/teams/${team.id}`, { team_type: newType })
+    } catch (err) {
+      // Roll back on error
       mutate()
-    } catch {
-      // silently ignore
+      toast.error(err instanceof ApiError ? err.message : '切换失败')
     } finally {
       setSwitchingTeamId(null)
+    }
+  }
+
+  async function handleDeleteTeam(team: Team) {
+    if (!confirm(`确定要删除团队"${team.name}"吗？\n\n团队及其工作区将被移入回收站，7天内可恢复。`)) return
+    setDeletingTeamId(team.id)
+    try {
+      await apiDelete(`/admin/teams/${team.id}`)
+      toast.success(`团队"${team.name}"已删除，可在回收站恢复`)
+      mutate()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '删除失败')
+    } finally {
+      setDeletingTeamId(null)
     }
   }
 
@@ -147,16 +175,37 @@ export function TeamTable() {
                   <Coins className="h-3.5 w-3.5 mr-1" />
                   调整积分
                 </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  title="删除团队"
+                  disabled={deletingTeamId === team.id}
+                  onClick={(e) => { e.stopPropagation(); handleDeleteTeam(team) }}
+                >
+                  {deletingTeamId === team.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </Button>
               </div>
 
               {/* Expanded content */}
               {expandedTeam === team.id && (
-                <TeamExpanded teamId={team.id} />
+                <TeamExpanded teamId={team.id} ownerId={team.owner_id} onPasswordChange={(uid) => setPasswordUserId(uid)} />
               )}
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Floating trash button */}
+      <Button
+        variant="outline"
+        size="sm"
+        className="fixed bottom-6 right-6 gap-2 shadow-md"
+        onClick={() => setTrashOpen(true)}
+      >
+        <Trash className="h-4 w-4" />
+        回收站
+      </Button>
 
       <TopupDialog
         teamId={topupTeam?.id ?? null}
@@ -166,11 +215,23 @@ export function TeamTable() {
         onOpenChange={(open) => !open && setTopupTeam(null)}
         onSuccess={() => mutate()}
       />
+
+      <AdminPasswordDialog
+        userId={passwordUserId}
+        open={!!passwordUserId}
+        onOpenChange={(open) => !open && setPasswordUserId(null)}
+      />
+
+      <TrashDrawer
+        open={trashOpen}
+        onOpenChange={setTrashOpen}
+        onRestored={() => mutate()}
+      />
     </>
   )
 }
 
-function TeamExpanded({ teamId }: { teamId: string }) {
+function TeamExpanded({ teamId, ownerId, onPasswordChange }: { teamId: string; ownerId: string; onPasswordChange: (uid: string) => void }) {
   const [activeTab, setActiveTab] = useState<'members' | 'workspaces'>('members')
 
   return (
@@ -196,14 +257,14 @@ function TeamExpanded({ teamId }: { teamId: string }) {
         </button>
       </div>
       <div className="px-4 pb-4">
-        {activeTab === 'members' && <TeamMembers teamId={teamId} />}
+        {activeTab === 'members' && <TeamMembers teamId={teamId} onPasswordChange={onPasswordChange} />}
         {activeTab === 'workspaces' && <TeamWorkspaces teamId={teamId} />}
       </div>
     </div>
   )
 }
 
-function TeamMembers({ teamId }: { teamId: string }) {
+function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordChange: (uid: string) => void }) {
   const { data, error } = useSWR<{ data: TeamMember[] }>(`/admin/teams/${teamId}/members`)
 
   if (!data && !error) return <Skeleton className="h-20 w-full mt-2" />
@@ -221,6 +282,7 @@ function TeamMembers({ teamId }: { teamId: string }) {
           <th className="text-right py-2 px-2 font-medium">已用积分</th>
           <th className="text-right py-2 px-2 font-medium">配额</th>
           <th className="text-left py-2 px-2 font-medium">加入时间</th>
+          <th className="text-right py-2 px-2 font-medium">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -239,6 +301,17 @@ function TeamMembers({ teamId }: { teamId: string }) {
             </td>
             <td className="py-2 px-2 text-muted-foreground">
               {new Date(m.joined_at).toLocaleDateString('zh-CN')}
+            </td>
+            <td className="py-2 px-2 text-right">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                title="修改密码"
+                onClick={() => onPasswordChange(m.id)}
+              >
+                <KeyRound className="h-3 w-3" />
+              </Button>
             </td>
           </tr>
         ))}

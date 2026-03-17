@@ -12,6 +12,7 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
     .innerJoin('teams', 'teams.id', 'team_members.team_id')
     .select(['teams.id as team_id', 'teams.name as team_name', 'teams.owner_id', 'teams.team_type', 'team_members.role'])
     .where('team_members.user_id', '=', userId)
+    .where('teams.is_deleted', '=', false)
     .execute()
 
   // Fetch owner info for each team
@@ -41,6 +42,7 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
       ])
       .where('workspace_members.user_id', '=', userId)
       .where('workspaces.team_id', 'in', teamIds)
+      .where('workspaces.is_deleted', '=', false)
       .execute()
   }
 

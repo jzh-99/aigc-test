@@ -32,6 +32,13 @@ export const ERROR_CODE_MAP: Record<string, string> = {
   VALIDATION_ERROR: '数据验证失败',
   FST_ERR_VALIDATION: '输入数据格式不正确',
 
+  // 团队/工作区相关
+  TEAM_NAME_TAKEN: '已有同名团队，请换一个名称',
+  WORKSPACE_NAME_TAKEN: '该团队下已有同名工作区，请换一个名称',
+  USER_ALREADY_OWNER: '该用户已是其他团队的组长，同一账号只能担任一个团队的组长',
+  CANNOT_REMOVE_OWNER: '不能移除团队组长',
+  ALREADY_MEMBER: '该用户已是成员',
+
   // 其他
   UNKNOWN: '未知错误，请联系客服',
 }
