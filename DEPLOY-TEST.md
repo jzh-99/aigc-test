@@ -5,50 +5,34 @@
 
 ---
 
-## 每次改完代码后的标准流程
+## 场景一：只改了前端代码
 
-### 第一步：构建
+修改了 `apps/web/` 下任何文件（组件、store、hooks、页面等）时，需要重新构建 `.next` bundle 再重启。
+
+> ⚠️ 直接 `pm2 restart aigc-test-web` **不会**应用新代码，Next.js 始终加载上次 build 的 bundle。
 
 ```bash
+# 1. 停止服务（释放端口，避免 EADDRINUSE）
+pm2 stop aigc-test-web
+
+# 2. 构建（耗时约 30–60 秒）
 pnpm --filter @aigc/web build
+
+# 3. 启动
+pm2 start aigc-test-web
 ```
 
-只构建 web 包，输出到 `apps/web/.next/`。耗时约 30–60 秒。
-
-**必须构建的情况：**
-- 修改了任何前端代码（组件、store、hooks、页面等）
-
-**不需要构建的情况：**
-- 只改了 API（`apps/api/`）或 Worker（`apps/worker/`），pm2 用 tsx 直接运行 ts 源码，改完 restart 即可
-
-### 第二步：重启 pm2
+一键版：
 
 ```bash
-pm2 restart aigc-test-web
-```
-
-### 第三步：确认状态正常
-
-```bash
-pm2 list
-```
-
-检查 `aigc-test-web` 的：
-- `status` 为 **online**
-- `uptime` 持续增长（不是一直 0s）
-- `↺` 重启次数没有持续增加
-
----
-
-## 完整命令（一键执行）
-
-```bash
-pnpm --filter @aigc/web build && pm2 restart aigc-test-web
+pm2 stop aigc-test-web && pnpm --filter @aigc/web build && pm2 start aigc-test-web
 ```
 
 ---
 
-## 只改 API 或 Worker 时
+## 场景二：只改了后端代码
+
+修改了 `apps/api/` 或 `apps/worker/` 下的文件时，pm2 用 `tsx` 直接运行 TypeScript 源码，**无需构建**，直接重启即可。
 
 ```bash
 # 只改了 API
@@ -58,7 +42,26 @@ pm2 restart aigc-test-api
 pm2 restart aigc-test-worker
 ```
 
-API 和 Worker 由 tsx 直接运行 TypeScript 源码，无需构建步骤。
+---
+
+## 场景三：前后端都改了
+
+```bash
+pm2 restart aigc-test-api && pm2 stop aigc-test-web && pnpm --filter @aigc/web build && pm2 start aigc-test-web
+```
+
+---
+
+## 确认状态正常
+
+```bash
+pm2 list
+```
+
+检查对应服务：
+- `status` 为 **online**
+- `uptime` 持续增长（不是一直 0s）
+- `↺` 重启次数没有持续增加
 
 ---
 
