@@ -232,10 +232,18 @@ export default function AssetsPage() {
         </section>
       ))}
 
+      {/* Skeleton placeholders shown while next page loads — prevents images from
+          suddenly appearing in the last row's empty slots */}
+      {isLoadingMore && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-square rounded-lg" />
+          ))}
+        </div>
+      )}
+
       {/* Infinite scroll sentinel */}
-      <div ref={sentinelRef} className="flex justify-center py-2">
-        {isLoadingMore && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-      </div>
+      <div ref={sentinelRef} />
 
       {/* Lightbox */}
       {lightboxAsset && (() => {
