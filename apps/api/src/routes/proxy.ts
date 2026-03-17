@@ -13,6 +13,19 @@ function isAllowedUrl(url: string): boolean {
   }
 }
 
+// Fetch with a timeout to avoid hanging connections blocking the event loop
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const PROXY_TIMEOUT_MS = 20_000 // 20 seconds — external storage SLA
+
 export async function proxyRoutes(app: FastifyInstance) {
   // In-memory thumbnail cache: key = "url:width", value = WebP Buffer
   const thumbCache = new Map<string, { data: Buffer; createdAt: number }>()
@@ -55,8 +68,11 @@ export async function proxyRoutes(app: FastifyInstance) {
 
         let upstream: Response
         try {
-          upstream = await fetch(url)
-        } catch {
+          upstream = await fetchWithTimeout(url, PROXY_TIMEOUT_MS)
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            return reply.code(504).send({ error: 'Gateway timeout' })
+          }
           return reply.code(502).send({ error: 'Failed to fetch asset' })
         }
         if (!upstream.ok) {
@@ -97,8 +113,11 @@ export async function proxyRoutes(app: FastifyInstance) {
       // Pass-through (original behaviour)
       let upstream: Response
       try {
-        upstream = await fetch(url)
-      } catch {
+        upstream = await fetchWithTimeout(url, PROXY_TIMEOUT_MS)
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          return reply.code(504).send({ error: 'Gateway timeout' })
+        }
         return reply.code(502).send({ error: 'Failed to fetch asset' })
       }
 

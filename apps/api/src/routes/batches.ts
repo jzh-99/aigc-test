@@ -195,7 +195,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
 
       // Fetch thumbnail URLs for all batches in one query
       const batchIds = batches.map((b: any) => b.id)
-      let thumbnailMap = new Map<string, string[]>()
+        const thumbnailMap = new Map<string, string[]>()
       if (batchIds.length > 0) {
         const assets = await db
           .selectFrom('assets')
@@ -205,12 +205,20 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           .execute()
 
         for (const a of assets) {
-          const rawUrl = (a as any).storage_url ?? (a as any).original_url
+          const rawUrl: string | null = (a as any).storage_url ?? (a as any).original_url
           if (!rawUrl) continue
-          const signedUrl = await signAssetUrl(rawUrl)
-          if (!signedUrl) continue
+          // Use small resized thumbnails (128px) for batch list cards to avoid
+          // saturating browser connections with full-resolution proxy fetches.
+          let thumbnailUrl: string
+          if (rawUrl.startsWith('http://')) {
+            thumbnailUrl = `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}&w=128`
+          } else {
+            const signed = await signAssetUrl(rawUrl)
+            if (!signed) continue
+            thumbnailUrl = signed
+          }
           const list = thumbnailMap.get((a as any).batch_id) ?? []
-          list.push(signedUrl)
+          list.push(thumbnailUrl)
           thumbnailMap.set((a as any).batch_id, list)
         }
       }
