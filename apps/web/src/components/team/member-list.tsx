@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { apiPatch, apiPost, apiDelete } from '@/lib/api-client'
+import { apiPatch, apiPost, apiDelete, ApiError } from '@/lib/api-client'
 import { InviteDialog } from './invite-dialog'
 import { toast } from 'sonner'
 import { UserPlus, Trash2, Edit2, RotateCcw } from 'lucide-react'
@@ -92,8 +92,8 @@ export function MemberList({ teamId }: { teamId: string }) {
       toast.success('配额已更新')
       setEditingMember(null)
       mutate()
-    } catch {
-      toast.error('更新失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '更新失败')
     }
   }
 
@@ -103,8 +103,8 @@ export function MemberList({ teamId }: { teamId: string }) {
       await apiPost(`/teams/${teamId}/members/${member.user_id}/reset-credits`, {})
       toast.success(`${member.username} 的已用积分已重置为 0`)
       mutate()
-    } catch {
-      toast.error('重置失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '重置失败')
     }
   }
 
@@ -114,8 +114,8 @@ export function MemberList({ teamId }: { teamId: string }) {
       await apiDelete(`/teams/${teamId}/members/${member.user_id}`)
       toast.success('成员已移除')
       mutate()
-    } catch (e: any) {
-      toast.error(e?.message || '移除失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '移除失败')
     }
   }
 

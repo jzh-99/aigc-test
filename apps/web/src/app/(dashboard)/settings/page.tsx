@@ -34,8 +34,8 @@ export default function SettingsPage() {
       })
       updateUser(updated)
       toast.success('设置已保存')
-    } catch {
-      toast.error('保存失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '保存失败')
     } finally {
       setLoading(false)
     }

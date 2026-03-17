@@ -30,6 +30,7 @@ export const ERROR_CODE_MAP: Record<string, string> = {
   // 验证错误
   INVALID_INPUT: '输入数据格式不正确',
   VALIDATION_ERROR: '数据验证失败',
+  FST_ERR_VALIDATION: '输入数据格式不正确',
 
   // 其他
   UNKNOWN: '未知错误，请联系客服',
@@ -70,6 +71,18 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /invalid (input|format|data)/i, message: '输入数据格式不正确' },
   { pattern: /validation (failed|error)/i, message: '数据验证失败' },
   { pattern: /missing required/i, message: '缺少必填字段' },
+
+  // Fastify / AJV schema validation messages
+  { pattern: /must match format "email"/i, message: '邮箱格式不正确，请输入有效的邮箱地址' },
+  { pattern: /must match format "uuid"/i, message: '字段格式不正确' },
+  { pattern: /must NOT be shorter than (\d+) characters/i, message: '输入内容过短，请检查长度要求' },
+  { pattern: /must NOT be longer than (\d+) characters/i, message: '输入内容超出长度限制' },
+  { pattern: /must match pattern/i, message: '输入内容格式不符合要求' },
+  { pattern: /must be (integer|number)/i, message: '请输入有效的数字' },
+  { pattern: /must have required property/i, message: '缺少必填字段' },
+  { pattern: /must be >= (\d+)/i, message: '数值不能小于最小限制' },
+  { pattern: /must be <= (\d+)/i, message: '数值超出最大限制' },
+  { pattern: /must be equal to one of the allowed values/i, message: '输入值不在允许的范围内' },
 ]
 
 /**

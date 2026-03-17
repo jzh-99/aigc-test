@@ -32,9 +32,14 @@ async function handleResponse<T>(res: Response): Promise<T> {
     let message = `HTTP ${res.status}`
     try {
       const body = await res.json()
-      if (body?.error) {
+      if (body?.error && typeof body.error === 'object') {
+        // Our custom error format: { error: { code, message } }
         code = body.error.code ?? code
         message = body.error.message ?? message
+      } else if (body?.code || body?.message) {
+        // Fastify built-in error format: { code, message, error: "Bad Request" }
+        code = body.code ?? code
+        message = body.message ?? message
       }
     } catch {
       // ignore parse error
