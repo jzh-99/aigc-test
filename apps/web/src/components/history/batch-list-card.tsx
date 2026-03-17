@@ -49,7 +49,7 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
 
   return (
     <Card
-      className={cn('group cursor-pointer transition-shadow hover:shadow-md', onClick && 'hover:border-primary/50')}
+      className={cn('cursor-pointer transition-shadow hover:shadow-md', onClick && 'hover:border-primary/50')}
       onClick={onClick}
     >
       <CardContent className="p-4 space-y-3">
@@ -124,8 +124,8 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
             size="sm"
             variant="ghost"
             className={cn(
-              'h-7 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity',
-              applied && 'opacity-100 text-green-600'
+              'h-7 px-2 text-xs',
+              applied && 'text-green-600'
             )}
             onClick={handleApply}
           >
