@@ -1,9 +1,85 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import { signAssetUrl } from '../lib/storage.js'
+import { signAssetUrl, extractStorageKey, signThumbnailUrl, verifyThumbnailSig, getS3ObjectBuffer } from '../lib/storage.js'
 
 export async function assetRoutes(app: FastifyInstance): Promise<void> {
-  // GET /assets — list assets for a workspace, ordered by created_at DESC
+  // In-memory thumbnail cache: key = "storageKey:width", value = WebP Buffer
+  const thumbnailCache = new Map<string, { data: Buffer; createdAt: number }>()
+  const THUMBNAIL_CACHE_MAX = 500
+
+  // GET /assets/thumbnail — serve resized WebP (no auth required, HMAC-signed URL)
+  app.get<{ Querystring: { key: string; w?: string; exp: string; sig: string } }>(
+    '/assets/thumbnail',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['key', 'exp', 'sig'],
+          properties: {
+            key: { type: 'string' },
+            w: { type: 'string' },
+            exp: { type: 'string' },
+            sig: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { key, w, exp, sig } = request.query
+      const width = Math.min(parseInt(w ?? '400', 10) || 400, 1200)
+      const expNum = parseInt(exp, 10)
+
+      if (!verifyThumbnailSig(key, width, expNum, sig)) {
+        return reply.code(403).send({ error: 'Invalid or expired thumbnail URL' })
+      }
+
+      const cacheKey = `${key}:${width}`
+      const cached = thumbnailCache.get(cacheKey)
+      if (cached) {
+        reply.header('Content-Type', 'image/webp')
+        reply.header('Cache-Control', 'public, max-age=86400, immutable')
+        reply.header('X-Cache', 'HIT')
+        return reply.send(cached.data)
+      }
+
+      let rawBuffer: Buffer
+      try {
+        rawBuffer = await getS3ObjectBuffer(key)
+      } catch (err) {
+        app.log.warn({ err, key }, 'Failed to fetch asset from S3 for thumbnail')
+        return reply.code(502).send({ error: 'Failed to fetch asset' })
+      }
+
+      let resultBuffer: Buffer
+      let contentType: string
+      try {
+        const sharp = (await import('sharp')).default
+        resultBuffer = await sharp(rawBuffer)
+          .resize(width, null, { withoutEnlargement: true, fit: 'inside' })
+          .webp({ quality: 82 })
+          .toBuffer()
+        contentType = 'image/webp'
+      } catch {
+        // Fallback: serve original bytes
+        resultBuffer = rawBuffer
+        contentType = 'image/jpeg'
+      }
+
+      if (thumbnailCache.size >= THUMBNAIL_CACHE_MAX) {
+        const oldest = [...thumbnailCache.entries()]
+          .sort((a, b) => a[1].createdAt - b[1].createdAt)
+          .slice(0, 100)
+          .map(([k]) => k)
+        for (const k of oldest) thumbnailCache.delete(k)
+      }
+      thumbnailCache.set(cacheKey, { data: resultBuffer, createdAt: Date.now() })
+
+      reply.header('Content-Type', contentType)
+      reply.header('Cache-Control', 'public, max-age=86400, immutable')
+      reply.header('X-Cache', 'MISS')
+      return reply.send(resultBuffer)
+    },
+  )
   app.get<{ Querystring: { workspace_id?: string; type?: string; date?: string; cursor?: string; limit?: string } }>(
     '/assets',
     async (request, reply) => {
@@ -90,16 +166,29 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
       const hasMore = rows.length > limit
       const assets = hasMore ? rows.slice(0, limit) : rows
 
-      // Sign URLs
+      // Sign URLs and build thumbnail URLs
       const signed = await Promise.all(
-        assets.map(async (a: any) => ({
-          id: a.id,
-          type: a.type,
-          storage_url: a.storage_url ? await signAssetUrl(a.storage_url) : null,
-          original_url: a.original_url ?? null,
-          created_at: a.created_at.toISOString?.() ?? String(a.created_at),
-          batch: { id: a.batch_id, prompt: a.prompt, model: a.model },
-        })),
+        assets.map(async (a: any) => {
+          const rawUrl: string | null = a.storage_url
+          const storageKey = rawUrl ? extractStorageKey(rawUrl) : null
+          let thumbnail_url: string | null = null
+          if (storageKey) {
+            // Our MinIO/S3 — HMAC-signed thumbnail endpoint
+            thumbnail_url = signThumbnailUrl(storageKey, 400) || null
+          } else if (rawUrl?.startsWith('http://')) {
+            // External HTTP storage — proxy with resize
+            thumbnail_url = `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}&w=400`
+          }
+          return {
+            id: a.id,
+            type: a.type,
+            storage_url: rawUrl ? await signAssetUrl(rawUrl) : null,
+            thumbnail_url,
+            original_url: a.original_url ?? null,
+            created_at: a.created_at.toISOString?.() ?? String(a.created_at),
+            batch: { id: a.batch_id, prompt: a.prompt, model: a.model },
+          }
+        }),
       )
 
       const nextCursor = hasMore && assets.length > 0
