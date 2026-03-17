@@ -27,6 +27,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         'credit_accounts.total_earned', 'credit_accounts.total_spent',
       ])
       .where('teams.is_deleted', '=', false)
+      .orderBy('teams.created_at', 'asc')
       .execute()
 
     // Get member counts
@@ -321,7 +322,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     // Check if owner user exists
     let owner = await db
       .selectFrom('users')
-      .select(['id', 'email'])
+      .select(['id', 'email', 'status'])
       .where('email', '=', owner_email)
       .executeTakeFirst()
 
@@ -344,7 +345,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         })
         .returning('id')
         .executeTakeFirstOrThrow()
-      owner = { id: result.id, email: owner_email }
+      owner = { id: result.id, email: owner_email, status: 'active' }
+    } else if (owner.status === 'suspended') {
+      // Reactivate suspended user when assigning them as a new team owner
+      await db
+        .updateTable('users')
+        .set({ status: 'active' })
+        .where('id', '=', owner.id)
+        .execute()
     }
 
     // Check owner uniqueness: one active team per owner
