@@ -26,6 +26,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         'credit_accounts.balance', 'credit_accounts.frozen_credits',
         'credit_accounts.total_earned', 'credit_accounts.total_spent',
       ])
+      .where('teams.is_deleted', '=', false)
       .execute()
 
     // Get member counts
@@ -41,6 +42,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const wsCounts = await db
       .selectFrom('workspaces')
       .select(['team_id', db.fn.count('id').as('workspace_count')])
+      .where('is_deleted', '=', false)
       .groupBy('team_id')
       .execute()
 
@@ -133,6 +135,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('workspaces')
       .select(['id', 'name', 'created_at'])
       .where('team_id', '=', teamId)
+      .where('is_deleted', '=', false)
       .orderBy('created_at', 'asc')
       .execute()
 
@@ -301,6 +304,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDb()
 
+    // Check duplicate team name
+    const existingTeam = await db
+      .selectFrom('teams')
+      .select('id')
+      .where('name', '=', name)
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+    if (existingTeam) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'TEAM_NAME_TAKEN', message: `已有同名团队"${name}"，请换一个名称` },
+      })
+    }
+
     // Check if owner user exists
     let owner = await db
       .selectFrom('users')
@@ -328,6 +345,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .returning('id')
         .executeTakeFirstOrThrow()
       owner = { id: result.id, email: owner_email }
+    }
+
+    // Check owner uniqueness: one active team per owner
+    const existingOwnership = await db
+      .selectFrom('teams')
+      .select('id')
+      .where('owner_id', '=', owner.id)
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+    if (existingOwnership) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'USER_ALREADY_OWNER', message: '该用户已是其他团队的组长，同一账号只能担任一个团队的组长' },
+      })
     }
 
     // Create team
@@ -435,6 +466,359 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.send({ success: true })
+  })
+
+  // DELETE /admin/teams/:id — soft-delete team + cascade workspaces + task_batches
+  app.delete<{ Params: { id: string } }>('/admin/teams/:id', async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+
+    const team = await db
+      .selectFrom('teams')
+      .select(['id', 'name'])
+      .where('id', '=', id)
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+    if (!team) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '团队不存在' } })
+
+    const now = new Date()
+
+    // Cascade: soft-delete all workspaces
+    const wsIds = await db
+      .selectFrom('workspaces')
+      .select('id')
+      .where('team_id', '=', id)
+      .where('is_deleted', '=', false)
+      .execute()
+
+    if (wsIds.length > 0) {
+      const wsIdList = wsIds.map(w => w.id)
+      await db
+        .updateTable('workspaces')
+        .set({ is_deleted: true, deleted_at: now })
+        .where('id', 'in', wsIdList)
+        .execute()
+
+      // Cascade: soft-delete task_batches in those workspaces
+      await db
+        .updateTable('task_batches')
+        .set({ is_deleted: true, deleted_at: now })
+        .where('workspace_id', 'in', wsIdList)
+        .where('is_deleted', '=', false)
+        .execute()
+    }
+
+    // Soft-delete the team
+    await db
+      .updateTable('teams')
+      .set({ is_deleted: true, deleted_at: now })
+      .where('id', '=', id)
+      .execute()
+
+    // Suspend members who no longer belong to any active team
+    const memberIds = (await db
+      .selectFrom('team_members')
+      .select('user_id')
+      .where('team_id', '=', id)
+      .execute()
+    ).map(m => m.user_id)
+
+    if (memberIds.length > 0) {
+      // Count active teams per member (excluding the just-deleted team)
+      const activeCounts = await db
+        .selectFrom('team_members')
+        .innerJoin('teams', 'teams.id', 'team_members.team_id')
+        .select(['team_members.user_id', db.fn.count('team_members.team_id').as('count')])
+        .where('team_members.user_id', 'in', memberIds)
+        .where('teams.is_deleted', '=', false)
+        .groupBy('team_members.user_id')
+        .execute()
+
+      const countMap = new Map(activeCounts.map(r => [r.user_id, Number(r.count)]))
+      const toSuspend = memberIds.filter(uid => (countMap.get(uid) ?? 0) === 0)
+
+      if (toSuspend.length > 0) {
+        await db
+          .updateTable('users')
+          .set({ status: 'suspended' })
+          .where('id', 'in', toSuspend)
+          .execute()
+
+        await db
+          .updateTable('refresh_tokens')
+          .set({ revoked_at: sql`NOW()` })
+          .where('user_id', 'in', toSuspend)
+          .where('revoked_at', 'is', null)
+          .execute()
+      }
+    }
+
+    return { success: true }
+  })
+
+  // GET /admin/trash — list soft-deleted teams and workspaces (within 7 days)
+  app.get('/admin/trash', async () => {
+    const db = getDb()
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+    const teams = await db
+      .selectFrom('teams')
+      .select(['id', 'name', 'owner_id', 'deleted_at'])
+      .where('is_deleted', '=', true)
+      .where('deleted_at', '>=', cutoff as any)
+      .orderBy('deleted_at', 'desc')
+      .execute()
+
+    const workspaces = await db
+      .selectFrom('workspaces')
+      .select(['id', 'name', 'team_id', 'deleted_at'])
+      .where('is_deleted', '=', true)
+      .where('deleted_at', '>=', cutoff as any)
+      // Only show workspaces whose parent team is NOT deleted (team-level deletes are under teams tab)
+      .where((eb) =>
+        eb.not(eb.exists(
+          eb.selectFrom('teams')
+            .select('id')
+            .whereRef('teams.id', '=', 'workspaces.team_id')
+            .where('teams.is_deleted', '=', true)
+        ))
+      )
+      .orderBy('deleted_at', 'desc')
+      .execute()
+
+    // Owner usernames for teams
+    const ownerIds = [...new Set(teams.map(t => t.owner_id))]
+    const ownerMap = new Map<string, string>()
+    if (ownerIds.length > 0) {
+      const owners = await db
+        .selectFrom('users')
+        .select(['id', 'username'])
+        .where('id', 'in', ownerIds)
+        .execute()
+      for (const o of owners) ownerMap.set(o.id, o.username)
+    }
+
+    // Team names for workspaces
+    const teamIds = [...new Set(workspaces.map(w => w.team_id))]
+    const teamNameMap = new Map<string, string>()
+    if (teamIds.length > 0) {
+      const teamRows = await db
+        .selectFrom('teams')
+        .select(['id', 'name'])
+        .where('id', 'in', teamIds)
+        .execute()
+      for (const t of teamRows) teamNameMap.set(t.id, t.name)
+    }
+
+    return {
+      teams: teams.map(t => ({
+        ...t,
+        owner_username: ownerMap.get(t.owner_id) ?? null,
+        deleted_at: t.deleted_at,
+      })),
+      workspaces: workspaces.map(w => ({
+        ...w,
+        team_name: teamNameMap.get(w.team_id) ?? null,
+      })),
+    }
+  })
+
+  // POST /admin/trash/teams/:id/restore — restore soft-deleted team
+  app.post<{ Params: { id: string } }>('/admin/trash/teams/:id/restore', async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+
+    const team = await db
+      .selectFrom('teams')
+      .select(['id', 'name', 'owner_id'])
+      .where('id', '=', id)
+      .where('is_deleted', '=', true)
+      .executeTakeFirst()
+    if (!team) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '已删除的团队不存在或已过期' } })
+
+    // Check owner uniqueness before restoring
+    const ownerConflict = await db
+      .selectFrom('teams')
+      .select('id')
+      .where('owner_id', '=', team.owner_id)
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+    if (ownerConflict) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'USER_ALREADY_OWNER', message: '该团队组长已成为其他团队的组长，无法恢复' },
+      })
+    }
+
+    // Check team name uniqueness before restoring
+    const nameConflict = await db
+      .selectFrom('teams')
+      .select('id')
+      .where('name', '=', team.name)
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+    if (nameConflict) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'TEAM_NAME_TAKEN', message: `已有同名团队"${team.name}"，恢复前请先重命名现有团队` },
+      })
+    }
+
+    // Restore team
+    await db
+      .updateTable('teams')
+      .set({ is_deleted: false, deleted_at: null })
+      .where('id', '=', id)
+      .execute()
+
+    // Restore workspaces and their task_batches that were deleted at the same time
+    const wsIds = await db
+      .selectFrom('workspaces')
+      .select('id')
+      .where('team_id', '=', id)
+      .where('is_deleted', '=', true)
+      .execute()
+
+    if (wsIds.length > 0) {
+      const wsIdList = wsIds.map(w => w.id)
+      await db
+        .updateTable('workspaces')
+        .set({ is_deleted: false, deleted_at: null })
+        .where('id', 'in', wsIdList)
+        .execute()
+
+      await db
+        .updateTable('task_batches')
+        .set({ is_deleted: false, deleted_at: null })
+        .where('workspace_id', 'in', wsIdList)
+        .where('is_deleted', '=', true)
+        .execute()
+    }
+
+    // Re-activate suspended members who have no other active teams (this team is their only one)
+    const memberIds = (await db
+      .selectFrom('team_members')
+      .select('user_id')
+      .where('team_id', '=', id)
+      .execute()
+    ).map(m => m.user_id)
+
+    if (memberIds.length > 0) {
+      // Find suspended members with no other active team
+      const activeCounts = await db
+        .selectFrom('team_members')
+        .innerJoin('teams', 'teams.id', 'team_members.team_id')
+        .select(['team_members.user_id', db.fn.count('team_members.team_id').as('count')])
+        .where('team_members.user_id', 'in', memberIds)
+        .where('teams.is_deleted', '=', false)
+        .where('team_members.team_id', '!=', id)  // exclude restored team itself to find "only this team" members
+        .groupBy('team_members.user_id')
+        .execute()
+
+      const countMap = new Map(activeCounts.map(r => [r.user_id, Number(r.count)]))
+      // Members with no OTHER active teams are those suspended because of this deletion
+      const toReactivate = memberIds.filter(uid => (countMap.get(uid) ?? 0) === 0)
+
+      if (toReactivate.length > 0) {
+        await db
+          .updateTable('users')
+          .set({ status: 'active' })
+          .where('id', 'in', toReactivate)
+          .where('status', '=', 'suspended')
+          .execute()
+      }
+    }
+
+    return { success: true }
+  })
+
+  // DELETE /admin/trash/teams/:id — permanently delete team and all data
+  app.delete<{ Params: { id: string } }>('/admin/trash/teams/:id', async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+
+    const team = await db
+      .selectFrom('teams')
+      .select('id')
+      .where('id', '=', id)
+      .where('is_deleted', '=', true)
+      .executeTakeFirst()
+    if (!team) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '团队不存在或未被删除' } })
+
+    // Get workspace IDs
+    const wsIds = (await db.selectFrom('workspaces').select('id').where('team_id', '=', id).execute()).map(w => w.id)
+
+    if (wsIds.length > 0) {
+      // Get task_batch IDs
+      const batchIds = (await db.selectFrom('task_batches').select('id').where('workspace_id', 'in', wsIds).execute()).map(b => b.id)
+
+      if (batchIds.length > 0) {
+        // Permanently delete assets
+        await db.deleteFrom('assets').where('batch_id', 'in', batchIds).execute()
+        // Permanently delete tasks
+        await db.deleteFrom('tasks').where('batch_id', 'in', batchIds).execute()
+        // Permanently delete task_batches
+        await db.deleteFrom('task_batches').where('id', 'in', batchIds).execute()
+      }
+
+      // Delete workspace members
+      await db.deleteFrom('workspace_members').where('workspace_id', 'in', wsIds).execute()
+      // Delete workspaces
+      await db.deleteFrom('workspaces').where('id', 'in', wsIds).execute()
+    }
+
+    // Delete team members
+    await db.deleteFrom('team_members').where('team_id', '=', id).execute()
+    // Delete the team (credit_accounts preserved as soft-delete)
+    await db.deleteFrom('teams').where('id', '=', id).execute()
+
+    return { success: true }
+  })
+
+  // PATCH /admin/users/:id/password — admin change any user's password
+  app.patch<{ Params: { id: string }; Body: { new_password: string } }>('/admin/users/:id/password', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['new_password'],
+        properties: {
+          new_password: { type: 'string', minLength: 8, maxLength: 72 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params
+    const { new_password } = request.body
+
+    if (!/[a-zA-Z]/.test(new_password) || !/\d/.test(new_password)) {
+      return reply.badRequest('密码必须包含字母和数字')
+    }
+
+    const db = getDb()
+    const user = await db
+      .selectFrom('users')
+      .select('id')
+      .where('id', '=', id)
+      .executeTakeFirst()
+    if (!user) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '用户不存在' } })
+
+    const passwordHash = await bcrypt.hash(new_password, 12)
+    await db
+      .updateTable('users')
+      .set({ password_hash: passwordHash })
+      .where('id', '=', id)
+      .execute()
+
+    // Revoke all refresh tokens so user must re-login
+    await db
+      .updateTable('refresh_tokens')
+      .set({ revoked_at: sql`NOW()` })
+      .where('user_id', '=', id)
+      .where('revoked_at', 'is', null)
+      .execute()
+
+    return { success: true }
   })
 
   // POST /admin/teams/:id/credits — adjust team credits (positive = top-up, negative = deduct)
@@ -587,6 +971,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .innerJoin('teams', 'teams.id', 'team_members.team_id')
         .select(['team_members.user_id', 'teams.name'])
         .where('team_members.user_id', 'in', userIds)
+        .where('teams.is_deleted', '=', false)
         .execute()
       for (const r of teamRows) {
         const list = teamMap.get(r.user_id) ?? []

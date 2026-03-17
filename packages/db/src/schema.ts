@@ -67,6 +67,8 @@ export interface TeamsTable {
   owner_id: string
   plan_tier: 'free' | 'basic' | 'pro' | 'enterprise'
   team_type: Generated<'standard' | 'company_a'>
+  is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>
 }
@@ -98,6 +100,8 @@ export interface WorkspacesTable {
   name: string
   description: string | null
   created_by: string
+  is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
   created_at: Generated<Timestamp>
 }
 
@@ -195,6 +199,7 @@ export interface AssetsTable {
   height: number | null
   metadata: ColumnType<unknown, string | null, string | null>
   is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
   created_at: Generated<Timestamp>
 }
 

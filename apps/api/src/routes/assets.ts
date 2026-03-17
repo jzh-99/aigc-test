@@ -163,11 +163,117 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
 
       await db
         .updateTable('assets')
-        .set({ is_deleted: true })
+        .set({ is_deleted: true, deleted_at: new Date() })
         .where('id', '=', id)
         .execute()
 
       return reply.status(204).send()
     },
+  )
+
+  // GET /assets/trash — list soft-deleted assets for a workspace (within 7 days)
+  app.get<{ Querystring: { workspace_id?: string } }>(
+    '/assets/trash',
+    async (request, reply) => {
+      const db = getDb()
+      const { workspace_id } = request.query
+      const userId = request.user.id
+
+      if (!workspace_id) return reply.badRequest('workspace_id is required')
+
+      if (request.user.role !== 'admin') {
+        const wsMember = await db
+          .selectFrom('workspace_members')
+          .select('role')
+          .where('workspace_id', '=', workspace_id)
+          .where('user_id', '=', userId)
+          .executeTakeFirst()
+        if (!wsMember) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Not a member of this workspace' } })
+      }
+
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+      const assets = await db
+        .selectFrom('assets as a')
+        .innerJoin('task_batches as b', 'b.id', 'a.batch_id')
+        .select(['a.id', 'a.type', 'a.storage_url', 'a.original_url', 'a.deleted_at', 'b.prompt'])
+        .where('b.workspace_id', '=', workspace_id)
+        .where('a.is_deleted', '=', true)
+        .where('a.deleted_at', '>=', cutoff as any)
+        .orderBy('a.deleted_at', 'desc')
+        .execute()
+
+      const signed = await Promise.all(
+        assets.map(async (a: any) => ({
+          id: a.id,
+          type: a.type,
+          storage_url: a.storage_url ? await signAssetUrl(a.storage_url) : null,
+          original_url: a.original_url ?? null,
+          deleted_at: a.deleted_at,
+          prompt: a.prompt,
+        }))
+      )
+
+      return { data: signed }
+    }
+  )
+
+  // POST /assets/trash/:id/restore — restore a soft-deleted asset
+  app.post<{ Params: { id: string } }>(
+    '/assets/trash/:id/restore',
+    async (request, reply) => {
+      const db = getDb()
+      const { id } = request.params
+      const userId = request.user.id
+
+      const asset = await db
+        .selectFrom('assets as a')
+        .innerJoin('task_batches as b', 'b.id', 'a.batch_id')
+        .select(['a.id', 'a.user_id', 'b.workspace_id'])
+        .where('a.id', '=', id)
+        .where('a.is_deleted', '=', true)
+        .executeTakeFirst()
+
+      if (!asset) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '资产不存在' } })
+
+      if (asset.user_id !== userId && request.user.role !== 'admin') {
+        return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Not authorized' } })
+      }
+
+      await db
+        .updateTable('assets')
+        .set({ is_deleted: false, deleted_at: null })
+        .where('id', '=', id)
+        .execute()
+
+      return { success: true }
+    }
+  )
+
+  // DELETE /assets/trash/:id — permanently delete an asset
+  app.delete<{ Params: { id: string } }>(
+    '/assets/trash/:id',
+    async (request, reply) => {
+      const db = getDb()
+      const { id } = request.params
+      const userId = request.user.id
+
+      const asset = await db
+        .selectFrom('assets')
+        .select(['id', 'user_id'])
+        .where('id', '=', id)
+        .where('is_deleted', '=', true)
+        .executeTakeFirst()
+
+      if (!asset) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '资产不存在' } })
+
+      if (asset.user_id !== userId && request.user.role !== 'admin') {
+        return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Not authorized' } })
+      }
+
+      await db.deleteFrom('assets').where('id', '=', id).execute()
+
+      return reply.status(204).send()
+    }
   )
 }

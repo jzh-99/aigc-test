@@ -65,7 +65,7 @@ export function UserTable() {
                   </td>
                   <td className="py-3 px-4">
                     <Badge variant={user.status === 'active' ? 'outline' : 'destructive'}>
-                      {user.status === 'active' ? '正常' : user.status === 'suspended' ? '待激活' : '已禁用'}
+                      {user.status === 'active' ? '正常' : user.status === 'suspended' && user.teams.length === 0 ? '无团队' : user.status === 'suspended' ? '待激活' : '已禁用'}
                     </Badge>
                   </td>
                   <td className="py-3 px-4">
