@@ -1,11 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import Image from 'next/image'
-import { User, Loader2 } from 'lucide-react'
+import { User, Loader2, RotateCcw, Check } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useGenerationStore } from '@/stores/generation-store'
 
 interface BatchListCardProps {
   batch: BatchResponse & { thumbnail_urls?: string[] }
@@ -21,7 +24,16 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
 }
 
 export function BatchListCard({ batch, onClick }: BatchListCardProps) {
+  const applyBatch = useGenerationStore((s) => s.applyBatch)
+  const [applied, setApplied] = useState(false)
   const status = statusConfig[batch.status] ?? statusConfig.pending
+
+  function handleApply(e: React.MouseEvent) {
+    e.stopPropagation()
+    applyBatch(batch)
+    setApplied(true)
+    setTimeout(() => setApplied(false), 1500)
+  }
 
   // Use thumbnail_urls from list API, fall back to tasks data
   const thumbnails: string[] = (batch as any).thumbnail_urls?.length
@@ -37,7 +49,7 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
 
   return (
     <Card
-      className={cn('cursor-pointer transition-shadow hover:shadow-md', onClick && 'hover:border-primary/50')}
+      className={cn('group cursor-pointer transition-shadow hover:shadow-md', onClick && 'hover:border-primary/50')}
       onClick={onClick}
     >
       <CardContent className="p-4 space-y-3">
@@ -105,6 +117,21 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
             暂无图片
           </div>
         )}
+
+        {/* Reuse button */}
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn(
+              'h-7 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity',
+              applied && 'opacity-100 text-green-600'
+            )}
+            onClick={handleApply}
+          >
+            {applied ? <><Check className="h-3 w-3 mr-1" />已填入</> : <><RotateCcw className="h-3 w-3 mr-1" />复用</>}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

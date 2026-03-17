@@ -1,10 +1,20 @@
 import { create } from 'zustand'
+import type { BatchResponse } from '@aigc/types'
 
 interface ReferenceImage {
   id: string
   file: File
   previewUrl: string
   dataUrl: string
+}
+
+const MODEL_REVERSE_MAP: Record<string, { modelType: 'gemini' | 'nano-banana-pro'; resolution: '1k' | '2k' | '4k' }> = {
+  'gemini-3.1-flash-image-preview':    { modelType: 'gemini', resolution: '1k' },
+  'gemini-3.1-flash-image-preview-2k': { modelType: 'gemini', resolution: '2k' },
+  'gemini-3.1-flash-image-preview-4k': { modelType: 'gemini', resolution: '4k' },
+  'nano-banana-2':    { modelType: 'nano-banana-pro', resolution: '1k' },
+  'nano-banana-2-2k': { modelType: 'nano-banana-pro', resolution: '2k' },
+  'nano-banana-2-4k': { modelType: 'nano-banana-pro', resolution: '4k' },
 }
 
 interface GenerationState {
@@ -26,6 +36,7 @@ interface GenerationState {
   clearReferenceImages: () => void
   setIsGenerating: (v: boolean) => void
   setActiveBatchId: (id: string | null) => void
+  applyBatch: (batch: BatchResponse) => void
   reset: () => void
 }
 
@@ -54,5 +65,15 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   clearReferenceImages: () => set({ referenceImages: [] }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   setActiveBatchId: (activeBatchId) => set({ activeBatchId }),
+  applyBatch: (batch) => {
+    const modelConfig = MODEL_REVERSE_MAP[batch.model]
+    const params = batch.params as Record<string, unknown> | null
+    set({
+      prompt: batch.prompt,
+      quantity: batch.quantity,
+      ...(modelConfig ? { modelType: modelConfig.modelType, resolution: modelConfig.resolution } : {}),
+      ...(params?.aspect_ratio ? { aspectRatio: params.aspect_ratio as string } : {}),
+    })
+  },
   reset: () => set(defaults),
 }))
