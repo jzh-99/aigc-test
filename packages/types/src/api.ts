@@ -91,6 +91,7 @@ export interface UserTeam {
   id: string
   name: string
   role: string
+  team_type: 'standard' | 'company_a'
   owner: { email: string; username: string } | null
   workspaces: UserWorkspace[]
 }
@@ -130,6 +131,7 @@ export interface CreateTeamRequest {
   owner_username?: string
   owner_password?: string
   initial_credits?: number
+  team_type?: 'standard' | 'company_a'
 }
 
 export interface CreateWorkspaceRequest {

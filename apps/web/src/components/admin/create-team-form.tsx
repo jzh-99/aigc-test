@@ -18,6 +18,7 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
   const [initialCredits, setInitialCredits] = useState('1000')
+  const [teamType, setTeamType] = useState<'standard' | 'company_a'>('standard')
   const [loading, setLoading] = useState(false)
 
   async function handleCreate(e: React.FormEvent) {
@@ -31,12 +32,14 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
         owner_email: ownerEmail,
         owner_password: ownerPassword || undefined,
         initial_credits: parseInt(initialCredits, 10) || 0,
+        team_type: teamType,
       })
       toast.success('团队已创建')
       setName('')
       setOwnerEmail('')
       setOwnerPassword('')
       setInitialCredits('1000')
+      setTeamType('standard')
       onCreated()
     } catch {
       toast.error('创建失败')
@@ -67,6 +70,29 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
           <div className="space-y-2">
             <Label>初始积分</Label>
             <Input type="number" value={initialCredits} onChange={(e) => setInitialCredits(e.target.value)} placeholder="1000" />
+          </div>
+          <div className="space-y-2">
+            <Label>团队类型</Label>
+            <div className="flex gap-3">
+              {(['standard', 'company_a'] as const).map((type) => (
+                <label
+                  key={type}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer text-sm transition-colors ${
+                    teamType === type ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="team_type"
+                    value={type}
+                    checked={teamType === type}
+                    onChange={() => setTeamType(type)}
+                    className="sr-only"
+                  />
+                  {type === 'standard' ? '标准版' : '公司A版'}
+                </label>
+              ))}
+            </div>
           </div>
           <Button type="submit" disabled={loading || !name || !ownerEmail}>
             {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
