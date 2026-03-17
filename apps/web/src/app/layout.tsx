@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${inter.variable} font-sans antialiased`} style={{ fontFamily: 'var(--font-inter), "Noto Sans SC", sans-serif' }}>
         {children}
-        <Toaster position="top-right" richColors />
+        <Toaster position="top-center" richColors duration={4000} />
       </body>
     </html>
   )
