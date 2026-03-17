@@ -1,5 +1,6 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import crypto from 'node:crypto'
 
 let _s3: S3Client | null = null
 
@@ -61,4 +62,73 @@ export async function signAssetUrl(storageUrl: string | null | undefined): Promi
  */
 export async function signAssetUrls(urls: string[]): Promise<string[]> {
   return Promise.all(urls.map(async (url) => (await signAssetUrl(url)) ?? url))
+}
+
+/**
+ * Extract the S3 object key from a storage URL.
+ * Returns null if the URL is not from our storage.
+ */
+export function extractStorageKey(storageUrl: string): string | null {
+  const publicUrl = process.env.STORAGE_PUBLIC_URL ?? ''
+  if (!publicUrl || !storageUrl.startsWith(publicUrl)) return null
+  const key = storageUrl.slice(publicUrl.length + 1)
+  return key || null
+}
+
+function getThumbnailSecret(): string {
+  return process.env.THUMBNAIL_SECRET ?? process.env.JWT_SECRET ?? ''
+}
+
+/**
+ * Create an HMAC-signed thumbnail URL that is stable for 7 days (keyed to UTC day boundary).
+ * Returns empty string if no secret is configured.
+ */
+export function signThumbnailUrl(storageKey: string, width: number): string {
+  const secret = getThumbnailSecret()
+  if (!secret) return ''
+
+  // Round to start of current UTC day; valid until start of day + 7 days
+  const dayStart = Math.floor(Date.now() / (86400 * 1000)) * 86400
+  const exp = dayStart + 7 * 86400
+
+  const data = `${storageKey}:${width}:${exp}`
+  const sig = crypto.createHmac('sha256', secret).update(data).digest('hex')
+
+  const params = new URLSearchParams({ key: storageKey, w: String(width), exp: String(exp), sig })
+  return `/api/v1/assets/thumbnail?${params.toString()}`
+}
+
+/**
+ * Verify an HMAC-signed thumbnail URL signature.
+ */
+export function verifyThumbnailSig(key: string, width: number, exp: number, sig: string): boolean {
+  const secret = getThumbnailSecret()
+  if (!secret) return false
+  if (Date.now() / 1000 > exp) return false
+
+  const data = `${key}:${width}:${exp}`
+  const expected = crypto.createHmac('sha256', secret).update(data).digest('hex')
+  try {
+    const expectedBuf = Buffer.from(expected, 'hex')
+    const sigBuf = Buffer.from(sig, 'hex')
+    if (expectedBuf.length !== sigBuf.length) return false
+    return crypto.timingSafeEqual(expectedBuf, sigBuf)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Fetch an S3 object as a Buffer (no presigning — for internal server use only).
+ */
+export async function getS3ObjectBuffer(key: string): Promise<Buffer> {
+  const s3 = getS3()
+  const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
+  const response = await s3.send(command) as any
+  if (!response.Body) throw new Error('Empty S3 response')
+  const chunks: Uint8Array[] = []
+  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
 }

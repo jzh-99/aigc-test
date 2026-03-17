@@ -44,6 +44,7 @@ interface AssetCardProps {
 function AssetCard({ asset, onEnlarge, onDelete }: AssetCardProps) {
   const url = asset.storage_url ?? asset.original_url
   if (!url) return null
+  const thumbUrl = asset.thumbnail_url ?? url
 
   return (
     <div
@@ -51,7 +52,7 @@ function AssetCard({ asset, onEnlarge, onDelete }: AssetCardProps) {
       onClick={() => onEnlarge(asset)}
     >
       <Image
-        src={url}
+        src={thumbUrl}
         alt={asset.batch.prompt}
         fill
         className="object-cover transition-transform group-hover:scale-105"

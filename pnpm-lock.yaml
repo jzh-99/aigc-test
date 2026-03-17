@@ -71,6 +71,9 @@ importers:
       pino:
         specifier: ^8.0.0
         version: 8.21.0
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
     devDependencies:
       '@types/bcryptjs':
         specifier: ^3.0.0
