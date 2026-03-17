@@ -13,11 +13,13 @@ import {
 } from '@/components/ui/dialog'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useGenerate } from '@/hooks/use-generate'
-import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2 } from 'lucide-react'
+import { useTeamFeatures } from '@/hooks/use-team-features'
+import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
 import { ReferenceImageUploadCompact } from './reference-image-upload-compact'
+import { CompanyAImagePicker } from './company-a-image-picker'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 
@@ -70,9 +72,12 @@ interface GenerationPanelProps {
 export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelProps) {
   const [mode, setMode] = useState<'image' | 'video'>('image')
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
+  const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const dragCounterRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { isCompanyA, showVideoTab } = useTeamFeatures()
 
   const {
     prompt,
@@ -138,6 +143,35 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   }, [handleImageFiles])
 
   const estimatedCredits = (MODEL_CREDITS[modelType] ?? 5) * quantity
+
+  // Handle Company A image selection — fetch as blob so it integrates with existing upload flow
+  const handleSelectCompanyAImage = useCallback(async (url: string, name: string) => {
+    if (referenceImages.length >= MAX_REF_IMAGES) {
+      toast.error(`最多添加 ${MAX_REF_IMAGES} 张参考图`)
+      return
+    }
+    try {
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error('fetch failed')
+      const blob = await resp.blob()
+      const ext = blob.type.split('/')[1] || 'jpg'
+      const file = new File([blob], `${name}.${ext}`, { type: blob.type })
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      addReferenceImage({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(blob),
+        dataUrl,
+      })
+    } catch {
+      toast.error('图片加载失败，请确认网络可访问图片服务器')
+    }
+  }, [referenceImages.length, addReferenceImage])
   const { generate } = useGenerate()
 
   const handleGenerate = async () => {
@@ -182,19 +216,21 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
             <ImageIcon className="h-3.5 w-3.5" />
             图片
           </button>
-          <button
-            onClick={() => setMode('video')}
-            disabled
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
-              mode === 'video'
-                ? 'bg-card border-border text-foreground z-10'
-                : 'bg-muted/60 border-muted text-muted-foreground opacity-40 cursor-not-allowed'
-            )}
-          >
-            <Video className="h-3.5 w-3.5" />
-            视频
-          </button>
+          {showVideoTab && (
+            <button
+              onClick={() => setMode('video')}
+              disabled
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
+                mode === 'video'
+                  ? 'bg-card border-border text-foreground z-10'
+                  : 'bg-muted/60 border-muted text-muted-foreground opacity-40 cursor-not-allowed'
+              )}
+            >
+              <Video className="h-3.5 w-3.5" />
+              视频
+            </button>
+          )}
         </div>
 
         {/* 提示词卡片 - 与标签无缝连接，填满剩余高度，支持拖拽上传 */}
@@ -259,6 +295,15 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                         </div>
                       </div>
                       <ImageIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
+                      {isCompanyA && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setCompanyAPickerOpen(true) }}
+                          className="h-6 w-6 rounded-md flex items-center justify-center text-blue-500 hover:bg-blue-500/10 transition-colors shrink-0"
+                          title="从图库搜索添加"
+                        >
+                          <Search className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); clearReferenceImages() }}
                         className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
@@ -266,6 +311,32 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
+                    </div>
+                  </div>
+                ) : isCompanyA ? (
+                  /* 公司A：左右分栏 - 本地上传 + 图库搜索 */
+                  <div className="h-full grid grid-cols-2 gap-2">
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className={cn(
+                        'h-full rounded-xl border-2 border-dashed transition-all cursor-pointer',
+                        'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50',
+                        'flex flex-col items-center justify-center gap-1'
+                      )}
+                    >
+                      <ImagePlus className="h-5 w-5 text-primary" />
+                      <span className="text-xs font-medium text-primary leading-tight">本地上传</span>
+                    </div>
+                    <div
+                      onClick={() => setCompanyAPickerOpen(true)}
+                      className={cn(
+                        'h-full rounded-xl border-2 border-dashed transition-all cursor-pointer',
+                        'border-blue-400/40 bg-blue-50/50 hover:bg-blue-50 hover:border-blue-400/70',
+                        'flex flex-col items-center justify-center gap-1'
+                      )}
+                    >
+                      <Search className="h-5 w-5 text-blue-500" />
+                      <span className="text-xs font-medium text-blue-600 leading-tight">图库搜索</span>
                     </div>
                   </div>
                 ) : (
@@ -471,6 +542,15 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
             className="hidden"
             onChange={(e) => handleImageFiles(e.target.files)}
           />
+
+          {/* 公司A图库选择器 */}
+          {isCompanyA && (
+            <CompanyAImagePicker
+              open={companyAPickerOpen}
+              onOpenChange={setCompanyAPickerOpen}
+              onSelectPoster={handleSelectCompanyAImage}
+            />
+          )}
         </>
       )}
     </div>

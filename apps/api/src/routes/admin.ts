@@ -22,7 +22,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           .on('credit_accounts.owner_type', '=', 'team')
       )
       .select([
-        'teams.id', 'teams.name', 'teams.owner_id', 'teams.plan_tier', 'teams.created_at',
+        'teams.id', 'teams.name', 'teams.owner_id', 'teams.plan_tier', 'teams.team_type', 'teams.created_at',
         'credit_accounts.balance', 'credit_accounts.frozen_credits',
         'credit_accounts.total_earned', 'credit_accounts.total_spent',
       ])
@@ -291,12 +291,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           owner_username: { type: 'string', maxLength: 50 },
           owner_password: { type: 'string', minLength: 8, maxLength: 72 },
           initial_credits: { type: 'integer', minimum: 0, maximum: 10000000 },
+          team_type: { type: 'string', enum: ['standard', 'company_a'] },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { name, owner_email, owner_username, owner_password, initial_credits } = request.body
+    const { name, owner_email, owner_username, owner_password, initial_credits, team_type } = request.body
 
     const db = getDb()
 
@@ -336,6 +337,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         name,
         owner_id: owner.id,
         plan_tier: 'free',
+        team_type: team_type ?? 'standard',
       })
       .returning(['id', 'name', 'created_at'])
       .executeTakeFirstOrThrow()
@@ -407,6 +409,32 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       owner: { id: owner.id, email: owner.email },
       workspace: { id: workspace.id, name: workspace.name },
     })
+  })
+
+  // PATCH /admin/teams/:id — update team settings (team_type, etc.)
+  app.patch<{ Params: { id: string }; Body: { team_type?: 'standard' | 'company_a' } }>('/admin/teams/:id', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          team_type: { type: 'string', enum: ['standard', 'company_a'] },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+    const { team_type } = request.body
+
+    const team = await db.selectFrom('teams').select('id').where('id', '=', id).executeTakeFirst()
+    if (!team) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '团队不存在' } })
+
+    if (team_type) {
+      await db.updateTable('teams').set({ team_type }).where('id', '=', id).execute()
+    }
+
+    return reply.send({ success: true })
   })
 
   // POST /admin/teams/:id/credits — adjust team credits (positive = top-up, negative = deduct)

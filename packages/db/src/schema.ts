@@ -66,6 +66,7 @@ export interface TeamsTable {
   name: string
   owner_id: string
   plan_tier: 'free' | 'basic' | 'pro' | 'enterprise'
+  team_type: Generated<'standard' | 'company_a'>
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>
 }

@@ -10,9 +10,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TopupDialog } from './topup-dialog'
 import {
   Coins, ChevronDown, ChevronRight, Users, FolderOpen,
-  Image as ImageIcon,
+  Image as ImageIcon, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { apiPatch } from '@/lib/api-client'
 
 interface Team {
   id: string
@@ -20,6 +21,7 @@ interface Team {
   owner_id: string
   owner_username: string | null
   plan_tier: string
+  team_type: 'standard' | 'company_a'
   created_at: string
   balance: number
   frozen_credits: number
@@ -76,6 +78,20 @@ export function TeamTable() {
   const { data, error, mutate } = useSWR<{ data: Team[] }>('/admin/teams')
   const [topupTeam, setTopupTeam] = useState<{ id: string; name: string; balance: number } | null>(null)
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null)
+  const [switchingTeamId, setSwitchingTeamId] = useState<string | null>(null)
+
+  async function handleSwitchType(team: Team) {
+    const newType = team.team_type === 'company_a' ? 'standard' : 'company_a'
+    setSwitchingTeamId(team.id)
+    try {
+      await apiPatch(`/admin/teams/${team.id}`, { team_type: newType })
+      mutate()
+    } catch {
+      // silently ignore
+    } finally {
+      setSwitchingTeamId(null)
+    }
+  }
 
   if (!data && !error) {
     return (
@@ -109,6 +125,9 @@ export function TeamTable() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{team.name}</span>
+                    {team.team_type === 'company_a' && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-400 text-blue-600">公司A</Badge>
+                    )}
                     {team.owner_username && (
                       <span className="text-xs text-muted-foreground">组长: {team.owner_username}</span>
                     )}
@@ -121,6 +140,9 @@ export function TeamTable() {
                     <span>累计已用: {team.lifetime_used.toLocaleString()}</span>
                   </div>
                 </div>
+                <Button size="sm" variant="outline" className="text-xs" onClick={(e) => { e.stopPropagation(); handleSwitchType(team) }} disabled={switchingTeamId === team.id}>
+                  {switchingTeamId === team.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (team.team_type === 'company_a' ? '切换标准版' : '切换公司A')}
+                </Button>
                 <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setTopupTeam({ id: team.id, name: team.name, balance: team.balance }) }}>
                   <Coins className="h-3.5 w-3.5 mr-1" />
                   调整积分
