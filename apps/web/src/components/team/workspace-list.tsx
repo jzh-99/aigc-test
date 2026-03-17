@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { apiPost, apiDelete, apiGet } from '@/lib/api-client'
+import { apiPost, apiDelete, apiGet, ApiError } from '@/lib/api-client'
 import { useAuthStore } from '@/stores/auth-store'
 import type { UserProfile } from '@aigc/types'
 import { toast } from 'sonner'
@@ -60,8 +60,8 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
       // Refresh user profile to get new workspace
       const profile = await apiGet<UserProfile>('/users/me')
       useAuthStore.getState().updateUser(profile)
-    } catch {
-      toast.error('创建失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '创建失败')
     }
   }
 
@@ -71,8 +71,8 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
       await apiPost(`/workspaces/${managingWs}/members`, { user_id: userId })
       toast.success('成员已添加')
       mutateWsMembers()
-    } catch {
-      toast.error('添加失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '添加失败')
     }
   }
 
@@ -82,8 +82,8 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
       await apiDelete(`/workspaces/${managingWs}/members/${userId}`)
       toast.success('成员已移除')
       mutateWsMembers()
-    } catch {
-      toast.error('移除失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '移除失败')
     }
   }
 

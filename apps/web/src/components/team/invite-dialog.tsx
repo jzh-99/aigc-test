@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { apiPost } from '@/lib/api-client'
+import { apiPost, ApiError } from '@/lib/api-client'
 import { useAuthStore } from '@/stores/auth-store'
 import { toast } from 'sonner'
 import { Loader2, Copy } from 'lucide-react'
@@ -82,8 +82,8 @@ export function InviteDialog({
       setInviteLink(link)
       toast.success('邀请已发送')
       onSuccess()
-    } catch {
-      toast.error('邀请失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '邀请失败，请稍后重试')
     } finally {
       setLoading(false)
     }

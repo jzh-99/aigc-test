@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { apiPost } from '@/lib/api-client'
+import { apiPost, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
@@ -41,8 +41,8 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
       setInitialCredits('1000')
       setTeamType('standard')
       onCreated()
-    } catch {
-      toast.error('创建失败')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '创建失败')
     } finally {
       setLoading(false)
     }
