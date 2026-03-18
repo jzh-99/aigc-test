@@ -65,7 +65,7 @@ const ASPECT_RATIOS = [
   { value: '9:16', label: '9:16' },
 ] as const
 
-const QUANTITY_OPTIONS = [1, 2, 3, 4, 5] as const
+const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
 const VIDEO_MODEL_OPTIONS = [
   { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成' },
