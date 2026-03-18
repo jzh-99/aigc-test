@@ -113,10 +113,10 @@ fi
 
 # 创建数据库和用户（如果不存在）
 info "配置 PostgreSQL 数据库..."
-sudo -u postgres psql -tc "SELECT 1 FROM pg_user WHERE usename='aigc'" | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE USER aigc WITH PASSWORD 'aigcpass';"
-sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='aigc_prod'" | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE DATABASE aigc_prod OWNER aigc;"
+su - postgres -c "psql -tc \"SELECT 1 FROM pg_user WHERE usename='aigc'\"" | grep -q 1 || \
+  su - postgres -c "psql -c \"CREATE USER aigc WITH PASSWORD 'aigcpass';\""
+su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='aigc_prod'\"" | grep -q 1 || \
+  su - postgres -c "psql -c \"CREATE DATABASE aigc_prod OWNER aigc;\""
 
 # ── 4. SSH Key（用于 clone 私有仓库） ─────────────────────
 if [ ! -f ~/.ssh/id_ed25519 ]; then
