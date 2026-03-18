@@ -128,8 +128,9 @@ fi
 # 确保 github.com 在 known_hosts 中
 ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
 
-# 测试是否已授权
-if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+# 测试是否已授权（ssh -T 正常返回 exit 1，用变量捕获避免 pipefail 误判）
+SSH_TEST=$(ssh -T git@github.com 2>&1) || true
+if ! echo "$SSH_TEST" | grep -q "successfully authenticated"; then
   echo ""
   echo -e "${YELLOW}══════════════════════════════════════════════════════${NC}"
   echo -e "${YELLOW}  需要将以下公钥添加到 GitHub SSH Keys：${NC}"
@@ -143,7 +144,8 @@ if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
   echo -e "${YELLOW}══════════════════════════════════════════════════════${NC}"
   read -r -p "添加完成后按 Enter 继续..."
   # 再次验证
-  if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+  SSH_TEST2=$(ssh -T git@github.com 2>&1) || true
+  if ! echo "$SSH_TEST2" | grep -q "successfully authenticated"; then
     error "GitHub SSH 认证失败，请确认公钥已正确添加后重新运行脚本"
   fi
 fi
