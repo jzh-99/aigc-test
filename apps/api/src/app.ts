@@ -17,6 +17,7 @@ import { workspaceRoutes } from './routes/workspaces.js'
 import { adminRoutes } from './routes/admin.js'
 import { proxyRoutes } from './routes/proxy.js'
 import { assetRoutes } from './routes/assets.js'
+import { videoRoutes } from './routes/videos.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -82,6 +83,7 @@ export async function buildApp() {
       await v1.register(adminRoutes)
       await v1.register(proxyRoutes)
       await v1.register(assetRoutes)
+      await v1.register(videoRoutes)
     },
     { prefix: '/api/v1' },
   )

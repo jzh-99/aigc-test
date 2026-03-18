@@ -1,0 +1,212 @@
+import pino from 'pino'
+import { getDb } from '@aigc/db'
+import { sql } from 'kysely'
+import { getPubRedis } from '../lib/redis.js'
+
+const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+
+const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
+const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
+const MAX_VIDEO_AGE_MS = 15 * 60 * 1000 // 15 minutes
+
+interface VideoTaskRow {
+  taskId: string
+  batchId: string
+  userId: string
+  teamId: string
+  creditAccountId: string
+  estimatedCredits: number
+  externalTaskId: string
+  processingStartedAt: string | null
+}
+
+async function checkVeoTask(externalTaskId: string): Promise<{
+  status: string
+  videoUrl?: string
+  failReason?: string
+}> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const res = await fetch(`${VEO_API_URL}/v2/videos/generations/${externalTaskId}`, {
+      headers: { Authorization: `Bearer ${VEO_API_KEY}` },
+      signal: controller.signal,
+    })
+    if (!res.ok) return { status: 'POLL_ERROR' }
+    const data = (await res.json()) as { status: string; data?: { output?: string }; fail_reason?: string }
+    return {
+      status: data.status,
+      videoUrl: data.data?.output,
+      failReason: data.fail_reason,
+    }
+  } catch {
+    return { status: 'POLL_ERROR' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise<void> {
+  const db = getDb()
+  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = task
+
+  await db.transaction().execute(async (trx: any) => {
+    // Idempotency guard
+    const taskUpdate = await trx
+      .updateTable('tasks')
+      .set({ status: 'completed', credits_cost: estimatedCredits, completed_at: new Date().toISOString() })
+      .where('id', '=', taskId)
+      .where('status', '!=', 'completed')
+      .where('status', '!=', 'failed')
+      .execute()
+
+    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 1) === 0) return
+
+    // Insert video asset
+    await trx
+      .insertInto('assets')
+      .values({ task_id: taskId, batch_id: batchId, user_id: userId, type: 'video', original_url: videoUrl, transfer_status: 'pending' })
+      .execute()
+
+    // Confirm credits
+    await trx.updateTable('credit_accounts')
+      .set({
+        frozen_credits: sql`frozen_credits - ${estimatedCredits}`,
+        total_spent: sql`total_spent + ${estimatedCredits}`,
+        balance: sql`balance - ${estimatedCredits}`,
+      })
+      .where('id', '=', creditAccountId).execute()
+
+    await trx.insertInto('credits_ledger').values({
+      credit_account_id: creditAccountId,
+      user_id: userId,
+      amount: -estimatedCredits,
+      type: 'confirm',
+      task_id: taskId,
+      batch_id: batchId,
+      description: 'Video generation confirmed',
+    }).execute()
+
+    // Update batch to completed
+    await trx.updateTable('task_batches')
+      .set({
+        status: 'completed',
+        completed_count: sql`completed_count + 1`,
+        actual_credits: sql`actual_credits + ${estimatedCredits}`,
+      })
+      .where('id', '=', batchId).execute()
+  })
+
+  await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+  logger.info({ taskId, batchId, videoUrl }, 'Video task completed')
+}
+
+async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Promise<void> {
+  const db = getDb()
+  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = task
+
+  await db.transaction().execute(async (trx: any) => {
+    const taskUpdate = await trx
+      .updateTable('tasks')
+      .set({ status: 'failed', error_message: errorMessage.slice(0, 1000), completed_at: new Date().toISOString() })
+      .where('id', '=', taskId)
+      .where('status', '!=', 'completed')
+      .where('status', '!=', 'failed')
+      .execute()
+
+    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 1) === 0) return
+
+    // Refund credits
+    await trx.updateTable('credit_accounts')
+      .set({ frozen_credits: sql`frozen_credits - ${estimatedCredits}` })
+      .where('id', '=', creditAccountId).execute()
+
+    await trx.updateTable('team_members')
+      .set({ credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)` })
+      .where('team_id', '=', teamId).where('user_id', '=', userId).execute()
+
+    await trx.insertInto('credits_ledger').values({
+      credit_account_id: creditAccountId,
+      user_id: userId,
+      amount: estimatedCredits,
+      type: 'refund',
+      task_id: taskId,
+      batch_id: batchId,
+      description: `Video generation failed: ${errorMessage.slice(0, 200)}`,
+    }).execute()
+
+    await trx.updateTable('task_batches')
+      .set({ status: 'failed', failed_count: sql`failed_count + 1` })
+      .where('id', '=', batchId).execute()
+  })
+
+  await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+  logger.warn({ taskId, batchId, errorMessage }, 'Video task failed')
+}
+
+async function pollVideoTasks(): Promise<void> {
+  const db = getDb()
+
+  const tasks = await db
+    .selectFrom('tasks')
+    .innerJoin('task_batches', 'tasks.batch_id', 'task_batches.id')
+    .select([
+      'tasks.id as taskId',
+      'tasks.external_task_id as externalTaskId',
+      'tasks.batch_id as batchId',
+      'tasks.estimated_credits as estimatedCredits',
+      'tasks.processing_started_at as processingStartedAt',
+      'task_batches.team_id as teamId',
+      'task_batches.user_id as userId',
+      'task_batches.credit_account_id as creditAccountId',
+    ])
+    .where('tasks.status', '=', 'processing')
+    .where('task_batches.module', '=', 'video')
+    .where('tasks.external_task_id', 'is not', null)
+    .execute() as VideoTaskRow[]
+
+  if (tasks.length === 0) return
+
+  logger.debug({ count: tasks.length }, 'Polling video tasks')
+
+  for (const task of tasks) {
+    try {
+      // Timeout guard: fail tasks running > 15 minutes
+      const ageMs = task.processingStartedAt
+        ? Date.now() - new Date(task.processingStartedAt).getTime()
+        : MAX_VIDEO_AGE_MS + 1
+
+      if (ageMs > MAX_VIDEO_AGE_MS) {
+        await handleVideoFailure(task, 'Video generation timed out after 15 minutes')
+        continue
+      }
+
+      const result = await checkVeoTask(task.externalTaskId)
+
+      if (result.status === 'SUCCESS' && result.videoUrl) {
+        await handleVideoSuccess(task, result.videoUrl)
+      } else if (result.status === 'FAILURE') {
+        await handleVideoFailure(task, result.failReason ?? 'Video generation failed')
+      }
+      // NOT_START, IN_PROGRESS, POLL_ERROR: skip until next interval
+    } catch (err) {
+      logger.error({ taskId: task.taskId, err }, 'Error processing video task')
+    }
+  }
+}
+
+export function startVideoPoller(): NodeJS.Timeout {
+  const POLL_INTERVAL = 15_000
+
+  // Delay first run by 30s to let service warm up
+  const initialDelay = setTimeout(() => {
+    pollVideoTasks().catch((err) => logger.error({ err }, 'Video poller error'))
+  }, 30_000)
+
+  const timer = setInterval(() => {
+    pollVideoTasks().catch((err) => logger.error({ err }, 'Video poller error'))
+  }, POLL_INTERVAL)
+
+  logger.info('Video poller started (every 15 seconds)')
+  return timer
+}

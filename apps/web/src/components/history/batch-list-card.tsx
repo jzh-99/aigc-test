@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check } from 'lucide-react'
+import { User, Loader2, RotateCcw, Check, Video } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +47,12 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
   const showLoading = thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing')
   console.log('[BatchListCard]', batch.id, 'status:', batch.status, 'thumbnails:', thumbnails.length, 'showLoading:', showLoading)
 
+  const isVideo = (batch as any).module === 'video'
+  const videoUrl = isVideo
+    ? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.storage_url
+      ?? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.original_url
+    : undefined
+
   return (
     <Card
       className={cn('cursor-pointer transition-shadow hover:shadow-md', onClick && 'hover:border-primary/50')}
@@ -81,41 +87,65 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
           </div>
         </div>
 
-        {/* Thumbnail grid */}
-        {thumbnails.length > 0 && (
-          <div className="flex gap-2 overflow-hidden">
-            {thumbnails.slice(0, 5).map((url, i) => (
-              <div key={i} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
-                <Image
-                  src={url}
-                  alt=""
-                  fill
-                  className="object-cover"
-                  sizes="64px"
-                  unoptimized
-                />
+        {/* Thumbnail grid / video preview */}
+        {isVideo ? (
+          videoUrl ? (
+            <div className="relative h-16 w-28 rounded-md overflow-hidden bg-black shrink-0">
+              <video src={videoUrl} className="h-full w-full object-cover" muted preload="metadata" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Video className="h-5 w-5 text-white/80" />
               </div>
-            ))}
-            {thumbnails.length > 5 && (
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                +{thumbnails.length - 5}
+            </div>
+          ) : (batch.status === 'pending' || batch.status === 'processing') ? (
+            <div className="flex h-16 items-center justify-center rounded-md bg-muted gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">视频生成中</span>
+            </div>
+          ) : (
+            <div className="flex h-16 items-center justify-center rounded-md bg-muted gap-2">
+              <Video className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">视频</span>
+            </div>
+          )
+        ) : (
+          <>
+            {/* Image thumbnails */}
+            {thumbnails.length > 0 && (
+              <div className="flex gap-2 overflow-hidden">
+                {thumbnails.slice(0, 5).map((url, i) => (
+                  <div key={i} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
+                    <Image
+                      src={url}
+                      alt=""
+                      fill
+                      className="object-cover"
+                      sizes="64px"
+                      unoptimized
+                    />
+                  </div>
+                ))}
+                {thumbnails.length > 5 && (
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                    +{thumbnails.length - 5}
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {/* Loading animation for pending/processing */}
-        {thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing') && (
-          <div className="flex h-16 items-center justify-center rounded-md bg-muted">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        )}
+            {/* Loading animation for pending/processing */}
+            {thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing') && (
+              <div className="flex h-16 items-center justify-center rounded-md bg-muted">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
 
-        {/* No images placeholder */}
-        {thumbnails.length === 0 && batch.status !== 'pending' && batch.status !== 'processing' && (
-          <div className="flex h-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-            暂无图片
-          </div>
+            {/* No images placeholder */}
+            {thumbnails.length === 0 && batch.status !== 'pending' && batch.status !== 'processing' && (
+              <div className="flex h-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                暂无图片
+              </div>
+            )}
+          </>
         )}
 
         {/* Reuse button */}
