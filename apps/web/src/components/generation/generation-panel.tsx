@@ -22,6 +22,7 @@ import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
 import { ReferenceImageUploadCompact } from './reference-image-upload-compact'
 import { CompanyAImagePicker } from './company-a-image-picker'
+import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 
@@ -100,6 +101,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const [videoAspectRatio, setVideoAspectRatio] = useState<'' | '16:9' | '9:16'>('')
   const [firstFrame, setFirstFrame] = useState<FrameImage | null>(null)
   const [lastFrame, setLastFrame] = useState<FrameImage | null>(null)
+  const [framePreviewIndex, setFramePreviewIndex] = useState<0 | 1 | null>(null)
   const firstFrameRef = useRef<HTMLInputElement>(null)
   const lastFrameRef = useRef<HTMLInputElement>(null)
 
@@ -441,18 +443,20 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
           </div>
         ) : (
           <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
-            {/* Frame slots row — fixed height, square slots */}
-            <div className="flex gap-3 shrink-0 h-[120px]">
+            {/* Frame slots row — fills full width, fixed image height */}
+            <div className="flex gap-2 shrink-0">
               {/* First frame */}
-              <div className="flex flex-col gap-1 h-full">
-                <p className="text-[11px] text-muted-foreground leading-none shrink-0">首帧图（可选）</p>
-                <div className="flex-1 aspect-square h-full">
+              <div className="flex-1 flex flex-col gap-1">
+                <p className="text-[11px] text-muted-foreground leading-none">首帧图（可选）</p>
                 {firstFrame ? (
-                  <div className="relative h-full aspect-square rounded-lg overflow-hidden border bg-muted group">
-                    <Image src={firstFrame.previewUrl} alt="" fill className="object-contain" sizes="120px" unoptimized />
+                  <div
+                    className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group cursor-zoom-in"
+                    onClick={() => setFramePreviewIndex(0)}
+                  >
+                    <Image src={firstFrame.previewUrl} alt="" fill className="object-contain" sizes="200px" unoptimized />
                     <button
-                      onClick={() => setFirstFrame(null)}
-                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => { e.stopPropagation(); setFirstFrame(null); setLastFrame(null) }}
+                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
                     >
                       <X className="h-3 w-3 text-background" />
                     </button>
@@ -460,24 +464,25 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                 ) : (
                   <button
                     onClick={() => firstFrameRef.current?.click()}
-                    className="h-full aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+                    className="h-[90px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
                   >
                     <Film className="h-4 w-4 text-muted-foreground" />
                     <span className="text-[11px] text-muted-foreground">点击上传</span>
                   </button>
                 )}
-                </div>
               </div>
               {/* Last frame */}
-              <div className="flex flex-col gap-1 h-full">
-                <p className="text-[11px] text-muted-foreground leading-none shrink-0">尾帧图（可选）</p>
-                <div className="flex-1 aspect-square h-full">
+              <div className="flex-1 flex flex-col gap-1">
+                <p className="text-[11px] text-muted-foreground leading-none">尾帧图（可选）</p>
                 {lastFrame ? (
-                  <div className="relative h-full aspect-square rounded-lg overflow-hidden border bg-muted group">
-                    <Image src={lastFrame.previewUrl} alt="" fill className="object-contain" sizes="120px" unoptimized />
+                  <div
+                    className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group cursor-zoom-in"
+                    onClick={() => setFramePreviewIndex(1)}
+                  >
+                    <Image src={lastFrame.previewUrl} alt="" fill className="object-contain" sizes="200px" unoptimized />
                     <button
-                      onClick={() => setLastFrame(null)}
-                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => { e.stopPropagation(); setLastFrame(null) }}
+                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
                     >
                       <X className="h-3 w-3 text-background" />
                     </button>
@@ -487,7 +492,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                     onClick={() => lastFrameRef.current?.click()}
                     disabled={!firstFrame}
                     className={cn(
-                      'h-full aspect-square rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
+                      'h-[90px] w-full rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
                       firstFrame
                         ? 'border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
                         : 'border-muted-foreground/15 opacity-50 cursor-not-allowed'
@@ -497,7 +502,6 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                     <span className="text-[11px] text-muted-foreground">点击上传</span>
                   </button>
                 )}
-                </div>
               </div>
             </div>
 
@@ -527,6 +531,26 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                 e.target.value = ''
               }}
             />
+
+            {/* Frame image lightbox */}
+            {framePreviewIndex !== null && (firstFrame || lastFrame) && (() => {
+              const frames = [firstFrame, lastFrame].filter(Boolean) as FrameImage[]
+              const labels = firstFrame && lastFrame ? ['首帧图', '尾帧图'] : [firstFrame ? '首帧图' : '尾帧图']
+              // Map framePreviewIndex (0=first,1=last) to index within frames array
+              const activeIdx = framePreviewIndex === 1 && firstFrame ? 1 : 0
+              const frame = frames[activeIdx]
+              if (!frame) return null
+              return (
+                <ImageLightbox
+                  url={frame.previewUrl}
+                  alt={labels[activeIdx]}
+                  onClose={() => setFramePreviewIndex(null)}
+                  onPrev={activeIdx > 0 ? () => setFramePreviewIndex(0) : undefined}
+                  onNext={activeIdx < frames.length - 1 ? () => setFramePreviewIndex(1) : undefined}
+                  footer={<p className="text-sm text-white/80">{labels[activeIdx]}</p>}
+                />
+              )
+            })()}
           </div>
         )}
       </div>

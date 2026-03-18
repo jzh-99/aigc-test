@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check, Video } from 'lucide-react'
+import { User, Loader2, RotateCcw, Check, Video, Play } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -90,19 +90,27 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
         {/* Thumbnail grid / video preview */}
         {isVideo ? (
           videoUrl ? (
-            <div className="relative h-16 w-28 rounded-md overflow-hidden bg-black shrink-0">
-              <video src={videoUrl} className="h-full w-full object-cover" muted preload="metadata" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Video className="h-5 w-5 text-white/80" />
+            <div className="relative h-20 w-full rounded-md overflow-hidden bg-muted">
+              <video
+                src={videoUrl}
+                className="h-full w-full object-cover"
+                muted
+                preload="metadata"
+                onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.001 }}
+              />
+              {/* Video badge */}
+              <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 bg-black/60 rounded-md px-1.5 py-0.5">
+                <Play className="h-2.5 w-2.5 text-white fill-white" />
+                <span className="text-[10px] text-white font-medium leading-none">视频</span>
               </div>
             </div>
           ) : (batch.status === 'pending' || batch.status === 'processing') ? (
-            <div className="flex h-16 items-center justify-center rounded-md bg-muted gap-2">
+            <div className="flex h-20 items-center justify-center rounded-md bg-muted gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               <span className="text-xs text-muted-foreground">视频生成中</span>
             </div>
           ) : (
-            <div className="flex h-16 items-center justify-center rounded-md bg-muted gap-2">
+            <div className="flex h-20 items-center justify-center rounded-md bg-muted gap-2">
               <Video className="h-4 w-4 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">视频</span>
             </div>
