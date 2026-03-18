@@ -94,7 +94,7 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
             <div className="relative h-20 w-full rounded-md overflow-hidden bg-muted">
               <video
                 src={videoUrl}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
                 muted
                 preload="metadata"
                 onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.001 }}
