@@ -127,6 +127,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       const batchResult = await trx
         .insertInto('task_batches')
         .values({
+          idempotency_key: crypto.randomUUID(),
           user_id: userId,
           team_id: teamId,
           workspace_id: workspaceId,
