@@ -1,6 +1,7 @@
 #!/bin/bash
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 set -a
-source /root/autodl-tmp/aigc-test/.env
+source "$DIR/.env"
 set +a
-cd /root/autodl-tmp/aigc-test
+cd "$DIR"
 npx tsx apps/worker/src/index.ts
