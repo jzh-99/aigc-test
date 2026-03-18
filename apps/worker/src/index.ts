@@ -15,6 +15,7 @@ import { failPipeline } from './pipelines/fail.js'
 import { runTimeoutGuardian } from './jobs/timeout-guardian.js'
 import { transferWorker } from './workers/transfer.js'
 import { getRedis, closeRedis } from './lib/redis.js'
+import { startVideoPoller } from './pollers/video-poller.js'
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
@@ -89,11 +90,16 @@ const guardianTimer = setInterval(() => {
 
 logger.info('Timeout guardian scheduled (every 5 minutes)')
 
+// ─── Video Poller ─────────────────────────────────────────────────────────────
+
+const videoPollerTimer = startVideoPoller()
+
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 
 const shutdown = async () => {
   logger.info('Shutting down workers...')
   clearInterval(guardianTimer)
+  clearInterval(videoPollerTimer)
   await imageWorker.close()
   await transferWorker.close()
   await closeRedis()

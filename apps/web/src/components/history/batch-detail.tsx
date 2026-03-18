@@ -31,6 +31,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'nano-banana-2':                     '全能图片Pro 1K',
   'nano-banana-2-2k':                  '全能图片Pro 2K',
   'nano-banana-2-4k':                  '全能图片Pro 4K',
+  'veo3.1-fast':                       'Veo 3.1 Fast',
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
@@ -96,6 +97,8 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
     .filter((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))
     .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
 
+  const isVideo = (batch as any).module === 'video'
+
   return (
     <div className="mt-6 space-y-4">
       {/* Meta info */}
@@ -144,12 +147,52 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
 
       <Separator />
 
-      {/* Task images */}
+      {/* Task results */}
       <div>
         <p className="text-sm font-medium mb-3">生成结果</p>
         {batch.tasks.length === 0 ? (
           <p className="text-sm text-muted-foreground">无任务数据</p>
+        ) : isVideo ? (
+          /* Video tasks */
+          <div className="space-y-3">
+            {batch.tasks.map((task) => {
+              const url = task.asset?.storage_url ?? task.asset?.original_url
+              if (task.status === 'completed' && url) {
+                return (
+                  <div key={task.id} className="rounded-lg overflow-hidden border bg-black">
+                    <video
+                      src={url}
+                      controls
+                      className="w-full max-h-[400px] object-contain"
+                      preload="metadata"
+                    />
+                    <div className="flex justify-end p-2">
+                      <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" asChild>
+                        <a href={url} download target="_blank" rel="noopener noreferrer">
+                          <Download className="h-3.5 w-3.5" />
+                          下载
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div key={task.id} className="flex h-20 items-center justify-center rounded-lg border bg-muted text-xs text-muted-foreground">
+                  {task.status === 'failed' ? (
+                    <div className="text-center px-2">
+                      <p>失败</p>
+                      {task.error_message && (
+                        <p className="mt-1 line-clamp-2 text-[10px]">{translateTaskError(task.error_message)}</p>
+                      )}
+                    </div>
+                  ) : task.status === 'processing' ? '视频生成中...' : '等待中'}
+                </div>
+              )
+            })}
+          </div>
         ) : (
+          /* Image tasks */
           <div className="grid grid-cols-2 gap-3">
             {batch.tasks.map((task) => {
               const url = task.asset?.storage_url ?? task.asset?.original_url
@@ -203,8 +246,8 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
         )}
       </div>
 
-      {/* Lightbox */}
-      {lightboxIndex !== null && completedUrls[lightboxIndex] && (
+      {/* Lightbox (images only) */}
+      {!isVideo && lightboxIndex !== null && completedUrls[lightboxIndex] && (
         <ImageLightbox
           url={completedUrls[lightboxIndex]}
           onClose={() => setLightboxIndex(null)}

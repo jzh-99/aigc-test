@@ -13,8 +13,10 @@ import {
 } from '@/components/ui/dialog'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useGenerate } from '@/hooks/use-generate'
+import { useVideoGenerate } from '@/hooks/use-video-generate'
 import { useTeamFeatures } from '@/hooks/use-team-features'
-import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search } from 'lucide-react'
+import { useAuthStore } from '@/stores/auth-store'
+import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search, Film, X } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
@@ -64,6 +66,21 @@ const ASPECT_RATIOS = [
 
 const QUANTITY_OPTIONS = [1, 2, 3, 4, 5] as const
 
+const VIDEO_MODEL_OPTIONS = [
+  { value: 'veo3.1-fast', label: 'Veo 3.1 Fast', desc: '快速高质量视频生成' },
+] as const
+
+const VIDEO_ASPECT_RATIOS = [
+  { value: '' as const, label: '自动' },
+  { value: '16:9' as const, label: '16:9' },
+  { value: '9:16' as const, label: '9:16' },
+] as const
+
+interface FrameImage {
+  previewUrl: string
+  dataUrl: string
+}
+
 interface GenerationPanelProps {
   onBatchCreated: (batch: BatchResponse) => void
   disabled?: boolean
@@ -77,7 +94,17 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const dragCounterRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Video mode state
+  const [videoPrompt, setVideoPrompt] = useState('')
+  const [videoModel, setVideoModel] = useState('veo3.1-fast')
+  const [videoAspectRatio, setVideoAspectRatio] = useState<'' | '16:9' | '9:16'>('')
+  const [firstFrame, setFirstFrame] = useState<FrameImage | null>(null)
+  const [lastFrame, setLastFrame] = useState<FrameImage | null>(null)
+  const firstFrameRef = useRef<HTMLInputElement>(null)
+  const lastFrameRef = useRef<HTMLInputElement>(null)
+
   const { isCompanyA, showVideoTab } = useTeamFeatures()
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
 
   const {
     prompt,
@@ -173,6 +200,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
     }
   }, [referenceImages.length, addReferenceImage])
   const { generate } = useGenerate()
+  const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
 
   const handleGenerate = async () => {
     try {
@@ -192,6 +220,44 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !isGenerating && !disabled) {
       handleGenerate()
+    }
+  }
+
+  const readFrameFile = useCallback(async (file: File): Promise<FrameImage | null> => {
+    if (!file.type.startsWith('image/')) return null
+    if (file.size > MAX_FILE_MB * 1024 * 1024) return null
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve({
+        previewUrl: URL.createObjectURL(file),
+        dataUrl: reader.result as string,
+      })
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(file)
+    })
+  }, [])
+
+  const handleVideoGenerate = async () => {
+    if (!videoPrompt.trim()) return
+    try {
+      const images: string[] = []
+      if (firstFrame) images.push(firstFrame.dataUrl)
+      if (lastFrame) images.push(lastFrame.dataUrl)
+
+      const batch = await generateVideo({
+        prompt: videoPrompt.trim(),
+        workspace_id: activeWorkspaceId ?? '',
+        model: videoModel,
+        images: images.length > 0 ? images : undefined,
+        aspect_ratio: videoAspectRatio || undefined,
+      })
+      if (batch) onBatchCreated(batch)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error(err.message)
+      } else {
+        toast.error('视频生成请求失败，请稍后重试')
+      }
     }
   }
 
@@ -220,12 +286,11 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
             {showVideoTab && (
               <button
                 onClick={() => setMode('video')}
-                disabled
                 className={cn(
                   'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
                   mode === 'video'
                     ? 'bg-card border-border text-foreground z-10'
-                    : 'bg-muted/60 border-muted text-muted-foreground opacity-40 cursor-not-allowed'
+                    : 'bg-muted/60 border-muted text-muted-foreground hover:text-foreground hover:bg-muted'
                 )}
               >
                 <Video className="h-3.5 w-3.5" />
@@ -375,18 +440,96 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
             </div>
           </div>
         ) : (
-          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card flex-1 flex flex-col items-center justify-center text-muted-foreground">
-            <Video className="h-10 w-10 mx-auto mb-3 opacity-50" />
-            <p className="text-base font-medium mb-1">视频生成功能即将推出</p>
-            <p className="text-sm">敬请期待...</p>
+          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
+            {/* Frame slots row */}
+            <div className="flex gap-2 shrink-0">
+              {/* First frame */}
+              <div className="flex-1">
+                <p className="text-[11px] text-muted-foreground mb-1">首帧图（可选）</p>
+                {firstFrame ? (
+                  <div className="relative h-[72px] rounded-lg overflow-hidden border group">
+                    <Image src={firstFrame.previewUrl} alt="" fill className="object-cover" sizes="120px" unoptimized />
+                    <button
+                      onClick={() => setFirstFrame(null)}
+                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3 text-white" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => firstFrameRef.current?.click()}
+                    className="w-full h-[72px] rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+                  >
+                    <Film className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground">点击上传</span>
+                  </button>
+                )}
+              </div>
+              {/* Last frame */}
+              <div className="flex-1">
+                <p className="text-[11px] text-muted-foreground mb-1">尾帧图（可选）</p>
+                {lastFrame ? (
+                  <div className="relative h-[72px] rounded-lg overflow-hidden border group">
+                    <Image src={lastFrame.previewUrl} alt="" fill className="object-cover" sizes="120px" unoptimized />
+                    <button
+                      onClick={() => setLastFrame(null)}
+                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3 text-white" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => lastFrameRef.current?.click()}
+                    disabled={!firstFrame}
+                    className={cn(
+                      'w-full h-[72px] rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
+                      firstFrame
+                        ? 'border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
+                        : 'border-muted-foreground/15 opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <Film className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground">点击上传</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Prompt */}
+            <div className="flex-1 min-h-0">
+              <Textarea
+                placeholder="描述你想要生成的视频内容..."
+                value={videoPrompt}
+                onChange={(e) => setVideoPrompt(e.target.value)}
+                className="h-full resize-none"
+                disabled={isVideoGenerating || disabled}
+              />
+            </div>
+
+            {/* Hidden file inputs */}
+            <input ref={firstFrameRef} type="file" accept="image/*" className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (f) setFirstFrame(await readFrameFile(f))
+                e.target.value = ''
+              }}
+            />
+            <input ref={lastFrameRef} type="file" accept="image/*" className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (f) setLastFrame(await readFrameFile(f))
+                e.target.value = ''
+              }}
+            />
           </div>
         )}
       </div>
 
       {mode === 'image' && (
         <>
-          {/* 生成配置 - 紧凑间距 */}
-          <div className="rounded-xl border bg-card p-3">
+          {/* 生成配置 - 紧凑间距 */}          <div className="rounded-xl border bg-card p-3">
             <div className="space-y-3">
               {/* 模型选择 */}
               <div>
@@ -554,6 +697,80 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
               onSelectPoster={handleSelectCompanyAImage}
             />
           )}
+        </>
+      )}
+
+      {mode === 'video' && (
+        <>
+          {/* 视频生成配置 */}
+          <div className="rounded-xl border bg-card p-3">
+            <div className="space-y-3">
+              {/* 模型 */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">模型</Label>
+                <Select value={videoModel} onValueChange={setVideoModel} disabled={isVideoGenerating || disabled}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VIDEO_MODEL_OPTIONS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{m.label}</span>
+                          <span className="text-xs text-muted-foreground">{m.desc}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 比例 */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">比例</Label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {VIDEO_ASPECT_RATIOS.map((ar) => (
+                    <button
+                      key={ar.value}
+                      onClick={() => setVideoAspectRatio(ar.value)}
+                      disabled={isVideoGenerating || disabled}
+                      className={cn(
+                        'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
+                        videoAspectRatio === ar.value
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'border-border hover:border-primary/50',
+                        (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                      )}
+                    >
+                      {ar.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 底部操作栏 */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1" />
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <Coins className="h-4 w-4 text-amber-500" />
+              <span>10 积分</span>
+            </div>
+            <Button
+              variant="gradient"
+              size="lg"
+              className="gap-2 px-8"
+              onClick={handleVideoGenerate}
+              disabled={isVideoGenerating || disabled || !videoPrompt.trim()}
+            >
+              {isVideoGenerating ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>
+              ) : (
+                <><Sparkles className="h-4 w-4" />生成</>
+              )}
+            </Button>
+          </div>
         </>
       )}
     </div>
