@@ -13,7 +13,6 @@ import { useLayoutStore } from '@/stores/layout-store'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   LayoutDashboard,
-  ImagePlus,
   Images,
   PanelLeftClose,
   PanelLeft,
@@ -34,7 +33,7 @@ interface NavItem {
 
 const baseNavItems: NavItem[] = [
   { href: '/', label: '工作台', icon: LayoutDashboard },
-  { href: '/image', label: '图片生成', icon: ImagePlus },
+  { href: '/image', label: '创作生成', icon: Sparkles },
   { href: '/assets', label: '资产库', icon: Images },
 ]
 
