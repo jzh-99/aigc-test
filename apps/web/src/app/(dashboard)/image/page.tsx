@@ -26,7 +26,7 @@ interface TeamInfo {
 }
 
 const POLL_INTERVAL_MS = 3000
-const VIDEO_POLL_INTERVAL_MS = 30_000 // Video generation takes minutes; SSE handles real-time, polling is just a fallback
+const VIDEO_POLL_INTERVAL_MS = 5000 // Videos take minutes; 5s polling is sufficient
 
 function isTerminalStatus(status: string) {
   return status === 'completed' || status === 'failed' || status === 'partial_complete'
