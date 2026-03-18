@@ -441,42 +441,45 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
           </div>
         ) : (
           <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
-            {/* Frame slots row */}
-            <div className="flex gap-2 shrink-0">
+            {/* Frame slots row — fixed height, square slots */}
+            <div className="flex gap-3 shrink-0 h-[120px]">
               {/* First frame */}
-              <div className="flex-1">
-                <p className="text-[11px] text-muted-foreground mb-1">首帧图（可选）</p>
+              <div className="flex flex-col gap-1 h-full">
+                <p className="text-[11px] text-muted-foreground leading-none shrink-0">首帧图（可选）</p>
+                <div className="flex-1 aspect-square h-full">
                 {firstFrame ? (
-                  <div className="relative h-[72px] rounded-lg overflow-hidden border group">
-                    <Image src={firstFrame.previewUrl} alt="" fill className="object-cover" sizes="120px" unoptimized />
+                  <div className="relative h-full aspect-square rounded-lg overflow-hidden border bg-muted group">
+                    <Image src={firstFrame.previewUrl} alt="" fill className="object-contain" sizes="120px" unoptimized />
                     <button
                       onClick={() => setFirstFrame(null)}
-                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <X className="h-3 w-3 text-white" />
+                      <X className="h-3 w-3 text-background" />
                     </button>
                   </div>
                 ) : (
                   <button
                     onClick={() => firstFrameRef.current?.click()}
-                    className="w-full h-[72px] rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+                    className="h-full aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
                   >
                     <Film className="h-4 w-4 text-muted-foreground" />
                     <span className="text-[11px] text-muted-foreground">点击上传</span>
                   </button>
                 )}
+                </div>
               </div>
               {/* Last frame */}
-              <div className="flex-1">
-                <p className="text-[11px] text-muted-foreground mb-1">尾帧图（可选）</p>
+              <div className="flex flex-col gap-1 h-full">
+                <p className="text-[11px] text-muted-foreground leading-none shrink-0">尾帧图（可选）</p>
+                <div className="flex-1 aspect-square h-full">
                 {lastFrame ? (
-                  <div className="relative h-[72px] rounded-lg overflow-hidden border group">
-                    <Image src={lastFrame.previewUrl} alt="" fill className="object-cover" sizes="120px" unoptimized />
+                  <div className="relative h-full aspect-square rounded-lg overflow-hidden border bg-muted group">
+                    <Image src={lastFrame.previewUrl} alt="" fill className="object-contain" sizes="120px" unoptimized />
                     <button
                       onClick={() => setLastFrame(null)}
-                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <X className="h-3 w-3 text-white" />
+                      <X className="h-3 w-3 text-background" />
                     </button>
                   </div>
                 ) : (
@@ -484,7 +487,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                     onClick={() => lastFrameRef.current?.click()}
                     disabled={!firstFrame}
                     className={cn(
-                      'w-full h-[72px] rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
+                      'h-full aspect-square rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
                       firstFrame
                         ? 'border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
                         : 'border-muted-foreground/15 opacity-50 cursor-not-allowed'
@@ -494,6 +497,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                     <span className="text-[11px] text-muted-foreground">点击上传</span>
                   </button>
                 )}
+                </div>
               </div>
             </div>
 
