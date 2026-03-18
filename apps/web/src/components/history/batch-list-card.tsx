@@ -51,6 +51,7 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
   const videoUrl = isVideo
     ? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.storage_url
       ?? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.original_url
+      ?? (batch as any).thumbnail_urls?.[0]  // fallback: list API puts video URL here
     : undefined
 
   return (
