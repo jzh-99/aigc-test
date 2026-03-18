@@ -26,4 +26,5 @@ export interface TransferJobData {
   taskId: string
   assetId: string
   originalUrl: string
+  assetType?: 'image' | 'video'
 }

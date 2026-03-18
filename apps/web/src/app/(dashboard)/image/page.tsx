@@ -26,6 +26,7 @@ interface TeamInfo {
 }
 
 const POLL_INTERVAL_MS = 3000
+const VIDEO_POLL_INTERVAL_MS = 30_000 // Video generation takes minutes; SSE handles real-time, polling is just a fallback
 
 function isTerminalStatus(status: string) {
   return status === 'completed' || status === 'failed' || status === 'partial_complete'
@@ -92,11 +93,11 @@ export default function ImagePage() {
     }
   }, [stopPolling])
 
-  const startPolling = useCallback((batchId: string) => {
+  const startPolling = useCallback((batchId: string, intervalMs = POLL_INTERVAL_MS) => {
     // Avoid duplicate polling for the same batch
     if (pollTimersRef.current.has(batchId)) return
 
-    const timer = setInterval(() => pollOnce(batchId), POLL_INTERVAL_MS)
+    const timer = setInterval(() => pollOnce(batchId), intervalMs)
     pollTimersRef.current.set(batchId, timer)
   }, [pollOnce])
 
@@ -117,7 +118,8 @@ export default function ImagePage() {
   const handleBatchCreated = useCallback((batch: BatchResponse) => {
     batchListRef.current?.prepend(batch)
     setActiveBatchCount((c) => c + 1)
-    startPolling(batch.id)
+    const intervalMs = (batch as any).module === 'video' ? VIDEO_POLL_INTERVAL_MS : POLL_INTERVAL_MS
+    startPolling(batch.id, intervalMs)
   }, [startPolling])
 
   const teamRole = activeTeam()?.role

@@ -193,9 +193,9 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
       const hasMore = rows.length > limit
       const batches = hasMore ? rows.slice(0, limit) : rows
 
-      // Fetch thumbnail URLs for all batches in one query
+      // Fetch thumbnail URLs for all batches — sign in parallel to avoid sequential await bottleneck
       const batchIds = batches.map((b: any) => b.id)
-        const thumbnailMap = new Map<string, string[]>()
+      const thumbnailMap = new Map<string, string[]>()
       if (batchIds.length > 0) {
         const assets = await db
           .selectFrom('assets')
@@ -204,22 +204,25 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           .where('is_deleted', '=', false)
           .execute()
 
-        for (const a of assets) {
+        const signed = await Promise.all(assets.map(async (a) => {
           const rawUrl: string | null = (a as any).storage_url ?? (a as any).original_url
-          if (!rawUrl) continue
-          // Use small resized thumbnails (128px) for batch list cards to avoid
-          // saturating browser connections with full-resolution proxy fetches.
+          if (!rawUrl) return null
           let thumbnailUrl: string
           if (rawUrl.startsWith('http://')) {
             thumbnailUrl = `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}&w=128`
           } else {
-            const signed = await signAssetUrl(rawUrl)
-            if (!signed) continue
-            thumbnailUrl = signed
+            const s = await signAssetUrl(rawUrl)
+            if (!s) return null
+            thumbnailUrl = s
           }
-          const list = thumbnailMap.get((a as any).batch_id) ?? []
-          list.push(thumbnailUrl)
-          thumbnailMap.set((a as any).batch_id, list)
+          return { batchId: (a as any).batch_id as string, thumbnailUrl }
+        }))
+
+        for (const entry of signed) {
+          if (!entry) continue
+          const list = thumbnailMap.get(entry.batchId) ?? []
+          list.push(entry.thumbnailUrl)
+          thumbnailMap.set(entry.batchId, list)
         }
       }
 

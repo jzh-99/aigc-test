@@ -19,11 +19,12 @@ interface ExternalStorageResponse {
   }
 }
 
-async function uploadToExternalStorage(taskId: string, sourceUrl: string): Promise<string> {
+async function uploadToExternalStorage(taskId: string, sourceUrl: string, assetType: 'image' | 'video' = 'image'): Promise<string> {
+  const fileType = assetType === 'video' ? 'mp4' : 'jpg'
   const res = await fetch(EXTERNAL_STORAGE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uuid: taskId, url: sourceUrl, type: 'jpg' }),
+    body: JSON.stringify({ uuid: taskId, url: sourceUrl, type: fileType }),
   })
 
   if (!res.ok) {
@@ -48,7 +49,7 @@ export const transferWorker = new Worker<TransferJobData>(
       // SSRF protection: validate URL before fetching
       validateExternalUrl(originalUrl)
 
-      const storageUrl = await uploadToExternalStorage(taskId, originalUrl)
+      const storageUrl = await uploadToExternalStorage(taskId, originalUrl, job.data.assetType ?? 'image')
 
       const db = getDb()
       await db

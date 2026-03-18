@@ -133,7 +133,10 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
         ])
         .where('b.workspace_id', '=', workspace_id)
         .where('a.is_deleted', '=', false)
-        .where('a.transfer_status', '=', 'completed')
+        .where((eb: any) => eb.or([
+          eb('a.transfer_status', '=', 'completed'),
+          eb('a.original_url', 'is not', null),
+        ]))
         .orderBy('a.created_at', 'desc')
         .orderBy('a.id', 'desc')
         .limit(limit + 1)

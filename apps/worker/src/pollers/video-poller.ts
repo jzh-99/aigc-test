@@ -1,7 +1,16 @@
 import pino from 'pino'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { getPubRedis } from '../lib/redis.js'
+import { getPubRedis, getRedis } from '../lib/redis.js'
+import { Queue } from 'bullmq'
+
+let _transferQueue: Queue | null = null
+function getTransferQueue(): Queue {
+  if (!_transferQueue) {
+    _transferQueue = new Queue('transfer-queue', { connection: getRedis() })
+  }
+  return _transferQueue
+}
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
@@ -98,6 +107,22 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
   })
 
   await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+
+  // Enqueue transfer job — same as image pipeline
+  const assetRow = await db
+    .selectFrom('assets')
+    .select('id')
+    .where('task_id', '=', taskId)
+    .executeTakeFirst()
+  if (assetRow) {
+    await getTransferQueue().add('transfer', {
+      taskId,
+      assetId: assetRow.id,
+      originalUrl: videoUrl,
+      assetType: 'video',
+    })
+  }
+
   logger.info({ taskId, batchId, videoUrl }, 'Video task completed')
 }
 
