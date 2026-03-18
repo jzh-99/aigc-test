@@ -84,8 +84,14 @@ else
 fi
 
 # ── 3. PostgreSQL ─────────────────────────────────────────
+# ── 3. PostgreSQL ─────────────────────────────────────────
 if ! command -v psql &>/dev/null; then
   info "安装 PostgreSQL..."
+  # 容器里 systemd-sysv-install 会失败导致 apt 返回非零，提前 mock 掉
+  if ! pidof systemd > /dev/null 2>&1; then
+    printf '#!/bin/sh\nexit 0\n' > /usr/bin/systemd-sysv-install
+    chmod +x /usr/bin/systemd-sysv-install
+  fi
   apt-get install -y -q postgresql postgresql-client
 fi
 # 检测 pg 是否在运行，不在则启动
