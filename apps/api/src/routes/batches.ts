@@ -210,9 +210,9 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           const isVideo = (a as any).type === 'video'
           let thumbnailUrl: string
           if (rawUrl.startsWith('http://')) {
-            // Video: return direct URL (image proxy can't handle video files)
-            // Image: use proxy for resizing
-            thumbnailUrl = isVideo ? rawUrl : `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}&w=128`
+            // Route through proxy to avoid mixed-content (storage is HTTP, app is HTTPS).
+            // Images get resized (&w=128); videos pass through as-is (no resize).
+            thumbnailUrl = `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}${isVideo ? '' : '&w=128'}`
           } else {
             const s = await signAssetUrl(rawUrl)
             if (!s) return null

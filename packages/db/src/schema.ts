@@ -192,6 +192,7 @@ export interface AssetsTable {
   type: 'image' | 'video' | 'audio'
   storage_url: string | null
   original_url: string | null
+  thumbnail_url: string | null
   transfer_status: Generated<'pending' | 'completed' | 'failed'>
   file_size: number | null
   duration: number | null
