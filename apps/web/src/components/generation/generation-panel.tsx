@@ -202,42 +202,45 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
 
       {/* 提示词区域 + 书签标签 */}
       <div className="flex flex-col flex-1 min-h-0">
-        {/* 书签标签 - 左上角，文件夹切换效果 */}
-        <div className="flex items-end">
-          <button
-            onClick={() => setMode('image')}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative z-10 -mb-px',
-              mode === 'image'
-                ? 'bg-card border-border text-foreground'
-                : 'bg-muted/60 border-muted text-muted-foreground hover:text-foreground hover:bg-muted'
-            )}
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-            图片
-          </button>
-          {showVideoTab && (
+        {/* 书签标签 - 公司A只有图片模式，隐藏标签直接全圆角卡片 */}
+        {!isCompanyA && (
+          <div className="flex items-end">
             <button
-              onClick={() => setMode('video')}
-              disabled
+              onClick={() => setMode('image')}
               className={cn(
-                'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
-                mode === 'video'
-                  ? 'bg-card border-border text-foreground z-10'
-                  : 'bg-muted/60 border-muted text-muted-foreground opacity-40 cursor-not-allowed'
+                'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative z-10 -mb-px',
+                mode === 'image'
+                  ? 'bg-card border-border text-foreground'
+                  : 'bg-muted/60 border-muted text-muted-foreground hover:text-foreground hover:bg-muted'
               )}
             >
-              <Video className="h-3.5 w-3.5" />
-              视频
+              <ImageIcon className="h-3.5 w-3.5" />
+              图片
             </button>
-          )}
-        </div>
+            {showVideoTab && (
+              <button
+                onClick={() => setMode('video')}
+                disabled
+                className={cn(
+                  'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
+                  mode === 'video'
+                    ? 'bg-card border-border text-foreground z-10'
+                    : 'bg-muted/60 border-muted text-muted-foreground opacity-40 cursor-not-allowed'
+                )}
+              >
+                <Video className="h-3.5 w-3.5" />
+                视频
+              </button>
+            )}
+          </div>
+        )}
 
-        {/* 提示词卡片 - 与标签无缝连接，填满剩余高度，支持拖拽上传 */}
+        {/* 提示词卡片 */}
         {mode === 'image' ? (
           <div
             className={cn(
-              'rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 relative transition-colors',
+              'border border-border bg-card p-4 flex-1 flex flex-col min-h-0 relative transition-colors',
+              isCompanyA ? 'rounded-xl' : 'rounded-b-xl rounded-tr-xl',
               isDragging && 'border-primary bg-primary/5'
             )}
             onDragEnter={handleDragEnter}
