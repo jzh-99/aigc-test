@@ -13,8 +13,8 @@ import { join } from 'node:path'
 const execFileAsync = promisify(execFile)
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
-const EXTERNAL_STORAGE_URL =
-  process.env.EXTERNAL_STORAGE_URL ?? 'http://61.155.227.20:19092/chatAI/api/video/content'
+const EXTERNAL_STORAGE_URL = process.env.EXTERNAL_STORAGE_URL
+if (!EXTERNAL_STORAGE_URL) throw new Error('EXTERNAL_STORAGE_URL env var is required')
 
 interface ExternalStorageResponse {
   code: number
