@@ -59,11 +59,12 @@ fi
 # 兼容 systemd 和容器环境（无 systemd）
 start_service() {
   local svc="$1"
-  if command -v systemctl &>/dev/null && systemctl is-system-running &>/dev/null 2>&1; then
-    systemctl enable "$svc" 2>/dev/null || true
-    systemctl start "$svc"
-  else
-    service "$svc" start || true
+  if service "$svc" start 2>/dev/null; then
+    return 0
+  fi
+  # 容器里 service 可能失败，直接用 init.d 脚本
+  if [ -f "/etc/init.d/$svc" ]; then
+    /etc/init.d/"$svc" start 2>/dev/null || true
   fi
 }
 
@@ -71,20 +72,37 @@ start_service() {
 if ! command -v redis-server &>/dev/null; then
   info "安装 Redis..."
   apt-get install -y -q redis-server
-  start_service redis-server
+fi
+# 容器里优先直接启动进程
+if ! redis-cli ping &>/dev/null 2>&1; then
+  info "启动 Redis..."
+  redis-server --daemonize yes --loglevel warning 2>/dev/null || start_service redis-server
+  sleep 1
+  redis-cli ping &>/dev/null && info "Redis 启动成功" || warn "Redis 启动可能失败，请检查"
 else
-  info "Redis 已安装，确保已运行..."
-  start_service redis-server
+  info "Redis 已在运行"
 fi
 
 # ── 3. PostgreSQL ─────────────────────────────────────────
 if ! command -v psql &>/dev/null; then
   info "安装 PostgreSQL..."
   apt-get install -y -q postgresql postgresql-client
-  start_service postgresql
+fi
+# 检测 pg 是否在运行，不在则启动
+if ! pg_isready -q 2>/dev/null; then
+  info "启动 PostgreSQL..."
+  # 容器优先用 pg_ctlcluster，更可靠
+  PG_VER=$(pg_lsclusters -h 2>/dev/null | head -1 | awk '{print $1}')
+  PG_CLU=$(pg_lsclusters -h 2>/dev/null | head -1 | awk '{print $2}')
+  if [ -n "$PG_VER" ] && [ -n "$PG_CLU" ]; then
+    pg_ctlcluster "$PG_VER" "$PG_CLU" start 2>/dev/null || start_service postgresql
+  else
+    start_service postgresql
+  fi
+  sleep 2
+  pg_isready -q && info "PostgreSQL 启动成功" || warn "PostgreSQL 启动可能失败，请检查"
 else
-  info "PostgreSQL 已安装，确保已运行..."
-  start_service postgresql
+  info "PostgreSQL 已在运行"
 fi
 
 # 创建数据库和用户（如果不存在）
