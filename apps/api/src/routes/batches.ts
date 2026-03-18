@@ -199,7 +199,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
       if (batchIds.length > 0) {
         const assets = await db
           .selectFrom('assets')
-          .select(['batch_id', 'storage_url', 'original_url'])
+          .select(['batch_id', 'storage_url', 'original_url', 'type'])
           .where('batch_id', 'in', batchIds)
           .where('is_deleted', '=', false)
           .execute()
@@ -207,9 +207,12 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
         const signed = await Promise.all(assets.map(async (a) => {
           const rawUrl: string | null = (a as any).storage_url ?? (a as any).original_url
           if (!rawUrl) return null
+          const isVideo = (a as any).type === 'video'
           let thumbnailUrl: string
           if (rawUrl.startsWith('http://')) {
-            thumbnailUrl = `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}&w=128`
+            // Video: return direct URL (image proxy can't handle video files)
+            // Image: use proxy for resizing
+            thumbnailUrl = isVideo ? rawUrl : `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}&w=128`
           } else {
             const s = await signAssetUrl(rawUrl)
             if (!s) return null
