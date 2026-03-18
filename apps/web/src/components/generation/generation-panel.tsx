@@ -250,14 +250,17 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
           >
             {/* 拖拽遮罩提示 */}
             {isDragging && (
-              <div className="absolute inset-0 rounded-b-xl rounded-tr-xl z-10 flex flex-col items-center justify-center gap-2 pointer-events-none">
+              <div className={cn(
+                'absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 pointer-events-none',
+                isCompanyA ? 'rounded-xl' : 'rounded-b-xl rounded-tr-xl'
+              )}>
                 <ImagePlus className="h-10 w-10 text-primary" />
                 <span className="text-sm font-medium text-primary">松开以添加参考图</span>
               </div>
             )}
             <div className={cn('flex flex-col flex-1 min-h-0 gap-2', isDragging && 'opacity-30 pointer-events-none')}>
               {/* 参考图区域 - 固定高度，保证添加图片前后布局不变 */}
-              <div className="h-[68px] shrink-0">
+              <div className={cn('shrink-0', isCompanyA ? 'h-[88px]' : 'h-[68px]')}>
                 {referenceImages.length > 0 ? (
                   <div
                     onClick={() => setImageDialogOpen(true)}
@@ -317,30 +320,27 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                     </div>
                   </div>
                 ) : isCompanyA ? (
-                  /* 公司A：左右分栏 - 本地上传 + 图库搜索 */
-                  <div className="h-full grid grid-cols-2 gap-2">
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className={cn(
-                        'h-full rounded-xl border-2 border-dashed transition-all cursor-pointer',
-                        'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50',
-                        'flex flex-col items-center justify-center gap-1'
-                      )}
-                    >
-                      <ImagePlus className="h-5 w-5 text-primary" />
-                      <span className="text-xs font-medium text-primary leading-tight">本地上传</span>
+                  /* 公司A：全宽上传框 + 右侧居中实体图库按钮 */
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className={cn(
+                      'h-full w-full rounded-xl border-2 border-dashed transition-all cursor-pointer',
+                      'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50',
+                      'flex items-center gap-3 px-3'
+                    )}
+                  >
+                    <ImagePlus className="h-6 w-6 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-primary leading-tight">上传参考图</div>
+                      <div className="text-[11px] text-primary/60 leading-tight mt-0.5">点击或拖拽 · 最多 {MAX_REF_IMAGES} 张</div>
                     </div>
-                    <div
-                      onClick={() => setCompanyAPickerOpen(true)}
-                      className={cn(
-                        'h-full rounded-xl border-2 border-dashed transition-all cursor-pointer',
-                        'border-blue-400/40 bg-blue-50/50 hover:bg-blue-50 hover:border-blue-400/70',
-                        'flex flex-col items-center justify-center gap-1'
-                      )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setCompanyAPickerOpen(true) }}
+                      className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-medium transition-colors mr-2"
                     >
-                      <Search className="h-5 w-5 text-blue-500" />
-                      <span className="text-xs font-medium text-blue-600 leading-tight">图库搜索</span>
-                    </div>
+                      <Search className="h-3.5 w-3.5" />
+                      图库搜索
+                    </button>
                   </div>
                 ) : (
                   /* 无参考图 - 横向全宽，直接触发文件选择 */
