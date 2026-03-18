@@ -92,7 +92,7 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
         {isVideo ? (
           videoUrl ? (
             <div className="flex gap-2 overflow-hidden">
-              <div className="relative h-16 w-16 shrink-0 rounded-md overflow-hidden bg-muted">
+              <div className="relative h-16 w-16 shrink-0 rounded-md overflow-hidden bg-muted [transform:translateZ(0)]">
                 <video
                   src={videoUrl}
                   className="h-full w-full object-contain"
