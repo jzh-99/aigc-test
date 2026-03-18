@@ -14,11 +14,11 @@ function isAllowedUrl(url: string): boolean {
 }
 
 // Fetch with a timeout to avoid hanging connections blocking the event loop
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+async function fetchWithTimeout(url: string, timeoutMs: number, headers?: Record<string, string>): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    return await fetch(url, { signal: controller.signal })
+    return await fetch(url, { signal: controller.signal, headers })
   } finally {
     clearTimeout(timer)
   }
@@ -110,10 +110,14 @@ export async function proxyRoutes(app: FastifyInstance) {
         return reply.send(resultBuffer)
       }
 
-      // Pass-through (original behaviour)
+      // Pass-through — forward Range header so browsers can efficiently load video metadata
+      const upstreamHeaders: Record<string, string> = {}
+      const rangeHeader = request.headers['range']
+      if (rangeHeader) upstreamHeaders['Range'] = rangeHeader
+
       let upstream: Response
       try {
-        upstream = await fetchWithTimeout(url, PROXY_TIMEOUT_MS)
+        upstream = await fetchWithTimeout(url, PROXY_TIMEOUT_MS, upstreamHeaders)
       } catch (err: any) {
         if (err?.name === 'AbortError') {
           return reply.code(504).send({ error: 'Gateway timeout' })
@@ -121,16 +125,22 @@ export async function proxyRoutes(app: FastifyInstance) {
         return reply.code(502).send({ error: 'Failed to fetch asset' })
       }
 
-      if (!upstream.ok) {
+      if (!upstream.ok && upstream.status !== 206) {
         return reply.code(upstream.status).send({ error: 'Upstream error' })
       }
 
       const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream'
       const contentLength = upstream.headers.get('content-length')
+      const contentRange = upstream.headers.get('content-range')
+      const acceptRanges = upstream.headers.get('accept-ranges')
 
+      reply.code(upstream.status)
       reply.header('Content-Type', contentType)
-      reply.header('Cache-Control', 'public, max-age=31536000, immutable')
       if (contentLength) reply.header('Content-Length', contentLength)
+      if (contentRange) reply.header('Content-Range', contentRange)
+      if (acceptRanges) reply.header('Accept-Ranges', acceptRanges)
+      // Partial responses must not be cached indefinitely
+      reply.header('Cache-Control', contentRange ? 'no-store' : 'public, max-age=31536000, immutable')
 
       return reply.send(upstream.body)
     },
