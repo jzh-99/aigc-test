@@ -31,7 +31,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'nano-banana-2':                     '全能图片Pro 1K',
   'nano-banana-2-2k':                  '全能图片Pro 2K',
   'nano-banana-2-4k':                  '全能图片Pro 4K',
-  'veo3.1-fast':                       'Veo 3.1 Fast',
+  'veo3.1-fast':                       '全能视频3.1 Fast',
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
