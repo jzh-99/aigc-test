@@ -48,29 +48,43 @@ fi
 if ! command -v pm2 &>/dev/null; then
   info "安装 PM2..."
   npm install -g pm2
-  pm2 startup systemd -u root --hp /root
+  # 仅在 systemd 环境下配置开机自启
+  if command -v systemctl &>/dev/null && systemctl is-system-running &>/dev/null 2>&1; then
+    pm2 startup systemd -u root --hp /root
+  fi
 else
   info "PM2 $(pm2 --version) 已安装，跳过"
 fi
+
+# 兼容 systemd 和容器环境（无 systemd）
+start_service() {
+  local svc="$1"
+  if command -v systemctl &>/dev/null && systemctl is-system-running &>/dev/null 2>&1; then
+    systemctl enable "$svc" 2>/dev/null || true
+    systemctl start "$svc"
+  else
+    service "$svc" start || true
+  fi
+}
 
 # ── 2. Redis ──────────────────────────────────────────────
 if ! command -v redis-server &>/dev/null; then
   info "安装 Redis..."
   apt-get install -y -q redis-server
-  systemctl enable redis-server
-  systemctl start redis-server
+  start_service redis-server
 else
-  info "Redis 已安装，跳过"
+  info "Redis 已安装，确保已运行..."
+  start_service redis-server
 fi
 
 # ── 3. PostgreSQL ─────────────────────────────────────────
 if ! command -v psql &>/dev/null; then
   info "安装 PostgreSQL..."
   apt-get install -y -q postgresql postgresql-client
-  systemctl enable postgresql
-  systemctl start postgresql
+  start_service postgresql
 else
-  info "PostgreSQL 已安装，跳过"
+  info "PostgreSQL 已安装，确保已运行..."
+  start_service postgresql
 fi
 
 # 创建数据库和用户（如果不存在）
