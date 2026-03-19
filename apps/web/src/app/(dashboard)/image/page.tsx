@@ -10,6 +10,7 @@ import { BatchDetail } from '@/components/history/batch-detail'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiGet } from '@/lib/api-client'
+import { ApiError } from '@/lib/api-client'
 import { AlertTriangle, FolderX } from 'lucide-react'
 import useSWR from 'swr'
 import type { BatchResponse } from '@aigc/types'
@@ -87,8 +88,12 @@ export default function ImagePage() {
         setTimeout(() => { batchListRef.current?.refresh() }, 800)
       }
     } catch (err) {
+      // 429: rate limited — skip this cycle, retry on next interval
+      if (err instanceof ApiError && err.status === 429) {
+        console.warn('[Poll] Rate limited for batch', batchId, '- retrying next cycle')
+        return
+      }
       console.error('[Poll] Error fetching batch', batchId, err)
-      // Stop polling on error to avoid hammering the API
       stopPolling(batchId)
     }
   }, [stopPolling])
@@ -97,8 +102,15 @@ export default function ImagePage() {
     // Avoid duplicate polling for the same batch
     if (pollTimersRef.current.has(batchId)) return
 
-    const timer = setInterval(() => pollOnce(batchId), intervalMs)
-    pollTimersRef.current.set(batchId, timer)
+    // Stagger start by up to 1.5s so concurrent batches don't all fire at once
+    const jitter = Math.floor(Math.random() * 1500)
+    const startTimer = setTimeout(() => {
+      if (!pollTimersRef.current.has(batchId)) return // stopped during jitter window
+      const timer = setInterval(() => pollOnce(batchId), intervalMs)
+      pollTimersRef.current.set(batchId, timer)
+      pollOnce(batchId) // fire immediately after jitter
+    }, jitter)
+    pollTimersRef.current.set(batchId, startTimer)
   }, [pollOnce])
 
   // When tab becomes visible again, immediately poll all active batches
