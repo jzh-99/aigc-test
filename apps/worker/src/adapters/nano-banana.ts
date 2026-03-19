@@ -75,7 +75,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     const isGemini = model.startsWith('gemini-3.1-flash-image-preview')
     const useEdits = !isGemini && imageUrls !== null
 
-    const maxRetries = 1
+    const maxRetries = 0
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const result = useEdits
         ? await this.callEdits(model, prompt, extraParams, imageUrls!)
@@ -107,7 +107,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 120_000)
+    const timeout = setTimeout(() => controller.abort(), 180_000)
     try {
       const res = await fetch(`${this.apiUrl}/v1/images/generations`, {
         method: 'POST',
@@ -178,7 +178,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 120_000)
+    const timeout = setTimeout(() => controller.abort(), 180_000)
     try {
       const res = await fetch(`${this.apiUrl}/v1/images/edits`, {
         method: 'POST',
