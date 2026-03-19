@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import { signAssetUrl, signAssetUrls } from '../lib/storage.js'
+import { signAssetUrl, signAssetUrls, encryptProxyUrl } from '../lib/storage.js'
 
 export async function batchRoutes(app: FastifyInstance): Promise<void> {
   // GET /batches/:id — batch detail with tasks + assets
@@ -105,7 +105,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
             ? {
                 id: asset.id,
                 type: asset.type,
-                original_url: asset.original_url,
+                original_url: await signAssetUrl(asset.original_url),
                 storage_url: asset.storage_url,
                 transfer_status: asset.transfer_status,
                 file_size: asset.file_size,
@@ -210,9 +210,9 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           const isVideo = (a as any).type === 'video'
           let thumbnailUrl: string
           if (rawUrl.startsWith('http://')) {
-            // Route through proxy to avoid mixed-content (storage is HTTP, app is HTTPS).
-            // Images get resized (&w=128); videos pass through as-is (no resize).
-            thumbnailUrl = `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}${isVideo ? '' : '&w=128'}`
+            // Encrypt URL to hide storage server IP from browser network tab
+            const token = encryptProxyUrl(rawUrl)
+            thumbnailUrl = `/api/v1/assets/proxy?token=${token}${isVideo ? '' : '&w=128'}`
           } else {
             const s = await signAssetUrl(rawUrl)
             if (!s) return null

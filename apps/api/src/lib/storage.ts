@@ -25,6 +25,41 @@ const BUCKET = process.env.STORAGE_BUCKET ?? 'aigc-assets'
 // Presigned URL expiration in seconds (default 1 hour)
 const PRESIGN_EXPIRES = parseInt(process.env.STORAGE_PRESIGN_EXPIRES ?? '3600', 10)
 
+// ── Proxy URL encryption (AES-256-GCM) ────────────────────────────────────────
+// Prevents storage server IP and AI provider CDN addresses from being
+// visible to users in proxy query parameters.
+
+function getProxyKey(): Buffer {
+  const secret = process.env.JWT_SECRET ?? ''
+  return crypto.createHash('sha256').update(secret + '-proxy').digest()
+}
+
+export function encryptProxyUrl(url: string): string {
+  const key = getProxyKey()
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([cipher.update(url, 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return Buffer.concat([iv, tag, encrypted]).toString('base64url')
+}
+
+export function decryptProxyUrl(token: string): string | null {
+  try {
+    const key = getProxyKey()
+    const buf = Buffer.from(token, 'base64url')
+    if (buf.length < 29) return null // min: 12 IV + 16 tag + 1 char
+    const iv = buf.subarray(0, 12)
+    const tag = buf.subarray(12, 28)
+    const encrypted = buf.subarray(28)
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv)
+    decipher.setAuthTag(tag)
+    return decipher.update(encrypted).toString('utf8') + decipher.final('utf8')
+  } catch {
+    return null
+  }
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 /**
  * Convert a storage URL (e.g. http://minio:9000/bucket/key) to a presigned URL.
  * If the URL is not from our storage (e.g. external provider URL), return as-is.
@@ -35,9 +70,9 @@ export async function signAssetUrl(storageUrl: string | null | undefined): Promi
 
   const publicUrl = process.env.STORAGE_PUBLIC_URL ?? ''
   if (!publicUrl || !storageUrl.startsWith(publicUrl)) {
-    // If the URL is HTTP, proxy it through the API to avoid mixed-content errors on the HTTPS frontend
+    // If the URL is HTTP, encrypt and proxy it — hides storage server IP
     if (storageUrl.startsWith('http://')) {
-      return `/api/v1/assets/proxy?url=${encodeURIComponent(storageUrl)}`
+      return `/api/v1/assets/proxy?token=${encryptProxyUrl(storageUrl)}`
     }
     // External HTTPS URL (e.g. provider CDN) — return as-is
     return storageUrl
