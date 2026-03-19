@@ -25,7 +25,7 @@ export function useBatches() {
       if (pageIndex === 0) return `/batches?limit=${PAGE_SIZE}${wsParam}`
       return `/batches?limit=${PAGE_SIZE}&cursor=${previousPageData!.cursor}${wsParam}`
     },
-    { revalidateFirstPage: false, revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 30000 },
+    { revalidateFirstPage: false, revalidateOnFocus: true, revalidateOnReconnect: true, dedupingInterval: 10000, focusThrottleInterval: 15000 },
   )
 
   const batches = data ? data.flatMap((page) => page.data) : []
