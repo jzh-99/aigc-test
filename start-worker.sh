@@ -4,4 +4,4 @@ set -a
 source "$DIR/.env"
 set +a
 cd "$DIR"
-node_modules/.bin/tsx apps/worker/src/index.ts
+apps/worker/node_modules/.bin/tsx apps/worker/src/index.ts
