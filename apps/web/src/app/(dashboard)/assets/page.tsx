@@ -338,11 +338,9 @@ export default function AssetsPage() {
                     {new Date(videoDialogAsset.created_at).toLocaleString('zh-CN')}
                   </p>
                 </div>
-                <Button size="sm" variant="ghost" className="shrink-0 gap-1.5 text-white hover:bg-white/10 hover:text-white" asChild>
-                  <a href={url!} download target="_blank" rel="noopener noreferrer">
-                    <Download className="h-3.5 w-3.5" />
-                    下载
-                  </a>
+                <Button size="sm" variant="ghost" className="shrink-0 gap-1.5 text-white hover:bg-white/10 hover:text-white" onClick={() => downloadImage(url!, 'video')}>
+                  <Download className="h-3.5 w-3.5" />
+                  下载
                 </Button>
               </div>
             </DialogContent>
