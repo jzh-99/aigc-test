@@ -167,11 +167,9 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
                       preload="metadata"
                     />
                     <div className="flex justify-end p-2">
-                      <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" asChild>
-                        <a href={url} download target="_blank" rel="noopener noreferrer">
-                          <Download className="h-3.5 w-3.5" />
-                          下载
-                        </a>
+                      <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={() => downloadImage(url, 'video')}>
+                        <Download className="h-3.5 w-3.5" />
+                        下载
                       </Button>
                     </div>
                   </div>
