@@ -62,7 +62,7 @@ const imageWorker = new Worker<GenerationJobData>(
   },
   {
     connection: getRedis(),
-    concurrency: 3,
+    concurrency: 2,
     limiter: {
       max: 10,
       duration: 60_000,
