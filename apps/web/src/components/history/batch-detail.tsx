@@ -217,7 +217,7 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7 bg-background/80 hover:bg-background"
-                          onClick={(e) => { e.stopPropagation(); downloadImage(url) }}
+                          onClick={(e) => { e.stopPropagation(); downloadImage(url, task.asset?.type as 'image' | 'video' | undefined) }}
                         >
                           <Download className="h-3.5 w-3.5" />
                         </Button>
