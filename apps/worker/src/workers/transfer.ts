@@ -16,6 +16,23 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 const EXTERNAL_STORAGE_URL = process.env.EXTERNAL_STORAGE_URL
 if (!EXTERNAL_STORAGE_URL) throw new Error('EXTERNAL_STORAGE_URL env var is required')
 
+// If the storage API returns an external domain URL, rewrite to internal base URL
+// so the API server can proxy it. e.g. https://midscreen.js118114.com:8443/path → http://61.155.227.29:19092/path
+const EXTERNAL_STORAGE_BASE = process.env.EXTERNAL_STORAGE_BASE ?? ''
+
+function rewriteStorageUrl(url: string): string {
+  if (!EXTERNAL_STORAGE_BASE) return url
+  try {
+    const parsed = new URL(url)
+    const base = new URL(EXTERNAL_STORAGE_BASE)
+    parsed.protocol = base.protocol
+    parsed.host = base.host
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
 interface ExternalStorageResponse {
   code: number
   msg: string
@@ -42,7 +59,7 @@ async function uploadToExternalStorage(taskId: string, sourceUrl: string, assetT
     throw new Error(`External storage returned error: code=${body.code} msg=${body.msg}`)
   }
 
-  return body.data.url
+  return rewriteStorageUrl(body.data.url)
 }
 
 // Upload a local file buffer to external storage as an image
@@ -60,7 +77,7 @@ async function uploadBufferToExternalStorage(taskId: string, buffer: Buffer): Pr
   if (!res.ok) throw new Error(`Thumbnail upload error: ${res.status}`)
   const body = (await res.json()) as ExternalStorageResponse
   if (body.code !== 10000 || !body.data?.url) throw new Error(`Thumbnail upload failed: ${body.msg}`)
-  return body.data.url
+  return rewriteStorageUrl(body.data.url)
 }
 
 // Extract first frame from a video URL using ffmpeg, return as JPEG buffer
