@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import { signAssetUrl, extractStorageKey, signThumbnailUrl, verifyThumbnailSig, getS3ObjectBuffer } from '../lib/storage.js'
+import { signAssetUrl, extractStorageKey, signThumbnailUrl, verifyThumbnailSig, getS3ObjectBuffer, encryptProxyUrl } from '../lib/storage.js'
 
 export async function assetRoutes(app: FastifyInstance): Promise<void> {
   // In-memory thumbnail cache: key = "storageKey:width", value = WebP Buffer
@@ -179,15 +179,15 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
             // Our MinIO/S3 — HMAC-signed thumbnail endpoint
             thumbnail_url = signThumbnailUrl(storageKey, 400) || null
           } else if (rawUrl?.startsWith('http://')) {
-            // External HTTP storage — proxy with resize
-            thumbnail_url = `/api/v1/assets/proxy?url=${encodeURIComponent(rawUrl)}&w=400`
+            // Encrypt URL to hide storage server IP
+            thumbnail_url = `/api/v1/assets/proxy?token=${encryptProxyUrl(rawUrl)}&w=400`
           }
           return {
             id: a.id,
             type: a.type,
             storage_url: rawUrl ? await signAssetUrl(rawUrl) : null,
             thumbnail_url,
-            original_url: a.original_url ?? null,
+            original_url: a.original_url ? await signAssetUrl(a.original_url) : null,
             created_at: a.created_at.toISOString?.() ?? String(a.created_at),
             batch: { id: a.batch_id, prompt: a.prompt, model: a.model },
           }
