@@ -91,7 +91,7 @@ function AssetCard({ asset, onEnlarge, onDelete }: AssetCardProps) {
               size="icon"
               variant="ghost"
               className="h-7 w-7 bg-black/50 hover:bg-black/70 text-white border-0"
-              onClick={(e) => { e.stopPropagation(); downloadImage(url) }}
+              onClick={(e) => { e.stopPropagation(); downloadImage(url, isVideo ? 'video' : 'image') }}
             >
               <Download className="h-3.5 w-3.5" />
             </Button>
