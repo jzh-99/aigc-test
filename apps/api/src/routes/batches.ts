@@ -90,7 +90,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
       actual_credits: batch.actual_credits,
       created_at: batch.created_at.toISOString?.() ?? String(batch.created_at),
       user: creator ? { id: creator.id, username: creator.username, avatar_url: creator.avatar_url ?? null } : undefined,
-      tasks: tasks.map((t: any) => {
+      tasks: await Promise.all(tasks.map(async (t: any) => {
         const asset = assetByTask.get(t.id)
         return {
           id: t.id,
@@ -114,7 +114,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
               }
             : null,
         }
-      }),
+      })),
     })
   })
 
