@@ -4,4 +4,4 @@ set -a
 source "$DIR/.env"
 set +a
 cd "$DIR"
-npx tsx apps/api/src/index.ts
+node_modules/.bin/tsx apps/api/src/index.ts
