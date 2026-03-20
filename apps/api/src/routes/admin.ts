@@ -109,7 +109,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('team_members')
       .innerJoin('users', 'users.id', 'team_members.user_id')
       .select([
-        'users.id', 'users.username', 'users.email', 'users.avatar_url',
+        'users.id', 'users.username', 'users.account', 'users.avatar_url',
         'team_members.role', 'team_members.credit_quota', 'team_members.credit_used',
         'team_members.joined_at',
       ])
@@ -939,7 +939,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb()
     const users = await db
       .selectFrom('users')
-      .select(['id', 'email', 'username', 'avatar_url', 'role', 'status', 'created_at'])
+      .select(['id', 'account', 'username', 'avatar_url', 'role', 'status', 'created_at'])
       .orderBy('created_at', 'desc')
       .execute()
 

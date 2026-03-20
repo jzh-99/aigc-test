@@ -22,12 +22,12 @@ import { Plus, FolderOpen, Users, Trash2, RotateCcw, Loader2 } from 'lucide-reac
 interface TeamData {
   id: string
   name: string
-  members: Array<{ user_id: string; username: string; email: string }>
+  members: Array<{ user_id: string; username: string; account: string }>
 }
 
 interface WsMember {
   user_id: string
-  email: string
+  account: string
   username: string
   role: string
 }
@@ -295,7 +295,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
                   <div>
                     <span className="text-sm">{m.username}</span>
                     <span className="text-xs text-muted-foreground ml-2">
-                      {m.email}
+                      {m.account}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -327,7 +327,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
                     <div>
                       <span className="text-sm">{m.username}</span>
                       <span className="text-xs text-muted-foreground ml-2">
-                        {m.email}
+                        {m.account}
                       </span>
                     </div>
                     <Button

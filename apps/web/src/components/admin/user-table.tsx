@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 interface User {
   id: string
-  email: string
+  account: string
   username: string
   role: string
   status: string
@@ -43,7 +43,7 @@ export function UserTable() {
             <thead>
               <tr className="border-b text-muted-foreground">
                 <th className="text-left py-3 px-4 font-medium">用户名</th>
-                <th className="text-left py-3 px-4 font-medium">邮箱</th>
+                <th className="text-left py-3 px-4 font-medium">账户</th>
                 <th className="text-left py-3 px-4 font-medium">角色</th>
                 <th className="text-left py-3 px-4 font-medium">状态</th>
                 <th className="text-left py-3 px-4 font-medium">所属团队</th>
@@ -57,7 +57,7 @@ export function UserTable() {
               {data?.data.map((user) => (
                 <tr key={user.id} className="border-b last:border-0">
                   <td className="py-3 px-4 font-medium">{user.username}</td>
-                  <td className="py-3 px-4 text-muted-foreground">{user.email}</td>
+                  <td className="py-3 px-4 text-muted-foreground">{user.account}</td>
                   <td className="py-3 px-4">
                     <Badge variant={user.role === 'admin' ? 'default' : 'outline'}>
                       {user.role === 'admin' ? '管理员' : '成员'}
