@@ -138,7 +138,11 @@ export function translateError(error: unknown): string {
  * 根据错误码获取中文提示
  */
 export function getErrorMessage(code: string, fallback?: string): string {
-  return ERROR_CODE_MAP[code] || fallback || ERROR_CODE_MAP.UNKNOWN
+  // For unknown codes, prefer the actual backend message over a generic placeholder
+  if (code === 'UNKNOWN' || !ERROR_CODE_MAP[code]) {
+    return fallback || ERROR_CODE_MAP.UNKNOWN
+  }
+  return ERROR_CODE_MAP[code]
 }
 
 /**

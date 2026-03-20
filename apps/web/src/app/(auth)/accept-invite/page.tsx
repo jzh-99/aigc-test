@@ -36,6 +36,9 @@ function AcceptInviteForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const passwordOk = password.length >= 8 && /[a-zA-Z]/.test(password) && /\d/.test(password)
+  const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
@@ -44,13 +47,13 @@ function AcceptInviteForm() {
       return
     }
 
-    if (password !== confirmPassword) {
-      toast.error('两次输入的密码不一致')
+    if (!passwordOk) {
+      toast.error('密码至少8位，且必须同时包含字母和数字')
       return
     }
 
-    if (password.length < 8) {
-      toast.error('密码至少需要8个字符')
+    if (password !== confirmPassword) {
+      toast.error('两次输入的密码不一致')
       return
     }
 
@@ -124,12 +127,17 @@ function AcceptInviteForm() {
               <Input
                 id="password"
                 type="password"
-                placeholder="至少8个字符"
+                placeholder="至少8位，含字母和数字"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={8}
               />
+              <p className="text-xs text-muted-foreground">至少 8 位，需同时包含字母和数字</p>
+              {password.length > 0 && !passwordOk && (
+                <p className="text-xs text-destructive">
+                  {password.length < 8 ? '密码至少需要 8 位' : '密码必须同时包含字母和数字'}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">确认密码</Label>
@@ -140,10 +148,12 @@ function AcceptInviteForm() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                minLength={8}
               />
+              {passwordMismatch && (
+                <p className="text-xs text-destructive">两次输入的密码不一致</p>
+              )}
             </div>
-            <Button type="submit" className="w-full" variant="gradient" disabled={loading}>
+            <Button type="submit" className="w-full" variant="gradient" disabled={loading || !passwordOk || passwordMismatch}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               注册并加入
             </Button>
