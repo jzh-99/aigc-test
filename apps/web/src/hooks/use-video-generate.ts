@@ -8,6 +8,7 @@ interface VideoGenerateParams {
   model?: string
   images?: string[]
   aspect_ratio?: '16:9' | '9:16'
+  enable_upsample?: boolean
 }
 
 export function useVideoGenerate() {
