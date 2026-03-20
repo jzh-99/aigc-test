@@ -81,6 +81,10 @@ async function fetchWithAuth<T>(
   })
 
   if (res.status === 401) {
+    // Skip refresh for auth endpoints — treat as normal error
+    if (path.startsWith('/auth/')) {
+      return handleResponse<T>(res)
+    }
     // Try refresh (deduplicate concurrent refreshes)
     if (!refreshPromise) {
       refreshPromise = refreshAccessToken().finally(() => {
