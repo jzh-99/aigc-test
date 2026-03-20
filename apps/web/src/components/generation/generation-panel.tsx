@@ -68,7 +68,7 @@ const ASPECT_RATIOS = [
 const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
 const VIDEO_MODEL_OPTIONS = [
-  { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成' },
+  { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: 10 },
 ] as const
 
 const VIDEO_ASPECT_RATIOS = [
@@ -746,14 +746,23 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                   <Label className="text-xs text-muted-foreground mb-1 block">模型</Label>
                   <Select value={videoModel} onValueChange={setVideoModel} disabled={isVideoGenerating || disabled}>
                     <SelectTrigger className="h-9">
-                      <SelectValue />
+                      <SelectValue>
+                        {VIDEO_MODEL_OPTIONS.find(m => m.value === videoModel)?.label}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {VIDEO_MODEL_OPTIONS.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{m.label}</span>
-                            <span className="text-xs text-muted-foreground">{m.desc}</span>
+                        <SelectItem key={m.value} value={m.value} className="py-2">
+                          <div className="flex items-start gap-3">
+                            <Film className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm mb-0.5">{m.label}</div>
+                              <div className="text-xs text-muted-foreground leading-snug">{m.desc}</div>
+                              <div className="flex items-center gap-1 text-xs font-medium text-primary mt-0.5">
+                                <Coins className="h-3 w-3" />
+                                {m.credits} 积分/次
+                              </div>
+                            </div>
                           </div>
                         </SelectItem>
                       ))}
@@ -762,24 +771,23 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground mb-1 block">分辨率</Label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {VIDEO_RESOLUTIONS.map((r) => (
-                      <button
-                        key={String(r.value)}
-                        onClick={() => setVideoUpsample(r.value)}
-                        disabled={isVideoGenerating || disabled}
-                        className={cn(
-                          'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
-                          videoUpsample === r.value
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-border hover:border-primary/50',
-                          (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
-                        )}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
-                  </div>
+                  <Select
+                    value={String(videoUpsample)}
+                    onValueChange={(v) => setVideoUpsample(v === 'true')}
+                    disabled={isVideoGenerating || disabled}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VIDEO_RESOLUTIONS.map((r) => (
+                        <SelectItem key={String(r.value)} value={String(r.value)}>
+                          <span className="font-medium">{r.label}</span>
+                          <span className="text-xs text-muted-foreground ml-1.5">{r.desc}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
