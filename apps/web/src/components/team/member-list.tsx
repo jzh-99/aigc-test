@@ -22,7 +22,7 @@ import { UserPlus, Trash2, Edit2, RotateCcw } from 'lucide-react'
 
 interface Member {
   user_id: string
-  email: string
+  account: string
   username: string
   avatar_url: string | null
   role: string
@@ -145,7 +145,7 @@ export function MemberList({ teamId }: { teamId: string }) {
               <thead>
                 <tr className="border-b text-muted-foreground">
                   <th className="text-left py-2 px-2 font-medium">用户名</th>
-                  <th className="text-left py-2 px-2 font-medium">邮箱</th>
+                  <th className="text-left py-2 px-2 font-medium">账户</th>
                   <th className="text-left py-2 px-2 font-medium">角色</th>
                   <th className="text-right py-2 px-2 font-medium">配额</th>
                   <th className="text-right py-2 px-2 font-medium">已用 / 剩余</th>
@@ -163,7 +163,7 @@ export function MemberList({ teamId }: { teamId: string }) {
                   return (
                     <tr key={member.user_id} className="border-b last:border-0">
                       <td className="py-2 px-2 font-medium">{member.username}</td>
-                      <td className="py-2 px-2 text-muted-foreground">{member.email}</td>
+                      <td className="py-2 px-2 text-muted-foreground">{member.account}</td>
                       <td className="py-2 px-2">
                         <Badge variant={roleBadgeVariant[member.role as keyof typeof roleBadgeVariant] ?? 'outline'}>
                           {roleLabel[member.role] ?? member.role}

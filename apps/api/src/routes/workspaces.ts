@@ -92,7 +92,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('workspace_members')
       .innerJoin('users', 'users.id', 'workspace_members.user_id')
       .select([
-        'users.id as user_id', 'users.email', 'users.username', 'users.avatar_url',
+        'users.id as user_id', 'users.account', 'users.username', 'users.avatar_url',
         'workspace_members.role', 'workspace_members.created_at',
       ])
       .where('workspace_members.workspace_id', '=', request.params.id)

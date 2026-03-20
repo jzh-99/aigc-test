@@ -38,7 +38,7 @@ interface Team {
 interface TeamMember {
   id: string
   username: string
-  email: string
+  account: string
   role: string
   credit_quota: number | null
   credit_used: number
@@ -277,7 +277,7 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
       <thead>
         <tr className="border-b text-muted-foreground">
           <th className="text-left py-2 px-2 font-medium">用户名</th>
-          <th className="text-left py-2 px-2 font-medium">邮箱</th>
+          <th className="text-left py-2 px-2 font-medium">账户</th>
           <th className="text-left py-2 px-2 font-medium">角色</th>
           <th className="text-right py-2 px-2 font-medium">已用积分</th>
           <th className="text-right py-2 px-2 font-medium">配额</th>
@@ -289,7 +289,7 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
         {members.map((m) => (
           <tr key={m.id} className="border-b last:border-0">
             <td className="py-2 px-2 font-medium">{m.username}</td>
-            <td className="py-2 px-2 text-muted-foreground">{m.email}</td>
+            <td className="py-2 px-2 text-muted-foreground">{m.account}</td>
             <td className="py-2 px-2">
               <Badge variant={m.role === 'owner' ? 'default' : 'outline'} className="text-[10px]">
                 {m.role === 'owner' ? '组长' : m.role === 'editor' ? '编辑' : m.role}

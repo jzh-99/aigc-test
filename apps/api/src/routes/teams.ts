@@ -35,7 +35,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('team_members')
       .innerJoin('users', 'users.id', 'team_members.user_id')
       .select([
-        'users.id as user_id', 'users.email', 'users.username', 'users.avatar_url',
+        'users.id as user_id', 'users.account', 'users.username', 'users.avatar_url',
         'team_members.role', 'team_members.credit_quota', 'team_members.credit_used',
         'team_members.quota_period', 'team_members.quota_reset_at', 'team_members.joined_at',
       ])
