@@ -15,7 +15,7 @@ interface CreateTeamFormProps {
 
 export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
   const [name, setName] = useState('')
-  const [ownerEmail, setOwnerEmail] = useState('')
+  const [ownerIdentifier, setOwnerIdentifier] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
   const [initialCredits, setInitialCredits] = useState('1000')
   const [teamType, setTeamType] = useState<'standard' | 'company_a'>('standard')
@@ -23,20 +23,21 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
-    if (!name || !ownerEmail) return
+    if (!name || !ownerIdentifier) return
 
     setLoading(true)
     try {
+      const isEmail = ownerIdentifier.includes('@')
       await apiPost('/admin/teams', {
         name,
-        owner_email: ownerEmail,
+        ...(isEmail ? { owner_email: ownerIdentifier } : { owner_phone: ownerIdentifier }),
         owner_password: ownerPassword || undefined,
         initial_credits: parseInt(initialCredits, 10) || 0,
         team_type: teamType,
       })
       toast.success('团队已创建')
       setName('')
-      setOwnerEmail('')
+      setOwnerIdentifier('')
       setOwnerPassword('')
       setInitialCredits('1000')
       setTeamType('standard')
@@ -60,8 +61,8 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
             <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="输入团队名称" />
           </div>
           <div className="space-y-2">
-            <Label>组长邮箱</Label>
-            <Input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} required placeholder="owner@example.com" />
+            <Label>负责人邮箱 / 手机号</Label>
+            <Input type="text" value={ownerIdentifier} onChange={(e) => setOwnerIdentifier(e.target.value)} required placeholder="owner@example.com 或手机号" />
           </div>
           <div className="space-y-2">
             <Label>组长初始密码（可选）</Label>
@@ -94,7 +95,7 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
               ))}
             </div>
           </div>
-          <Button type="submit" disabled={loading || !name || !ownerEmail}>
+          <Button type="submit" disabled={loading || !name || !ownerIdentifier}>
             {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             创建团队
           </Button>

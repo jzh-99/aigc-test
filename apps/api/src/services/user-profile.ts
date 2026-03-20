@@ -3,7 +3,7 @@ import { getDb } from '@aigc/db'
 export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: string) {
   const user = await db
     .selectFrom('users')
-    .select(['id', 'email', 'username', 'avatar_url', 'role'])
+    .select(['id', 'email', 'phone', 'username', 'avatar_url', 'role'])
     .where('id', '=', userId)
     .executeTakeFirstOrThrow()
 
@@ -17,7 +17,7 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
 
   // Fetch owner info for each team
   const ownerIds = [...new Set(teamRows.map((t) => t.owner_id).filter(Boolean))]
-  const ownerMap = new Map<string, { email: string; username: string }>()
+  const ownerMap = new Map<string, { email: string | null; username: string }>()
   if (ownerIds.length > 0) {
     const owners = await db
       .selectFrom('users')
@@ -66,6 +66,7 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
   return {
     id: user.id,
     email: user.email,
+    phone: user.phone,
     username: user.username,
     avatar_url: user.avatar_url,
     role: user.role,

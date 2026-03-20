@@ -14,11 +14,11 @@ const LOCKOUT_DURATION = 15 * 60 // 15 minutes in seconds
 const BCRYPT_ROUNDS = 12
 const MAX_PASSWORD_LENGTH = 72 // bcrypt truncates at 72 bytes
 
-function signAccessToken(user: { id: string; email: string; role: string }): string {
+function signAccessToken(user: { id: string; account: string; role: string }): string {
   const secret = process.env.JWT_SECRET
   if (!secret) throw new Error('JWT_SECRET is not set')
   const expiresIn = (process.env.JWT_ACCESS_EXPIRES_IN ?? '15m') as jwt.SignOptions['expiresIn']
-  return jwt.sign({ sub: user.id, email: user.email, role: user.role }, secret, { expiresIn })
+  return jwt.sign({ sub: user.id, email: user.account, role: user.role }, secret, { expiresIn })
 }
 
 function signRefreshToken(): string {
@@ -42,27 +42,27 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // Account lockout helpers using Redis
   const redis = (app as any).redis as import('ioredis').default
 
-  async function checkAccountLocked(email: string): Promise<boolean> {
-    const lockKey = `auth:locked:${email.toLowerCase()}`
+  async function checkAccountLocked(identifier: string): Promise<boolean> {
+    const lockKey = `auth:locked:${identifier.toLowerCase()}`
     const locked = await redis.get(lockKey)
     return locked === '1'
   }
 
-  async function recordFailedAttempt(email: string): Promise<void> {
-    const attemptsKey = `auth:attempts:${email.toLowerCase()}`
+  async function recordFailedAttempt(identifier: string): Promise<void> {
+    const attemptsKey = `auth:attempts:${identifier.toLowerCase()}`
     const count = await redis.incr(attemptsKey)
     if (count === 1) {
       await redis.expire(attemptsKey, LOCKOUT_WINDOW)
     }
     if (count >= MAX_LOGIN_ATTEMPTS) {
-      const lockKey = `auth:locked:${email.toLowerCase()}`
+      const lockKey = `auth:locked:${identifier.toLowerCase()}`
       await redis.setex(lockKey, LOCKOUT_DURATION, '1')
       await redis.del(attemptsKey)
     }
   }
 
-  async function clearFailedAttempts(email: string): Promise<void> {
-    await redis.del(`auth:attempts:${email.toLowerCase()}`)
+  async function clearFailedAttempts(identifier: string): Promise<void> {
+    await redis.del(`auth:attempts:${identifier.toLowerCase()}`)
   }
 
   // POST /auth/login
@@ -70,19 +70,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     schema: {
       body: {
         type: 'object',
-        required: ['email', 'password'],
+        required: ['identifier', 'password'],
         properties: {
-          email: { type: 'string', format: 'email', maxLength: 254 },
+          identifier: { type: 'string', minLength: 1, maxLength: 254 },
           password: { type: 'string', minLength: 1, maxLength: 72 },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { email, password } = request.body
+    const { identifier, password } = request.body
 
     // Check account lockout
-    if (await checkAccountLocked(email)) {
+    if (await checkAccountLocked(identifier)) {
       return reply.status(429).send({
         success: false,
         error: { code: 'ACCOUNT_LOCKED', message: '登录失败次数过多，账户已临时锁定，请 15 分钟后再试' },
@@ -92,12 +92,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb()
     const user = await db
       .selectFrom('users')
-      .select(['id', 'email', 'username', 'password_hash', 'role', 'status'])
-      .where('email', '=', email)
+      .select(['id', 'account', 'username', 'password_hash', 'role', 'status'])
+      .where('account', '=', identifier.toLowerCase())
       .executeTakeFirst()
 
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      await recordFailedAttempt(email)
+      await recordFailedAttempt(identifier)
       // If user exists but is suspended, reveal that rather than a generic credentials error
       if (user && user.status !== 'active') {
         return reply.status(403).send({
@@ -107,7 +107,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
       return reply.status(401).send({
         success: false,
-        error: { code: 'INVALID_CREDENTIALS', message: '邮箱或密码错误' },
+        error: { code: 'INVALID_CREDENTIALS', message: '邮箱/手机号或密码错误' },
       })
     }
 
@@ -119,9 +119,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Clear failed attempts on successful login
-    await clearFailedAttempts(email)
+    await clearFailedAttempts(identifier)
 
-    const accessToken = signAccessToken({ id: user.id, email: user.email, role: user.role })
+    const accessToken = signAccessToken({ id: user.id, account: user.account, role: user.role })
     const refreshToken = signRefreshToken()
     const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
 
@@ -159,7 +159,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const stored = await db
       .selectFrom('refresh_tokens')
       .innerJoin('users', 'users.id', 'refresh_tokens.user_id')
-      .select(['users.id', 'users.email', 'users.role', 'users.status', 'refresh_tokens.id as token_id', 'refresh_tokens.expires_at', 'refresh_tokens.revoked_at'])
+      .select(['users.id', 'users.account', 'users.role', 'users.status', 'refresh_tokens.id as token_id', 'refresh_tokens.expires_at', 'refresh_tokens.revoked_at'])
       .where('refresh_tokens.token_hash', '=', tokenHash)
       .executeTakeFirst()
 
@@ -229,7 +229,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       maxAge: 7 * 24 * 60 * 60,
     })
 
-    const accessToken = signAccessToken({ id: stored.id, email: stored.email, role: stored.role })
+    const accessToken = signAccessToken({ id: stored.id, account: stored.account, role: stored.role })
     const profile = await buildUserProfile(db, stored.id)
     return { access_token: accessToken, user: profile }
   })
@@ -256,10 +256,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     schema: {
       body: {
         type: 'object',
-        required: ['token', 'email', 'password', 'username'],
+        required: ['token', 'password', 'username'],
         properties: {
           token: { type: 'string', minLength: 1 },
           email: { type: 'string', format: 'email', maxLength: 254 },
+          phone: { type: 'string', maxLength: 20 },
           password: { type: 'string', minLength: 8, maxLength: 72 },
           username: { type: 'string', minLength: 1, maxLength: 50 },
         },
@@ -267,7 +268,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { token, email, password, username } = request.body
+    const { token, email, phone, password, username } = request.body
+
+    if (!email && !phone) {
+      return reply.badRequest('必须提供邮箱或手机号')
+    }
+
     if (password.length > MAX_PASSWORD_LENGTH) {
       return reply.badRequest(`密码长度不能超过 ${MAX_PASSWORD_LENGTH} 个字符`)
     }
@@ -295,15 +301,23 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return { error: 'INVALID_INVITE' as const }
       }
 
-      // Verify email matches the invited user
+      // Verify identifier matches the invited user
       const invitedUser = await trx
         .selectFrom('users')
-        .select(['id', 'email'])
+        .select(['id', 'email', 'phone', 'account'])
         .where('id', '=', inviteRow.user_id)
         .executeTakeFirst()
 
-      if (!invitedUser || invitedUser.email.toLowerCase() !== email.toLowerCase()) {
-        return { error: 'EMAIL_MISMATCH' as const }
+      if (!invitedUser) {
+        return { error: 'INVALID_INVITE' as const }
+      }
+
+      // Check identifier match
+      if (email && invitedUser.email?.toLowerCase() !== email.toLowerCase()) {
+        return { error: 'IDENTIFIER_MISMATCH' as const }
+      }
+      if (phone && invitedUser.phone !== phone) {
+        return { error: 'IDENTIFIER_MISMATCH' as const }
       }
 
       const pwHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
@@ -327,10 +341,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     })
 
     if ('error' in result) {
-      if (result.error === 'EMAIL_MISMATCH') {
+      if (result.error === 'IDENTIFIER_MISMATCH') {
         return reply.status(400).send({
           success: false,
-          error: { code: 'EMAIL_MISMATCH', message: '邮箱与邀请不匹配，请使用被邀请的邮箱地址' },
+          error: { code: 'IDENTIFIER_MISMATCH', message: '邮箱/手机号与邀请不匹配，请使用被邀请的账号' },
         })
       }
       return reply.status(400).send({
@@ -341,11 +355,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const user = await db
       .selectFrom('users')
-      .select(['id', 'email', 'role'])
+      .select(['id', 'account', 'role'])
       .where('id', '=', result.userId)
       .executeTakeFirstOrThrow()
 
-    const accessToken = signAccessToken(user)
+    const accessToken = signAccessToken({ id: user.id, account: user.account, role: user.role })
     const refreshTokenStr = signRefreshToken()
     const refreshHash = crypto.createHash('sha256').update(refreshTokenStr).digest('hex')
 

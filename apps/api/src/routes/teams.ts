@@ -52,15 +52,15 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     return { ...team, members, credits: creditAccount ?? { balance: 0, frozen_credits: 0, total_earned: 0, total_spent: 0 } }
   })
 
-  // POST /teams/:id/members — invite member by email
+  // POST /teams/:id/members — invite member by email or phone
   app.post<{ Params: { id: string }; Body: InviteMemberRequest }>('/teams/:id/members', {
     preHandler: teamRoleGuard('owner'),
     schema: {
       body: {
         type: 'object',
-        required: ['email'],
         properties: {
           email: { type: 'string', format: 'email', maxLength: 254 },
+          phone: { type: 'string', maxLength: 20 },
           role: { type: 'string', enum: ['editor', 'viewer', 'admin', 'owner'] },
           workspace_id: { type: 'string', format: 'uuid' },
           new_workspace_name: { type: 'string', maxLength: 100 },
@@ -69,7 +69,12 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { email, role, workspace_id, new_workspace_name } = request.body
+    const { email, phone, role, workspace_id, new_workspace_name } = request.body
+
+    if (!email && !phone) {
+      return reply.badRequest('必须提供邮箱或手机号')
+    }
+
     const memberRole: TeamMemberRole = (role as TeamMemberRole) ?? 'editor'
 
     const db = getDb()
@@ -113,17 +118,24 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     // Check if user already exists
     let user = await db
       .selectFrom('users')
-      .select(['id', 'email'])
-      .where('email', '=', email)
+      .select(['id', 'email', 'phone'])
+      .$if(!!email, (qb) => qb.where('email', '=', email!))
+      .$if(!email && !!phone, (qb) => qb.where('phone', '=', phone!))
       .executeTakeFirst()
+
+    const identifier = email ?? phone!
 
     if (!user) {
       // Create placeholder user
+      const account = identifier
+      const username = email ? email.split('@')[0] : phone!.slice(-4)
       const result = await db
         .insertInto('users')
         .values({
-          email,
-          username: email.split('@')[0],
+          account,
+          email: email ?? null,
+          phone: phone ?? null,
+          username,
           password_hash: '',  // placeholder, filled on accept-invite
           role: 'member',
           status: 'suspended',  // inactive until invite accepted
@@ -131,7 +143,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
         })
         .returning('id')
         .executeTakeFirstOrThrow()
-      user = { id: result.id, email }
+      user = { id: result.id, email: email ?? null, phone: phone ?? null }
     }
 
     // Check if already a team member
@@ -174,7 +186,8 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
 
         return reply.status(200).send({
           user_id: user.id,
-          email,
+          email: user.email,
+          phone: user.phone,
           role: memberRole,
           invite_token: inviteToken, // SECURITY: Remove once email service sends tokens directly
           regenerated: true,
@@ -226,7 +239,8 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.status(201).send({
       user_id: user.id,
-      email,
+      email: user.email,
+      phone: user.phone,
       role: memberRole,
       invite_token: inviteToken, // SECURITY: Remove once email service sends tokens directly
     })

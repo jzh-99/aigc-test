@@ -6,7 +6,9 @@ type Timestamp = ColumnType<Date, Date | string, Date | string>
 
 export interface UsersTable {
   id: Generated<string>
-  email: string
+  account: string
+  email: string | null
+  phone: string | null
   username: string
   password_hash: string
   avatar_url: string | null

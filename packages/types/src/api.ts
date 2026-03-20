@@ -69,7 +69,7 @@ export interface BatchSSEEvent {
 // ─── Auth & User Management ─────────────────────────────────────────────────
 
 export interface LoginRequest {
-  email: string
+  identifier: string
   password: string
 }
 
@@ -80,7 +80,8 @@ export interface AuthResponse {
 
 export interface UserProfile {
   id: string
-  email: string
+  email: string | null
+  phone: string | null
   username: string
   avatar_url: string | null
   role: 'admin' | 'member'
@@ -92,7 +93,7 @@ export interface UserTeam {
   name: string
   role: string
   team_type: 'standard' | 'company_a'
-  owner: { email: string; username: string } | null
+  owner: { email: string | null; username: string } | null
   workspaces: UserWorkspace[]
 }
 
@@ -104,13 +105,15 @@ export interface UserWorkspace {
 
 export interface AcceptInviteRequest {
   token: string
-  email: string
+  email?: string
+  phone?: string
   password: string
   username: string
 }
 
 export interface InviteMemberRequest {
-  email: string
+  email?: string
+  phone?: string
   role?: string
   workspace_id?: string
   new_workspace_name?: string
@@ -127,7 +130,8 @@ export interface TopUpCreditsRequest {
 
 export interface CreateTeamRequest {
   name: string
-  owner_email: string
+  owner_email?: string
+  owner_phone?: string
   owner_username?: string
   owner_password?: string
   initial_credits?: number
