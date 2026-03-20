@@ -49,6 +49,17 @@ export function InviteDialog({
   const [identifier, setIdentifier] = useState('')
   const [loading, setLoading] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [phoneError, setPhoneError] = useState('')
+
+  function handleIdentifierChange(val: string) {
+    setIdentifier(val)
+    const trimmed = val.trim()
+    if (trimmed && !trimmed.includes('@')) {
+      setPhoneError(/^\d{11}$/.test(trimmed) ? '' : '手机号必须是 11 位数字')
+    } else {
+      setPhoneError('')
+    }
+  }
 
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const workspaces = activeTeam?.workspaces ?? []
@@ -64,11 +75,12 @@ export function InviteDialog({
   const [newWsName, setNewWsName] = useState(defaultWsName)
 
   async function handleInvite() {
-    if (!identifier) return
+    const trimmedId = identifier.trim()
+    if (!trimmedId || phoneError) return
     setLoading(true)
     try {
-      const isEmail = identifier.includes('@')
-      const body: Record<string, string> = isEmail ? { email: identifier } : { phone: identifier }
+      const isEmail = trimmedId.includes('@')
+      const body: Record<string, string> = isEmail ? { email: trimmedId } : { phone: trimmedId }
       if (wsMode === 'new' && newWsName.trim()) {
         body.new_workspace_name = newWsName.trim()
       } else if (wsMode === 'existing' && selectedWsId) {
@@ -80,8 +92,8 @@ export function InviteDialog({
         body
       )
       const identifierParam = isEmail
-        ? `email=${encodeURIComponent(identifier)}`
-        : `phone=${encodeURIComponent(identifier)}`
+        ? `email=${encodeURIComponent(trimmedId)}`
+        : `phone=${encodeURIComponent(trimmedId)}`
       const link = `${window.location.origin}/accept-invite?token=${res.invite_token}&${identifierParam}`
       setInviteLink(link)
       toast.success('邀请已发送')
@@ -104,6 +116,7 @@ export function InviteDialog({
     if (!nextOpen) {
       setIdentifier('')
       setInviteLink(null)
+      setPhoneError('')
       setWsMode('new')
       setSelectedWsId(workspaces[0]?.id ?? '')
       setNewWsName(defaultWsName)
@@ -135,10 +148,11 @@ export function InviteDialog({
               <Label>邮箱 / 手机号</Label>
               <Input
                 type="text"
-                placeholder="member@example.com 或手机号"
+                placeholder="member@example.com 或 11 位手机号"
                 value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                onChange={(e) => handleIdentifierChange(e.target.value)}
               />
+              {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
             </div>
 
             <div className="space-y-3">
@@ -203,7 +217,7 @@ export function InviteDialog({
               <Button
                 onClick={handleInvite}
                 disabled={
-                  loading || !identifier ||
+                  loading || !identifier.trim() || !!phoneError ||
                   (wsMode === 'new' && !newWsName.trim()) ||
                   (wsMode === 'existing' && !selectedWsId)
                 }

@@ -69,10 +69,17 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { email, phone, role, workspace_id, new_workspace_name } = request.body
+    const email = request.body.email?.trim()
+    const phone = request.body.phone?.trim()
+    const { role, workspace_id, new_workspace_name } = request.body
 
     if (!email && !phone) {
       return reply.badRequest('必须提供邮箱或手机号')
+    }
+
+    // Validate phone: exactly 11 digits
+    if (phone && !/^\d{11}$/.test(phone)) {
+      return reply.badRequest('手机号必须是 11 位数字')
     }
 
     const memberRole: TeamMemberRole = (role as TeamMemberRole) ?? 'editor'

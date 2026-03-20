@@ -302,10 +302,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { name, owner_email, owner_phone, owner_username, owner_password, initial_credits, team_type } = request.body
+    const { name, owner_username, owner_password, initial_credits, team_type } = request.body
+    const owner_email = request.body.owner_email?.trim()
+    const owner_phone = request.body.owner_phone?.trim()
 
     if (!owner_email && !owner_phone) {
       return reply.badRequest('必须提供 owner_email 或 owner_phone')
+    }
+
+    // Validate phone: exactly 11 digits
+    if (owner_phone && !/^\d{11}$/.test(owner_phone)) {
+      return reply.badRequest('手机号必须是 11 位数字')
     }
 
     const db = getDb()
@@ -327,10 +334,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     // Check if owner user exists (by email or phone)
     let owner = await db
       .selectFrom('users')
-      .select(['id', 'email', 'status'])
+      .select(['id', 'account', 'username', 'status'])
       .$if(!!owner_email, (qb) => qb.where('email', '=', owner_email!))
       .$if(!owner_email && !!owner_phone, (qb) => qb.where('phone', '=', owner_phone!))
       .executeTakeFirst()
+
+    const ownerWasExisting = !!owner
 
     if (!owner) {
       if (!owner_password || owner_password.length < 8) {
@@ -356,9 +365,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           status: 'active',
           plan_tier: 'free',
         })
-        .returning('id')
+        .returning(['id', 'account', 'username'])
         .executeTakeFirstOrThrow()
-      owner = { id: result.id, email: owner_email ?? null, status: 'active' }
+      owner = { id: result.id, account: result.account, username: result.username, status: 'active' }
     } else {
       // User exists — reactivate if suspended, and update password if a new one is provided
       const updates: Record<string, unknown> = {}
@@ -461,7 +470,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.status(201).send({
       team,
-      owner: { id: owner.id, email: owner.email },
+      owner: { id: owner.id, account: owner.account, username: owner.username, existing: ownerWasExisting },
       workspace: { id: workspace.id, name: workspace.name },
     })
   })
