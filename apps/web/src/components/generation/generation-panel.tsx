@@ -77,6 +77,11 @@ const VIDEO_ASPECT_RATIOS = [
   { value: '9:16' as const, label: '9:16' },
 ] as const
 
+const VIDEO_RESOLUTIONS = [
+  { value: false, label: '720p', desc: '标准' },
+  { value: true, label: '1080p', desc: '高清' },
+] as const
+
 interface FrameImage {
   previewUrl: string
   dataUrl: string
@@ -99,6 +104,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const [videoPrompt, setVideoPrompt] = useState('')
   const [videoModel, setVideoModel] = useState('veo3.1-fast')
   const [videoAspectRatio, setVideoAspectRatio] = useState<'' | '16:9' | '9:16'>('')
+  const [videoUpsample, setVideoUpsample] = useState(false)
   const [firstFrame, setFirstFrame] = useState<FrameImage | null>(null)
   const [lastFrame, setLastFrame] = useState<FrameImage | null>(null)
   const [framePreviewIndex, setFramePreviewIndex] = useState<0 | 1 | null>(null)
@@ -252,6 +258,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
         model: videoModel,
         images: images.length > 0 ? images : undefined,
         aspect_ratio: videoAspectRatio || undefined,
+        enable_upsample: videoUpsample,
       })
       if (batch) onBatchCreated(batch)
     } catch (err) {
@@ -733,24 +740,47 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
           {/* 视频生成配置 */}
           <div className="rounded-xl border bg-card p-3">
             <div className="space-y-3">
-              {/* 模型 */}
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">模型</Label>
-                <Select value={videoModel} onValueChange={setVideoModel} disabled={isVideoGenerating || disabled}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VIDEO_MODEL_OPTIONS.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{m.label}</span>
-                          <span className="text-xs text-muted-foreground">{m.desc}</span>
-                        </div>
-                      </SelectItem>
+              {/* 模型 + 分辨率 */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">模型</Label>
+                  <Select value={videoModel} onValueChange={setVideoModel} disabled={isVideoGenerating || disabled}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VIDEO_MODEL_OPTIONS.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{m.label}</span>
+                            <span className="text-xs text-muted-foreground">{m.desc}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">分辨率</Label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {VIDEO_RESOLUTIONS.map((r) => (
+                      <button
+                        key={String(r.value)}
+                        onClick={() => setVideoUpsample(r.value)}
+                        disabled={isVideoGenerating || disabled}
+                        className={cn(
+                          'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
+                          videoUpsample === r.value
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border hover:border-primary/50',
+                          (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                        )}
+                      >
+                        {r.label}
+                      </button>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                </div>
               </div>
 
               {/* 比例 */}

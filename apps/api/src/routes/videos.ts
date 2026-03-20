@@ -11,6 +11,7 @@ interface VideoGenerateBody {
   model?: string
   images?: string[]
   aspect_ratio?: '16:9' | '9:16'
+  enable_upsample?: boolean
 }
 
 export async function videoRoutes(app: FastifyInstance): Promise<void> {
@@ -25,6 +26,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           model: { type: 'string', default: 'veo3.1-fast' },
           images: { type: 'array', items: { type: 'string' }, maxItems: 2 },
           aspect_ratio: { type: 'string', enum: ['16:9', '9:16'] },
+          enable_upsample: { type: 'boolean' },
         },
         additionalProperties: false,
       },
@@ -36,6 +38,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       model = 'veo3.1-fast',
       images,
       aspect_ratio,
+      enable_upsample,
     } = request.body
 
     const userId = request.user.id
@@ -171,6 +174,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     }
     if (images && images.length > 0) veoBody.images = images
     if (aspect_ratio) veoBody.aspect_ratio = aspect_ratio
+    if (enable_upsample !== undefined) veoBody.enable_upsample = enable_upsample
 
     let externalTaskId: string
     try {
