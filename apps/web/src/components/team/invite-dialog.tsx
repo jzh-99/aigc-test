@@ -46,7 +46,7 @@ export function InviteDialog({
   onOpenChange,
   onSuccess,
 }: InviteDialogProps) {
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [loading, setLoading] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
 
@@ -64,21 +64,25 @@ export function InviteDialog({
   const [newWsName, setNewWsName] = useState(defaultWsName)
 
   async function handleInvite() {
-    if (!email) return
+    if (!identifier) return
     setLoading(true)
     try {
-      const body: Record<string, string> = { email }
+      const isEmail = identifier.includes('@')
+      const body: Record<string, string> = isEmail ? { email: identifier } : { phone: identifier }
       if (wsMode === 'new' && newWsName.trim()) {
         body.new_workspace_name = newWsName.trim()
       } else if (wsMode === 'existing' && selectedWsId) {
         body.workspace_id = selectedWsId
       }
 
-      const res = await apiPost<{ invite_token: string }>(
+      const res = await apiPost<{ invite_token: string; email?: string; phone?: string }>(
         `/teams/${teamId}/members`,
         body
       )
-      const link = `${window.location.origin}/accept-invite?token=${res.invite_token}&email=${encodeURIComponent(email)}`
+      const identifierParam = isEmail
+        ? `email=${encodeURIComponent(identifier)}`
+        : `phone=${encodeURIComponent(identifier)}`
+      const link = `${window.location.origin}/accept-invite?token=${res.invite_token}&${identifierParam}`
       setInviteLink(link)
       toast.success('邀请已发送')
       onSuccess()
@@ -98,7 +102,7 @@ export function InviteDialog({
 
   function handleClose(nextOpen: boolean) {
     if (!nextOpen) {
-      setEmail('')
+      setIdentifier('')
       setInviteLink(null)
       setWsMode('new')
       setSelectedWsId(workspaces[0]?.id ?? '')
@@ -128,12 +132,12 @@ export function InviteDialog({
         ) : (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>邮箱地址</Label>
+              <Label>邮箱 / 手机号</Label>
               <Input
-                type="email"
-                placeholder="member@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                placeholder="member@example.com 或手机号"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
               />
             </div>
 
@@ -199,7 +203,7 @@ export function InviteDialog({
               <Button
                 onClick={handleInvite}
                 disabled={
-                  loading || !email ||
+                  loading || !identifier ||
                   (wsMode === 'new' && !newWsName.trim()) ||
                   (wsMode === 'existing' && !selectedWsId)
                 }

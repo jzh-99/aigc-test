@@ -26,9 +26,11 @@ function AcceptInviteForm() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token') ?? ''
   const emailFromUrl = searchParams.get('email') ?? ''
+  const phoneFromUrl = searchParams.get('phone') ?? ''
+  const identifierFromUrl = emailFromUrl || phoneFromUrl
   const setAuth = useAuthStore((s) => s.setAuth)
 
-  const [email, setEmail] = useState(emailFromUrl)
+  const [identifier, setIdentifier] = useState(identifierFromUrl)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -54,12 +56,12 @@ function AcceptInviteForm() {
 
     setLoading(true)
     try {
-      const res = await apiPost<AuthResponse>('/auth/accept-invite', {
-        token,
-        email,
-        password,
-        username,
-      } satisfies AcceptInviteRequest)
+      const isEmail = identifier.includes('@')
+      const body: AcceptInviteRequest = isEmail
+        ? { token, email: identifier, password, username }
+        : { token, phone: identifier, password, username }
+
+      const res = await apiPost<AuthResponse>('/auth/accept-invite', body)
       setAuth(res.user, res.access_token)
       toast.success('注册成功！')
       router.replace('/')
@@ -91,19 +93,19 @@ function AcceptInviteForm() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">邮箱</Label>
+              <Label htmlFor="identifier">邮箱 / 手机号</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="identifier"
+                type="text"
+                placeholder="输入邮箱或手机号"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
-                readOnly={!!emailFromUrl}
-                className={emailFromUrl ? 'bg-muted' : ''}
+                readOnly={!!identifierFromUrl}
+                className={identifierFromUrl ? 'bg-muted' : ''}
               />
-              {emailFromUrl && (
-                <p className="text-xs text-muted-foreground">邮箱由邀请链接指定，不可修改</p>
+              {identifierFromUrl && (
+                <p className="text-xs text-muted-foreground">账号由邀请链接指定，不可修改</p>
               )}
             </div>
             <div className="space-y-2">

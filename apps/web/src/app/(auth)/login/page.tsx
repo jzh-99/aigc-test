@@ -18,19 +18,19 @@ export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
   const resetGeneration = useGenerationStore((s) => s.reset)
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [suspended, setSuspended] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!email || !password) return
+    if (!identifier || !password) return
 
     setLoading(true)
     setSuspended(false)
     try {
-      const res = await apiPost<AuthResponse>('/auth/login', { email, password } satisfies LoginRequest)
+      const res = await apiPost<AuthResponse>('/auth/login', { identifier, password } satisfies LoginRequest)
       resetGeneration()
       setAuth(res.user, res.access_token)
       router.replace('/')
@@ -66,13 +66,13 @@ export default function LoginPage() {
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">邮箱</Label>
+            <Label htmlFor="identifier">邮箱 / 手机号</Label>
             <Input
-              id="email"
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="identifier"
+              type="text"
+              placeholder="输入邮箱或手机号"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               required
               autoFocus
             />

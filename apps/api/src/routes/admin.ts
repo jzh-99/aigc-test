@@ -288,10 +288,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     schema: {
       body: {
         type: 'object',
-        required: ['name', 'owner_email'],
+        required: ['name'],
         properties: {
           name: { type: 'string', minLength: 1, maxLength: 100 },
           owner_email: { type: 'string', format: 'email', maxLength: 254 },
+          owner_phone: { type: 'string', maxLength: 20 },
           owner_username: { type: 'string', maxLength: 50 },
           owner_password: { type: 'string', minLength: 8, maxLength: 72 },
           initial_credits: { type: 'integer', minimum: 0, maximum: 10000000 },
@@ -301,7 +302,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { name, owner_email, owner_username, owner_password, initial_credits, team_type } = request.body
+    const { name, owner_email, owner_phone, owner_username, owner_password, initial_credits, team_type } = request.body
+
+    if (!owner_email && !owner_phone) {
+      return reply.badRequest('必须提供 owner_email 或 owner_phone')
+    }
 
     const db = getDb()
 
@@ -319,11 +324,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    // Check if owner user exists
+    // Check if owner user exists (by email or phone)
     let owner = await db
       .selectFrom('users')
       .select(['id', 'email', 'status'])
-      .where('email', '=', owner_email)
+      .$if(!!owner_email, (qb) => qb.where('email', '=', owner_email!))
+      .$if(!owner_email && !!owner_phone, (qb) => qb.where('phone', '=', owner_phone!))
       .executeTakeFirst()
 
     if (!owner) {
@@ -333,11 +339,18 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       // Create owner user
       const passwordHash = await bcrypt.hash(owner_password, 12)
 
+      const account = owner_email ?? owner_phone!
+      const defaultUsername = owner_email
+        ? owner_email.split('@')[0]
+        : owner_phone!.slice(-4)
+
       const result = await db
         .insertInto('users')
         .values({
-          email: owner_email,
-          username: owner_username ?? owner_email.split('@')[0],
+          account,
+          email: owner_email ?? null,
+          phone: owner_phone ?? null,
+          username: owner_username ?? defaultUsername,
           password_hash: passwordHash,
           role: 'member',
           status: 'active',
@@ -345,7 +358,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         })
         .returning('id')
         .executeTakeFirstOrThrow()
-      owner = { id: result.id, email: owner_email, status: 'active' }
+      owner = { id: result.id, email: owner_email ?? null, status: 'active' }
     } else {
       // User exists — reactivate if suspended, and update password if a new one is provided
       const updates: Record<string, unknown> = {}
