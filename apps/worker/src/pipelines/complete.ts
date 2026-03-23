@@ -91,7 +91,7 @@ export async function completePipeline(
       .execute()
 
     // If no rows updated, task was already processed — skip remaining
-    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 1) === 0) {
+    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 0) === 0) {
       return assetResult.id
     }
 

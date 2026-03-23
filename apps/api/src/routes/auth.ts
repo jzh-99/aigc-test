@@ -322,6 +322,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
       const pwHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
 
+
       // Update the pre-created user with real credentials
       await trx
         .updateTable('users')

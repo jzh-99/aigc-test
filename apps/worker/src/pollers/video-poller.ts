@@ -14,6 +14,10 @@ function getTransferQueue(): Queue {
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
+// Track consecutive poll errors per task to detect persistent API failures
+const pollErrorCounts = new Map<string, number>()
+const MAX_CONSECUTIVE_POLL_ERRORS = 5
+
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
 const MAX_VIDEO_AGE_MS = 15 * 60 * 1000 // 15 minutes
@@ -69,7 +73,7 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
       .where('status', '!=', 'failed')
       .execute()
 
-    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 1) === 0) return
+    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 0) === 0) return
 
     // Insert video asset
     await trx
@@ -139,7 +143,7 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
       .where('status', '!=', 'failed')
       .execute()
 
-    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 1) === 0) return
+    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 0) === 0) return
 
     // Refund credits
     await trx.updateTable('credit_accounts')
@@ -209,9 +213,22 @@ async function pollVideoTasks(): Promise<void> {
       const result = await checkVeoTask(task.externalTaskId)
 
       if (result.status === 'SUCCESS' && result.videoUrl) {
+        pollErrorCounts.delete(task.taskId)
         await handleVideoSuccess(task, result.videoUrl)
       } else if (result.status === 'FAILURE') {
+        pollErrorCounts.delete(task.taskId)
         await handleVideoFailure(task, result.failReason ?? 'Video generation failed')
+      } else if (result.status === 'POLL_ERROR') {
+        const count = (pollErrorCounts.get(task.taskId) ?? 0) + 1
+        pollErrorCounts.set(task.taskId, count)
+        if (count >= MAX_CONSECUTIVE_POLL_ERRORS) {
+          logger.warn({ taskId: task.taskId, count }, 'Video task exceeded max poll errors, failing task')
+          pollErrorCounts.delete(task.taskId)
+          await handleVideoFailure(task, '生成过程中出现异常，请重新发起请求')
+        }
+      } else {
+        // NOT_START, IN_PROGRESS: still in progress, reset error count
+        pollErrorCounts.delete(task.taskId)
       }
       // NOT_START, IN_PROGRESS, POLL_ERROR: skip until next interval
     } catch (err) {

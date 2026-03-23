@@ -25,7 +25,7 @@ export async function failPipeline(
       .execute()
 
     // If no rows updated, task already processed — skip refund
-    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 1) === 0) {
+    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 0) === 0) {
       return
     }
 

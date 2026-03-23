@@ -37,6 +37,7 @@ export async function runTimeoutGuardian(): Promise<void> {
       'tasks.status',
       'task_batches.provider',
       'task_batches.model',
+      'task_batches.module as module',
       'task_batches.prompt',
       'task_batches.params',
       'task_batches.team_id as teamId',
@@ -63,6 +64,13 @@ export async function runTimeoutGuardian(): Promise<void> {
   logger.info({ count: stuckTasks.length }, 'Found stuck tasks')
 
   for (const task of stuckTasks) {
+    // Video tasks are managed by the video poller (which has its own 15-min timeout)
+    // Re-enqueueing them to imageQueue would incorrectly process them as image tasks
+    if ((task as any).module === 'video') {
+      logger.debug({ taskId: task.taskId }, 'Skipping video task in timeout guardian (handled by video poller)')
+      continue
+    }
+
     if (!task.teamId || !task.creditAccountId) {
       logger.warn({ taskId: task.taskId }, 'Stuck task missing teamId or creditAccountId, marking failed')
       await db

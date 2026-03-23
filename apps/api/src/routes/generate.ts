@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import type { GenerateImageRequest, BatchResponse, TaskResponse } from '@aigc/types'
 import { checkPrompt } from '../services/prompt-filter.js'
-import { freezeCredits } from '../services/credit.js'
+import { freezeCredits, refundCredits } from '../services/credit.js'
 import { getImageQueue } from '../lib/queue.js'
 import rateLimit from '@fastify/rate-limit'
 
@@ -263,58 +263,74 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    // Create batch + tasks in transaction
-    const batch = await db.transaction().execute(async (trx: any) => {
-      const batchResult = await trx
-        .insertInto('task_batches')
-        .values({
+    // Create batch + tasks in transaction, then enqueue
+    // If either step fails after freeze, refund to prevent orphan frozen credits
+    let batch: { batch: any; tasks: any[] }
+    try {
+      batch = await db.transaction().execute(async (trx: any) => {
+        const batchResult = await trx
+          .insertInto('task_batches')
+          .values({
+            user_id: userId,
+            team_id: teamId,
+            workspace_id: workspaceId,
+            credit_account_id: creditAccountId,
+            idempotency_key,
+            module: 'image',
+            provider: providerModel.providerCode,
+            model,
+            prompt,
+            params: JSON.stringify(paramsForDb),
+            quantity,
+            status: 'pending',
+            estimated_credits: totalCost,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow()
+
+        const taskValues = Array.from({ length: quantity }, (_, i) => ({
+          batch_id: batchResult.id,
           user_id: userId,
-          team_id: teamId,
-          workspace_id: workspaceId,
-          credit_account_id: creditAccountId,
-          idempotency_key,
-          module: 'image',
+          version_index: i,
+          estimated_credits: providerModel.credit_cost,
+          status: 'pending' as const,
+        }))
+
+        const tasks = await trx
+          .insertInto('tasks')
+          .values(taskValues)
+          .returningAll()
+          .execute()
+
+        return { batch: batchResult, tasks }
+      })
+
+      // Enqueue BullMQ jobs
+      for (const task of batch.tasks) {
+        await getImageQueue().add('generate', {
+          taskId: task.id,
+          batchId: batch.batch.id,
+          userId,
+          teamId,
+          creditAccountId,
           provider: providerModel.providerCode,
           model,
           prompt,
-          params: JSON.stringify(paramsForDb),
-          quantity,
-          status: 'pending',
-          estimated_credits: totalCost,
+          params,
+          estimatedCredits: providerModel.credit_cost,
         })
-        .returningAll()
-        .executeTakeFirstOrThrow()
-
-      const taskValues = Array.from({ length: quantity }, (_, i) => ({
-        batch_id: batchResult.id,
-        user_id: userId,
-        version_index: i,
-        estimated_credits: providerModel.credit_cost,
-        status: 'pending' as const,
-      }))
-
-      const tasks = await trx
-        .insertInto('tasks')
-        .values(taskValues)
-        .returningAll()
-        .execute()
-
-      return { batch: batchResult, tasks }
-    })
-
-    // Enqueue BullMQ jobs
-    for (const task of batch.tasks) {
-      await getImageQueue().add('generate', {
-        taskId: task.id,
-        batchId: batch.batch.id,
-        userId,
-        teamId,
-        creditAccountId,
-        provider: providerModel.providerCode,
-        model,
-        prompt,
-        params,
-        estimatedCredits: providerModel.credit_cost,
+      }
+    } catch (err) {
+      // DB or queue error after freeze — refund to prevent orphan frozen credits
+      app.log.error({ err }, 'Failed to create batch/tasks after freeze, refunding credits')
+      try {
+        await refundCredits(teamId, creditAccountId, userId, totalCost)
+      } catch (refundErr) {
+        app.log.error({ refundErr }, 'CRITICAL: Failed to refund credits after batch creation failure')
+      }
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回，请重试' },
       })
     }
 
