@@ -50,7 +50,7 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied }: BatchDet
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
           <SheetTitle>批次详情</SheetTitle>
-          <SheetDescription className="truncate">
+          <SheetDescription className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-left">
             {batch?.prompt ?? '加载中...'}
           </SheetDescription>
         </SheetHeader>

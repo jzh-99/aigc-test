@@ -3,6 +3,7 @@
 import { Sidebar } from './sidebar'
 import { Topbar } from './topbar'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { AiAssistant } from '@/components/ai-assistant/ai-assistant'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -21,6 +22,8 @@ export function AppShell({ children, title }: AppShellProps) {
           </main>
         </div>
       </div>
+      <AiAssistant />
     </TooltipProvider>
   )
 }
+

@@ -18,6 +18,8 @@ import { adminRoutes } from './routes/admin.js'
 import { proxyRoutes } from './routes/proxy.js'
 import { assetRoutes } from './routes/assets.js'
 import { videoRoutes } from './routes/videos.js'
+import multipart from '@fastify/multipart'
+import { aiAssistantRoutes } from './routes/ai-assistant.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -29,6 +31,7 @@ export async function buildApp() {
 
   await app.register(sensible)
   await app.register(cookie)
+  await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } })
 
   // CORS — restrict to allowed origins
   const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(',').map(s => s.trim())
@@ -84,6 +87,7 @@ export async function buildApp() {
       await v1.register(proxyRoutes)
       await v1.register(assetRoutes)
       await v1.register(videoRoutes)
+      await v1.register(aiAssistantRoutes)
     },
     { prefix: '/api/v1' },
   )

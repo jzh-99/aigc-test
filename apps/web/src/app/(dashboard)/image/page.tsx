@@ -186,7 +186,7 @@ export default function ImagePage() {
       </div>
 
       {/* Right column — History */}
-      <div className="flex-1 min-h-[400px] flex flex-col">
+      <div className="flex-1 min-h-[400px] flex flex-col min-w-0 max-w-full">
         <Card className="flex-1 flex flex-col overflow-hidden">
           <CardHeader className="pb-3 shrink-0">
             <CardTitle className="text-base flex items-center gap-2">
@@ -196,7 +196,7 @@ export default function ImagePage() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 overflow-y-auto">
+          <CardContent className="flex-1 overflow-y-auto min-w-0">
             <BatchList
               ref={batchListRef}
               onSelect={(batch) => { setSelectedBatchId(batch.id); setDetailOpen(true) }}
