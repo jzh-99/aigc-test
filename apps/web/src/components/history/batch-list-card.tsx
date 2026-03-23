@@ -56,13 +56,13 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
 
   return (
     <Card
-      className={cn('cursor-pointer transition-shadow hover:shadow-md', onClick && 'hover:border-primary/50')}
+      className={cn('cursor-pointer transition-shadow hover:shadow-md w-full', onClick && 'hover:border-primary/50')}
       onClick={onClick}
     >
-      <CardContent className="p-4 space-y-3">
+      <CardContent className="p-4 space-y-3 max-w-full overflow-hidden">
         {/* Prompt + meta row */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-3 min-w-0">
+          <div className="flex-1 min-w-0 overflow-hidden">
             <p className="text-sm font-medium truncate">{batch.prompt}</p>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={status.variant} className="text-[10px]">

@@ -10,6 +10,7 @@ const PUBLIC_ROUTES = [
   '/api/v1/auth/accept-invite',
   '/api/v1/assets/proxy',
   '/api/v1/assets/thumbnail',
+  '/api/v1/ai-assistant/uploads/', // temp video files served to Gemini
 ]
 
 export interface AuthUser {
