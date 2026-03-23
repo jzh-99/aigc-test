@@ -58,6 +58,7 @@ export function AiAssistant() {
   const [buttonPosition, setButtonPosition] = useState({ x: 0, y: 0 })
   const [isButtonDragging, setIsButtonDragging] = useState(false)
   const [buttonDragStart, setButtonDragStart] = useState({ x: 0, y: 0 })
+  const buttonDraggedRef = useRef(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const chatImageRef = useRef<HTMLInputElement>(null)
@@ -84,6 +85,32 @@ export function AiAssistant() {
     if (messages.length > 0) saveAiChatHistory(userId, messages)
   }, [messages, userId])
 
+  // Click outside to close
+  useEffect(() => {
+    if (!open) return
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node
+      // 检查点击是否在面板或按钮外部
+      if (
+        panelRef.current && !panelRef.current.contains(target) &&
+        buttonRef.current && !buttonRef.current.contains(target)
+      ) {
+        setOpen(false)
+      }
+    }
+
+    // 延迟添加监听器，避免打开时立即触发
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+    }, 100)
+
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [open])
+
   // Drag & resize handlers
   useEffect(() => {
     if (!isDragging && !isResizing && !isButtonDragging) return
@@ -106,9 +133,15 @@ export function AiAssistant() {
         }
         setWidth(newWidth)
       } else if (isButtonDragging) {
+        const newX = e.clientX - buttonDragStart.x
+        const newY = e.clientY - buttonDragStart.y
+        // 如果移动超过5px，认为是拖动而不是点击
+        if (Math.abs(newX - buttonPosition.x) > 5 || Math.abs(newY - buttonPosition.y) > 5) {
+          buttonDraggedRef.current = true
+        }
         setButtonPosition({
-          x: e.clientX - buttonDragStart.x,
-          y: e.clientY - buttonDragStart.y,
+          x: newX,
+          y: newY,
         })
       }
     }
@@ -155,14 +188,16 @@ export function AiAssistant() {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     })
+    buttonDraggedRef.current = false // 重置拖动标记
     setIsButtonDragging(true)
   }
 
   const handleButtonClick = (e: React.MouseEvent) => {
-    // Only toggle if not dragging (click without drag)
-    if (!isButtonDragging) {
+    // Only toggle if not dragged (pure click without drag)
+    if (!buttonDraggedRef.current) {
       setOpen((v) => !v)
     }
+    buttonDraggedRef.current = false // 重置标记
   }
 
   function readFileAsBase64(file: File): Promise<{ base64: string; type: string; preview: string }> {
