@@ -52,7 +52,7 @@ export function AiAssistant() {
   const [isResizing, setIsResizing] = useState(false)
   const [resizeEdge, setResizeEdge] = useState<'left' | 'right'>('left')
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [resizeStart, setResizeStart] = useState({ x: 0, width: 0 })
+  const [resizeStart, setResizeStart] = useState({ x: 0, width: 0, posX: 0 })
 
   // Floating button draggable state
   const [buttonPosition, setButtonPosition] = useState({ x: 0, y: 0 })
@@ -123,15 +123,23 @@ export function AiAssistant() {
         })
       } else if (isResizing) {
         const delta = e.clientX - resizeStart.x
-        let newWidth: number
         if (resizeEdge === 'left') {
-          // 从左边拖动：向左拖增加宽度
-          newWidth = Math.max(360, Math.min(800, resizeStart.width - delta))
+          // 从左边拖动：调整左侧边界（同时改变位置和宽度）
+          const targetWidth = resizeStart.width - delta
+          const newWidth = Math.max(360, Math.min(800, targetWidth))
+          // 计算实际可以移动的距离（考虑宽度限制）
+          const actualWidthChange = resizeStart.width - newWidth
+          const newLeft = resizeStart.posX + actualWidthChange
+          setWidth(newWidth)
+          setPosition(prev => ({
+            ...prev,
+            x: newLeft
+          }))
         } else {
-          // 从右边拖动：向右拖增加宽度
-          newWidth = Math.max(360, Math.min(800, resizeStart.width + delta))
+          // 从右边拖动：调整右侧边界（只改变宽度）
+          const newWidth = Math.max(360, Math.min(800, resizeStart.width + delta))
+          setWidth(newWidth)
         }
-        setWidth(newWidth)
       } else if (isButtonDragging) {
         const newX = e.clientX - buttonDragStart.x
         const newY = e.clientY - buttonDragStart.y
@@ -172,10 +180,13 @@ export function AiAssistant() {
 
   const handleResizeStart = (edge: 'left' | 'right') => (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!panelRef.current) return
+    const rect = panelRef.current.getBoundingClientRect()
     setResizeEdge(edge)
     setResizeStart({
       x: e.clientX,
       width,
+      posX: rect.left, // 使用实际的左边界位置，而不是 position.x
     })
     setIsResizing(true)
   }
@@ -495,9 +506,8 @@ export function AiAssistant() {
             left: position.x ? `${position.x}px` : 'auto',
             right: position.x ? 'auto' : '104px',
             top: position.y ? `${position.y}px` : '16px',
-            bottom: '16px',
             width: `${width}px`,
-            height: position.y ? `calc(100vh - ${position.y}px - 16px)` : 'calc(100vh - 32px)',
+            height: 'calc(100vh - 32px)',
           }}>
 
           {/* Header - draggable */}
