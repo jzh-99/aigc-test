@@ -100,13 +100,20 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="flex h-14 items-center px-4 border-b">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-accent">
-            <Sparkles className="h-4 w-4 text-white" />
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-accent shrink-0">
+            <svg viewBox="0 0 20 20" className="h-[18px] w-[18px]" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* T crossbar */}
+              <rect x="2" y="2.5" width="16" height="4" rx="1.5" fill="white"/>
+              {/* T stem */}
+              <rect x="7.5" y="6" width="5" height="11.5" rx="1.5" fill="white"/>
+              {/* AI dot */}
+              <circle cx="17" cy="15.5" r="1.5" fill="rgba(255,255,255,0.7)"/>
+            </svg>
           </div>
           {!sidebarCollapsed && (
-            <span className="font-semibold text-base gradient-accent-text">
-              创作平台
+            <span className="font-bold text-xl gradient-accent-text tracking-tight whitespace-nowrap drop-shadow-sm">
+              Toby.AI 企业版
             </span>
           )}
         </Link>
