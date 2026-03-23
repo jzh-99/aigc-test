@@ -14,12 +14,12 @@ import {
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-type Tab = 'chat' | 'image' | 'video'
+type Tab = 'chat' | 'image' // | 'video'
 
 const TAB_CONFIG: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat', label: '对话助手', icon: <MessageSquare className="h-3.5 w-3.5" /> },
   { id: 'image', label: '图片解析', icon: <ImageIcon className="h-3.5 w-3.5" /> },
-  { id: 'video', label: '视频解析', icon: <Video className="h-3.5 w-3.5" /> },
+  // { id: 'video', label: '视频解析', icon: <Video className="h-3.5 w-3.5" /> },
 ]
 
 export function AiAssistant() {
@@ -34,16 +34,16 @@ export function AiAssistant() {
 
   // Chat tab attachments
   const [chatImage, setChatImage] = useState<{ base64: string; type: string; preview: string; name: string } | null>(null)
-  const [chatVideo, setChatVideo] = useState<{ tempId: string; name: string } | null>(null)
-  const [chatVideoUploading, setChatVideoUploading] = useState(false)
+  // const [chatVideo, setChatVideo] = useState<{ tempId: string; name: string } | null>(null)
+  // const [chatVideoUploading, setChatVideoUploading] = useState(false)
 
   // Image tab
   const [imageFile, setImageFile] = useState<{ base64: string; type: string; preview: string; name: string } | null>(null)
 
-  // Video tab
-  const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [videoUploadProgress, setVideoUploadProgress] = useState(0)
-  const [videoTempId, setVideoTempId] = useState<string | null>(null)
+  // Video tab (hidden)
+  // const [videoFile, setVideoFile] = useState<File | null>(null)
+  // const [videoUploadProgress, setVideoUploadProgress] = useState(0)
+  // const [videoTempId, setVideoTempId] = useState<string | null>(null)
 
   // Draggable & resizable state
   const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -62,9 +62,9 @@ export function AiAssistant() {
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const chatImageRef = useRef<HTMLInputElement>(null)
-  const chatVideoRef = useRef<HTMLInputElement>(null)
+  // const chatVideoRef = useRef<HTMLInputElement>(null)
   const imageTabRef = useRef<HTMLInputElement>(null)
-  const videoTabRef = useRef<HTMLInputElement>(null)
+  // const videoTabRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
@@ -213,44 +213,46 @@ export function AiAssistant() {
     })
   }
 
-  async function uploadVideoFile(file: File): Promise<string> {
-    const formData = new FormData()
-    formData.append('file', file)
-    const token = useAuthStore.getState().accessToken
-    const res = await fetch('/api/v1/ai-assistant/upload', {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    })
-    if (!res.ok) throw new Error('视频上传失败')
-    const data = await res.json()
-    return data.temp_id as string
-  }
+  // Video upload function (hidden)
+  // async function uploadVideoFile(file: File): Promise<string> {
+  //   const formData = new FormData()
+  //   formData.append('file', file)
+  //   const token = useAuthStore.getState().accessToken
+  //   const res = await fetch('/api/v1/ai-assistant/upload', {
+  //     method: 'POST',
+  //     headers: token ? { Authorization: `Bearer ${token}` } : {},
+  //     body: formData,
+  //   })
+  //   if (!res.ok) throw new Error('视频上传失败')
+  //   const data = await res.json()
+  //   return data.temp_id as string
+  // }
 
   async function handleChatImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     const result = await readFileAsBase64(file)
     setChatImage({ ...result, name: file.name })
-    setChatVideo(null)
+    // setChatVideo(null)
     e.target.value = ''
   }
 
-  async function handleChatVideoPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setChatVideoUploading(true)
-    setChatImage(null)
-    try {
-      const tempId = await uploadVideoFile(file)
-      setChatVideo({ tempId, name: file.name })
-    } catch {
-      alert('视频上传失败，请重试')
-    } finally {
-      setChatVideoUploading(false)
-    }
-    e.target.value = ''
-  }
+  // Video pick handler (hidden)
+  // async function handleChatVideoPick(e: React.ChangeEvent<HTMLInputElement>) {
+  //   const file = e.target.files?.[0]
+  //   if (!file) return
+  //   setChatVideoUploading(true)
+  //   setChatImage(null)
+  //   try {
+  //     const tempId = await uploadVideoFile(file)
+  //     setChatVideo({ tempId, name: file.name })
+  //   } catch {
+  //     alert('视频上传失败，请重试')
+  //   } finally {
+  //     setChatVideoUploading(false)
+  //   }
+  //   e.target.value = ''
+  // }
 
   async function handleImageTabPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -260,28 +262,29 @@ export function AiAssistant() {
     e.target.value = ''
   }
 
-  async function handleVideoTabPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setVideoFile(file)
-    setVideoTempId(null)
-    setVideoUploadProgress(0)
-    e.target.value = ''
-  }
+  // Video tab pick handler (hidden)
+  // async function handleVideoTabPick(e: React.ChangeEvent<HTMLInputElement>) {
+  //   const file = e.target.files?.[0]
+  //   if (!file) return
+  //   setVideoFile(file)
+  //   setVideoTempId(null)
+  //   setVideoUploadProgress(0)
+  //   e.target.value = ''
+  // }
 
-  async function uploadVideoTab() {
-    if (!videoFile) return null
-    setVideoUploadProgress(10)
-    try {
-      const tempId = await uploadVideoFile(videoFile)
-      setVideoTempId(tempId)
-      setVideoUploadProgress(100)
-      return tempId
-    } catch {
-      setVideoUploadProgress(0)
-      throw new Error('视频上传失败')
-    }
-  }
+  // async function uploadVideoTab() {
+  //   if (!videoFile) return null
+  //   setVideoUploadProgress(10)
+  //   try {
+  //     const tempId = await uploadVideoFile(videoFile)
+  //     setVideoTempId(tempId)
+  //     setVideoUploadProgress(100)
+  //     return tempId
+  //   } catch {
+  //     setVideoUploadProgress(0)
+  //     throw new Error('视频上传失败')
+  //   }
+  // }
 
   const sendMessage = useCallback(async (opts: {
     message?: string
@@ -396,7 +399,7 @@ export function AiAssistant() {
   async function handleChatSend() {
     if (loading) return
     const text = input.trim()
-    if (!text && !chatImage && !chatVideo) return
+    if (!text && !chatImage) return // && !chatVideo
 
     const opts: Parameters<typeof sendMessage>[0] = { tab: 'chat' }
     if (text) opts.message = text
@@ -406,17 +409,19 @@ export function AiAssistant() {
       opts.imagePreview = chatImage.preview
       opts.mediaLabel = `[图片: ${chatImage.name}]`
       opts.userLabel = text || `[图片: ${chatImage.name}]`
-    } else if (chatVideo) {
-      opts.video_temp_id = chatVideo.tempId
-      opts.mediaLabel = `[视频: ${chatVideo.name}]`
-      opts.userLabel = text || `[视频: ${chatVideo.name}]`
-    } else {
+    }
+    // else if (chatVideo) {
+    //   opts.video_temp_id = chatVideo.tempId
+    //   opts.mediaLabel = `[视频: ${chatVideo.name}]`
+    //   opts.userLabel = text || `[视频: ${chatVideo.name}]`
+    // }
+    else {
       opts.userLabel = text
     }
 
     setInput('')
     setChatImage(null)
-    setChatVideo(null)
+    // setChatVideo(null)
     await sendMessage(opts)
   }
 
@@ -433,25 +438,26 @@ export function AiAssistant() {
     setImageFile(null)
   }
 
-  async function handleVideoAnalyze() {
-    if (!videoFile || loading) return
-    try {
-      let tempId = videoTempId
-      if (!tempId) tempId = await uploadVideoTab()
-      if (!tempId) return
-      await sendMessage({
-        tab: 'video',
-        video_temp_id: tempId,
-        mediaLabel: `[视频: ${videoFile.name}]`,
-        userLabel: `[视频: ${videoFile.name}]`,
-      })
-      setVideoFile(null)
-      setVideoTempId(null)
-      setVideoUploadProgress(0)
-    } catch (e: any) {
-      alert(e.message ?? '视频处理失败')
-    }
-  }
+  // Video analyze handler (hidden)
+  // async function handleVideoAnalyze() {
+  //   if (!videoFile || loading) return
+  //   try {
+  //     let tempId = videoTempId
+  //     if (!tempId) tempId = await uploadVideoTab()
+  //     if (!tempId) return
+  //     await sendMessage({
+  //       tab: 'video',
+  //       video_temp_id: tempId,
+  //       mediaLabel: `[视频: ${videoFile.name}]`,
+  //       userLabel: `[视频: ${videoFile.name}]`,
+  //     })
+  //     setVideoFile(null)
+  //     setVideoTempId(null)
+  //     setVideoUploadProgress(0)
+  //   } catch (e: any) {
+  //     alert(e.message ?? '视频处理失败')
+  //   }
+  // }
 
   function handleClear() {
     setMessages([])
@@ -580,7 +586,7 @@ export function AiAssistant() {
             {tab === 'chat' && (
               <div className="p-3 space-y-2">
                 {/* Attachment preview */}
-                {(chatImage || chatVideo || chatVideoUploading) && (
+                {chatImage && ( // || chatVideo || chatVideoUploading
                   <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-1.5 text-xs text-muted-foreground">
                     {chatImage && (
                       <>
@@ -589,14 +595,14 @@ export function AiAssistant() {
                         <button onClick={() => setChatImage(null)} className="hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
                       </>
                     )}
-                    {chatVideoUploading && <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span>上传中...</span></>}
+                    {/* {chatVideoUploading && <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span>上传中...</span></>}
                     {chatVideo && !chatVideoUploading && (
                       <>
                         <Video className="h-4 w-4 shrink-0" />
                         <span className="flex-1 truncate">{chatVideo.name}</span>
                         <button onClick={() => setChatVideo(null)} className="hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
                       </>
-                    )}
+                    )} */}
                   </div>
                 )}
                 <div className="flex gap-2 items-end">
@@ -604,23 +610,23 @@ export function AiAssistant() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend() } }}
-                    placeholder="描述需求，或上传图片/视频..."
+                    placeholder="描述需求，或上传图片..."
                     className="min-h-[60px] max-h-[120px] resize-none text-sm"
                     disabled={loading}
                   />
                   <div className="flex flex-col gap-1">
                     <input ref={chatImageRef} type="file" accept="image/*" className="hidden" onChange={handleChatImagePick} />
-                    <input ref={chatVideoRef} type="file" accept="video/*" className="hidden" onChange={handleChatVideoPick} />
+                    {/* <input ref={chatVideoRef} type="file" accept="video/*" className="hidden" onChange={handleChatVideoPick} /> */}
                     <button onClick={() => chatImageRef.current?.click()} title="附加图片"
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors">
                       <ImageIcon className="h-4 w-4 text-muted-foreground" />
                     </button>
-                    <button onClick={() => chatVideoRef.current?.click()} title="附加视频"
+                    {/* <button onClick={() => chatVideoRef.current?.click()} title="附加视频"
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors">
                       <Video className="h-4 w-4 text-muted-foreground" />
-                    </button>
+                    </button> */}
                     <Button size="icon" className="h-8 w-8 gradient-accent" onClick={handleChatSend}
-                      disabled={loading || (!input.trim() && !chatImage && !chatVideo)}>
+                      disabled={loading || (!input.trim() && !chatImage)}>
                       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>
                   </div>
@@ -656,8 +662,8 @@ export function AiAssistant() {
               </div>
             )}
 
-            {/* Tab: 视频解析 */}
-            {tab === 'video' && (
+            {/* Tab: 视频解析 (hidden) */}
+            {/* {tab === 'video' && (
               <div className="p-3 space-y-2">
                 <input ref={videoTabRef} type="file" accept="video/*" className="hidden" onChange={handleVideoTabPick} />
                 {!videoFile ? (
@@ -687,7 +693,7 @@ export function AiAssistant() {
                   </div>
                 )}
               </div>
-            )}
+            )} */}
           </div>
         </div>
       )}
