@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { freezeCredits } from '../services/credit.js'
+import { freezeCredits, refundCredits } from '../services/credit.js'
 
 const VIDEO_CREDITS = 10
 
@@ -124,7 +124,11 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Create batch + task (status=processing, external_task_id will be set after API call)
-    const { batchId, taskId } = await db.transaction().execute(async (trx: any) => {
+    // Wrapped in try-catch: if DB fails after freeze, refund to prevent orphan frozen credits
+    let batchId: string
+    let taskId: string
+    try {
+    const _batchTask = await db.transaction().execute(async (trx: any) => {
       const paramsForDb = { aspect_ratio: aspect_ratio ?? null, has_first_frame: (images?.length ?? 0) > 0, has_last_frame: (images?.length ?? 0) > 1 }
 
       const batchResult = await trx
@@ -162,6 +166,21 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
 
       return { batchId: batchResult.id, taskId: taskResult.id }
     })
+    batchId = _batchTask.batchId
+    taskId = _batchTask.taskId
+    } catch (err) {
+      // DB error after freeze — refund to prevent orphan frozen credits
+      app.log.error({ err }, 'Failed to create video batch/task after freeze, refunding credits')
+      try {
+        await refundCredits(teamId, creditAccountId, userId, VIDEO_CREDITS)
+      } catch (refundErr) {
+        app.log.error({ refundErr }, 'CRITICAL: Failed to refund credits after video batch creation failure')
+      }
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回，请重试' },
+      })
+    }
 
     // Call Veo API
     const veoApiUrl = process.env.NANO_BANANA_API_URL ?? 'https://api.nanobanana.com'
