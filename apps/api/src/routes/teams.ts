@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import crypto from 'node:crypto'
+import bcrypt from 'bcryptjs'
 import { teamRoleGuard } from '../plugins/guards.js'
 import type { InviteMemberRequest, UpdateQuotaRequest, TeamMemberRole } from '@aigc/types'
 import rateLimit from '@fastify/rate-limit'
@@ -17,6 +18,18 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
       statusCode: 429,
       success: false,
       error: { code: 'RATE_LIMITED', message: '邀请操作过于频繁，请稍后再试' },
+    }),
+  })
+
+  // Rate limit batch invite endpoint: 15 batch operations per hour per user
+  await app.register(rateLimit, {
+    max: 15,
+    timeWindow: '1 hour',
+    keyGenerator: (request) => `batch-invite:${request.user?.id ?? request.ip}`,
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      success: false,
+      error: { code: 'RATE_LIMITED', message: '批量添加操作过于频繁，请稍后再试' },
     }),
   })
 
@@ -250,6 +263,373 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
       phone: user.phone,
       role: memberRole,
       invite_token: inviteToken, // SECURITY: Remove once email service sends tokens directly
+    })
+  })
+
+  // POST /teams/:id/members/create — create single member with default password (aligned with batch)
+  app.post<{
+    Params: { id: string }
+    Body: {
+      identifier: string
+      role?: 'editor' | 'viewer'
+      credit_quota?: number
+      default_password: string
+    }
+  }>('/teams/:id/members/create', {
+    preHandler: teamRoleGuard('owner'),
+    schema: {
+      body: {
+        type: 'object',
+        required: ['identifier', 'default_password'],
+        properties: {
+          identifier: { type: 'string', maxLength: 254 },
+          role: { type: 'string', enum: ['editor', 'viewer'] },
+          credit_quota: { type: 'number', minimum: 0, maximum: 1000000 },
+          default_password: { type: 'string', minLength: 6, maxLength: 50 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { identifier: rawIdentifier, role = 'editor', credit_quota = 1000, default_password } = request.body
+    const teamId = request.params.id
+    const db = getDb()
+
+    const identifier = rawIdentifier.trim()
+    if (!identifier) {
+      return reply.badRequest('账号不能为空')
+    }
+
+    // Determine if email or phone
+    const isEmail = identifier.includes('@')
+    const isPhone = /^\d{11}$/.test(identifier)
+
+    if (!isEmail && !isPhone) {
+      return reply.badRequest('格式错误（需要邮箱或11位手机号）')
+    }
+
+    // Check if user already exists
+    const existingUser = await db
+      .selectFrom('users')
+      .select(['id', 'account'])
+      .$if(isEmail, (qb) => qb.where('email', '=', identifier))
+      .$if(isPhone, (qb) => qb.where('phone', '=', identifier))
+      .executeTakeFirst()
+
+    if (existingUser) {
+      // Check if already a team member
+      const isMember = await db
+        .selectFrom('team_members')
+        .select('user_id')
+        .where('team_id', '=', teamId)
+        .where('user_id', '=', existingUser.id)
+        .executeTakeFirst()
+
+      if (isMember) {
+        return reply.status(409).send({
+          success: false,
+          error: { code: 'ALREADY_MEMBER', message: '该用户已是团队成员' },
+        })
+      }
+    }
+
+    // Generate username
+    const baseUsername = isEmail ? identifier.split('@')[0] : identifier.slice(-4)
+    let username = baseUsername
+    let suffix = 1
+    while (true) {
+      const existing = await db
+        .selectFrom('users')
+        .select('id')
+        .where('username', '=', username)
+        .executeTakeFirst()
+      if (!existing) break
+      username = `${baseUsername}_${suffix++}`
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(default_password, 10)
+
+    // Create user if not exists
+    let userId: string
+    if (!existingUser) {
+      const newUser = await db
+        .insertInto('users')
+        .values({
+          account: identifier,
+          email: isEmail ? identifier : null,
+          phone: isPhone ? identifier : null,
+          username,
+          password_hash: passwordHash,
+          role: 'member',
+          status: 'active',
+          plan_tier: 'free',
+          password_change_required: true,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+      userId = newUser.id
+    } else {
+      userId = existingUser.id
+    }
+
+    // Add to team
+    await db
+      .insertInto('team_members')
+      .values({
+        team_id: teamId,
+        user_id: userId,
+        role,
+        credit_quota,
+      })
+      .execute()
+
+    // Create personal workspace
+    const workspaceName = `${username}工作区`
+    const workspace = await db
+      .insertInto('workspaces')
+      .values({
+        team_id: teamId,
+        name: workspaceName,
+        created_by: request.user.id,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow()
+
+    // Add user to workspace
+    const wsRole = role === 'viewer' ? 'viewer' : 'editor'
+    await db
+      .insertInto('workspace_members')
+      .values({
+        workspace_id: workspace.id,
+        user_id: userId,
+        role: wsRole,
+      })
+      .execute()
+
+    // Also add owner to workspace as admin
+    await db
+      .insertInto('workspace_members')
+      .values({
+        workspace_id: workspace.id,
+        user_id: request.user.id,
+        role: 'admin',
+      })
+      .execute()
+
+    return reply.status(201).send({
+      user_id: userId,
+      username,
+      workspace_id: workspace.id,
+      workspace_name: workspaceName,
+      account: identifier,
+    })
+  })
+
+  // POST /teams/:id/members/batch — batch create members with default password
+  app.post<{
+    Params: { id: string }
+    Body: {
+      identifiers: string[]
+      role?: 'editor' | 'viewer'
+      credit_quota?: number
+      default_password: string
+    }
+  }>('/teams/:id/members/batch', {
+    preHandler: teamRoleGuard('owner'),
+    schema: {
+      body: {
+        type: 'object',
+        required: ['identifiers', 'default_password'],
+        properties: {
+          identifiers: {
+            type: 'array',
+            items: { type: 'string', maxLength: 254 },
+            minItems: 1,
+            maxItems: 50,
+          },
+          role: { type: 'string', enum: ['editor', 'viewer'] },
+          credit_quota: { type: 'number', minimum: 0, maximum: 1000000 },
+          default_password: { type: 'string', minLength: 6, maxLength: 50 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { identifiers, role = 'editor', credit_quota = 1000, default_password } = request.body
+    const teamId = request.params.id
+    const db = getDb()
+
+    // Hash password once for all users
+    const passwordHash = await bcrypt.hash(default_password, 10)
+
+    interface BatchResult {
+      identifier: string
+      status: 'success' | 'failed' | 'exists'
+      user_id?: string
+      workspace_id?: string
+      workspace_name?: string
+      username?: string
+      error?: string
+    }
+
+    const results: BatchResult[] = []
+    let successCount = 0
+    let failedCount = 0
+    let existsCount = 0
+
+    // Helper: generate unique username
+    async function generateUsername(baseUsername: string): Promise<string> {
+      let username = baseUsername
+      let suffix = 1
+      while (true) {
+        const existing = await db
+          .selectFrom('users')
+          .select('id')
+          .where('username', '=', username)
+          .executeTakeFirst()
+        if (!existing) return username
+        username = `${baseUsername}_${suffix++}`
+      }
+    }
+
+    // Process each identifier
+    for (const rawIdentifier of identifiers) {
+      const identifier = rawIdentifier.trim()
+      if (!identifier) {
+        results.push({ identifier, status: 'failed', error: '标识符为空' })
+        failedCount++
+        continue
+      }
+
+      try {
+        // Determine if email or phone
+        const isEmail = identifier.includes('@')
+        const isPhone = /^\d{11}$/.test(identifier)
+
+        if (!isEmail && !isPhone) {
+          results.push({ identifier, status: 'failed', error: '格式错误（需要邮箱或11位手机号）' })
+          failedCount++
+          continue
+        }
+
+        // Check if user already exists
+        let existingUser = await db
+          .selectFrom('users')
+          .select(['id', 'account'])
+          .$if(isEmail, (qb) => qb.where('email', '=', identifier))
+          .$if(isPhone, (qb) => qb.where('phone', '=', identifier))
+          .executeTakeFirst()
+
+        if (existingUser) {
+          // Check if already a team member
+          const isMember = await db
+            .selectFrom('team_members')
+            .select('user_id')
+            .where('team_id', '=', teamId)
+            .where('user_id', '=', existingUser.id)
+            .executeTakeFirst()
+
+          if (isMember) {
+            results.push({ identifier, status: 'exists', user_id: existingUser.id, error: '已是团队成员' })
+            existsCount++
+            continue
+          }
+        }
+
+        // Generate username
+        const baseUsername = isEmail ? identifier.split('@')[0] : identifier.slice(-4)
+        const username = await generateUsername(baseUsername)
+
+        // Create user if not exists
+        let userId: string
+        if (!existingUser) {
+          const newUser = await db
+            .insertInto('users')
+            .values({
+              account: identifier,
+              email: isEmail ? identifier : null,
+              phone: isPhone ? identifier : null,
+              username,
+              password_hash: passwordHash,
+              role: 'member',
+              status: 'active',
+              plan_tier: 'free',
+              password_change_required: true,
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow()
+          userId = newUser.id
+        } else {
+          userId = existingUser.id
+        }
+
+        // Add to team
+        await db
+          .insertInto('team_members')
+          .values({
+            team_id: teamId,
+            user_id: userId,
+            role,
+            credit_quota,
+          })
+          .execute()
+
+        // Create personal workspace
+        const workspaceName = `${username}工作区`
+        const workspace = await db
+          .insertInto('workspaces')
+          .values({
+            team_id: teamId,
+            name: workspaceName,
+            created_by: request.user.id,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+
+        // Add user to workspace
+        const wsRole = role === 'viewer' ? 'viewer' : 'editor'
+        await db
+          .insertInto('workspace_members')
+          .values({
+            workspace_id: workspace.id,
+            user_id: userId,
+            role: wsRole,
+          })
+          .execute()
+
+        // Also add owner to workspace as admin
+        await db
+          .insertInto('workspace_members')
+          .values({
+            workspace_id: workspace.id,
+            user_id: request.user.id,
+            role: 'admin',
+          })
+          .execute()
+
+        results.push({
+          identifier,
+          status: 'success',
+          user_id: userId,
+          workspace_id: workspace.id,
+          workspace_name: workspaceName,
+          username,
+        })
+        successCount++
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        app.log.error({ identifier, err: errMsg }, 'Batch user creation failed for identifier')
+        results.push({ identifier, status: 'failed', error: errMsg.slice(0, 200) })
+        failedCount++
+      }
+    }
+
+    return reply.status(200).send({
+      success: successCount,
+      failed: failedCount,
+      exists: existsCount,
+      results,
     })
   })
 

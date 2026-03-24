@@ -17,8 +17,9 @@ import {
 } from '@/components/ui/dialog'
 import { apiPatch, apiPost, apiDelete, ApiError } from '@/lib/api-client'
 import { InviteDialog } from './invite-dialog'
+import { BatchInviteDialog } from './batch-invite-dialog'
 import { toast } from 'sonner'
-import { UserPlus, Trash2, Edit2, RotateCcw } from 'lucide-react'
+import { UserPlus, Trash2, Edit2, RotateCcw, Users } from 'lucide-react'
 
 interface Member {
   user_id: string
@@ -62,6 +63,7 @@ const periodLabel: Record<string, string> = {
 export function MemberList({ teamId }: { teamId: string }) {
   const { data, error, mutate } = useSWR<TeamData>(`/teams/${teamId}`)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [batchInviteOpen, setBatchInviteOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<Member | null>(null)
   const [quotaValue, setQuotaValue] = useState('')
   const [periodValue, setPeriodValue] = useState<string>('none')
@@ -134,10 +136,16 @@ export function MemberList({ teamId }: { teamId: string }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">成员列表</CardTitle>
-          <Button size="sm" onClick={() => setInviteOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            邀请成员
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setBatchInviteOpen(true)}>
+              <Users className="h-4 w-4 mr-2" />
+              批量添加
+            </Button>
+            <Button size="sm" onClick={() => setInviteOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              添加成员
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -295,6 +303,14 @@ export function MemberList({ teamId }: { teamId: string }) {
         teamId={teamId}
         open={inviteOpen}
         onOpenChange={setInviteOpen}
+        onSuccess={() => mutate()}
+      />
+
+      {/* Batch Invite Dialog */}
+      <BatchInviteDialog
+        teamId={teamId}
+        open={batchInviteOpen}
+        onOpenChange={setBatchInviteOpen}
         onSuccess={() => mutate()}
       />
     </>

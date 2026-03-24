@@ -3,7 +3,7 @@ import { getDb } from '@aigc/db'
 export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: string) {
   const user = await db
     .selectFrom('users')
-    .select(['id', 'email', 'phone', 'username', 'avatar_url', 'role'])
+    .select(['id', 'email', 'phone', 'username', 'avatar_url', 'role', 'password_change_required'])
     .where('id', '=', userId)
     .executeTakeFirstOrThrow()
 
@@ -70,6 +70,7 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
     username: user.username,
     avatar_url: user.avatar_url,
     role: user.role,
+    password_change_required: user.password_change_required,
     teams,
   }
 }

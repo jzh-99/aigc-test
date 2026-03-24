@@ -15,6 +15,7 @@ export interface UsersTable {
   role: 'admin' | 'member'
   status: 'active' | 'suspended' | 'deleted'
   plan_tier: 'free' | 'basic' | 'pro' | 'enterprise'
+  password_change_required: Generated<boolean>
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>
 }
