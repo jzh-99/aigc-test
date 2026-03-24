@@ -67,9 +67,14 @@ const ASPECT_RATIOS = [
 
 const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
-const VIDEO_MODEL_OPTIONS = [
-  { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: 10 },
-] as const
+const VIDEO_MODEL_OPTIONS = {
+  frames: [
+    { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: 10 },
+  ],
+  components: [
+    { value: 'veo3.1-components', label: '全能视频3.1 参考生视频', desc: '基于参考图片生成视频', credits: 15 },
+  ],
+} as const
 
 const VIDEO_ASPECT_RATIOS = [
   { value: '' as const, label: '自动' },
@@ -83,6 +88,7 @@ const VIDEO_RESOLUTIONS = [
 ] as const
 
 interface FrameImage {
+  id?: string
   previewUrl: string
   dataUrl: string
 }
@@ -101,6 +107,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Video mode state
+  const [videoMode, setVideoMode] = useState<'frames' | 'components'>('frames')
   const [videoPrompt, setVideoPrompt] = useState('')
   const [videoModel, setVideoModel] = useState('veo3.1-fast')
   const [videoAspectRatio, setVideoAspectRatio] = useState<'' | '16:9' | '9:16'>('')
@@ -110,6 +117,13 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
   const [framePreviewIndex, setFramePreviewIndex] = useState<0 | 1 | null>(null)
   const firstFrameRef = useRef<HTMLInputElement>(null)
   const lastFrameRef = useRef<HTMLInputElement>(null)
+
+  // Reference components mode state
+  const [videoReferenceImages, setVideoReferenceImages] = useState<FrameImage[]>([])
+  const [referencePreviewIndex, setReferencePreviewIndex] = useState<number | null>(null)
+  const referenceInputRef = useRef<HTMLInputElement>(null)
+  const [isReferenceDragging, setIsReferenceDragging] = useState(false)
+  const referenceDragCounterRef = useRef(0)
 
   const { isCompanyA, showVideoTab } = useTeamFeatures()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -237,6 +251,7 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
     return new Promise((resolve) => {
       const reader = new FileReader()
       reader.onload = () => resolve({
+        id: crypto.randomUUID(),
         previewUrl: URL.createObjectURL(file),
         dataUrl: reader.result as string,
       })
@@ -245,12 +260,59 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
     })
   }, [])
 
+  // Handle reference images for components mode
+  const handleReferenceFiles = useCallback(async (files: FileList | null) => {
+    if (!files) return
+    const newImages: FrameImage[] = []
+    for (const file of Array.from(files)) {
+      if (videoReferenceImages.length + newImages.length >= 3) break
+      const img = await readFrameFile(file)
+      if (img) newImages.push(img)
+    }
+    setVideoReferenceImages(prev => [...prev, ...newImages])
+    if (referenceInputRef.current) referenceInputRef.current.value = ''
+  }, [videoReferenceImages.length, readFrameFile])
+
+  const handleReferenceDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    referenceDragCounterRef.current++
+    if (referenceDragCounterRef.current === 1) setIsReferenceDragging(true)
+  }, [])
+
+  const handleReferenceDragLeave = useCallback(() => {
+    referenceDragCounterRef.current--
+    if (referenceDragCounterRef.current === 0) setIsReferenceDragging(false)
+  }, [])
+
+  const handleReferenceDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+  }, [])
+
+  const handleReferenceDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    referenceDragCounterRef.current = 0
+    setIsReferenceDragging(false)
+    await handleReferenceFiles(e.dataTransfer.files)
+  }, [handleReferenceFiles])
+
+  const removeReferenceImage = useCallback((index: number) => {
+    setVideoReferenceImages(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const clearReferenceImagesVideo = useCallback(() => {
+    setVideoReferenceImages([])
+  }, [])
+
   const handleVideoGenerate = async () => {
     if (!videoPrompt.trim()) return
     try {
       const images: string[] = []
-      if (firstFrame) images.push(firstFrame.dataUrl)
-      if (lastFrame) images.push(lastFrame.dataUrl)
+      if (videoMode === 'frames') {
+        if (firstFrame) images.push(firstFrame.dataUrl)
+        if (lastFrame) images.push(lastFrame.dataUrl)
+      } else {
+        images.push(...videoReferenceImages.map(img => img.dataUrl))
+      }
 
       const batch = await generateVideo({
         prompt: videoPrompt.trim(),
@@ -450,67 +512,172 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
           </div>
         ) : (
           <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
-            {/* Frame slots row — fills full width, fixed image height */}
+            {/* Video mode switcher */}
             <div className="flex gap-2 shrink-0">
-              {/* First frame */}
-              <div className="flex-1 flex flex-col gap-1">
-                <p className="text-[11px] text-muted-foreground leading-none">首帧图（可选）</p>
-                {firstFrame ? (
-                  <div
-                    className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group cursor-zoom-in"
-                    onClick={() => setFramePreviewIndex(0)}
-                  >
-                    <Image src={firstFrame.previewUrl} alt="" fill className="object-contain" sizes="200px" unoptimized />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setFirstFrame(null); setLastFrame(null) }}
-                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                    >
-                      <X className="h-3 w-3 text-background" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => firstFrameRef.current?.click()}
-                    className="h-[90px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
-                  >
-                    <Film className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-[11px] text-muted-foreground">点击上传</span>
-                  </button>
+              <button
+                onClick={() => {
+                  setVideoMode('frames')
+                  setVideoModel('veo3.1-fast')
+                  setVideoReferenceImages([])
+                }}
+                className={cn(
+                  'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
+                  videoMode === 'frames'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
                 )}
-              </div>
-              {/* Last frame */}
-              <div className="flex-1 flex flex-col gap-1">
-                <p className="text-[11px] text-muted-foreground leading-none">尾帧图（可选）</p>
-                {lastFrame ? (
-                  <div
-                    className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group cursor-zoom-in"
-                    onClick={() => setFramePreviewIndex(1)}
-                  >
-                    <Image src={lastFrame.previewUrl} alt="" fill className="object-contain" sizes="200px" unoptimized />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setLastFrame(null) }}
-                      className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                    >
-                      <X className="h-3 w-3 text-background" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => lastFrameRef.current?.click()}
-                    disabled={!firstFrame}
-                    className={cn(
-                      'h-[90px] w-full rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
-                      firstFrame
-                        ? 'border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
-                        : 'border-muted-foreground/15 opacity-50 cursor-not-allowed'
-                    )}
-                  >
-                    <Film className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-[11px] text-muted-foreground">点击上传</span>
-                  </button>
+              >
+                首尾帧
+              </button>
+              <button
+                onClick={() => {
+                  setVideoMode('components')
+                  setVideoModel('veo3.1-components')
+                  setFirstFrame(null)
+                  setLastFrame(null)
+                }}
+                className={cn(
+                  'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
+                  videoMode === 'components'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
                 )}
-              </div>
+              >
+                参考生视频
+              </button>
             </div>
+
+            {/* Image upload area - dynamic based on mode */}
+            {videoMode === 'frames' ? (
+              <div className="flex gap-2 shrink-0">
+                {/* First frame */}
+                <div className="flex-1 flex flex-col gap-1">
+                  <p className="text-[11px] text-muted-foreground leading-none">首帧图（可选）</p>
+                  {firstFrame ? (
+                    <div
+                      className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group cursor-zoom-in"
+                      onClick={() => setFramePreviewIndex(0)}
+                    >
+                      <Image src={firstFrame.previewUrl} alt="" fill className="object-contain" sizes="200px" unoptimized />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setFirstFrame(null); setLastFrame(null) }}
+                        className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      >
+                        <X className="h-3 w-3 text-background" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => firstFrameRef.current?.click()}
+                      className="h-[90px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+                    >
+                      <Film className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-[11px] text-muted-foreground">点击上传</span>
+                    </button>
+                  )}
+                </div>
+                {/* Last frame */}
+                <div className="flex-1 flex flex-col gap-1">
+                  <p className="text-[11px] text-muted-foreground leading-none">尾帧图（可选）</p>
+                  {lastFrame ? (
+                    <div
+                      className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group cursor-zoom-in"
+                      onClick={() => setFramePreviewIndex(1)}
+                    >
+                      <Image src={lastFrame.previewUrl} alt="" fill className="object-contain" sizes="200px" unoptimized />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setLastFrame(null) }}
+                        className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      >
+                        <X className="h-3 w-3 text-background" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => lastFrameRef.current?.click()}
+                      disabled={!firstFrame}
+                      className={cn(
+                        'h-[90px] w-full rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
+                        firstFrame
+                          ? 'border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
+                          : 'border-muted-foreground/15 opacity-50 cursor-not-allowed'
+                      )}
+                    >
+                      <Film className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-[11px] text-muted-foreground">点击上传</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  'shrink-0 relative transition-colors',
+                  isReferenceDragging && 'opacity-50'
+                )}
+                onDragEnter={handleReferenceDragEnter}
+                onDragLeave={handleReferenceDragLeave}
+                onDragOver={handleReferenceDragOver}
+                onDrop={handleReferenceDrop}
+              >
+                {isReferenceDragging && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 pointer-events-none rounded-xl border-2 border-primary bg-primary/5">
+                    <ImagePlus className="h-8 w-8 text-primary" />
+                    <span className="text-sm font-medium text-primary">松开以添加参考图</span>
+                  </div>
+                )}
+                {videoReferenceImages.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] text-muted-foreground">{videoReferenceImages.length}/3 张参考图</p>
+                      <button
+                        onClick={clearReferenceImagesVideo}
+                        className="text-[11px] text-destructive hover:underline"
+                      >
+                        清空全部
+                      </button>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {videoReferenceImages.map((img, index) => (
+                        <div
+                          key={img.id ?? index}
+                          className="relative h-[90px] w-[90px] rounded-lg overflow-hidden border bg-muted group cursor-zoom-in"
+                          onClick={() => setReferencePreviewIndex(index)}
+                        >
+                          <Image src={img.previewUrl} alt="" fill className="object-cover" sizes="90px" unoptimized />
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeReferenceImage(index) }}
+                            className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                          >
+                            <X className="h-3 w-3 text-background" />
+                          </button>
+                        </div>
+                      ))}
+                      {videoReferenceImages.length < 3 && (
+                        <button
+                          onClick={() => referenceInputRef.current?.click()}
+                          className="h-[90px] w-[90px] rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+                        >
+                          <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-[11px] text-muted-foreground">添加</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => referenceInputRef.current?.click()}
+                    className="h-[90px] w-full rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all cursor-pointer flex items-center gap-3 px-4"
+                  >
+                    <ImagePlus className="h-6 w-6 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-primary leading-tight">上传参考图片</div>
+                      <div className="text-[11px] text-primary/60 leading-tight mt-0.5">1-3张 · 支持拖拽</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Prompt */}
             <div className="flex-1 min-h-0">
@@ -538,12 +705,14 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                 e.target.value = ''
               }}
             />
+            <input ref={referenceInputRef} type="file" accept="image/*" multiple className="hidden"
+              onChange={(e) => handleReferenceFiles(e.target.files)}
+            />
 
             {/* Frame image lightbox */}
             {framePreviewIndex !== null && (firstFrame || lastFrame) && (() => {
               const frames = [firstFrame, lastFrame].filter(Boolean) as FrameImage[]
               const labels = firstFrame && lastFrame ? ['首帧图', '尾帧图'] : [firstFrame ? '首帧图' : '尾帧图']
-              // Map framePreviewIndex (0=first,1=last) to index within frames array
               const activeIdx = framePreviewIndex === 1 && firstFrame ? 1 : 0
               const frame = frames[activeIdx]
               if (!frame) return null
@@ -558,6 +727,18 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                 />
               )
             })()}
+
+            {/* Reference images lightbox */}
+            {referencePreviewIndex !== null && videoReferenceImages[referencePreviewIndex] && (
+              <ImageLightbox
+                url={videoReferenceImages[referencePreviewIndex].previewUrl}
+                alt={`参考图 ${referencePreviewIndex + 1}`}
+                onClose={() => setReferencePreviewIndex(null)}
+                onPrev={referencePreviewIndex > 0 ? () => setReferencePreviewIndex(referencePreviewIndex - 1) : undefined}
+                onNext={referencePreviewIndex < videoReferenceImages.length - 1 ? () => setReferencePreviewIndex(referencePreviewIndex + 1) : undefined}
+                footer={<p className="text-sm text-white/80">参考图 {referencePreviewIndex + 1}/{videoReferenceImages.length}</p>}
+              />
+            )}
           </div>
         )}
       </div>
@@ -747,11 +928,11 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
                   <Select value={videoModel} onValueChange={setVideoModel} disabled={isVideoGenerating || disabled}>
                     <SelectTrigger className="h-9">
                       <SelectValue>
-                        {VIDEO_MODEL_OPTIONS.find(m => m.value === videoModel)?.label}
+                        {VIDEO_MODEL_OPTIONS[videoMode].find(m => m.value === videoModel)?.label}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {VIDEO_MODEL_OPTIONS.map((m) => (
+                      {VIDEO_MODEL_OPTIONS[videoMode].map((m) => (
                         <SelectItem key={m.value} value={m.value} className="py-2">
                           <div className="flex items-start gap-3">
                             <Film className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
@@ -821,14 +1002,14 @@ export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelPro
             <div className="flex-1" />
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
-              <span>10 积分</span>
+              <span>{VIDEO_MODEL_OPTIONS[videoMode][0].credits} 积分</span>
             </div>
             <Button
               variant="gradient"
               size="lg"
               className="gap-2 px-8"
               onClick={handleVideoGenerate}
-              disabled={isVideoGenerating || disabled || !videoPrompt.trim()}
+              disabled={isVideoGenerating || disabled || !videoPrompt.trim() || (videoMode === 'components' && videoReferenceImages.length === 0)}
             >
               {isVideoGenerating ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>

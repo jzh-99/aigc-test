@@ -3,7 +3,10 @@ import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 
-const VIDEO_CREDITS = 10
+const VIDEO_CREDITS_MAP: Record<string, number> = {
+  'veo3.1-fast': 10,
+  'veo3.1-components': 15,
+}
 
 interface VideoGenerateBody {
   prompt: string
@@ -23,8 +26,12 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
         properties: {
           prompt: { type: 'string', minLength: 1, maxLength: 4000 },
           workspace_id: { type: 'string', format: 'uuid' },
-          model: { type: 'string', default: 'veo3.1-fast' },
-          images: { type: 'array', items: { type: 'string' }, maxItems: 2 },
+          model: {
+            type: 'string',
+            enum: ['veo3.1-fast', 'veo3.1-components'],
+            default: 'veo3.1-fast'
+          },
+          images: { type: 'array', items: { type: 'string' }, maxItems: 3 },
           aspect_ratio: { type: 'string', enum: ['16:9', '9:16'] },
           enable_upsample: { type: 'boolean' },
         },
@@ -40,6 +47,31 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       aspect_ratio,
       enable_upsample,
     } = request.body
+
+    // Validate images count based on model
+    if (images) {
+      if (model === 'veo3.1-fast' && images.length > 2) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_IMAGES', message: 'veo3.1-fast 模型最多支持2张图片（首尾帧）' },
+        })
+      }
+      if (model === 'veo3.1-components') {
+        if (images.length < 1 || images.length > 3) {
+          return reply.status(400).send({
+            success: false,
+            error: { code: 'INVALID_IMAGES', message: 'veo3.1-components 模型需要1-3张参考图片' },
+          })
+        }
+      }
+    } else if (model === 'veo3.1-components') {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'MISSING_IMAGES', message: 'veo3.1-components 模型需要至少1张参考图片' },
+      })
+    }
+
+    const VIDEO_CREDITS = VIDEO_CREDITS_MAP[model] ?? 10
 
     const userId = request.user.id
     const db = getDb()
@@ -129,7 +161,17 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     let taskId: string
     try {
     const _batchTask = await db.transaction().execute(async (trx: any) => {
-      const paramsForDb = { aspect_ratio: aspect_ratio ?? null, has_first_frame: (images?.length ?? 0) > 0, has_last_frame: (images?.length ?? 0) > 1 }
+      const paramsForDb = model === 'veo3.1-components'
+        ? {
+            aspect_ratio: aspect_ratio ?? null,
+            has_reference_components: true,
+            reference_count: images?.length ?? 0,
+          }
+        : {
+            aspect_ratio: aspect_ratio ?? null,
+            has_first_frame: (images?.length ?? 0) > 0,
+            has_last_frame: (images?.length ?? 0) > 1,
+          }
 
       const batchResult = await trx
         .insertInto('task_batches')
@@ -182,7 +224,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    // Call Veo API
+    // Call Veo API with retry on fast errors (not timeout)
     const veoApiUrl = process.env.NANO_BANANA_API_URL ?? 'https://api.nanobanana.com'
     const veoApiKey = process.env.NANO_BANANA_API_KEY ?? ''
 
@@ -196,37 +238,66 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     if (enable_upsample !== undefined) veoBody.enable_upsample = enable_upsample
 
     let externalTaskId: string
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 30_000)
-      let veoRes: Response
+    let lastError: string = ''
+    const maxRetries = 1 // Retry once on fast API errors (not timeout)
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        veoRes = await fetch(`${veoApiUrl}/v2/videos/generations`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${veoApiKey}` },
-          body: JSON.stringify(veoBody),
-          signal: controller.signal,
-        })
-      } finally {
-        clearTimeout(timer)
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 30_000)
+        let veoRes: Response
+        try {
+          veoRes = await fetch(`${veoApiUrl}/v2/videos/generations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${veoApiKey}` },
+            body: JSON.stringify(veoBody),
+            signal: controller.signal,
+          })
+        } finally {
+          clearTimeout(timer)
+        }
+
+        if (!veoRes.ok) {
+          const errText = await veoRes.text()
+          throw new Error(`Veo API ${veoRes.status}: ${errText}`)
+        }
+
+        const veoJson = (await veoRes.json()) as { task_id: string }
+        if (!veoJson.task_id) throw new Error('Veo API did not return task_id')
+        externalTaskId = veoJson.task_id
+        break // Success, exit retry loop
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        lastError = errMsg
+
+        // Check if error is retryable (fast API error, not timeout)
+        const isTimeout = errMsg.includes('aborted') || errMsg.includes('timeout')
+        const isHttpError = errMsg.startsWith('Veo API ')
+        const isNetworkError = errMsg.includes('fetch failed') ||
+                              errMsg.includes('ECONNREFUSED') ||
+                              errMsg.includes('ENOTFOUND') ||
+                              errMsg.includes('ETIMEDOUT') ||
+                              errMsg.includes('ECONNRESET')
+
+        const shouldRetry = !isTimeout && !isHttpError && isNetworkError && attempt < maxRetries
+
+        if (shouldRetry) {
+          app.log.warn({ taskId, batchId, attempt: attempt + 1, err: errMsg }, 'Veo API call failed, retrying')
+          await new Promise(r => setTimeout(r, 2000)) // 2 second delay before retry
+          continue
+        }
+
+        // No retry or exhausted retries, fail the task
+        app.log.error({ taskId, batchId, err: errMsg }, 'Veo API submission failed')
+        break
       }
+    }
 
-      if (!veoRes.ok) {
-        const errText = await veoRes.text()
-        throw new Error(`Veo API ${veoRes.status}: ${errText}`)
-      }
-
-      const veoJson = (await veoRes.json()) as { task_id: string }
-      if (!veoJson.task_id) throw new Error('Veo API did not return task_id')
-      externalTaskId = veoJson.task_id
-    } catch (err) {
-      // Veo API call failed — fail the task immediately and refund credits
-      const errMsg = err instanceof Error ? err.message : String(err)
-      app.log.error({ taskId, batchId, err: errMsg }, 'Veo API submission failed')
-
+    // If no externalTaskId, fail the task and refund credits
+    if (!externalTaskId!) {
       await db.transaction().execute(async (trx: any) => {
         await trx.updateTable('tasks')
-          .set({ status: 'failed', error_message: errMsg.slice(0, 1000), completed_at: new Date().toISOString() })
+          .set({ status: 'failed', error_message: lastError.slice(0, 1000), completed_at: new Date().toISOString() })
           .where('id', '=', taskId).execute()
 
         await trx.updateTable('task_batches')
@@ -248,7 +319,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           type: 'refund',
           task_id: taskId,
           batch_id: batchId,
-          description: `Video generation failed to submit: ${errMsg.slice(0, 200)}`,
+          description: `Video generation failed to submit: ${lastError.slice(0, 200)}`,
         }).execute()
       })
 
