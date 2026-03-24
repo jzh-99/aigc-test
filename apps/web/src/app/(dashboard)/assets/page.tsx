@@ -50,9 +50,10 @@ interface AssetCardProps {
   onEnlarge: (asset: AssetItem) => void
   onDelete: (id: string) => void
   onReuse: (asset: AssetItem) => void
+  isReusing?: boolean
 }
 
-function AssetCard({ asset, onEnlarge, onDelete, onReuse }: AssetCardProps) {
+function AssetCard({ asset, onEnlarge, onDelete, onReuse, isReusing }: AssetCardProps) {
   const url = asset.storage_url ?? asset.original_url
   if (!url) return null
   const thumbUrl = asset.thumbnail_url ?? url
@@ -98,8 +99,13 @@ function AssetCard({ asset, onEnlarge, onDelete, onReuse }: AssetCardProps) {
               className="h-7 w-7 bg-black/50 hover:bg-black/70 text-white border-0"
               onClick={(e) => { e.stopPropagation(); onReuse(asset) }}
               title="复用"
+              disabled={isReusing}
             >
-              <RotateCcw className="h-3.5 w-3.5" />
+              {isReusing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" />
+              )}
             </Button>
             <Button
               size="icon"
@@ -133,6 +139,7 @@ export default function AssetsPage() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [videoDialogAsset, setVideoDialogAsset] = useState<AssetItem | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [reusingId, setReusingId] = useState<string | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const { showVideoTab } = useTeamFeatures()
 
@@ -178,6 +185,7 @@ export default function AssetsPage() {
   }
 
   const handleReuse = async (asset: AssetItem) => {
+    setReusingId(asset.id)
     try {
       // Fetch full batch details to get all parameters
       const batch = await apiGet<BatchResponse>(`/batches/${asset.batch.id}`)
@@ -195,6 +203,8 @@ export default function AssetsPage() {
       toast.success('已复用提示词和参数')
     } catch (err) {
       toast.error('获取参数失败')
+    } finally {
+      setReusingId(null)
     }
   }
 
@@ -304,6 +314,7 @@ export default function AssetsPage() {
                   onEnlarge={handleEnlarge}
                   onDelete={handleDelete}
                   onReuse={handleReuse}
+                  isReusing={reusingId === asset.id}
                 />
               )
             )}
@@ -353,8 +364,13 @@ export default function AssetsPage() {
                       handleReuse(lightboxAsset)
                       setLightboxIndex(null)
                     }}
+                    disabled={reusingId === lightboxAsset.id}
                   >
-                    <RotateCcw className="h-3.5 w-3.5" />
+                    {reusingId === lightboxAsset.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    )}
                     复用
                   </Button>
                   <Button
@@ -404,8 +420,13 @@ export default function AssetsPage() {
                       handleReuse(videoDialogAsset)
                       setVideoDialogAsset(null)
                     }}
+                    disabled={reusingId === videoDialogAsset.id}
                   >
-                    <RotateCcw className="h-3.5 w-3.5" />
+                    {reusingId === videoDialogAsset.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    )}
                     复用
                   </Button>
                   <Button

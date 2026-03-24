@@ -72,7 +72,7 @@ const VIDEO_MODEL_OPTIONS = {
     { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: 10 },
   ],
   components: [
-    { value: 'veo3.1-components', label: '全能视频3.1 参考生视频', desc: '基于参考图片生成视频', credits: 15 },
+    { value: 'veo3.1-components', label: '全能视频3.1', desc: '基于参考图片生成视频', credits: 15 },
   ],
 } as const
 
@@ -155,8 +155,17 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       setVideoModel(videoParams.videoModel)
       setVideoAspectRatio(videoParams.videoAspectRatio)
       setVideoUpsample(videoParams.videoUpsample)
+      // Auto-switch to video mode when video params are applied
+      setMode('video')
     }
   }, [videoParams])
+
+  // Switch to image mode when image prompt is set and videoParams is null
+  useEffect(() => {
+    if (prompt && !videoParams) {
+      setMode('image')
+    }
+  }, [prompt, videoParams])
 
   // Process dropped / selected image files
   const handleImageFiles = useCallback(async (files: FileList | null) => {

@@ -16,14 +16,14 @@ function getImageQueue(): Queue {
   return _imageQueue
 }
 
-const TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
-const MAX_RETRIES = 3
+const TIMEOUT_MS = 6 * 60 * 1000 // 6 minutes (slightly longer than API timeout to allow completion)
+const MAX_RETRIES = 0 // Disabled: no retries, fail immediately on timeout
 
 export async function runTimeoutGuardian(): Promise<void> {
   const db = getDb()
   const cutoff = new Date(Date.now() - TIMEOUT_MS).toISOString()
 
-  // Find stuck tasks: pending or processing for >5 minutes
+  // Find stuck tasks: pending or processing for >6 minutes
   const stuckTasks = await db
     .selectFrom('tasks')
     .innerJoin('task_batches', 'task_batches.id', 'tasks.batch_id')
@@ -94,48 +94,12 @@ export async function runTimeoutGuardian(): Promise<void> {
       estimatedCredits: task.estimated_credits,
     }
 
-    if (task.retry_count < MAX_RETRIES) {
-      // #11: Optimistic lock — only update if still in expected status
-      const result = await db
-        .updateTable('tasks')
-        .set({
-          status: 'pending',
-          retry_count: sql`retry_count + 1`,
-          processing_started_at: null,
-          queue_job_id: null,
-        })
-        .where('id', '=', task.taskId)
-        .where('status', '=', task.status as any)
-        .execute()
-
-      // If no rows updated, task status changed concurrently — skip
-      if (Number((result as any)[0]?.numUpdatedRows ?? (result as any).numUpdatedRows ?? 1) === 0) {
-        logger.info({ taskId: task.taskId }, 'Task status changed concurrently, skipping retry')
-        continue
-      }
-
-      logger.info({ taskId: task.taskId, retry: task.retry_count + 1 }, 'Retrying stuck task')
-
-      // Remove old BullMQ job if exists
-      if (task.queue_job_id) {
-        try {
-          const oldJob = await getImageQueue().getJob(task.queue_job_id)
-          if (oldJob) await oldJob.remove()
-        } catch {
-          // Ignore removal errors
-        }
-      }
-
-      // Re-enqueue
-      await getImageQueue().add('generate', jobData)
-    } else {
-      // Max retries exceeded — fail (with error handling to prevent credit leaks)
-      logger.warn({ taskId: task.taskId, retries: task.retry_count }, 'Task exceeded max retries, failing')
-      try {
-        await failPipeline(jobData, `Task timed out after ${MAX_RETRIES} retries`)
-      } catch (err) {
-        logger.error({ taskId: task.taskId, error: err }, 'failPipeline threw during timeout handling — credits may be frozen')
-      }
+    // No retry: directly fail stuck tasks and refund credits
+    logger.warn({ taskId: task.taskId }, 'Task timed out, failing immediately (no retry)')
+    try {
+      await failPipeline(jobData, 'Task timed out')
+    } catch (err) {
+      logger.error({ taskId: task.taskId, error: err }, 'failPipeline threw during timeout handling — credits may be frozen')
     }
   }
 }
