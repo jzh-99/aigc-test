@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { User, Loader2, RotateCcw, Check, Video, Play } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
@@ -24,6 +25,7 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
 }
 
 export function BatchListCard({ batch, onClick }: BatchListCardProps) {
+  const router = useRouter()
   const applyBatch = useGenerationStore((s) => s.applyBatch)
   const [applied, setApplied] = useState(false)
   const status = statusConfig[batch.status] ?? statusConfig.pending
@@ -32,6 +34,15 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
     e.stopPropagation()
     applyBatch(batch)
     setApplied(true)
+
+    // Auto-navigate to appropriate generation page
+    const isVideo = (batch as any).module === 'video'
+    if (isVideo) {
+      router.push('/image?mode=video')
+    } else {
+      router.push('/image')
+    }
+
     setTimeout(() => setApplied(false), 1500)
   }
 
