@@ -103,7 +103,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const newHash = await bcrypt.hash(new_password, 12)
     await db
       .updateTable('users')
-      .set({ password_hash: newHash })
+      .set({ password_hash: newHash, password_change_required: false })
       .where('id', '=', user.id)
       .execute()
 

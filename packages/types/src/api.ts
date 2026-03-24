@@ -85,6 +85,7 @@ export interface UserProfile {
   username: string
   avatar_url: string | null
   role: 'admin' | 'member'
+  password_change_required: boolean
   teams: UserTeam[]
 }
 

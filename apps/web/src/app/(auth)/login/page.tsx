@@ -33,7 +33,13 @@ export default function LoginPage() {
       const res = await apiPost<AuthResponse>('/auth/login', { identifier, password } satisfies LoginRequest)
       resetGeneration()
       setAuth(res.user, res.access_token)
-      router.replace('/')
+
+      // Check if password change is required
+      if (res.user.password_change_required) {
+        router.replace('/settings?tab=security&change_password=true')
+      } else {
+        router.replace('/')
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'ACCOUNT_SUSPENDED') {

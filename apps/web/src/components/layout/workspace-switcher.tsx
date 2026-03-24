@@ -52,7 +52,7 @@ export function WorkspaceSwitcher({ collapsed }: WorkspaceSwitcherProps) {
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-2" align="start">
+      <PopoverContent className="w-56 p-2 max-h-[400px] overflow-y-auto" align="start">
         {user.teams.map((team) => (
           <div key={team.id} className="mb-2 last:mb-0">
             <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-muted-foreground">
