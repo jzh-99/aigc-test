@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -142,10 +142,21 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     setAspectRatio,
     referenceImages,
     addReferenceImage,
-    isGenerating
+    isGenerating,
+    videoParams
   } = useGenerationStore()
 
   const clearReferenceImages = useGenerationStore((s) => s.clearReferenceImages)
+
+  // Apply video parameters from store when they change
+  useEffect(() => {
+    if (videoParams) {
+      setVideoPrompt(videoParams.videoPrompt)
+      setVideoModel(videoParams.videoModel)
+      setVideoAspectRatio(videoParams.videoAspectRatio)
+      setVideoUpsample(videoParams.videoUpsample)
+    }
+  }, [videoParams])
 
   // Process dropped / selected image files
   const handleImageFiles = useCallback(async (files: FileList | null) => {

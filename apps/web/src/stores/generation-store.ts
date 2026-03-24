@@ -17,7 +17,15 @@ const MODEL_REVERSE_MAP: Record<string, { modelType: 'gemini' | 'nano-banana-pro
   'nano-banana-2-4k': { modelType: 'nano-banana-pro', resolution: '4k' },
 }
 
+interface VideoParams {
+  videoPrompt: string
+  videoModel: string
+  videoAspectRatio: '' | '16:9' | '9:16'
+  videoUpsample: boolean
+}
+
 interface GenerationState {
+  // Image generation state
   prompt: string
   modelType: 'gemini' | 'nano-banana-pro'
   resolution: '1k' | '2k' | '4k'
@@ -26,6 +34,11 @@ interface GenerationState {
   referenceImages: ReferenceImage[]
   isGenerating: boolean
   activeBatchId: string | null
+
+  // Video generation state
+  videoParams: VideoParams | null
+
+  // Image generation actions
   setPrompt: (prompt: string) => void
   setModelType: (modelType: 'gemini' | 'nano-banana-pro') => void
   setResolution: (resolution: '1k' | '2k' | '4k') => void
@@ -36,6 +49,11 @@ interface GenerationState {
   clearReferenceImages: () => void
   setIsGenerating: (v: boolean) => void
   setActiveBatchId: (id: string | null) => void
+
+  // Video generation actions
+  setVideoParams: (params: VideoParams | null) => void
+
+  // Common actions
   applyBatch: (batch: BatchResponse) => void
   reset: () => void
 }
@@ -49,6 +67,7 @@ const defaults = {
   referenceImages: [] as ReferenceImage[],
   isGenerating: false,
   activeBatchId: null,
+  videoParams: null as VideoParams | null,
 }
 
 export const useGenerationStore = create<GenerationState>((set) => ({
@@ -65,15 +84,33 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   clearReferenceImages: () => set({ referenceImages: [] }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   setActiveBatchId: (activeBatchId) => set({ activeBatchId }),
+  setVideoParams: (videoParams) => set({ videoParams }),
   applyBatch: (batch) => {
-    const modelConfig = MODEL_REVERSE_MAP[batch.model]
-    const params = batch.params as Record<string, unknown> | null
-    set({
-      prompt: batch.prompt,
-      quantity: batch.quantity,
-      ...(modelConfig ? { modelType: modelConfig.modelType, resolution: modelConfig.resolution } : {}),
-      ...(params?.aspect_ratio ? { aspectRatio: params.aspect_ratio as string } : {}),
-    })
+    const isVideo = (batch as any).module === 'video'
+
+    if (isVideo) {
+      // Apply video parameters
+      const params = batch.params as Record<string, unknown> | null
+      set({
+        videoParams: {
+          videoPrompt: batch.prompt,
+          videoModel: batch.model,
+          videoAspectRatio: (params?.aspect_ratio as '' | '16:9' | '9:16') || '',
+          videoUpsample: (params?.enable_upsample as boolean) || false,
+        },
+      })
+    } else {
+      // Apply image parameters
+      const modelConfig = MODEL_REVERSE_MAP[batch.model]
+      const params = batch.params as Record<string, unknown> | null
+      set({
+        prompt: batch.prompt,
+        quantity: batch.quantity,
+        ...(modelConfig ? { modelType: modelConfig.modelType, resolution: modelConfig.resolution } : {}),
+        ...(params?.aspect_ratio ? { aspectRatio: params.aspect_ratio as string } : {}),
+        videoParams: null, // Clear video params when applying image batch
+      })
+    }
   },
   reset: () => set(defaults),
 }))
