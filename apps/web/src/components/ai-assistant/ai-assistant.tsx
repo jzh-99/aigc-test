@@ -8,10 +8,11 @@ import type { AiChatMessage } from '@/hooks/use-ai-chat-history'
 import { cn } from '@/lib/utils'
 import { fetchWithAuth } from '@/lib/fetch-with-auth'
 import {
-  Bot, X, Send, ImageIcon, Video, Trash2, Loader2, Upload, MessageSquare, GripVertical,
+  Bot, X, Send, ImageIcon, Video, Trash2, Loader2, Upload, MessageSquare, GripVertical, Copy, Check,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { toast } from 'sonner'
 
 type Tab = 'chat' | 'image' // | 'video'
 
@@ -35,6 +36,9 @@ export function AiAssistant() {
   const [chatImage, setChatImage] = useState<{ base64: string; type: string; preview: string; name: string } | null>(null)
   // const [chatVideo, setChatVideo] = useState<{ tempId: string; name: string } | null>(null)
   // const [chatVideoUploading, setChatVideoUploading] = useState(false)
+
+  // Copy state
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // Image tab
   const [imageFile, setImageFile] = useState<{ base64: string; type: string; preview: string; name: string } | null>(null)
@@ -472,6 +476,17 @@ export function AiAssistant() {
     clearAiChatHistory(userId)
   }
 
+  const handleCopy = useCallback(async (content: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedId(id)
+      toast.success('已复制到剪贴板')
+      setTimeout(() => setCopiedId(null), 2000)
+    } catch {
+      toast.error('复制失败')
+    }
+  }, [])
+
   return (
     <>
       {/* Floating button */}
@@ -548,7 +563,7 @@ export function AiAssistant() {
                 msg.role === 'user' ? 'justify-end pl-8' : 'justify-start pr-8'
               )}>
                 <div className={cn(
-                  'max-w-full min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words overflow-hidden',
+                  'max-w-full min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words overflow-hidden relative group',
                   msg.role === 'user'
                     ? 'gradient-accent text-white rounded-br-sm'
                     : 'bg-muted text-foreground rounded-bl-sm'
@@ -559,7 +574,24 @@ export function AiAssistant() {
                   {msg.content === '' && msg.role === 'assistant'
                     ? <Loader2 className="h-4 w-4 animate-spin opacity-50" />
                     : msg.role === 'assistant'
-                    ? <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                    ? (
+                      <>
+                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-8"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                        {msg.content && (
+                          <button
+                            onClick={() => handleCopy(msg.content, msg.id)}
+                            className="absolute bottom-2 right-2 p-1.5 rounded-md bg-background/80 hover:bg-background border border-border opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="复制"
+                          >
+                            {copiedId === msg.id ? (
+                              <Check className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
+                      </>
+                    )
                     : <span className="whitespace-pre-wrap break-words">{msg.content}</span>
                   }
                 </div>
@@ -616,8 +648,8 @@ export function AiAssistant() {
                   <Textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend() } }}
-                    placeholder="描述需求，或上传图片..."
+                    onKeyDown={(e) => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleChatSend() } }}
+                    placeholder="描述需求，或上传图片... (Shift+Enter 发送)"
                     className="min-h-[60px] max-h-[120px] resize-none text-sm"
                     disabled={loading}
                   />
