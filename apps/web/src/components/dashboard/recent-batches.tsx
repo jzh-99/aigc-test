@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { useBatches } from '@/hooks/use-batches'
 import { BatchListCard } from '@/components/history/batch-list-card'
+import { BatchDetail } from '@/components/history/batch-detail'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -10,6 +12,8 @@ import { ArrowRight } from 'lucide-react'
 export function RecentBatches() {
   const { batches, isLoadingInitial } = useBatches()
   const recent = batches.slice(0, 5)
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   if (isLoadingInitial) {
     return (
@@ -30,19 +34,34 @@ export function RecentBatches() {
   }
 
   return (
-    <div className="space-y-3">
-      {recent.map((batch) => (
-        <BatchListCard key={batch.id} batch={batch} />
-      ))}
-      {batches.length > 5 && (
-        <div className="flex justify-center">
-          <Button variant="ghost" className="gap-2" asChild>
-            <Link href="/history">
-              查看全部 <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
-      )}
-    </div>
+    <>
+      <div className="space-y-3">
+        {recent.map((batch) => (
+          <BatchListCard
+            key={batch.id}
+            batch={batch}
+            onClick={() => {
+              setSelectedBatchId(batch.id)
+              setDetailOpen(true)
+            }}
+          />
+        ))}
+        {batches.length > 5 && (
+          <div className="flex justify-center">
+            <Button variant="ghost" className="gap-2" asChild>
+              <Link href="/history">
+                查看全部 <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <BatchDetail
+        batchId={selectedBatchId}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
+    </>
   )
 }

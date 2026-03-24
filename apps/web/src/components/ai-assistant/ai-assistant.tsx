@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -8,6 +6,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { loadAiChatHistory, saveAiChatHistory, clearAiChatHistory } from '@/hooks/use-ai-chat-history'
 import type { AiChatMessage } from '@/hooks/use-ai-chat-history'
 import { cn } from '@/lib/utils'
+import { fetchWithAuth } from '@/lib/fetch-with-auth'
 import {
   Bot, X, Send, ImageIcon, Video, Trash2, Loader2, Upload, MessageSquare, GripVertical,
 } from 'lucide-react'
@@ -335,12 +334,10 @@ export function AiAssistant() {
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
     try {
-      const token = useAuthStore.getState().accessToken
-      const res = await fetch('/api/v1/ai-assistant/chat', {
+      const res = await fetchWithAuth('/api/v1/ai-assistant/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           message: message || undefined,
@@ -490,7 +487,7 @@ export function AiAssistant() {
           left: buttonPosition.x ? `${buttonPosition.x}px` : 'auto',
           right: buttonPosition.x ? 'auto' : '24px',
           top: buttonPosition.y ? `${buttonPosition.y}px` : 'auto',
-          bottom: buttonPosition.y ? 'auto' : '24px',
+          bottom: buttonPosition.y ? 'auto' : '80px',
         }}
         aria-label="AI助手"
       >
