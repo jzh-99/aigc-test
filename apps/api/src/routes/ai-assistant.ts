@@ -4,6 +4,7 @@ import { unlink, mkdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
+import rateLimit from '@fastify/rate-limit'
 
 const UPLOAD_DIR = '/tmp/ai-uploads'
 const MAX_VIDEO_AGE_MS = 15 * 60 * 1000 // 15 minutes
@@ -26,6 +27,24 @@ const SAFE_ID = /^[\w-]+\.(mp4|mov|webm|avi)$/
 
 export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
   await mkdir(UPLOAD_DIR, { recursive: true })
+
+  // AI assistant rate limit: 50 requests per hour per user (authenticated users)
+  await app.register(rateLimit, {
+    max: 50,
+    timeWindow: '1 hour',
+    keyGenerator: (request) => {
+      const userId = request.user?.id || request.ip
+      return `ai-assistant:${userId}`
+    },
+    errorResponseBuilder: (_request, context) => ({
+      statusCode: 429,
+      success: false,
+      error: {
+        code: 'RATE_LIMITED',
+        message: `AI助手使用次数已达上限（50次/小时），请 ${Math.ceil(context.ttl / 60000)} 分钟后再试`
+      },
+    }),
+  })
 
   const AI_API_URL = process.env.NANO_BANANA_API_URL ?? 'https://ai.comfly.chat'
   const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
@@ -119,6 +138,17 @@ export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const { message = '', tab, image_base64, image_type, video_temp_id, history = [] } = request.body
+      const userId = request.user?.id
+
+      // Log AI assistant usage for monitoring
+      app.log.info({
+        userId,
+        tab,
+        hasImage: !!image_base64,
+        hasVideo: !!video_temp_id,
+        messageLength: message?.length || 0,
+        historyLength: history.length,
+      }, 'AI assistant request')
 
       // Build OpenAI-compatible messages array
       const messages: any[] = [
@@ -133,7 +163,7 @@ export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
         // Image attached (any tab) — send as base64 data URI
         const defaultPrompt =
           tab === 'image'
-            ? '请详细分析这张图片的视觉元素，生成可复刻的AI绘图提示词（中英双语）。'
+            ? '我要复刻这张图片，请以JSON格式返回详细的技术规格和提示词。要求：1. 精细到像素级别，详细描述所有视觉元素（主体对象、背景环境、颜色色调、光影效果、构图布局、材质纹理、细节特征、整体氛围、艺术风格等）；2. 如果原图中出现任何文字内容，必须在提示词中准确保留原文（中文保留中文，英文保留英文，数字保留数字）；3. 只返回纯JSON对象，不要markdown代码块标记，不要任何额外说明；4. JSON结构应包含：metadata（主题、尺寸、渲染引擎、色彩模式等元数据）、typography_layer_specification（文字内容、字体样式、视觉效果、位置等排版规格）、pixel_level_visual_specs（角色/主体细节、背景场景、光照设置等像素级视觉规格）、color_palette_hex（十六进制色彩方案）、ai_generation_prompts（包含dalle_3_optimized、midjourney_v6、chinese_description等多种AI生成提示词）。'
             : message || '请分析这张图片。'
         userContent = [
           {
@@ -164,7 +194,7 @@ export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
 
       // Call Gemini via comfly (OpenAI-compatible)
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 120_000)
+      const timer = setTimeout(() => controller.abort(), 300_000) // 5 minutes
 
       let geminiRes: Response
       try {
