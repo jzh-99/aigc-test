@@ -96,10 +96,11 @@ interface FrameImage {
 interface GenerationPanelProps {
   onBatchCreated: (batch: BatchResponse) => void
   disabled?: boolean
+  initialMode?: 'image' | 'video'
 }
 
-export function GenerationPanel({ onBatchCreated, disabled }: GenerationPanelProps) {
-  const [mode, setMode] = useState<'image' | 'video'>('image')
+export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image' }: GenerationPanelProps) {
+  const [mode, setMode] = useState<'image' | 'video'>(initialMode)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
