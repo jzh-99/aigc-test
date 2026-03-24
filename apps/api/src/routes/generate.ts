@@ -62,7 +62,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
         properties: {
           idempotency_key: { type: 'string', minLength: 1, maxLength: 128 },
           model: { type: 'string', minLength: 1, maxLength: 100 },
-          prompt: { type: 'string', minLength: 1, maxLength: 4000 },
+          prompt: { type: 'string', minLength: 1, maxLength: 15000 },
           quantity: { type: 'integer', minimum: 1, maximum: 5, default: 1 },
           workspace_id: { type: 'string', format: 'uuid' },
           params: { type: 'object', default: {} },

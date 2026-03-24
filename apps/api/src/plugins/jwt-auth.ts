@@ -10,7 +10,7 @@ const PUBLIC_ROUTES = [
   '/api/v1/auth/accept-invite',
   '/api/v1/assets/proxy',
   '/api/v1/assets/thumbnail',
-  '/api/v1/ai-assistant/uploads/', // temp video files served to Gemini
+  '/api/v1/ai-assistant/uploads/', // temp video files served to Gemini (public for API access)
 ]
 
 export interface AuthUser {
@@ -47,10 +47,15 @@ export const jwtAuthPlugin = fp(async function jwtAuth(app: FastifyInstance): Pr
       const token = authHeader.slice(7)
       const payload = jwt.verify(token, secret) as { sub: string; email: string; role: string }
       request.user = { id: payload.sub, email: payload.email, role: payload.role as 'admin' | 'member' }
-    } catch {
+    } catch (err) {
+      // Distinguish between expired and invalid tokens for better client-side handling
+      const isExpired = err instanceof jwt.TokenExpiredError
       return reply.status(401).send({
         success: false,
-        error: { code: 'TOKEN_INVALID', message: 'Invalid or expired access token' },
+        error: {
+          code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
+          message: isExpired ? 'Access token expired' : 'Invalid or expired access token',
+        },
       })
     }
   })

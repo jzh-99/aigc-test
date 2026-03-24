@@ -75,14 +75,15 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     const isGemini = model.startsWith('gemini-3.1-flash-image-preview')
     const useEdits = !isGemini && imageUrls !== null
 
-    const maxRetries = 0
+    const maxRetries = 1 // Retry once on fast API errors (not timeout)
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const result = useEdits
         ? await this.callEdits(model, prompt, extraParams, imageUrls!)
         : await this.callGenerations(model, prompt, extraParams, imageUrls)
 
       if (!result.success && attempt < maxRetries && this.isRetryable(result.errorMessage)) {
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)))
+        console.log(`[nano-banana] Retrying after fast API error (attempt ${attempt + 1}/${maxRetries}): ${result.errorMessage}`)
+        await new Promise((r) => setTimeout(r, 2000)) // 2 second delay before retry
         continue
       }
 
@@ -107,7 +108,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 180_000)
+    const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
     try {
       const res = await fetch(`${this.apiUrl}/v1/images/generations`, {
         method: 'POST',
@@ -178,7 +179,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 180_000)
+    const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
     try {
       const res = await fetch(`${this.apiUrl}/v1/images/edits`, {
         method: 'POST',
@@ -208,9 +209,21 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
 
   private isRetryable(errorMessage?: string): boolean {
     if (!errorMessage) return false
-    // Only retry on timeout / network failures (no HTTP response received).
-    // If the API returned any error response (4xx, 5xx), fail immediately
-    // so the caller sees the full error details without waiting for more attempts.
-    return !errorMessage.startsWith('API ')
+
+    // Do NOT retry on timeout errors (AbortError)
+    if (errorMessage.includes('aborted') || errorMessage.includes('timeout')) {
+      return false
+    }
+
+    // Retry on fast API errors (connection refused, network errors, DNS failures)
+    // but NOT on HTTP error responses (4xx, 5xx) which indicate API-level issues
+    const isHttpError = errorMessage.startsWith('API ')
+    const isNetworkError = errorMessage.includes('fetch failed') ||
+                          errorMessage.includes('ECONNREFUSED') ||
+                          errorMessage.includes('ENOTFOUND') ||
+                          errorMessage.includes('ETIMEDOUT') ||
+                          errorMessage.includes('ECONNRESET')
+
+    return !isHttpError && isNetworkError
   }
 }
