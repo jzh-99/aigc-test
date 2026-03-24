@@ -1,15 +1,19 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
-import { Loader2, Download, Trash2, ImageIcon, VideoIcon, CalendarSearch, X, Play } from 'lucide-react'
+import { Loader2, Download, Trash2, ImageIcon, VideoIcon, CalendarSearch, X, Play, RotateCcw } from 'lucide-react'
 import { useAssets, deleteAsset } from '@/hooks/use-assets'
 import type { AssetItem } from '@/hooks/use-assets'
 import { useTeamFeatures } from '@/hooks/use-team-features'
+import { useGenerationStore } from '@/stores/generation-store'
+import { apiGet } from '@/lib/api-client'
+import type { BatchResponse } from '@aigc/types'
 import { downloadImage } from '@/lib/download'
 import { toast } from 'sonner'
 import {
@@ -45,9 +49,10 @@ interface AssetCardProps {
   asset: AssetItem
   onEnlarge: (asset: AssetItem) => void
   onDelete: (id: string) => void
+  onReuse: (asset: AssetItem) => void
 }
 
-function AssetCard({ asset, onEnlarge, onDelete }: AssetCardProps) {
+function AssetCard({ asset, onEnlarge, onDelete, onReuse }: AssetCardProps) {
   const url = asset.storage_url ?? asset.original_url
   if (!url) return null
   const thumbUrl = asset.thumbnail_url ?? url
@@ -91,6 +96,15 @@ function AssetCard({ asset, onEnlarge, onDelete }: AssetCardProps) {
               size="icon"
               variant="ghost"
               className="h-7 w-7 bg-black/50 hover:bg-black/70 text-white border-0"
+              onClick={(e) => { e.stopPropagation(); onReuse(asset) }}
+              title="复用"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 bg-black/50 hover:bg-black/70 text-white border-0"
               onClick={(e) => { e.stopPropagation(); downloadImage(url, isVideo ? 'video' : 'image') }}
             >
               <Download className="h-3.5 w-3.5" />
@@ -111,6 +125,8 @@ function AssetCard({ asset, onEnlarge, onDelete }: AssetCardProps) {
 }
 
 export default function AssetsPage() {
+  const router = useRouter()
+  const applyBatch = useGenerationStore((s) => s.applyBatch)
   const [assetType, setAssetType] = useState<'image' | 'video'>('image')
   const [dateFilter, setDateFilter] = useState('')
   const { assets, isLoadingInitial, isLoadingMore, hasMore, loadMore, error, mutate } = useAssets(assetType, dateFilter || undefined)
@@ -159,6 +175,27 @@ export default function AssetsPage() {
     }
     const idx = viewableAssets.findIndex((a) => a.id === asset.id)
     if (idx !== -1) setLightboxIndex(idx)
+  }
+
+  const handleReuse = async (asset: AssetItem) => {
+    try {
+      // Fetch full batch details to get all parameters
+      const batch = await apiGet<BatchResponse>(`/batches/${asset.batch.id}`)
+
+      // Apply batch parameters to generation store
+      applyBatch(batch)
+
+      // Navigate to appropriate generation page
+      if (asset.type === 'video') {
+        router.push('/image?mode=video')
+      } else {
+        router.push('/image')
+      }
+
+      toast.success('已复用提示词和参数')
+    } catch (err) {
+      toast.error('获取参数失败')
+    }
   }
 
   const grouped = groupByDate(assets)
@@ -266,6 +303,7 @@ export default function AssetsPage() {
                   asset={asset}
                   onEnlarge={handleEnlarge}
                   onDelete={handleDelete}
+                  onReuse={handleReuse}
                 />
               )
             )}
@@ -306,10 +344,29 @@ export default function AssetsPage() {
                     {viewableAssets.length > 1 && ` · ${lightboxIndex! + 1} / ${viewableAssets.length}`}
                   </p>
                 </div>
-                <Button size="sm" variant="ghost" className="shrink-0 gap-1.5 text-white hover:bg-white/10 hover:text-white" onClick={() => downloadImage(url!)}>
-                  <Download className="h-3.5 w-3.5" />
-                  下载
-                </Button>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
+                    onClick={() => {
+                      handleReuse(lightboxAsset)
+                      setLightboxIndex(null)
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    复用
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
+                    onClick={() => downloadImage(url!)}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    下载
+                  </Button>
+                </div>
               </div>
             }
           />
@@ -338,10 +395,29 @@ export default function AssetsPage() {
                     {new Date(videoDialogAsset.created_at).toLocaleString('zh-CN')}
                   </p>
                 </div>
-                <Button size="sm" variant="ghost" className="shrink-0 gap-1.5 text-white hover:bg-white/10 hover:text-white" onClick={() => downloadImage(url!, 'video')}>
-                  <Download className="h-3.5 w-3.5" />
-                  下载
-                </Button>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
+                    onClick={() => {
+                      handleReuse(videoDialogAsset)
+                      setVideoDialogAsset(null)
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    复用
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
+                    onClick={() => downloadImage(url!, 'video')}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    下载
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>

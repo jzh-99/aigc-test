@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +35,8 @@ function isTerminalStatus(status: string) {
 }
 
 export default function ImagePage() {
+  const searchParams = useSearchParams()
+  const initialMode = searchParams.get('mode') === 'video' ? 'video' : 'image'
   const batchListRef = useRef<BatchListHandle>(null)
 
   const [activeBatchCount, setActiveBatchCount] = useState(0)
@@ -181,7 +184,7 @@ export default function ImagePage() {
         )}
 
         <div className="flex-1 flex flex-col min-h-0">
-          <GenerationPanel onBatchCreated={handleBatchCreated} disabled={noWorkspace} />
+          <GenerationPanel onBatchCreated={handleBatchCreated} disabled={noWorkspace} initialMode={initialMode} />
         </div>
       </div>
 
