@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { apiPost, ApiError } from '@/lib/api-client'
@@ -56,56 +56,103 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="border-border">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">AIGC 创作平台</CardTitle>
-        <CardDescription>登录您的账户</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {suspended && (
-          <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
-            <p className="font-medium text-destructive">账户已停用</p>
-            <p className="mt-1 text-muted-foreground">
-              您已被移出所有团队，账户已自动停用。请联系团队管理员重新发送邀请链接以恢复使用。
+    <div className="w-full max-w-md">
+      {/* Logo and Toby.AI 企业版 - 在卡片外部 */}
+      <div className="flex items-center justify-center gap-3 mb-8">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl gradient-accent shrink-0 shadow-lg">
+          <svg viewBox="0 0 20 20" className="h-6 w-6" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* T crossbar */}
+            <rect x="2" y="2.5" width="16" height="4" rx="1.5" fill="white"/>
+            {/* T stem */}
+            <rect x="7.5" y="6" width="5" height="11.5" rx="1.5" fill="white"/>
+            {/* AI dot */}
+            <circle cx="17" cy="15.5" r="1.5" fill="rgba(255,255,255,0.7)"/>
+          </svg>
+        </div>
+        <h1 className="font-bold text-3xl gradient-accent-text tracking-tight drop-shadow-sm">
+          Toby.AI 企业版
+        </h1>
+      </div>
+
+      {/* Login Card - 包含 AIGC 创作平台和表单 */}
+      <Card className="border-border shadow-xl">
+        <CardContent className="pt-8 pb-6 px-8">
+          {/* AIGC 创作平台标题 */}
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold text-foreground tracking-wide mb-2">
+              AIGC 创作平台
+            </h2>
+            <p className="text-sm text-muted-foreground">登录您的账户</p>
+          </div>
+
+          {suspended && (
+            <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-sm">
+              <p className="font-semibold text-destructive mb-1">账户已停用</p>
+              <p className="text-muted-foreground leading-relaxed">
+                您已被移出所有团队，账户已自动停用。请联系团队管理员重新发送邀请链接以恢复使用。
+              </p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="identifier" className="text-sm font-medium">
+                邮箱 / 手机号
+              </Label>
+              <Input
+                id="identifier"
+                type="text"
+                placeholder="请输入邮箱或手机号"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                required
+                autoFocus
+                className="h-11"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium">
+                密码
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="请输入密码"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="h-11"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-11 text-base font-medium"
+              variant="gradient"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  登录中...
+                </>
+              ) : (
+                '登录'
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              收到邀请？
+              <Link href="/accept-invite" className="ml-1 text-accent-blue hover:underline font-medium">
+                接受邀请
+              </Link>
             </p>
           </div>
-        )}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="identifier">邮箱 / 手机号</Label>
-            <Input
-              id="identifier"
-              type="text"
-              placeholder="输入邮箱或手机号"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              required
-              autoFocus
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">密码</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit" className="w-full" variant="gradient" disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            登录
-          </Button>
-        </form>
-        <div className="mt-4 text-center text-sm text-muted-foreground">
-          收到邀请？{' '}
-          <Link href="/accept-invite" className="text-accent-blue hover:underline">
-            接受邀请
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
