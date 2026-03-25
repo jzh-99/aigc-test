@@ -85,6 +85,7 @@ export interface TeamMembersTable {
   credit_used: Generated<number>
   quota_period: 'weekly' | 'monthly' | null
   quota_reset_at: Timestamp | null
+  priority_boost: Generated<boolean>
 }
 
 export interface TeamSubscriptionsTable {

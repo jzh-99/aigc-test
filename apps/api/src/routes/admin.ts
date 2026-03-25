@@ -996,13 +996,15 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Get team names per user
+    // Get team names, team_id, and priority_boost per user
     const teamMap = new Map<string, string[]>()
+    const teamIdMap = new Map<string, string>()
+    const priorityBoostMap = new Map<string, boolean>()
     if (userIds.length > 0) {
       const teamRows = await db
         .selectFrom('team_members')
         .innerJoin('teams', 'teams.id', 'team_members.team_id')
-        .select(['team_members.user_id', 'teams.name'])
+        .select(['team_members.user_id', 'team_members.team_id', 'team_members.priority_boost', 'teams.name'])
         .where('team_members.user_id', 'in', userIds)
         .where('teams.is_deleted', '=', false)
         .execute()
@@ -1010,6 +1012,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         const list = teamMap.get(r.user_id) ?? []
         list.push(r.name)
         teamMap.set(r.user_id, list)
+        // Store first team_id and priority_boost (most users belong to one team)
+        if (!teamIdMap.has(r.user_id)) {
+          teamIdMap.set(r.user_id, r.team_id)
+          priorityBoostMap.set(r.user_id, r.priority_boost ?? false)
+        }
       }
     }
 
@@ -1020,6 +1027,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         credit_quota: creditUsageMap.get(u.id)?.total_quota ?? null,
         lifetime_used: lifetimeUsageMap.get(u.id) ?? 0,
         teams: teamMap.get(u.id) ?? [],
+        team_id: teamIdMap.get(u.id) ?? null,
+        priority_boost: priorityBoostMap.get(u.id) ?? false,
       })),
     }
   })

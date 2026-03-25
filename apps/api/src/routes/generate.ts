@@ -146,7 +146,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
     // Ensure user is a team member (required for credit tracking)
     const teamMember = await db
       .selectFrom('team_members')
-      .select('user_id')
+      .select(['user_id', 'priority_boost'])
       .where('team_id', '=', teamId)
       .where('user_id', '=', userId)
       .executeTakeFirst()
@@ -157,6 +157,10 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
         error: { code: 'FORBIDDEN', message: '必须是团队成员才能生成图片' },
       })
     }
+
+    // Priority: admin or priority_boost users get highest priority (1), others get default (10)
+    const isHighPriority = request.user.role === 'admin' || teamMember.priority_boost === true
+    const jobPriority = isHighPriority ? 1 : 10
 
     // Idempotency check
     const existing = await db
@@ -318,7 +322,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
           prompt,
           params,
           estimatedCredits: providerModel.credit_cost,
-        })
+        }, { priority: jobPriority })
       }
     } catch (err) {
       // DB or queue error after freeze — refund to prevent orphan frozen credits
