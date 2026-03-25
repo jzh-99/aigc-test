@@ -51,6 +51,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
         'users.id as user_id', 'users.account', 'users.username', 'users.avatar_url',
         'team_members.role', 'team_members.credit_quota', 'team_members.credit_used',
         'team_members.quota_period', 'team_members.quota_reset_at', 'team_members.joined_at',
+        'team_members.priority_boost',
       ])
       .where('team_members.team_id', '=', request.params.id)
       .execute()
@@ -634,12 +635,17 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // PATCH /teams/:id/members/:uid — update member role, quota, or period
-  app.patch<{ Params: { id: string; uid: string }; Body: { role?: string; credit_quota?: number | null; quota_period?: string | null } }>('/teams/:id/members/:uid', {
+  app.patch<{ Params: { id: string; uid: string }; Body: { role?: string; credit_quota?: number | null; quota_period?: string | null; priority_boost?: boolean } }>('/teams/:id/members/:uid', {
     preHandler: teamRoleGuard('owner'),
   }, async (request, reply) => {
-    const { role, credit_quota, quota_period } = request.body ?? {}
-    if (role === undefined && credit_quota === undefined && quota_period === undefined) {
-      return reply.badRequest('At least one field (role, credit_quota, quota_period) is required')
+    const { role, credit_quota, quota_period, priority_boost } = request.body ?? {}
+    if (role === undefined && credit_quota === undefined && quota_period === undefined && priority_boost === undefined) {
+      return reply.badRequest('At least one field (role, credit_quota, quota_period, priority_boost) is required')
+    }
+
+    // Only global admin can set priority_boost
+    if (priority_boost !== undefined && request.user.role !== 'admin') {
+      return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '只有管理员可以设置优先特权' } })
     }
 
     if (quota_period !== undefined && quota_period !== null && quota_period !== 'weekly' && quota_period !== 'monthly') {
@@ -650,6 +656,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     const updates: Record<string, unknown> = {}
     if (role !== undefined) updates.role = role
     if (credit_quota !== undefined) updates.credit_quota = credit_quota
+    if (priority_boost !== undefined) updates.priority_boost = priority_boost
     if (quota_period !== undefined) {
       updates.quota_period = quota_period
       if (quota_period) {
