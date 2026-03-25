@@ -1,9 +1,13 @@
+import createMDX from '@next/mdx'
+import remarkGfm from 'remark-gfm'
+
 /** @type {import('next').NextConfig} */
 const apiUrl = process.env.INTERNAL_API_URL ?? 'http://localhost:7001'
 const storageHost = process.env.NEXT_PUBLIC_STORAGE_HOST ?? 'localhost'
 const storagePort = process.env.NEXT_PUBLIC_STORAGE_PORT ?? '9000'
 
 const nextConfig = {
+  pageExtensions: ['ts', 'tsx', 'md', 'mdx'],
   transpilePackages: ['@aigc/types'],
   async rewrites() {
     return [
@@ -41,4 +45,8 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+export default createMDX({
+  options: {
+    remarkPlugins: [remarkGfm],
+  },
+})(nextConfig)
