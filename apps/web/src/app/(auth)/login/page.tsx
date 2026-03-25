@@ -143,11 +143,16 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-2">
             <p className="text-sm text-muted-foreground">
               收到邀请？
               <Link href="/accept-invite" className="ml-1 text-accent-blue hover:underline font-medium">
                 接受邀请
+              </Link>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              <Link href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">
+                查看使用手册 →
               </Link>
             </p>
           </div>

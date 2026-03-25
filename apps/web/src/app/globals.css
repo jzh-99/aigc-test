@@ -62,6 +62,202 @@
   background-clip: text;
 }
 
+/* ─── Docs content styles ─────────────────────────────────────────── */
+
+.docs-content {
+  color: #3D3450;
+  font-size: 15px;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
+}
+
+/* H1 — page title */
+.docs-content h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #2D2440;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #EDE5F5;
+}
+
+/* H2 — section heading */
+.docs-content h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #2D2440;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid #C89BEC;
+}
+
+/* H3 — sub-section */
+.docs-content h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2D2440;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Paragraph */
+.docs-content p {
+  margin-top: 0;
+  margin-bottom: 0.9rem;
+  color: #4A4060;
+  line-height: 1.8;
+}
+
+/* Strong */
+.docs-content strong {
+  font-weight: 600;
+  color: #2D2440;
+}
+
+/* Links */
+.docs-content a {
+  color: #6BA3F5;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(107, 163, 245, 0.3);
+  transition: border-color 0.15s;
+}
+.docs-content a:hover {
+  border-bottom-color: #6BA3F5;
+}
+
+/* HR divider */
+.docs-content hr {
+  border: none;
+  border-top: 1px solid #EDE5F5;
+  margin: 2rem 0;
+}
+
+/* Blockquote — used as callout/note */
+.docs-content blockquote {
+  margin: 1.25rem 0;
+  padding: 0.875rem 1.125rem;
+  background: linear-gradient(135deg, rgba(245,169,98,0.06), rgba(200,155,236,0.06), rgba(107,163,245,0.06));
+  border-left: 3px solid #C89BEC;
+  border-radius: 0 8px 8px 0;
+  color: #4A4060;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.docs-content blockquote p {
+  margin: 0;
+  color: #4A4060;
+}
+
+/* Inline code */
+.docs-content code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Menlo', monospace;
+  font-size: 0.82em;
+  background: rgba(200, 155, 236, 0.1);
+  color: #C89BEC;
+  padding: 0.15em 0.45em;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 155, 236, 0.2);
+}
+
+/* Code block */
+.docs-content pre {
+  background: #F7F4FC;
+  border: 1px solid #EDE5F5;
+  border-radius: 10px;
+  padding: 1.125rem 1.25rem;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  line-height: 1.65;
+}
+.docs-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #4A4060;
+  font-size: 0.85rem;
+}
+
+/* Lists */
+.docs-content ul,
+.docs-content ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0 1rem;
+}
+.docs-content li {
+  margin-bottom: 0.35rem;
+  color: #4A4060;
+  line-height: 1.75;
+}
+.docs-content ul li::marker {
+  color: #C89BEC;
+}
+.docs-content ol li::marker {
+  color: #6BA3F5;
+  font-weight: 600;
+}
+
+/* Nested list */
+.docs-content li > ul,
+.docs-content li > ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Images */
+.docs-content img {
+  max-width: 100%;
+  display: block;
+  border-radius: 10px;
+  border: 1.5px solid #C4B8DC;
+  margin: 1.5rem 0;
+  box-shadow: 0 2px 8px rgba(45, 36, 64, 0.08), 0 8px 28px rgba(45, 36, 64, 0.12);
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* Table */
+.docs-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.9rem;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #EDE5F5;
+}
+.docs-content thead {
+  background: linear-gradient(135deg, rgba(245,169,98,0.08), rgba(200,155,236,0.08), rgba(107,163,245,0.08));
+}
+.docs-content th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #2D2440;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #EDE5F5;
+}
+.docs-content td {
+  padding: 0.7rem 1rem;
+  color: #4A4060;
+  border-bottom: 1px solid #F3EEF9;
+  vertical-align: top;
+  line-height: 1.6;
+}
+.docs-content tr:last-child td {
+  border-bottom: none;
+}
+.docs-content tbody tr:hover {
+  background: rgba(200, 155, 236, 0.04);
+}
+
+/* ─── Scrollbar styling ─────────────────────────────────────────────── */
 /* Scrollbar styling */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
