@@ -114,20 +114,20 @@ export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
           type: 'object',
           required: ['tab'],
           properties: {
-            message: { type: 'string', maxLength: 2000 },
+            message: { type: 'string', maxLength: 4000 },
             tab: { type: 'string', enum: ['chat', 'image', 'video'] },
             image_base64: { type: ['string', 'null'], maxLength: 20_000_000 },
             image_type: { type: ['string', 'null'], maxLength: 100 },
             video_temp_id: { type: ['string', 'null'], maxLength: 200 },
             history: {
               type: 'array',
-              maxItems: 20,
+              maxItems: 6,
               items: {
                 type: 'object',
                 required: ['role', 'content'],
                 properties: {
                   role: { type: 'string', enum: ['user', 'assistant'] },
-                  content: { type: 'string', maxLength: 4000 },
+                  content: { type: 'string', maxLength: 12000 },
                 },
               },
             },

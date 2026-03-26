@@ -31,7 +31,11 @@ function isTokenExpiringSoon(token: string): boolean {
  */
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const getToken = () => useAuthStore.getState().accessToken
-  const setAccessToken = (token: string) => useAuthStore.getState().setAuth(useAuthStore.getState().user!, token)
+  const setAccessToken = (token: string) => {
+    const { user, activeTeamId, activeWorkspaceId } = useAuthStore.getState()
+    if (!user) return
+    useAuthStore.setState({ accessToken: token, activeTeamId, activeWorkspaceId })
+  }
   const logout = () => {
     useAuthStore.getState().clearAuth()
     window.location.href = '/login'

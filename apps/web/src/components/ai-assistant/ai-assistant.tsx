@@ -331,11 +331,11 @@ export function AiAssistant() {
     setMessages((prev) => [...prev, userMsg, assistantMsg])
     setLoading(true)
 
-    // Build history (text only, last 10)
+    // Build history (text only, last 6 messages, content truncated to 12000 chars)
     const history = messages
       .filter((m) => !m.mediaLabel || m.role === 'assistant')
-      .slice(-10)
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+      .slice(-6)
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 12000) }))
 
     try {
       const res = await fetchWithAuth('/api/v1/ai-assistant/chat', {
@@ -576,7 +576,7 @@ export function AiAssistant() {
                     : msg.role === 'assistant'
                     ? (
                       <>
-                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-8"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-8 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
                         {msg.content && (
                           <button
                             onClick={() => handleCopy(msg.content, msg.id)}

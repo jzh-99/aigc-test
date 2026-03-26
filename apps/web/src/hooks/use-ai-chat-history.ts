@@ -9,7 +9,7 @@ export interface AiChatMessage {
   timestamp: number
 }
 
-const MAX_PERSISTED = 30
+const MAX_PERSISTED = 10
 
 function storageKey(userId: string) {
   return `toby-ai-chat:${userId}`
