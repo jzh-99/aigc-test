@@ -20,6 +20,9 @@ export function AppShell({ children, title }: AppShellProps) {
           <main className="flex-1 overflow-y-auto bg-[hsl(var(--surface-warm))] p-4 md:p-6">
             {children}
           </main>
+          <div className="shrink-0 border-t px-4 py-1.5 text-center text-[11px] text-muted-foreground/60 bg-[hsl(var(--surface-warm))]">
+            所有创作内容均由 AI 生成，可能存在不准确之处，请自行甄别其真实性
+          </div>
         </div>
       </div>
       <AiAssistant />

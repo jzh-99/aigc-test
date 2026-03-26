@@ -32,6 +32,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'nano-banana-2-2k':                  '全能图片Pro 2K',
   'nano-banana-2-4k':                  '全能图片Pro 4K',
   'veo3.1-fast':                       '全能视频3.1 Fast',
+  'veo3.1-components':                 '全能视频3.1',
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
@@ -178,10 +179,10 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
               return (
                 <div key={task.id} className="flex h-20 items-center justify-center rounded-lg border bg-muted text-xs text-muted-foreground">
                   {task.status === 'failed' ? (
-                    <div className="text-center px-2">
-                      <p>失败</p>
+                    <div className="text-center px-3">
+                      <p className="font-medium text-destructive">生成失败</p>
                       {task.error_message && (
-                        <p className="mt-1 line-clamp-2 text-[10px]">{translateTaskError(task.error_message)}</p>
+                        <p className="mt-1 line-clamp-3 text-xs text-destructive/80">{translateTaskError(task.error_message)}</p>
                       )}
                     </div>
                   ) : task.status === 'processing' ? '视频生成中...' : '等待中'}
@@ -230,10 +231,10 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
               return (
                 <div key={task.id} className="flex aspect-square items-center justify-center rounded-lg border bg-muted text-xs text-muted-foreground">
                   {task.status === 'failed' ? (
-                    <div className="text-center px-2">
-                      <p>失败</p>
+                    <div className="text-center px-3">
+                      <p className="font-medium text-destructive">生成失败</p>
                       {task.error_message && (
-                        <p className="mt-1 line-clamp-2 text-[10px]">{translateTaskError(task.error_message)}</p>
+                        <p className="mt-1 line-clamp-3 text-xs text-destructive/80">{translateTaskError(task.error_message)}</p>
                       )}
                     </div>
                   ) : task.status === 'processing' ? '生成中' : '等待中'}

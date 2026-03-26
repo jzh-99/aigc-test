@@ -36,6 +36,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
   // GET /teams/:id — team info + members + credit balance
   app.get<{ Params: { id: string } }>('/teams/:id', {
     preHandler: teamRoleGuard('editor'),
+    config: { rateLimit: false },
   }, async (request) => {
     const db = getDb()
     const team = await db
@@ -637,6 +638,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
   // PATCH /teams/:id/members/:uid — update member role, quota, or period
   app.patch<{ Params: { id: string; uid: string }; Body: { role?: string; credit_quota?: number | null; quota_period?: string | null; priority_boost?: boolean } }>('/teams/:id/members/:uid', {
     preHandler: teamRoleGuard('owner'),
+    config: { rateLimit: false },
   }, async (request, reply) => {
     const { role, credit_quota, quota_period, priority_boost } = request.body ?? {}
     if (role === undefined && credit_quota === undefined && quota_period === undefined && priority_boost === undefined) {
@@ -685,6 +687,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
   // POST /teams/:id/members/:uid/reset-credits — manually reset member credit_used to 0
   app.post<{ Params: { id: string; uid: string } }>('/teams/:id/members/:uid/reset-credits', {
     preHandler: teamRoleGuard('owner'),
+    config: { rateLimit: false },
   }, async (request, reply) => {
     const db = getDb()
 
@@ -722,6 +725,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /teams/:id/members/:uid — remove member
   app.delete<{ Params: { id: string; uid: string } }>('/teams/:id/members/:uid', {
     preHandler: teamRoleGuard('owner'),
+    config: { rateLimit: false },
   }, async (request, reply) => {
     const db = getDb()
 
@@ -805,6 +809,57 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return { success: true }
+  })
+
+  // PATCH /teams/:id/members/batch-quota — bulk update quota & period for multiple members
+  app.patch<{
+    Params: { id: string }
+    Body: { user_ids: string[]; credit_quota?: number | null; quota_period?: string | null }
+  }>('/teams/:id/members/batch-quota', {
+    preHandler: teamRoleGuard('owner'),
+    config: { rateLimit: false },
+    schema: {
+      body: {
+        type: 'object',
+        required: ['user_ids'],
+        properties: {
+          user_ids: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 200 },
+          credit_quota: { type: ['number', 'null'], minimum: 0, maximum: 1000000 },
+          quota_period: { type: ['string', 'null'], enum: ['weekly', 'monthly', null] },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { user_ids, credit_quota, quota_period } = request.body
+    if (credit_quota === undefined && quota_period === undefined) {
+      return reply.badRequest('At least one of credit_quota or quota_period is required')
+    }
+
+    const db = getDb()
+    const updates: Record<string, unknown> = {}
+    if (credit_quota !== undefined) updates.credit_quota = credit_quota
+    if (quota_period !== undefined) {
+      updates.quota_period = quota_period
+      if (quota_period) {
+        const now = new Date()
+        updates.quota_reset_at = quota_period === 'weekly'
+          ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
+          : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
+      } else {
+        updates.quota_reset_at = null
+      }
+    }
+
+    await db
+      .updateTable('team_members')
+      .set(updates)
+      .where('team_id', '=', request.params.id)
+      .where('user_id', 'in', user_ids)
+      .where('role', '!=', 'owner')
+      .execute()
+
+    return { success: true, updated: user_ids.length }
   })
 
   // GET /teams/:id/batches — all team generation records

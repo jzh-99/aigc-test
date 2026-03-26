@@ -7,15 +7,25 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TopupDialog } from './topup-dialog'
 import { AdminPasswordDialog } from './admin-password-dialog'
 import { TrashDrawer } from './trash-drawer'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
   Coins, ChevronDown, ChevronRight, Users, FolderOpen,
   Image as ImageIcon, Loader2, Trash2, KeyRound, Trash,
+  Edit2, RotateCcw, Check, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { apiPatch, apiDelete, ApiError } from '@/lib/api-client'
+import { apiPatch, apiPost, apiDelete, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
 
 interface Team {
@@ -265,58 +275,163 @@ function TeamExpanded({ teamId, ownerId, onPasswordChange }: { teamId: string; o
 }
 
 function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordChange: (uid: string) => void }) {
-  const { data, error } = useSWR<{ data: TeamMember[] }>(`/admin/teams/${teamId}/members`)
+  const { data, error, mutate } = useSWR<{ data: TeamMember[] }>(`/admin/teams/${teamId}/members`)
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
+  const [quotaValue, setQuotaValue] = useState('')
+  const [quotaSaving, setQuotaSaving] = useState(false)
+  const [resettingId, setResettingId] = useState<string | null>(null)
 
   if (!data && !error) return <Skeleton className="h-20 w-full mt-2" />
 
   const members = data?.data ?? []
   if (members.length === 0) return <p className="text-sm text-muted-foreground py-3">暂无成员</p>
 
+  function openEdit(m: TeamMember) {
+    setEditingMember(m)
+    setQuotaValue(m.credit_quota !== null && m.credit_quota !== undefined ? String(m.credit_quota) : '')
+  }
+
+  async function handleSaveQuota() {
+    if (!editingMember) return
+    setQuotaSaving(true)
+    try {
+      const quota = quotaValue.trim() === '' ? null : Number(quotaValue)
+      if (quotaValue.trim() !== '' && (isNaN(quota!) || quota! < 0)) {
+        toast.error('请输入有效的积分上限（正整数或留空表示无限）')
+        return
+      }
+      await apiPatch(`/admin/teams/${teamId}/members/${editingMember.id}`, { credit_quota: quota })
+      toast.success('积分上限已更新')
+      setEditingMember(null)
+      setTimeout(() => mutate(), 300)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '更新失败')
+    } finally {
+      setQuotaSaving(false)
+    }
+  }
+
+  async function handleResetUsage(m: TeamMember) {
+    if (!confirm(`确定要将「${m.username}」的用量重置为 0 吗？`)) return
+    setResettingId(m.id)
+    try {
+      await apiPost(`/admin/teams/${teamId}/members/${m.id}/reset-credits`, {})
+      toast.success(`已重置 ${m.username} 的用量`)
+      setTimeout(() => mutate(), 300)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '重置失败')
+    } finally {
+      setResettingId(null)
+    }
+  }
+
   return (
-    <table className="w-full text-xs mt-2">
-      <thead>
-        <tr className="border-b text-muted-foreground">
-          <th className="text-left py-2 px-2 font-medium">用户名</th>
-          <th className="text-left py-2 px-2 font-medium">账户</th>
-          <th className="text-left py-2 px-2 font-medium">角色</th>
-          <th className="text-right py-2 px-2 font-medium">已用积分</th>
-          <th className="text-right py-2 px-2 font-medium">配额</th>
-          <th className="text-left py-2 px-2 font-medium">加入时间</th>
-          <th className="text-right py-2 px-2 font-medium">操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        {members.map((m) => (
-          <tr key={m.id} className="border-b last:border-0">
-            <td className="py-2 px-2 font-medium">{m.username}</td>
-            <td className="py-2 px-2 text-muted-foreground">{m.account}</td>
-            <td className="py-2 px-2">
-              <Badge variant={m.role === 'owner' ? 'default' : 'outline'} className="text-[10px]">
-                {m.role === 'owner' ? '组长' : m.role === 'editor' ? '编辑' : m.role}
-              </Badge>
-            </td>
-            <td className="py-2 px-2 text-right font-medium">{(m.credit_used ?? 0).toLocaleString()}</td>
-            <td className="py-2 px-2 text-right text-muted-foreground">
-              {m.credit_quota !== null && m.credit_quota !== undefined ? m.credit_quota.toLocaleString() : '无限'}
-            </td>
-            <td className="py-2 px-2 text-muted-foreground">
-              {new Date(m.joined_at).toLocaleDateString('zh-CN')}
-            </td>
-            <td className="py-2 px-2 text-right">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                title="修改密码"
-                onClick={() => onPasswordChange(m.id)}
-              >
-                <KeyRound className="h-3 w-3" />
-              </Button>
-            </td>
+    <>
+      <table className="w-full text-xs mt-2">
+        <thead>
+          <tr className="border-b text-muted-foreground">
+            <th className="text-left py-2 px-2 font-medium">用户名</th>
+            <th className="text-left py-2 px-2 font-medium">账户</th>
+            <th className="text-left py-2 px-2 font-medium">角色</th>
+            <th className="text-right py-2 px-2 font-medium">已用积分</th>
+            <th className="text-right py-2 px-2 font-medium">积分上限</th>
+            <th className="text-left py-2 px-2 font-medium">加入时间</th>
+            <th className="text-right py-2 px-2 font-medium">操作</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {members.map((m) => (
+            <tr key={m.id} className="border-b last:border-0">
+              <td className="py-2 px-2 font-medium">{m.username}</td>
+              <td className="py-2 px-2 text-muted-foreground">{m.account}</td>
+              <td className="py-2 px-2">
+                <Badge variant={m.role === 'owner' ? 'default' : 'outline'} className="text-[10px]">
+                  {m.role === 'owner' ? '组长' : m.role === 'editor' ? '编辑' : m.role}
+                </Badge>
+              </td>
+              <td className="py-2 px-2 text-right font-medium">{(m.credit_used ?? 0).toLocaleString()}</td>
+              <td className="py-2 px-2 text-right text-muted-foreground">
+                {m.credit_quota !== null && m.credit_quota !== undefined ? m.credit_quota.toLocaleString() : '无限'}
+              </td>
+              <td className="py-2 px-2 text-muted-foreground">
+                {new Date(m.joined_at).toLocaleDateString('zh-CN')}
+              </td>
+              <td className="py-2 px-2 text-right">
+                <div className="flex items-center justify-end gap-0.5">
+                  {/* 修改积分上限 */}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    title="修改积分上限"
+                    onClick={() => openEdit(m)}
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                  {/* 刷新用量（重置 credit_used） */}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    title="刷新用量（重置已用积分为0）"
+                    disabled={resettingId === m.id}
+                    onClick={() => handleResetUsage(m)}
+                  >
+                    {resettingId === m.id
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <RotateCcw className="h-3 w-3" />
+                    }
+                  </Button>
+                  {/* 修改密码 */}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    title="修改密码"
+                    onClick={() => onPasswordChange(m.id)}
+                  >
+                    <KeyRound className="h-3 w-3" />
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* 修改积分上限 Dialog */}
+      <Dialog open={!!editingMember} onOpenChange={(open) => !open && setEditingMember(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>修改积分上限</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              成员：<span className="font-medium text-foreground">{editingMember?.username}</span>
+              （当前已用：{(editingMember?.credit_used ?? 0).toLocaleString()}）
+            </p>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">积分上限（留空表示无限制）</label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="留空 = 无限制"
+                value={quotaValue}
+                onChange={(e) => setQuotaValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveQuota()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingMember(null)}>取消</Button>
+            <Button onClick={handleSaveQuota} disabled={quotaSaving}>
+              {quotaSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

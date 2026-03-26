@@ -19,7 +19,7 @@ import { apiPatch, apiPost, apiDelete, ApiError } from '@/lib/api-client'
 import { InviteDialog } from './invite-dialog'
 import { BatchInviteDialog } from './batch-invite-dialog'
 import { toast } from 'sonner'
-import { UserPlus, Trash2, Edit2, RotateCcw, Users } from 'lucide-react'
+import { UserPlus, Trash2, Edit2, RotateCcw, Users, Settings2 } from 'lucide-react'
 
 interface Member {
   user_id: string
@@ -61,12 +61,29 @@ const periodLabel: Record<string, string> = {
 }
 
 export function MemberList({ teamId }: { teamId: string }) {
-  const { data, error, mutate } = useSWR<TeamData>(`/teams/${teamId}`)
+  const { data, error, mutate } = useSWR<TeamData>(`/teams/${teamId}`, {
+    // Skip retry on 429 (rate-limited) — prevent hammering the server when overloaded
+    onErrorRetry: (err, _key, _config, revalidate, { retryCount }) => {
+      if (err instanceof ApiError && err.status === 429) return
+      if (retryCount >= 3) return
+      setTimeout(() => revalidate({ retryCount }), 5000)
+    },
+  })
   const [inviteOpen, setInviteOpen] = useState(false)
   const [batchInviteOpen, setBatchInviteOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<Member | null>(null)
   const [quotaValue, setQuotaValue] = useState('')
   const [periodValue, setPeriodValue] = useState<string>('none')
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchEditOpen, setBatchEditOpen] = useState(false)
+  const [batchQuotaValue, setBatchQuotaValue] = useState('')
+  const [batchPeriodValue, setBatchPeriodValue] = useState<string>('keep')
+  const [batchSaving, setBatchSaving] = useState(false)
+
+  // Delayed mutate: give the DB a moment to commit before re-fetching
+  const delayedMutate = (ms = 400) => new Promise<void>(res => setTimeout(() => { mutate(); res() }, ms))
 
   if (!data && !error) {
     return (
@@ -82,6 +99,28 @@ export function MemberList({ teamId }: { teamId: string }) {
     )
   }
 
+  // Non-owner members eligible for selection
+  const selectableMembers = data?.members.filter((m) => m.role !== 'owner') ?? []
+  const allSelected = selectableMembers.length > 0 && selectableMembers.every((m) => selectedIds.has(m.user_id))
+  const someSelected = selectableMembers.some((m) => selectedIds.has(m.user_id))
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(selectableMembers.map((m) => m.user_id)))
+    }
+  }
+
+  function toggleSelect(userId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+  }
+
   async function handleUpdateQuota() {
     if (!editingMember) return
     const quota = quotaValue === '' ? null : parseInt(quotaValue, 10)
@@ -93,9 +132,38 @@ export function MemberList({ teamId }: { teamId: string }) {
       })
       toast.success('配额已更新')
       setEditingMember(null)
-      mutate()
+      delayedMutate()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : '更新失败')
+    }
+  }
+
+  async function handleBatchUpdate() {
+    if (selectedIds.size === 0) return
+    setBatchSaving(true)
+    try {
+      const body: Record<string, unknown> = { user_ids: Array.from(selectedIds) }
+      if (batchQuotaValue !== '') {
+        body.credit_quota = batchQuotaValue === 'unlimited' ? null : parseInt(batchQuotaValue, 10)
+      }
+      if (batchPeriodValue !== 'keep') {
+        body.quota_period = batchPeriodValue === 'none' ? null : batchPeriodValue
+      }
+      if (!('credit_quota' in body) && !('quota_period' in body)) {
+        toast.error('请至少修改一项配置')
+        return
+      }
+      await apiPatch(`/teams/${teamId}/members/batch-quota`, body)
+      toast.success(`已更新 ${selectedIds.size} 名成员的配额`)
+      setBatchEditOpen(false)
+      setSelectedIds(new Set())
+      setBatchQuotaValue('')
+      setBatchPeriodValue('keep')
+      delayedMutate()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '批量更新失败')
+    } finally {
+      setBatchSaving(false)
     }
   }
 
@@ -104,7 +172,7 @@ export function MemberList({ teamId }: { teamId: string }) {
     try {
       await apiPost(`/teams/${teamId}/members/${member.user_id}/reset-credits`, {})
       toast.success(`${member.username} 的已用积分已重置为 0`)
-      mutate()
+      delayedMutate()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : '重置失败')
     }
@@ -115,7 +183,7 @@ export function MemberList({ teamId }: { teamId: string }) {
     try {
       await apiDelete(`/teams/${teamId}/members/${member.user_id}`)
       toast.success('成员已移除')
-      mutate()
+      delayedMutate()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : '移除失败')
     }
@@ -148,10 +216,47 @@ export function MemberList({ teamId }: { teamId: string }) {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Batch action toolbar */}
+          {someSelected && (
+            <div className="mb-3 flex items-center gap-3 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">已选 <span className="font-medium text-foreground">{selectedIds.size}</span> 名成员</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5"
+                onClick={() => {
+                  setBatchQuotaValue('')
+                  setBatchPeriodValue('keep')
+                  setBatchEditOpen(true)
+                }}
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                批量修改配额
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 ml-auto"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                取消选择
+              </Button>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-muted-foreground">
+                  <th className="py-2 px-2 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="全选"
+                      className="h-4 w-4 cursor-pointer accent-primary"
+                    />
+                  </th>
                   <th className="text-left py-2 px-2 font-medium">用户名</th>
                   <th className="text-left py-2 px-2 font-medium">账户</th>
                   <th className="text-left py-2 px-2 font-medium">角色</th>
@@ -167,9 +272,24 @@ export function MemberList({ teamId }: { teamId: string }) {
                     : null
                   const nearLimit = member.credit_quota !== null && remaining !== null && remaining <= 0
                   const resetInfo = formatResetInfo(member)
+                  const isSelectable = member.role !== 'owner'
+                  const isSelected = selectedIds.has(member.user_id)
 
                   return (
-                    <tr key={member.user_id} className="border-b last:border-0">
+                    <tr key={member.user_id} className={`border-b last:border-0 ${isSelected ? 'bg-muted/40' : ''}`}>
+                      <td className="py-2 px-2">
+                        {isSelectable ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(member.user_id)}
+                            aria-label={`选择 ${member.username}`}
+                            className="h-4 w-4 cursor-pointer accent-primary"
+                          />
+                        ) : (
+                          <span className="block w-4" />
+                        )}
+                      </td>
                       <td className="py-2 px-2 font-medium">{member.username}</td>
                       <td className="py-2 px-2 text-muted-foreground">{member.account}</td>
                       <td className="py-2 px-2">
@@ -244,7 +364,7 @@ export function MemberList({ teamId }: { teamId: string }) {
         </CardContent>
       </Card>
 
-      {/* Edit Quota Dialog */}
+      {/* Edit Quota Dialog (single member) */}
       <Dialog
         open={!!editingMember}
         onOpenChange={(open) => !open && setEditingMember(null)}
@@ -298,12 +418,55 @@ export function MemberList({ teamId }: { teamId: string }) {
         </DialogContent>
       </Dialog>
 
+      {/* Batch Edit Quota Dialog */}
+      <Dialog open={batchEditOpen} onOpenChange={(open) => !open && setBatchEditOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>批量修改配额 — 已选 {selectedIds.size} 名成员</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">积分额度上限</label>
+              <Input
+                type="number"
+                placeholder="留空则不修改此项"
+                value={batchQuotaValue}
+                onChange={(e) => setBatchQuotaValue(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                留空表示不修改此项。填 0 表示不限制。
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">重置周期</label>
+              <Select value={batchPeriodValue} onValueChange={setBatchPeriodValue}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keep">不修改此项</SelectItem>
+                  <SelectItem value="none">不自动重置</SelectItem>
+                  <SelectItem value="weekly">每周自动重置</SelectItem>
+                  <SelectItem value="monthly">每月自动重置</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBatchEditOpen(false)}>取消</Button>
+            <Button onClick={handleBatchUpdate} disabled={batchSaving}>
+              {batchSaving ? '保存中...' : `保存（${selectedIds.size} 人）`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Invite Dialog */}
       <InviteDialog
         teamId={teamId}
         open={inviteOpen}
         onOpenChange={setInviteOpen}
-        onSuccess={() => mutate()}
+        onSuccess={() => delayedMutate(600)}
       />
 
       {/* Batch Invite Dialog */}
@@ -311,7 +474,7 @@ export function MemberList({ teamId }: { teamId: string }) {
         teamId={teamId}
         open={batchInviteOpen}
         onOpenChange={setBatchInviteOpen}
-        onSuccess={() => mutate()}
+        onSuccess={() => delayedMutate(800)}
       />
     </>
   )
