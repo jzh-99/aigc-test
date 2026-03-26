@@ -94,7 +94,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // GET /admin/teams/:id/members — list team members with credit usage
-  app.get<{ Params: { id: string } }>('/admin/teams/:id/members', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/admin/teams/:id/members', {
+    config: { rateLimit: false },
+  }, async (request, reply) => {
     const db = getDb()
     const teamId = request.params.id
 
@@ -118,6 +120,78 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       .execute()
 
     return { data: members }
+  })
+
+  // PATCH /admin/teams/:id/members/:uid — admin update member quota/period
+  app.patch<{
+    Params: { id: string; uid: string }
+    Body: { credit_quota?: number | null; quota_period?: string | null }
+  }>('/admin/teams/:id/members/:uid', {
+    config: { rateLimit: false },
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          credit_quota: { type: ['number', 'null'], minimum: 0, maximum: 1000000 },
+          quota_period: { type: ['string', 'null'], enum: ['weekly', 'monthly', null] },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { credit_quota, quota_period } = request.body
+    if (credit_quota === undefined && quota_period === undefined) {
+      return reply.badRequest('At least one of credit_quota or quota_period is required')
+    }
+    const db = getDb()
+    const updates: Record<string, unknown> = {}
+    if (credit_quota !== undefined) updates.credit_quota = credit_quota
+    if (quota_period !== undefined) {
+      updates.quota_period = quota_period
+      if (quota_period) {
+        const now = new Date()
+        updates.quota_reset_at = quota_period === 'weekly'
+          ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
+          : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
+      } else {
+        updates.quota_reset_at = null
+      }
+    }
+    await db
+      .updateTable('team_members')
+      .set(updates)
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .execute()
+    return { success: true }
+  })
+
+  // POST /admin/teams/:id/members/:uid/reset-credits — admin reset member credit_used to 0
+  app.post<{ Params: { id: string; uid: string } }>('/admin/teams/:id/members/:uid/reset-credits', {
+    config: { rateLimit: false },
+  }, async (request, reply) => {
+    const db = getDb()
+    const member = await db
+      .selectFrom('team_members')
+      .select(['credit_used', 'quota_period'])
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .executeTakeFirst()
+    if (!member) return reply.notFound('成员不存在')
+    const updates: Record<string, unknown> = { credit_used: 0 }
+    if (member.quota_period) {
+      const now = new Date()
+      updates.quota_reset_at = member.quota_period === 'weekly'
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
+        : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
+    }
+    await db
+      .updateTable('team_members')
+      .set(updates)
+      .where('team_id', '=', request.params.id)
+      .where('user_id', '=', request.params.uid)
+      .execute()
+    return { success: true, credit_used: 0 }
   })
 
   // GET /admin/teams/:id/workspaces — list team workspaces with batch stats

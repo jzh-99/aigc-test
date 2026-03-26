@@ -243,6 +243,26 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
+      // Fetch one representative error_message per failed/partial_complete batch
+      const failedBatchIds = batches
+        .filter((b: any) => b.status === 'failed' || b.status === 'partial_complete')
+        .map((b: any) => b.id)
+      const errorMap = new Map<string, string>()
+      if (failedBatchIds.length > 0) {
+        const errorRows = await db
+          .selectFrom('tasks')
+          .select(['batch_id', 'error_message'])
+          .where('batch_id', 'in', failedBatchIds)
+          .where('status', '=', 'failed')
+          .where('error_message', 'is not', null)
+          .execute()
+        for (const row of errorRows) {
+          if (!errorMap.has(row.batch_id)) {
+            errorMap.set(row.batch_id, row.error_message!)
+          }
+        }
+      }
+
       const nextCursor = hasMore && batches.length > 0
         ? Buffer.from(
             JSON.stringify({
@@ -269,6 +289,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           created_at: b.created_at.toISOString?.() ?? String(b.created_at),
           tasks: [],
           thumbnail_urls: thumbnailMap.get(b.id) ?? [],
+          error_message: errorMap.get(b.id) ?? null,
           user: userMap.get(b.user_id) ?? undefined,
         })),
         cursor: nextCursor,

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useGenerationStore } from '@/stores/generation-store'
+import { translateTaskError } from '@/lib/error-messages'
 
 interface BatchListCardProps {
   batch: BatchResponse & { thumbnail_urls?: string[] }
@@ -57,6 +58,12 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
 
   const showLoading = thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing')
   console.log('[BatchListCard]', batch.id, 'status:', batch.status, 'thumbnails:', thumbnails.length, 'showLoading:', showLoading)
+
+  // First error message: prefer batch-level field (set by list API), fall back to tasks array
+  const firstError: string | null =
+    (batch as any).error_message
+    ?? batch.tasks?.find((t) => t.status === 'failed' && t.error_message)?.error_message
+    ?? null
 
   const isVideo = (batch as any).module === 'video'
   const videoUrl = isVideo
@@ -121,6 +128,11 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
             <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
+          ) : (batch.status === 'failed' || batch.status === 'partial_complete') && firstError ? (
+            <div className="flex h-16 w-full items-center gap-2 rounded-md bg-destructive/10 px-3">
+              <Video className="h-4 w-4 shrink-0 text-destructive" />
+              <p className="text-xs text-destructive line-clamp-2">{translateTaskError(firstError)}</p>
+            </div>
           ) : (
             <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
               <Video className="h-4 w-4 text-muted-foreground" />
@@ -158,11 +170,17 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
               </div>
             )}
 
-            {/* No images placeholder */}
+            {/* No images / failed placeholder */}
             {thumbnails.length === 0 && batch.status !== 'pending' && batch.status !== 'processing' && (
-              <div className="flex h-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                暂无图片
-              </div>
+              (batch.status === 'failed' || batch.status === 'partial_complete') && firstError ? (
+                <div className="flex h-16 w-full items-center gap-2 rounded-md bg-destructive/10 px-3">
+                  <p className="text-xs text-destructive line-clamp-2">{translateTaskError(firstError)}</p>
+                </div>
+              ) : (
+                <div className="flex h-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                  暂无图片
+                </div>
+              )
             )}
           </>
         )}

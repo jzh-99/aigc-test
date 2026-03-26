@@ -29,6 +29,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'nano-banana-2-2k':                  '全能图片Pro 2K',
   'nano-banana-2-4k':                  '全能图片Pro 4K',
   'veo3.1-fast':                       '全能视频3.1 Fast',
+  'veo3.1-components':                 '全能视频3.1',
 }
 
 function groupByDate(assets: AssetItem[]): { date: string; items: AssetItem[] }[] {
