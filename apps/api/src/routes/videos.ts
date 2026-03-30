@@ -423,7 +423,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.status(502).send({
         success: false,
-        error: { code: 'VIDEO_API_ERROR', message: '视频生成服务暂时不可用，请稍后重试' },
+        error: { code: 'VIDEO_API_ERROR', message: `视频生成服务暂时不可用：${lastError.slice(0, 300)}` },
       })
     }
 
