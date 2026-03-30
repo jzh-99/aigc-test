@@ -26,6 +26,7 @@ const MODEL_CODE_MAP = {
     '4k': 'seedream-4.5',
   },
   'seedream-4.0': {
+    '1k': 'seedream-4.0',
     '2k': 'seedream-4.0',
     '4k': 'seedream-4.0',
   },
