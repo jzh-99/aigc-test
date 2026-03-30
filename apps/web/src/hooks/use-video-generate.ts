@@ -7,8 +7,12 @@ interface VideoGenerateParams {
   workspace_id: string
   model?: string
   images?: string[]
-  aspect_ratio?: '16:9' | '9:16'
+  aspect_ratio?: string
   enable_upsample?: boolean
+  resolution?: string
+  duration?: number
+  generate_audio?: boolean
+  camera_fixed?: boolean
 }
 
 export function useVideoGenerate() {
