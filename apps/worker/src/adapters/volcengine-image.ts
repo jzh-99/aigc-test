@@ -58,9 +58,9 @@ function resolveSize(aspectRatio: string, resolution: string): string {
  * Map frontend model code → Volcengine doubao model ID.
  */
 const MODEL_ID_MAP: Record<string, string> = {
-  'seedream-5.0-lite': 'doubao-seedream-5.0-lite',
-  'seedream-4.5':      'doubao-seedream-4.5',
-  'seedream-4.0':      'doubao-seedream-4.0',
+  'seedream-5.0-lite': 'doubao-seedream-5-0-lite-260128',
+  'seedream-4.5':      'doubao-seedream-4-5-251128',
+  'seedream-4.0':      'doubao-seedream-4-0-250828',
 }
 
 export class VolcengineImageAdapter implements ImageGenerationAdapter {
