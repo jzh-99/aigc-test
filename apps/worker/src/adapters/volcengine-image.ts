@@ -86,21 +86,21 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
       return { success: false, errorMessage: `Unknown Volcengine model: ${model}` }
     }
 
-    // Resolve size from aspect_ratio + resolution
-    const aspectRatio = typeof extraParams.aspect_ratio === 'string' ? extraParams.aspect_ratio : '1:1'
+    // Resolve size from aspect_ratio + resolution → pixel dimensions
     const resolution  = typeof extraParams.resolution  === 'string' ? extraParams.resolution  : '2k'
-    const size = resolveSize(aspectRatio, resolution)
+    const aspectRatio = typeof extraParams.aspect_ratio === 'string' ? extraParams.aspect_ratio : '1:1'
 
     // Build request body
     const body: Record<string, unknown> = {
       model:           volcengineModel,
       prompt,
-      size,
-      response_format: 'url',
-      // Disable sequential image generation (no group image feature)
-      sequential_image_generation: 'disabled',
-      // Watermark: default false unless explicitly set to true
-      watermark: extraParams.watermark === true,
+      size:            resolveSize(aspectRatio, resolution),
+      watermark:       extraParams.watermark === true,
+    }
+
+    // Only seedream-5.0-lite supports output_format
+    if (model === 'seedream-5.0-lite') {
+      body.output_format = 'png'
     }
 
     // Reference images: pass through as-is (URL or base64 data URI)
@@ -110,16 +110,11 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
       body.image = images.length === 1 ? images[0] : images
     }
 
-    // Seedream 5.0 lite: enable web search by default
-    if (model === 'seedream-5.0-lite') {
-      body.tools = [{ type: 'web_search' }]
-    }
-
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
 
     try {
-      console.log(`[volcengine-image] Calling model=${volcengineModel} size=${size}`)
+      console.log(`[volcengine-image] Calling model=${volcengineModel} size=${body.size}`)
       const res = await fetch(`${VOLCENGINE_API_URL}/images/generations`, {
         method:  'POST',
         headers: {
@@ -163,12 +158,19 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
       return { success: false, errorMessage: `Volcengine error ${json.error.code}: ${json.error.message}` }
     }
 
-    // Find first successfully generated image
+    // For Seedream /contents/generations/tasks endpoint:
+    // Response has `data` array with items, each item can have `url` or `error`
     const items = json.data ?? []
-    const successItem = items.find((item) => item.url && !item.error)
+    if (items.length === 0) {
+      console.error(`[volcengine-image] Empty data array in response`)
+      return { success: false, errorMessage: 'No images in Volcengine response' }
+    }
+
+    // Find first successfully generated image
+    const successItem = items.find((item: any) => item.url && !item.error)
     if (!successItem?.url) {
       // Check if any item has per-image error
-      const firstErr = items.find((item) => item.error)
+      const firstErr = items.find((item: any) => item.error)
       const errMsg = firstErr?.error
         ? `${firstErr.error.code}: ${firstErr.error.message}`
         : 'No image URL in Volcengine response'
