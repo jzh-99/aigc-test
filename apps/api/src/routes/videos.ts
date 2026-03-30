@@ -6,6 +6,7 @@ import { freezeCredits, refundCredits } from '../services/credit.js'
 const VIDEO_CREDITS_MAP: Record<string, number> = {
   'veo3.1-fast': 10,
   'veo3.1-components': 15,
+  'seedance-1.5-pro': 100, // per-second price
 }
 
 interface VideoGenerateBody {
@@ -13,8 +14,12 @@ interface VideoGenerateBody {
   workspace_id: string
   model?: string
   images?: string[]
-  aspect_ratio?: '16:9' | '9:16'
+  aspect_ratio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive'
   enable_upsample?: boolean
+  resolution?: '720p' | '1080p'
+  duration?: number
+  generate_audio?: boolean
+  camera_fixed?: boolean
 }
 
 export async function videoRoutes(app: FastifyInstance): Promise<void> {
@@ -28,12 +33,16 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           workspace_id: { type: 'string', format: 'uuid' },
           model: {
             type: 'string',
-            enum: ['veo3.1-fast', 'veo3.1-components'],
+            enum: ['veo3.1-fast', 'veo3.1-components', 'seedance-1.5-pro'],
             default: 'veo3.1-fast'
           },
           images: { type: 'array', items: { type: 'string' }, maxItems: 3 },
-          aspect_ratio: { type: 'string', enum: ['16:9', '9:16'] },
+          aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'] },
           enable_upsample: { type: 'boolean' },
+          resolution: { type: 'string', enum: ['720p', '1080p'] },
+          duration: { type: 'integer', minimum: -1, maximum: 12 },
+          generate_audio: { type: 'boolean' },
+          camera_fixed: { type: 'boolean' },
         },
         additionalProperties: false,
       },
@@ -46,6 +55,10 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       images,
       aspect_ratio,
       enable_upsample,
+      resolution,
+      duration,
+      generate_audio,
+      camera_fixed,
     } = request.body
 
     // Validate images count based on model
@@ -64,6 +77,12 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           })
         }
       }
+      if (model === 'seedance-1.5-pro' && images.length > 2) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_IMAGES', message: 'seedance-1.5-pro 模型最多支持2张图片（首尾帧）' },
+        })
+      }
     } else if (model === 'veo3.1-components') {
       return reply.status(400).send({
         success: false,
@@ -71,7 +90,13 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    const VIDEO_CREDITS = VIDEO_CREDITS_MAP[model] ?? 10
+    // Calculate credits: seedance uses per-second pricing, others use flat rate
+    const isSeedance = model === 'seedance-1.5-pro'
+    const CREDITS_PER_SECOND = VIDEO_CREDITS_MAP['seedance-1.5-pro']
+    const videoDuration = isSeedance ? (duration ?? 5) : undefined
+    const VIDEO_CREDITS = isSeedance
+      ? (videoDuration === -1 ? 12 : videoDuration!) * CREDITS_PER_SECOND
+      : VIDEO_CREDITS_MAP[model] ?? 10
 
     const userId = request.user.id
     const db = getDb()
@@ -161,17 +186,23 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     let taskId: string
     try {
     const _batchTask = await db.transaction().execute(async (trx: any) => {
-      const paramsForDb = model === 'veo3.1-components'
-        ? {
-            aspect_ratio: aspect_ratio ?? null,
-            has_reference_components: true,
-            reference_count: images?.length ?? 0,
-          }
-        : {
-            aspect_ratio: aspect_ratio ?? null,
-            has_first_frame: (images?.length ?? 0) > 0,
-            has_last_frame: (images?.length ?? 0) > 1,
-          }
+      const paramsForDb: Record<string, unknown> = {
+        aspect_ratio: aspect_ratio ?? null,
+      }
+
+      if (model === 'veo3.1-components') {
+        paramsForDb.has_reference_components = true
+        paramsForDb.reference_count = images?.length ?? 0
+      } else if (model === 'seedance-1.5-pro') {
+        paramsForDb.duration = videoDuration
+        paramsForDb.generate_audio = generate_audio ?? true
+        paramsForDb.camera_fixed = camera_fixed ?? false
+      } else {
+        paramsForDb.has_first_frame = (images?.length ?? 0) > 0
+        paramsForDb.has_last_frame = (images?.length ?? 0) > 1
+      }
+
+      const provider = model === 'seedance-1.5-pro' ? 'volcengine' : 'nano-banana'
 
       const batchResult = await trx
         .insertInto('task_batches')
@@ -182,7 +213,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           workspace_id: workspaceId,
           credit_account_id: creditAccountId,
           module: 'video',
-          provider: 'nano-banana',
+          provider,
           model,
           prompt,
           params: JSON.stringify(paramsForDb),
@@ -224,72 +255,135 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    // Call Veo API with retry on fast errors (not timeout)
-    const veoApiUrl = process.env.NANO_BANANA_API_URL ?? 'https://api.nanobanana.com'
-    const veoApiKey = process.env.NANO_BANANA_API_KEY ?? ''
-
-    const veoBody: Record<string, unknown> = {
-      prompt,
-      model,
-      enhance_prompt: true,
-    }
-    if (images && images.length > 0) veoBody.images = images
-    if (aspect_ratio) veoBody.aspect_ratio = aspect_ratio
-    if (enable_upsample !== undefined) veoBody.enable_upsample = enable_upsample
-
+    // Call API (Veo for nano-banana, Volcengine for seedance)
     let externalTaskId: string
     let lastError: string = ''
-    const maxRetries = 1 // Retry once on fast API errors (not timeout)
+    const maxRetries = 1
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 30_000)
-        let veoRes: Response
-        try {
-          veoRes = await fetch(`${veoApiUrl}/v2/videos/generations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${veoApiKey}` },
-            body: JSON.stringify(veoBody),
-            signal: controller.signal,
+    if (model === 'seedance-1.5-pro') {
+      // Volcengine Seedance API
+      const volcengineApiUrl = 'https://ark.cn-beijing.volces.com/api/v3'
+      const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
+
+      const volcengineBody: Record<string, unknown> = {
+        model: 'doubao-seedance-1-5-pro-251215',
+        content: [{ type: 'text', text: prompt }],
+        resolution: resolution ?? '720p',
+        duration: videoDuration,
+        generate_audio: generate_audio ?? true,
+        camera_fixed: camera_fixed ?? false,
+      }
+      if (images && images.length > 0) {
+        images.forEach((img, idx) => {
+          const role = idx === 0 ? 'first_frame' : 'last_frame'
+          ;(volcengineBody.content as any[]).push({
+            type: 'image_url',
+            image_url: { url: img },
+            role,
           })
-        } finally {
-          clearTimeout(timer)
+        })
+      }
+      if (aspect_ratio) volcengineBody.ratio = aspect_ratio
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), 30_000)
+          let res: Response
+          try {
+            res = await fetch(`${volcengineApiUrl}/contents/generations/tasks`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${volcengineApiKey}` },
+              body: JSON.stringify(volcengineBody),
+              signal: controller.signal,
+            })
+          } finally {
+            clearTimeout(timer)
+          }
+
+          if (!res.ok) {
+            const errText = await res.text()
+            throw new Error(`Volcengine API ${res.status}: ${errText}`)
+          }
+
+          const json = (await res.json()) as { id: string }
+          if (!json.id) throw new Error('Volcengine API did not return task id')
+          externalTaskId = json.id
+          break
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err)
+          lastError = errMsg
+          const isTimeout = errMsg.includes('aborted') || errMsg.includes('timeout')
+          const isHttpError = errMsg.startsWith('Volcengine API ')
+          const isNetworkError = errMsg.includes('fetch failed') || errMsg.includes('ECONNREFUSED') ||
+                                errMsg.includes('ENOTFOUND') || errMsg.includes('ETIMEDOUT') ||
+                                errMsg.includes('ECONNRESET')
+          const shouldRetry = !isTimeout && !isHttpError && isNetworkError && attempt < maxRetries
+          if (shouldRetry) {
+            app.log.warn({ taskId, batchId, attempt: attempt + 1, err: errMsg }, 'Volcengine API call failed, retrying')
+            await new Promise(r => setTimeout(r, 2000))
+            continue
+          }
+          app.log.error({ taskId, batchId, err: errMsg }, 'Volcengine API submission failed')
+          break
         }
+      }
+    } else {
+      // Nano Banana Veo API (existing logic)
+      const veoApiUrl = process.env.NANO_BANANA_API_URL ?? 'https://api.nanobanana.com'
+      const veoApiKey = process.env.NANO_BANANA_API_KEY ?? ''
 
-        if (!veoRes.ok) {
-          const errText = await veoRes.text()
-          throw new Error(`Veo API ${veoRes.status}: ${errText}`)
+      const veoBody: Record<string, unknown> = {
+        prompt,
+        model,
+        enhance_prompt: true,
+      }
+      if (images && images.length > 0) veoBody.images = images
+      if (aspect_ratio) veoBody.aspect_ratio = aspect_ratio
+      if (enable_upsample !== undefined) veoBody.enable_upsample = enable_upsample
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), 30_000)
+          let veoRes: Response
+          try {
+            veoRes = await fetch(`${veoApiUrl}/v2/videos/generations`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${veoApiKey}` },
+              body: JSON.stringify(veoBody),
+              signal: controller.signal,
+            })
+          } finally {
+            clearTimeout(timer)
+          }
+
+          if (!veoRes.ok) {
+            const errText = await veoRes.text()
+            throw new Error(`Veo API ${veoRes.status}: ${errText}`)
+          }
+
+          const veoJson = (await veoRes.json()) as { task_id: string }
+          if (!veoJson.task_id) throw new Error('Veo API did not return task_id')
+          externalTaskId = veoJson.task_id
+          break
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err)
+          lastError = errMsg
+          const isTimeout = errMsg.includes('aborted') || errMsg.includes('timeout')
+          const isHttpError = errMsg.startsWith('Veo API ')
+          const isNetworkError = errMsg.includes('fetch failed') || errMsg.includes('ECONNREFUSED') ||
+                                errMsg.includes('ENOTFOUND') || errMsg.includes('ETIMEDOUT') ||
+                                errMsg.includes('ECONNRESET')
+          const shouldRetry = !isTimeout && !isHttpError && isNetworkError && attempt < maxRetries
+          if (shouldRetry) {
+            app.log.warn({ taskId, batchId, attempt: attempt + 1, err: errMsg }, 'Veo API call failed, retrying')
+            await new Promise(r => setTimeout(r, 2000))
+            continue
+          }
+          app.log.error({ taskId, batchId, err: errMsg }, 'Veo API submission failed')
+          break
         }
-
-        const veoJson = (await veoRes.json()) as { task_id: string }
-        if (!veoJson.task_id) throw new Error('Veo API did not return task_id')
-        externalTaskId = veoJson.task_id
-        break // Success, exit retry loop
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err)
-        lastError = errMsg
-
-        // Check if error is retryable (fast API error, not timeout)
-        const isTimeout = errMsg.includes('aborted') || errMsg.includes('timeout')
-        const isHttpError = errMsg.startsWith('Veo API ')
-        const isNetworkError = errMsg.includes('fetch failed') ||
-                              errMsg.includes('ECONNREFUSED') ||
-                              errMsg.includes('ENOTFOUND') ||
-                              errMsg.includes('ETIMEDOUT') ||
-                              errMsg.includes('ECONNRESET')
-
-        const shouldRetry = !isTimeout && !isHttpError && isNetworkError && attempt < maxRetries
-
-        if (shouldRetry) {
-          app.log.warn({ taskId, batchId, attempt: attempt + 1, err: errMsg }, 'Veo API call failed, retrying')
-          await new Promise(r => setTimeout(r, 2000)) // 2 second delay before retry
-          continue
-        }
-
-        // No retry or exhausted retries, fail the task
-        app.log.error({ taskId, batchId, err: errMsg }, 'Veo API submission failed')
-        break
       }
     }
 
@@ -342,7 +436,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(201).send({
       id: batchId,
       module: 'video',
-      provider: 'nano-banana',
+      provider: model === 'seedance-1.5-pro' ? 'volcengine' : 'nano-banana',
       model,
       prompt,
       params: {},

@@ -17,10 +17,22 @@ const MODEL_CODE_MAP = {
     '2k': 'nano-banana-2-2k',
     '4k': 'nano-banana-2-4k',
   },
+  'seedream-5.0-lite': {
+    '2k': 'seedream-5.0-lite',
+    '3k': 'seedream-5.0-lite',
+  },
+  'seedream-4.5': {
+    '2k': 'seedream-4.5',
+    '4k': 'seedream-4.5',
+  },
+  'seedream-4.0': {
+    '2k': 'seedream-4.0',
+    '4k': 'seedream-4.0',
+  },
 } as const
 
 export function useGenerate() {
-  const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, setIsGenerating, setActiveBatchId } = useGenerationStore()
+  const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, setIsGenerating, setActiveBatchId } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
 
   const generate = useCallback(async (): Promise<BatchResponse | null> => {
@@ -28,8 +40,12 @@ export function useGenerate() {
 
     setIsGenerating(true)
     try {
-      const model = MODEL_CODE_MAP[modelType][resolution]
-      const params: Record<string, unknown> = { aspect_ratio: aspectRatio }
+      const modelMap = MODEL_CODE_MAP[modelType] as Record<string, string> | undefined
+      if (!modelMap) throw new Error(`Unknown model type: ${modelType}`)
+      const model = modelMap[resolution]
+      if (!model) throw new Error(`Unknown resolution for ${modelType}: ${resolution}`)
+
+      const params: Record<string, unknown> = { aspect_ratio: aspectRatio, resolution, watermark }
 
       if (referenceImages.length > 0) {
         params.image = referenceImages.map((img) => img.dataUrl)
@@ -55,7 +71,7 @@ export function useGenerate() {
     } finally {
       setIsGenerating(false)
     }
-  }, [prompt, modelType, resolution, quantity, aspectRatio, referenceImages, activeWorkspaceId, setIsGenerating, setActiveBatchId])
+  }, [prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, activeWorkspaceId, setIsGenerating, setActiveBatchId])
 
   return { generate }
 }

@@ -26,36 +26,81 @@ import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 
-const MODEL_CREDITS: Record<'gemini' | 'nano-banana-pro', number> = {
+const MODEL_CREDITS: Record<'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0', number> = {
   gemini: 5,
   'nano-banana-pro': 10,
+  'seedream-5.0-lite': 5,
+  'seedream-4.5': 5,
+  'seedream-4.0': 5,
 }
 
 const MAX_REF_IMAGES = 10
 const MAX_FILE_MB = 20
 
-const MODEL_OPTIONS = [
+type ModelResolution = '1k' | '2k' | '3k' | '4k'
+
+const MODEL_OPTIONS: Array<{
+  value: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
+  label: string
+  icon: React.ElementType
+  desc: string
+  credits: number
+  resolutions: ModelResolution[]
+  supportsWatermark: boolean
+}> = [
   {
     value: 'gemini',
     label: '全能图片2',
     icon: Zap,
     desc: '快速生成，适合日常使用',
-    credits: 5
+    credits: 5,
+    resolutions: ['1k', '2k', '4k'],
+    supportsWatermark: false,
   },
   {
     value: 'nano-banana-pro',
     label: '全能图片Pro',
     icon: Target,
     desc: '高质量输出，细节丰富',
-    credits: 10
+    credits: 10,
+    resolutions: ['1k', '2k', '4k'],
+    supportsWatermark: false,
   },
-] as const
+  {
+    value: 'seedream-5.0-lite',
+    label: 'Seedream 5.0',
+    icon: Sparkles,
+    desc: '最新火山引擎模型，联网搜索增强',
+    credits: 5,
+    resolutions: ['2k', '3k'],
+    supportsWatermark: true,
+  },
+  {
+    value: 'seedream-4.5',
+    label: 'Seedream 4.5',
+    icon: Sparkles,
+    desc: '高分辨率图像生成',
+    credits: 5,
+    resolutions: ['2k', '4k'],
+    supportsWatermark: true,
+  },
+  {
+    value: 'seedream-4.0',
+    label: 'Seedream 4.0',
+    icon: Sparkles,
+    desc: '多分辨率图像生成',
+    credits: 5,
+    resolutions: ['1k', '2k', '4k'],
+    supportsWatermark: true,
+  },
+]
 
-const RESOLUTION_OPTIONS = [
+const ALL_RESOLUTION_OPTIONS: Array<{ value: ModelResolution; label: string }> = [
   { value: '1k', label: '1K' },
   { value: '2k', label: '2K' },
+  { value: '3k', label: '3K' },
   { value: '4k', label: '4K' },
-] as const
+]
 
 const ASPECT_RATIOS = [
   { value: '1:1', label: '1:1' },
@@ -69,22 +114,43 @@ const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
 const VIDEO_MODEL_OPTIONS = {
   frames: [
-    { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: 10 },
+    { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: 10, isSeedance: false },
+    { value: 'seedance-1.5-pro', label: 'Seedance 1.5 Pro', desc: '有声视频生成，支持首尾帧', credits: 100, isSeedance: true },
   ],
   components: [
-    { value: 'veo3.1-components', label: '全能视频3.1', desc: '基于参考图片生成视频', credits: 15 },
+    { value: 'veo3.1-components', label: '全能视频3.1', desc: '基于参考图片生成视频', credits: 15, isSeedance: false },
   ],
 } as const
 
-const VIDEO_ASPECT_RATIOS = [
-  { value: '' as const, label: '自动' },
-  { value: '16:9' as const, label: '16:9' },
-  { value: '9:16' as const, label: '9:16' },
-] as const
+const VIDEO_ASPECT_RATIOS_DEFAULT = [
+  { value: '', label: '自动' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+]
+
+const VIDEO_ASPECT_RATIOS_SEEDANCE = [
+  { value: 'adaptive', label: '自适应' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+  { value: '1:1', label: '1:1' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:4', label: '3:4' },
+  { value: '21:9', label: '21:9' },
+]
 
 const VIDEO_RESOLUTIONS = [
   { value: false, label: '720p', desc: '标准' },
   { value: true, label: '1080p', desc: '高清' },
+] as const
+
+const SEEDANCE_DURATION_OPTIONS = [
+  { value: 4, label: '4s' },
+  { value: 5, label: '5s' },
+  { value: 6, label: '6s' },
+  { value: 8, label: '8s' },
+  { value: 10, label: '10s' },
+  { value: 12, label: '12s' },
+  { value: -1, label: '自动' },
 ] as const
 
 interface FrameImage {
@@ -111,8 +177,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const [videoMode, setVideoMode] = useState<'frames' | 'components'>('frames')
   const [videoPrompt, setVideoPrompt] = useState('')
   const [videoModel, setVideoModel] = useState('veo3.1-fast')
-  const [videoAspectRatio, setVideoAspectRatio] = useState<'' | '16:9' | '9:16'>('')
+  const [videoAspectRatio, setVideoAspectRatio] = useState('')
   const [videoUpsample, setVideoUpsample] = useState(false)
+  const [videoDuration, setVideoDuration] = useState<number>(5)
+  const [videoGenerateAudio, setVideoGenerateAudio] = useState(true)
+  const [videoCameraFixed, setVideoCameraFixed] = useState(false)
   const [firstFrame, setFirstFrame] = useState<FrameImage | null>(null)
   const [lastFrame, setLastFrame] = useState<FrameImage | null>(null)
   const [framePreviewIndex, setFramePreviewIndex] = useState<0 | 1 | null>(null)
@@ -142,6 +211,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     setAspectRatio,
     referenceImages,
     addReferenceImage,
+    watermark,
+    setWatermark,
     isGenerating,
     videoParams
   } = useGenerationStore()
@@ -166,6 +237,24 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       setMode('image')
     }
   }, [prompt, videoParams])
+
+  // Reset resolution if the selected model doesn't support the current resolution
+  useEffect(() => {
+    const model = MODEL_OPTIONS.find(m => m.value === modelType)
+    if (model && !model.resolutions.includes(resolution as ModelResolution)) {
+      setResolution(model.resolutions[0])
+    }
+  }, [modelType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset video aspect ratio when switching between Seedance and non-Seedance
+  useEffect(() => {
+    const isSeedance = videoModel === 'seedance-1.5-pro'
+    if (isSeedance && !VIDEO_ASPECT_RATIOS_SEEDANCE.find(r => r.value === videoAspectRatio)) {
+      setVideoAspectRatio('adaptive')
+    } else if (!isSeedance && !VIDEO_ASPECT_RATIOS_DEFAULT.find(r => r.value === videoAspectRatio)) {
+      setVideoAspectRatio('')
+    }
+  }, [videoModel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Process dropped / selected image files
   const handleImageFiles = useCallback(async (files: FileList | null) => {
@@ -335,13 +424,21 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         images.push(...videoReferenceImages.map(img => img.dataUrl))
       }
 
+      const isSeedance = videoModel === 'seedance-1.5-pro'
       const batch = await generateVideo({
         prompt: videoPrompt.trim(),
         workspace_id: activeWorkspaceId ?? '',
         model: videoModel,
         images: images.length > 0 ? images : undefined,
         aspect_ratio: videoAspectRatio || undefined,
-        enable_upsample: videoUpsample,
+        ...(isSeedance ? {
+          resolution: videoUpsample ? '1080p' : '720p',
+          duration: videoDuration,
+          generate_audio: videoGenerateAudio,
+          camera_fixed: videoCameraFixed,
+        } : {
+          enable_upsample: videoUpsample,
+        }),
       })
       if (batch) onBatchCreated(batch)
     } catch (err) {
@@ -354,6 +451,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   }
 
   const currentModel = MODEL_OPTIONS.find(m => m.value === modelType)
+  const isSeedanceVideo = videoModel === 'seedance-1.5-pro'
+  const currentVideoAspectRatios = isSeedanceVideo ? VIDEO_ASPECT_RATIOS_SEEDANCE : VIDEO_ASPECT_RATIOS_DEFAULT
+  const availableResolutions = ALL_RESOLUTION_OPTIONS.filter(r =>
+    currentModel?.resolutions.includes(r.value) ?? true
+  )
 
   return (
     <div className="flex flex-col gap-3 h-full">
@@ -538,7 +640,9 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               <button
                 onClick={() => {
                   setVideoMode('frames')
-                  setVideoModel('veo3.1-fast')
+                  if (!VIDEO_MODEL_OPTIONS.frames.find(m => m.value === videoModel)) {
+                    setVideoModel('veo3.1-fast')
+                  }
                   setVideoReferenceImages([])
                 }}
                 className={cn(
@@ -773,7 +877,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 <Label className="text-xs text-muted-foreground mb-1 block">模型</Label>
                 <Select
                   value={modelType}
-                  onValueChange={(v) => setModelType(v as 'gemini' | 'nano-banana-pro')}
+                  onValueChange={(v) => setModelType(v as 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0')}
                   disabled={disabled}
                 >
                   <SelectTrigger className="h-9">
@@ -809,8 +913,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               {/* 质量 */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">质量</Label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {RESOLUTION_OPTIONS.map((res) => (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {availableResolutions.map((res) => (
                     <button
                       key={res.value}
                       onClick={() => setResolution(res.value)}
@@ -828,6 +932,31 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                   ))}
                 </div>
               </div>
+
+              {/* 水印 - 仅 Seedream 模型显示 */}
+              {currentModel?.supportsWatermark && (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">水印</Label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[{ value: false, label: '不加水印' }, { value: true, label: '添加水印' }].map((opt) => (
+                      <button
+                        key={String(opt.value)}
+                        onClick={() => setWatermark(opt.value)}
+                        disabled={disabled}
+                        className={cn(
+                          'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
+                          watermark === opt.value
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border hover:border-primary/50',
+                          disabled && 'opacity-50 cursor-not-allowed'
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 画面比例 */}
               <div>
@@ -949,7 +1078,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                   <Select value={videoModel} onValueChange={setVideoModel} disabled={isVideoGenerating || disabled}>
                     <SelectTrigger className="h-9">
                       <SelectValue>
-                        {VIDEO_MODEL_OPTIONS[videoMode].find(m => m.value === videoModel)?.label}
+                        {VIDEO_MODEL_OPTIONS[videoMode].find(m => m.value === videoModel)?.label ?? videoModel}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -962,7 +1091,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                               <div className="text-xs text-muted-foreground leading-snug">{m.desc}</div>
                               <div className="flex items-center gap-1 text-xs font-medium text-primary mt-0.5">
                                 <Coins className="h-3 w-3" />
-                                {m.credits} 积分/次
+                                {m.isSeedance ? `${m.credits} 积分/秒` : `${m.credits} 积分/次`}
                               </div>
                             </div>
                           </div>
@@ -993,17 +1122,91 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 </div>
               </div>
 
+              {/* Seedance 专属参数 */}
+              {isSeedanceVideo && (
+                <>
+                  {/* 时长 */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">时长</Label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {SEEDANCE_DURATION_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setVideoDuration(opt.value)}
+                          disabled={isVideoGenerating || disabled}
+                          className={cn(
+                            'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
+                            videoDuration === opt.value
+                              ? 'border-primary bg-primary/5 text-primary'
+                              : 'border-border hover:border-primary/50',
+                            (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 音频 + 固定镜头 */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">音频</Label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[{ value: true, label: '有声' }, { value: false, label: '无声' }].map((opt) => (
+                          <button
+                            key={String(opt.value)}
+                            onClick={() => setVideoGenerateAudio(opt.value)}
+                            disabled={isVideoGenerating || disabled}
+                            className={cn(
+                              'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
+                              videoGenerateAudio === opt.value
+                                ? 'border-primary bg-primary/5 text-primary'
+                                : 'border-border hover:border-primary/50',
+                              (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">镜头</Label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[{ value: false, label: '自由' }, { value: true, label: '固定' }].map((opt) => (
+                          <button
+                            key={String(opt.value)}
+                            onClick={() => setVideoCameraFixed(opt.value)}
+                            disabled={isVideoGenerating || disabled}
+                            className={cn(
+                              'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
+                              videoCameraFixed === opt.value
+                                ? 'border-primary bg-primary/5 text-primary'
+                                : 'border-border hover:border-primary/50',
+                              (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
               {/* 比例 */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">比例</Label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {VIDEO_ASPECT_RATIOS.map((ar) => (
+                <div className={cn('grid gap-1.5', isSeedanceVideo ? 'grid-cols-4' : 'grid-cols-3')}>
+                  {currentVideoAspectRatios.map((ar) => (
                     <button
                       key={ar.value}
                       onClick={() => setVideoAspectRatio(ar.value)}
                       disabled={isVideoGenerating || disabled}
                       className={cn(
-                        'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
+                        'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
                         videoAspectRatio === ar.value
                           ? 'border-primary bg-primary/5 text-primary'
                           : 'border-border hover:border-primary/50',
@@ -1023,7 +1226,10 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex-1" />
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
-              <span>{VIDEO_MODEL_OPTIONS[videoMode][0].credits} 积分</span>
+              {isSeedanceVideo
+                ? <span>{(videoDuration === -1 ? 12 : videoDuration) * 100} 积分</span>
+                : <span>{VIDEO_MODEL_OPTIONS[videoMode].find(m => m.value === videoModel)?.credits ?? 10} 积分</span>
+              }
             </div>
             <Button
               variant="gradient"
