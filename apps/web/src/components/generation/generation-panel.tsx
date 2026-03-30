@@ -452,7 +452,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   const currentModel = MODEL_OPTIONS.find(m => m.value === modelType)
   const isSeedanceVideo = videoModel === 'seedance-1.5-pro'
-  const currentVideoAspectRatios = isSeedanceVideo ? VIDEO_ASPECT_RATIOS_SEEDANCE : VIDEO_ASPECT_RATIOS_DEFAULT
   const availableResolutions = ALL_RESOLUTION_OPTIONS.filter(r =>
     currentModel?.resolutions.includes(r.value) ?? true
   )
@@ -1122,21 +1121,74 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 </div>
               </div>
 
-              {/* Seedance 专属参数 */}
-              {isSeedanceVideo && (
-                <>
-                  {/* 时长 */}
+              {/* Row 2: 比例 [buttons veo] | 比例+时长 [dropdowns seedance] */}
+              {isSeedanceVideo ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">比例</Label>
+                    <Select value={videoAspectRatio} onValueChange={setVideoAspectRatio} disabled={isVideoGenerating || disabled}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VIDEO_ASPECT_RATIOS_SEEDANCE.map((ar) => (
+                          <SelectItem key={ar.value} value={ar.value}>{ar.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1 block">时长</Label>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {SEEDANCE_DURATION_OPTIONS.map((opt) => (
+                    <Select value={String(videoDuration)} onValueChange={(v) => setVideoDuration(Number(v))} disabled={isVideoGenerating || disabled}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SEEDANCE_DURATION_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">比例</Label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {VIDEO_ASPECT_RATIOS_DEFAULT.map((ar) => (
+                      <button
+                        key={ar.value}
+                        onClick={() => setVideoAspectRatio(ar.value)}
+                        disabled={isVideoGenerating || disabled}
+                        className={cn(
+                          'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
+                          videoAspectRatio === ar.value
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border hover:border-primary/50',
+                          (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                        )}
+                      >
+                        {ar.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Row 3 (Seedance only): 音频 + 镜头 */}
+              {isSeedanceVideo && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">音频</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[{ value: true, label: '有声' }, { value: false, label: '无声' }].map((opt) => (
                         <button
-                          key={opt.value}
-                          onClick={() => setVideoDuration(opt.value)}
+                          key={String(opt.value)}
+                          onClick={() => setVideoGenerateAudio(opt.value)}
                           disabled={isVideoGenerating || disabled}
                           className={cn(
                             'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
-                            videoDuration === opt.value
+                            videoGenerateAudio === opt.value
                               ? 'border-primary bg-primary/5 text-primary'
                               : 'border-border hover:border-primary/50',
                             (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
@@ -1147,77 +1199,29 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                       ))}
                     </div>
                   </div>
-
-                  {/* 音频 + 固定镜头 */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-1 block">音频</Label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[{ value: true, label: '有声' }, { value: false, label: '无声' }].map((opt) => (
-                          <button
-                            key={String(opt.value)}
-                            onClick={() => setVideoGenerateAudio(opt.value)}
-                            disabled={isVideoGenerating || disabled}
-                            className={cn(
-                              'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
-                              videoGenerateAudio === opt.value
-                                ? 'border-primary bg-primary/5 text-primary'
-                                : 'border-border hover:border-primary/50',
-                              (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
-                            )}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-1 block">镜头</Label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[{ value: false, label: '自由' }, { value: true, label: '固定' }].map((opt) => (
-                          <button
-                            key={String(opt.value)}
-                            onClick={() => setVideoCameraFixed(opt.value)}
-                            disabled={isVideoGenerating || disabled}
-                            className={cn(
-                              'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
-                              videoCameraFixed === opt.value
-                                ? 'border-primary bg-primary/5 text-primary'
-                                : 'border-border hover:border-primary/50',
-                              (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
-                            )}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">镜头</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[{ value: false, label: '自由' }, { value: true, label: '固定' }].map((opt) => (
+                        <button
+                          key={String(opt.value)}
+                          onClick={() => setVideoCameraFixed(opt.value)}
+                          disabled={isVideoGenerating || disabled}
+                          className={cn(
+                            'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
+                            videoCameraFixed === opt.value
+                              ? 'border-primary bg-primary/5 text-primary'
+                              : 'border-border hover:border-primary/50',
+                            (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                </>
-              )}
-
-              {/* 比例 */}
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">比例</Label>
-                <div className={cn('grid gap-1.5', isSeedanceVideo ? 'grid-cols-4' : 'grid-cols-3')}>
-                  {currentVideoAspectRatios.map((ar) => (
-                    <button
-                      key={ar.value}
-                      onClick={() => setVideoAspectRatio(ar.value)}
-                      disabled={isVideoGenerating || disabled}
-                      className={cn(
-                        'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
-                        videoAspectRatio === ar.value
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border hover:border-primary/50',
-                        (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
-                      )}
-                    >
-                      {ar.label}
-                    </button>
-                  ))}
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
