@@ -1,4 +1,4 @@
-import pino from 'pino'
+import pino_ from 'pino'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { getPubRedis, getRedis } from '../lib/redis.js'
@@ -12,6 +12,7 @@ function getTransferQueue(): Queue {
   return _transferQueue
 }
 
+const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
 // Track consecutive poll errors per task to detect persistent API failures
@@ -31,6 +32,7 @@ interface VideoTaskRow {
   estimatedCredits: number
   externalTaskId: string
   processingStartedAt: string | null
+  provider: string
 }
 
 async function checkVeoTask(externalTaskId: string): Promise<{
@@ -51,6 +53,47 @@ async function checkVeoTask(externalTaskId: string): Promise<{
       status: data.status,
       videoUrl: data.data?.output,
       failReason: data.fail_reason,
+    }
+  } catch {
+    return { status: 'POLL_ERROR' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function checkVolcengineTask(externalTaskId: string): Promise<{
+  status: string
+  videoUrl?: string
+  failReason?: string
+}> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const volcengineApiUrl = 'https://ark.cn-beijing.volces.com/api/v3'
+    const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
+    const res = await fetch(`${volcengineApiUrl}/contents/generations/tasks/${externalTaskId}`, {
+      headers: { Authorization: `Bearer ${volcengineApiKey}` },
+      signal: controller.signal,
+    })
+    if (!res.ok) return { status: 'POLL_ERROR' }
+    const data = (await res.json()) as {
+      status: string
+      content?: { video_url?: string }
+      error?: { message?: string }
+    }
+    // Map Volcengine status to internal status
+    const statusMap: Record<string, string> = {
+      succeeded: 'SUCCESS',
+      failed: 'FAILURE',
+      expired: 'FAILURE',
+      queued: 'NOT_START',
+      running: 'IN_PROGRESS',
+      cancelled: 'FAILURE',
+    }
+    return {
+      status: statusMap[data.status] ?? 'POLL_ERROR',
+      videoUrl: data.content?.video_url,
+      failReason: data.error?.message,
     }
   } catch {
     return { status: 'POLL_ERROR' }
@@ -188,6 +231,7 @@ async function pollVideoTasks(): Promise<void> {
       'task_batches.team_id as teamId',
       'task_batches.user_id as userId',
       'task_batches.credit_account_id as creditAccountId',
+      'task_batches.provider as provider',
     ])
     .where('tasks.status', '=', 'processing')
     .where('task_batches.module', '=', 'video')
@@ -210,7 +254,9 @@ async function pollVideoTasks(): Promise<void> {
         continue
       }
 
-      const result = await checkVeoTask(task.externalTaskId)
+      const result = task.provider === 'volcengine'
+        ? await checkVolcengineTask(task.externalTaskId)
+        : await checkVeoTask(task.externalTaskId)
 
       if (result.status === 'SUCCESS' && result.videoUrl) {
         pollErrorCounts.delete(task.taskId)

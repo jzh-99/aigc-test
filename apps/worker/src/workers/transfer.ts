@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq'
-import pino from 'pino'
+import pino_ from 'pino'
 import { getDb } from '@aigc/db'
 import type { TransferJobData } from '@aigc/types'
 import { getRedis } from '../lib/redis.js'
@@ -11,9 +11,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const execFileAsync = promisify(execFile)
+const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
-const EXTERNAL_STORAGE_URL = process.env.EXTERNAL_STORAGE_URL
+const EXTERNAL_STORAGE_URL = process.env.EXTERNAL_STORAGE_URL as string
 if (!EXTERNAL_STORAGE_URL) throw new Error('EXTERNAL_STORAGE_URL env var is required')
 
 // If the storage API returns an external domain URL, rewrite to internal base URL

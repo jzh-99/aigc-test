@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiPost, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { Loader2, Info } from 'lucide-react'
@@ -18,7 +19,7 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
   const [ownerIdentifier, setOwnerIdentifier] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
   const [initialCredits, setInitialCredits] = useState('1000')
-  const [teamType, setTeamType] = useState<'standard' | 'company_a'>('standard')
+  const [teamType, setTeamType] = useState<'standard' | 'company_a' | 'avatar_enabled'>('standard')
   const [loading, setLoading] = useState(false)
   const [phoneError, setPhoneError] = useState('')
 
@@ -111,26 +112,16 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
           </div>
           <div className="space-y-2">
             <Label>团队类型</Label>
-            <div className="flex gap-3">
-              {(['standard', 'company_a'] as const).map((type) => (
-                <label
-                  key={type}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer text-sm transition-colors ${
-                    teamType === type ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="team_type"
-                    value={type}
-                    checked={teamType === type}
-                    onChange={() => setTeamType(type)}
-                    className="sr-only"
-                  />
-                  {type === 'standard' ? '标准版' : '省台版'}
-                </label>
-              ))}
-            </div>
+            <Select value={teamType} onValueChange={(v) => setTeamType(v as 'standard' | 'company_a' | 'avatar_enabled')}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="standard">标准版</SelectItem>
+                <SelectItem value="company_a">省台版</SelectItem>
+                <SelectItem value="avatar_enabled">专业版（含数字人）</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Button type="submit" disabled={loading || !isValid}>
             {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}

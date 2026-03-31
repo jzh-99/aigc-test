@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 config({ path: path.resolve(__dirname, '../../../.env') })
 
 import { Worker, Queue } from 'bullmq'
-import pino from 'pino'
+import pino_ from 'pino'
 import type { GenerationJobData, TransferJobData } from '@aigc/types'
 import { getDb } from '@aigc/db'
 import { getAdapter } from './adapters/factory.js'
@@ -16,7 +16,9 @@ import { runTimeoutGuardian } from './jobs/timeout-guardian.js'
 import { transferWorker } from './workers/transfer.js'
 import { getRedis, closeRedis } from './lib/redis.js'
 import { startVideoPoller } from './pollers/video-poller.js'
+import { startAvatarPoller } from './pollers/avatar-poller.js'
 
+const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
 // ─── Image Worker ────────────────────────────────────────────────────────────
@@ -90,12 +92,17 @@ logger.info('Timeout guardian scheduled (every 5 minutes)')
 
 const videoPollerTimer = startVideoPoller()
 
+// ─── Avatar Poller ────────────────────────────────────────────────────────────
+
+const avatarPollerTimer = startAvatarPoller()
+
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 
 const shutdown = async () => {
   logger.info('Shutting down workers...')
   clearInterval(guardianTimer)
   clearInterval(videoPollerTimer)
+  clearInterval(avatarPollerTimer)
   await imageWorker.close()
   await transferWorker.close()
   await closeRedis()

@@ -69,7 +69,7 @@ export interface TeamsTable {
   name: string
   owner_id: string
   plan_tier: 'free' | 'basic' | 'pro' | 'enterprise'
-  team_type: Generated<'standard' | 'company_a'>
+  team_type: Generated<'standard' | 'company_a' | 'avatar_enabled'>
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
   created_at: Generated<Timestamp>
@@ -153,7 +153,7 @@ export interface TaskBatchesTable {
   credit_account_id: string
   parent_batch_id: string | null
   idempotency_key: string
-  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent'
+  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar'
   provider: string
   model: string
   prompt: string
@@ -261,7 +261,7 @@ export interface ProviderModelsTable {
   provider_id: string
   code: string
   name: string
-  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent'
+  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar'
   credit_cost: number
   params_pricing: ColumnType<unknown, string, string>
   params_schema: ColumnType<unknown, string, string>

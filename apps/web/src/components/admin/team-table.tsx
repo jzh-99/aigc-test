@@ -34,7 +34,7 @@ interface Team {
   owner_id: string
   owner_username: string | null
   plan_tier: string
-  team_type: 'standard' | 'company_a'
+  team_type: 'standard' | 'company_a' | 'avatar_enabled'
   created_at: string
   balance: number
   frozen_credits: number
@@ -96,10 +96,9 @@ export function TeamTable() {
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null)
   const [trashOpen, setTrashOpen] = useState(false)
 
-  async function handleSwitchType(team: Team) {
-    const newType = team.team_type === 'company_a' ? 'standard' : 'company_a'
+  async function handleChangeType(team: Team, newType: 'standard' | 'company_a' | 'avatar_enabled') {
+    if (newType === team.team_type) return
     setSwitchingTeamId(team.id)
-    // Optimistic update
     mutate(
       (prev) => prev
         ? { data: prev.data.map(t => t.id === team.id ? { ...t, team_type: newType } : t) }
@@ -109,7 +108,6 @@ export function TeamTable() {
     try {
       await apiPatch(`/admin/teams/${team.id}`, { team_type: newType })
     } catch (err) {
-      // Roll back on error
       mutate()
       toast.error(err instanceof ApiError ? err.message : '切换失败')
     } finally {
@@ -166,6 +164,9 @@ export function TeamTable() {
                     {team.team_type === 'company_a' && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-400 text-blue-600">省台</Badge>
                     )}
+                    {team.team_type === 'avatar_enabled' && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-purple-400 text-purple-600">专业版</Badge>
+                    )}
                     {team.owner_username && (
                       <span className="text-xs text-muted-foreground">组长: {team.owner_username}</span>
                     )}
@@ -178,9 +179,23 @@ export function TeamTable() {
                     <span>累计已用: {team.lifetime_used.toLocaleString()}</span>
                   </div>
                 </div>
-                <Button size="sm" variant="outline" className="text-xs" onClick={(e) => { e.stopPropagation(); handleSwitchType(team) }} disabled={switchingTeamId === team.id}>
-                  {switchingTeamId === team.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (team.team_type === 'company_a' ? '切换标准版' : '切换省台版')}
-                </Button>
+                <Select
+                  value={team.team_type}
+                  onValueChange={(v) => handleChangeType(team, v as 'standard' | 'company_a' | 'avatar_enabled')}
+                  disabled={switchingTeamId === team.id}
+                >
+                  <SelectTrigger className="h-8 w-[100px] text-xs" onClick={(e) => e.stopPropagation()}>
+                    {switchingTeamId === team.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <SelectValue />
+                    }
+                  </SelectTrigger>
+                  <SelectContent onClick={(e) => e.stopPropagation()}>
+                    <SelectItem value="standard" className="text-xs">标准版</SelectItem>
+                    <SelectItem value="company_a" className="text-xs">省台版</SelectItem>
+                    <SelectItem value="avatar_enabled" className="text-xs">专业版</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setTopupTeam({ id: team.id, name: team.name, balance: team.balance }) }}>
                   <Coins className="h-3.5 w-3.5 mr-1" />
                   调整积分

@@ -1,11 +1,12 @@
 import { getDb } from '@aigc/db'
 import { Queue } from 'bullmq'
-import pino from 'pino'
+import pino_ from 'pino'
 import { sql } from 'kysely'
 import type { GenerationJobData } from '@aigc/types'
 import { failPipeline } from '../pipelines/fail.js'
 import { getRedis } from '../lib/redis.js'
 
+const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
 let _imageQueue: Queue | null = null

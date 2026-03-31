@@ -14,6 +14,8 @@ const ALLOWED_PARAM_KEYS = new Set([
   'aspect_ratio', 'width', 'height', 'seed', 'style', 'quality',
   'image', 'image_url', 'reference_image', 'negative_prompt',
   'steps', 'cfg_scale', 'guidance_scale', 'scheduler',
+  // Volcengine Seedream params
+  'resolution', 'watermark',
 ])
 
 // Keys that may contain image data (data URIs or URLs) — must NOT be truncated

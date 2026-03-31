@@ -10,9 +10,12 @@ import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
 
-const MODEL_CREDITS: Record<'gemini' | 'nano-banana-pro', number> = {
+const MODEL_CREDITS: Record<'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0', number> = {
   gemini: 5,
   'nano-banana-pro': 10,
+  'seedream-5.0-lite': 50,
+  'seedream-4.5': 50,
+  'seedream-4.0': 50,
 }
 
 interface PromptInputProps {
@@ -60,13 +63,16 @@ export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={modelType} onValueChange={(v) => setModelType(v as 'gemini' | 'nano-banana-pro')} disabled={disabled}>
+        <Select value={modelType} onValueChange={(v) => setModelType(v as 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0')} disabled={disabled}>
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="模型" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="gemini">全能图片2</SelectItem>
             <SelectItem value="nano-banana-pro">全能图片Pro</SelectItem>
+            <SelectItem value="seedream-5.0-lite">Seedream 5.0</SelectItem>
+            <SelectItem value="seedream-4.5">Seedream 4.5</SelectItem>
+            <SelectItem value="seedream-4.0">Seedream 4.0</SelectItem>
           </SelectContent>
         </Select>
 

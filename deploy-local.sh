@@ -21,6 +21,7 @@ info "构建项目..."
 pnpm --filter @aigc/db build
 pnpm --filter @aigc/types build
 pnpm --filter @aigc/web build
+pnpm --filter @aigc/worker build
 
 # ── 2. 数据库迁移（幂等） ─────────────────────────────────
 info "执行数据库迁移..."
