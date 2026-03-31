@@ -7,5 +7,6 @@ export function useTeamFeatures() {
   return {
     isCompanyA,
     showVideoTab: !isCompanyA,
+    showAvatarTab: activeTeam()?.team_type === 'avatar_enabled',
   }
 }

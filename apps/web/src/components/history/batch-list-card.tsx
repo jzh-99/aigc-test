@@ -37,8 +37,10 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
     setApplied(true)
 
     // Auto-navigate to appropriate generation page
-    const isVideo = (batch as any).module === 'video'
-    if (isVideo) {
+    const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar'
+    if ((batch as any).module === 'avatar') {
+      router.push('/image?mode=avatar')
+    } else if (isVideo) {
       router.push('/image?mode=video')
     } else {
       router.push('/image')
@@ -65,7 +67,7 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
     ?? batch.tasks?.find((t) => t.status === 'failed' && t.error_message)?.error_message
     ?? null
 
-  const isVideo = (batch as any).module === 'video'
+  const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar'
   const videoUrl = isVideo
     ? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.storage_url
       ?? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.original_url

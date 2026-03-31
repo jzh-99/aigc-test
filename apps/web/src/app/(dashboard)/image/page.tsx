@@ -36,7 +36,7 @@ function isTerminalStatus(status: string) {
 
 export default function ImagePage() {
   const searchParams = useSearchParams()
-  const initialMode = searchParams.get('mode') === 'video' ? 'video' : 'image'
+  const initialMode = (searchParams.get('mode') === 'video' ? 'video' : searchParams.get('mode') === 'avatar' ? 'avatar' : 'image') as 'image' | 'video' | 'avatar'
   const batchListRef = useRef<BatchListHandle>(null)
 
   const [activeBatchCount, setActiveBatchCount] = useState(0)
@@ -133,7 +133,7 @@ export default function ImagePage() {
   const handleBatchCreated = useCallback((batch: BatchResponse) => {
     batchListRef.current?.prepend(batch)
     setActiveBatchCount((c) => c + 1)
-    const intervalMs = (batch as any).module === 'video' ? VIDEO_POLL_INTERVAL_MS : POLL_INTERVAL_MS
+    const intervalMs = ((batch as any).module === 'video' || (batch as any).module === 'avatar') ? VIDEO_POLL_INTERVAL_MS : POLL_INTERVAL_MS
     startPolling(batch.id, intervalMs)
   }, [startPolling])
 

@@ -370,7 +370,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           owner_username: { type: 'string', maxLength: 50 },
           owner_password: { type: 'string', minLength: 8, maxLength: 72 },
           initial_credits: { type: 'integer', minimum: 0, maximum: 10000000 },
-          team_type: { type: 'string', enum: ['standard', 'company_a'] },
+          team_type: { type: 'string', enum: ['standard', 'company_a', 'avatar_enabled'] },
         },
         additionalProperties: false,
       },
@@ -550,12 +550,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // PATCH /admin/teams/:id — update team settings (team_type, etc.)
-  app.patch<{ Params: { id: string }; Body: { team_type?: 'standard' | 'company_a' } }>('/admin/teams/:id', {
+  app.patch<{ Params: { id: string }; Body: { team_type?: 'standard' | 'company_a' | 'avatar_enabled' } }>('/admin/teams/:id', {
     schema: {
       body: {
         type: 'object',
         properties: {
-          team_type: { type: 'string', enum: ['standard', 'company_a'] },
+          team_type: { type: 'string', enum: ['standard', 'company_a', 'avatar_enabled'] },
         },
         additionalProperties: false,
       },

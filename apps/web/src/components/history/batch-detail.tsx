@@ -33,6 +33,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'nano-banana-2-4k':                  '全能图片Pro 4K',
   'veo3.1-fast':                       '全能视频3.1 Fast',
   'veo3.1-components':                 '全能视频3.1',
+  'jimeng_realman_avatar_picture_omni_v15': 'OmniHuman 1.5 数字人',
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
@@ -98,7 +99,7 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
     .filter((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))
     .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
 
-  const isVideo = (batch as any).module === 'video'
+  const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar'
 
   return (
     <div className="mt-6 space-y-4">

@@ -16,7 +16,7 @@ import { useGenerate } from '@/hooks/use-generate'
 import { useVideoGenerate } from '@/hooks/use-video-generate'
 import { useTeamFeatures } from '@/hooks/use-team-features'
 import { useAuthStore } from '@/stores/auth-store'
-import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search, Film, X } from 'lucide-react'
+import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search, Film, X, UserSquare2, Music } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
@@ -162,11 +162,11 @@ interface FrameImage {
 interface GenerationPanelProps {
   onBatchCreated: (batch: BatchResponse) => void
   disabled?: boolean
-  initialMode?: 'image' | 'video'
+  initialMode?: 'image' | 'video' | 'avatar'
 }
 
 export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image' }: GenerationPanelProps) {
-  const [mode, setMode] = useState<'image' | 'video'>(initialMode)
+  const [mode, setMode] = useState<'image' | 'video' | 'avatar'>(initialMode)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -195,7 +195,16 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const [isReferenceDragging, setIsReferenceDragging] = useState(false)
   const referenceDragCounterRef = useRef(0)
 
-  const { isCompanyA, showVideoTab } = useTeamFeatures()
+  // Avatar (数字人) mode state
+  const [avatarImage, setAvatarImage] = useState<FrameImage | null>(null)
+  const [avatarAudio, setAvatarAudio] = useState<{ id: string; name: string; dataUrl: string; duration: number } | null>(null)
+  const [avatarPrompt, setAvatarPrompt] = useState('')
+  const [avatarResolution, setAvatarResolution] = useState<'720p' | '1080p'>('720p')
+  const [isAvatarGenerating, setIsAvatarGenerating] = useState(false)
+  const avatarImageRef = useRef<HTMLInputElement>(null)
+  const avatarAudioRef = useRef<HTMLInputElement>(null)
+
+  const { isCompanyA, showVideoTab, showAvatarTab } = useTeamFeatures()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
 
   const {
@@ -333,6 +342,65 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   }, [referenceImages.length, addReferenceImage])
   const { generate } = useGenerate()
   const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
+
+  const handleAvatarGenerate = async () => {
+    if (!avatarImage || !avatarAudio) return
+    setIsAvatarGenerating(true)
+    try {
+      const token = useAuthStore.getState().accessToken ?? ''
+
+      // Upload image
+      const imageFormData = new FormData()
+      const imageBlob = await fetch(avatarImage.dataUrl).then(r => r.blob())
+      imageFormData.append('file', imageBlob, `avatar-image.${imageBlob.type.split('/')[1] || 'jpg'}`)
+      const imageUploadRes = await fetch('/api/v1/avatar/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: imageFormData,
+      })
+      if (!imageUploadRes.ok) throw new ApiError(imageUploadRes.status, 'UPLOAD_ERROR', '图片上传失败')
+      const imageUpload = (await imageUploadRes.json()) as { url: string }
+
+      // Upload audio
+      const audioFormData = new FormData()
+      const audioBlob = await fetch(avatarAudio.dataUrl).then(r => r.blob())
+      audioFormData.append('file', audioBlob, avatarAudio.name)
+      const audioUploadRes = await fetch('/api/v1/avatar/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: audioFormData,
+      })
+      if (!audioUploadRes.ok) throw new ApiError(audioUploadRes.status, 'UPLOAD_ERROR', '音频上传失败')
+      const audioUpload = (await audioUploadRes.json()) as { url: string }
+
+      // Submit generation
+      const res = await fetch('/api/v1/avatar/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          workspace_id: activeWorkspaceId,
+          image_url: imageUpload.url,
+          audio_url: audioUpload.url,
+          audio_duration: avatarAudio.duration,
+          prompt: avatarPrompt.trim() || undefined,
+          resolution: avatarResolution,
+        }),
+      })
+      const batch = await res.json()
+      if (!res.ok) {
+        throw new ApiError(res.status, batch?.error?.code ?? 'AVATAR_ERROR', batch?.error?.message ?? '数字人生成失败')
+      }
+      onBatchCreated(batch)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error(err.message)
+      } else {
+        toast.error('数字人生成请求失败，请稍后重试')
+      }
+    } finally {
+      setIsAvatarGenerating(false)
+    }
+  }
 
   const handleGenerate = async () => {
     try {
@@ -490,6 +558,20 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 视频
               </button>
             )}
+            {showAvatarTab && (
+              <button
+                onClick={() => setMode('avatar')}
+                className={cn(
+                  'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
+                  mode === 'avatar'
+                    ? 'bg-card border-border text-foreground z-10'
+                    : 'bg-muted/60 border-muted text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                <UserSquare2 className="h-3.5 w-3.5" />
+                数字人
+              </button>
+            )}
           </div>
         )}
 
@@ -632,7 +714,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               </div>
             </div>
           </div>
-        ) : (
+        ) : mode === 'video' ? (
           <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
             {/* Video mode switcher */}
             <div className="flex gap-2 shrink-0">
@@ -863,6 +945,100 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 footer={<p className="text-sm text-white/80">参考图 {referencePreviewIndex + 1}/{videoReferenceImages.length}</p>}
               />
             )}
+          </div>
+        ) : (
+          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-3">
+            {/* 人物图片上传 */}
+            <div className="shrink-0">
+              <p className="text-[11px] text-muted-foreground mb-1">人物图片（必填，≤5MB）</p>
+              {avatarImage ? (
+                <div className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group">
+                  <Image src={avatarImage.previewUrl} alt="" fill className="object-contain" sizes="300px" unoptimized />
+                  <button
+                    onClick={() => setAvatarImage(null)}
+                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  >
+                    <X className="h-3 w-3 text-background" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => avatarImageRef.current?.click()}
+                  className="h-[90px] w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
+                >
+                  <ImagePlus className="h-5 w-5 text-primary shrink-0" />
+                  <div className="text-left">
+                    <div className="text-sm font-medium text-primary">上传人物图片</div>
+                    <div className="text-[11px] text-primary/60">jpg / png / webp · 最大 5MB</div>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {/* 音频上传 */}
+            <div className="shrink-0">
+              <p className="text-[11px] text-muted-foreground mb-1">驱动音频（必填，≤60秒）</p>
+              {avatarAudio ? (
+                <div className="flex items-center gap-3 h-10 px-3 rounded-lg border bg-muted">
+                  <Music className="h-4 w-4 text-primary shrink-0" />
+                  <span className="flex-1 text-sm truncate">{avatarAudio.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{avatarAudio.duration.toFixed(1)}s</span>
+                  <button onClick={() => setAvatarAudio(null)} className="h-5 w-5 rounded-full hover:bg-foreground/10 flex items-center justify-center shrink-0">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => avatarAudioRef.current?.click()}
+                  className="h-10 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
+                >
+                  <Music className="h-4 w-4 text-primary shrink-0" />
+                  <div className="text-sm font-medium text-primary">上传音频文件</div>
+                  <div className="text-[11px] text-primary/60 ml-1">mp3 / wav / m4a · 最大 60s</div>
+                </button>
+              )}
+            </div>
+
+            {/* 提示词 */}
+            <div className="flex-1 min-h-0">
+              <Textarea
+                placeholder="可选：描述动作、运镜或画面风格..."
+                value={avatarPrompt}
+                onChange={(e) => setAvatarPrompt(e.target.value)}
+                className="h-full resize-none"
+                disabled={isAvatarGenerating}
+              />
+            </div>
+
+            {/* 隐藏文件输入 */}
+            <input ref={avatarImageRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                if (f.size > 5 * 1024 * 1024) { toast.error('图片不能超过 5MB'); return }
+                const img = await readFrameFile(f)
+                if (img) setAvatarImage(img)
+                e.target.value = ''
+              }}
+            />
+            <input ref={avatarAudioRef} type="file" accept="audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/x-m4a" className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                const url = URL.createObjectURL(f)
+                const audio = document.createElement('audio')
+                audio.src = url
+                audio.onloadedmetadata = () => {
+                  const dur = audio.duration
+                  URL.revokeObjectURL(url)
+                  if (dur > 60) { toast.error('音频不能超过 60 秒'); return }
+                  const reader = new FileReader()
+                  reader.onload = () => setAvatarAudio({ id: crypto.randomUUID(), name: f.name, dataUrl: reader.result as string, duration: dur })
+                  reader.readAsDataURL(f)
+                }
+                e.target.value = ''
+              }}
+            />
           </div>
         )}
       </div>
@@ -1243,6 +1419,59 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               disabled={isVideoGenerating || disabled || !videoPrompt.trim() || (videoMode === 'components' && videoReferenceImages.length === 0)}
             >
               {isVideoGenerating ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>
+              ) : (
+                <><Sparkles className="h-4 w-4" />生成</>
+              )}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {mode === 'avatar' && (
+        <>
+          {/* 数字人配置 */}
+          <div className="rounded-xl border bg-card p-3">
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">分辨率</Label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[{ value: '720p', label: '720p', desc: '标准' }, { value: '1080p', label: '1080p', desc: '高清' }].map((r) => (
+                    <button
+                      key={r.value}
+                      onClick={() => setAvatarResolution(r.value as '720p' | '1080p')}
+                      disabled={isAvatarGenerating}
+                      className={cn(
+                        'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
+                        avatarResolution === r.value
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'border-border hover:border-primary/50',
+                        isAvatarGenerating && 'opacity-50 cursor-not-allowed'
+                      )}
+                    >
+                      {r.label} <span className="text-xs font-normal text-muted-foreground">{r.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 底部操作栏 */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1" />
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <Coins className="h-4 w-4 text-amber-500" />
+              <span>{avatarAudio ? `${Math.ceil(avatarAudio.duration) * 100} 积分` : '100 积分/秒'}</span>
+            </div>
+            <Button
+              variant="gradient"
+              size="lg"
+              className="gap-2 px-8"
+              onClick={handleAvatarGenerate}
+              disabled={isAvatarGenerating || disabled || !avatarImage || !avatarAudio}
+            >
+              {isAvatarGenerating ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>
               ) : (
                 <><Sparkles className="h-4 w-4" />生成</>

@@ -22,7 +22,8 @@
       "Bash(python3:*)",
       "Bash(xargs grep:*)",
       "Bash(cat:*)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(bash deploy-local.sh)"
     ]
   }
 }
