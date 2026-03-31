@@ -21,6 +21,7 @@ import { videoRoutes } from './routes/videos.js'
 import multipart from '@fastify/multipart'
 import { aiAssistantRoutes } from './routes/ai-assistant.js'
 import { avatarRoutes } from './routes/avatar.js'
+import { actionImitationRoutes } from './routes/action-imitation.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -90,6 +91,7 @@ export async function buildApp() {
       await v1.register(videoRoutes)
       await v1.register(aiAssistantRoutes)
       await v1.register(avatarRoutes)
+      await v1.register(actionImitationRoutes)
     },
     { prefix: '/api/v1' },
   )

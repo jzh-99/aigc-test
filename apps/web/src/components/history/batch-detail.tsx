@@ -34,6 +34,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'veo3.1-fast':                       '全能视频3.1 Fast',
   'veo3.1-components':                 '全能视频3.1',
   'jimeng_realman_avatar_picture_omni_v15': 'OmniHuman 1.5 数字人',
+  'jimeng_dreamactor_m20_gen_video': '动作模仿2.0',
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
@@ -99,7 +100,7 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
     .filter((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))
     .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
 
-  const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar'
+  const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
 
   return (
     <div className="mt-6 space-y-4">

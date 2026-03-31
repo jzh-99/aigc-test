@@ -153,7 +153,7 @@ export interface TaskBatchesTable {
   credit_account_id: string
   parent_batch_id: string | null
   idempotency_key: string
-  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar'
+  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
   provider: string
   model: string
   prompt: string
@@ -261,7 +261,7 @@ export interface ProviderModelsTable {
   provider_id: string
   code: string
   name: string
-  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar'
+  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
   credit_cost: number
   params_pricing: ColumnType<unknown, string, string>
   params_schema: ColumnType<unknown, string, string>

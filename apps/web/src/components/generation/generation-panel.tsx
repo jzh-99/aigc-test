@@ -16,7 +16,7 @@ import { useGenerate } from '@/hooks/use-generate'
 import { useVideoGenerate } from '@/hooks/use-video-generate'
 import { useTeamFeatures } from '@/hooks/use-team-features'
 import { useAuthStore } from '@/stores/auth-store'
-import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search, Film, X, UserSquare2, Music } from 'lucide-react'
+import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search, Film, X, UserSquare2, Music, Clapperboard, Play } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
@@ -162,11 +162,11 @@ interface FrameImage {
 interface GenerationPanelProps {
   onBatchCreated: (batch: BatchResponse) => void
   disabled?: boolean
-  initialMode?: 'image' | 'video' | 'avatar'
+  initialMode?: 'image' | 'video' | 'avatar' | 'action_imitation'
 }
 
 export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image' }: GenerationPanelProps) {
-  const [mode, setMode] = useState<'image' | 'video' | 'avatar'>(initialMode)
+  const [mode, setMode] = useState<'image' | 'video' | 'avatar' | 'action_imitation'>(initialMode)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -204,7 +204,15 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const avatarImageRef = useRef<HTMLInputElement>(null)
   const avatarAudioRef = useRef<HTMLInputElement>(null)
 
-  const { isCompanyA, showVideoTab, showAvatarTab } = useTeamFeatures()
+  // Action Imitation (动作模仿) mode state
+  const [actionImage, setActionImage] = useState<FrameImage | null>(null)
+  const [actionVideo, setActionVideo] = useState<{ file: File; previewUrl: string; duration: number; name: string } | null>(null)
+  const [actionVideoPreviewOpen, setActionVideoPreviewOpen] = useState(false)
+  const [isActionGenerating, setIsActionGenerating] = useState(false)
+  const actionImageRef = useRef<HTMLInputElement>(null)
+  const actionVideoRef = useRef<HTMLInputElement>(null)
+
+  const { isCompanyA, showVideoTab, showAvatarTab, showActionImitationTab } = useTeamFeatures()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
 
   const {
@@ -402,6 +410,55 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     }
   }
 
+  const handleActionImitationGenerate = async () => {
+    if (!actionImage || !actionVideo) return
+    setIsActionGenerating(true)
+    try {
+      const token = useAuthStore.getState().accessToken ?? ''
+
+      // Upload video
+      const videoFormData = new FormData()
+      videoFormData.append('file', actionVideo.file, actionVideo.name)
+      const videoUploadRes = await fetch('/api/v1/action-imitation/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: videoFormData,
+      })
+      if (!videoUploadRes.ok) throw new ApiError(videoUploadRes.status, 'UPLOAD_ERROR', '视频上传失败')
+      const videoUpload = (await videoUploadRes.json()) as { url: string }
+
+      // Extract base64 from dataUrl
+      const [header, imageBase64] = actionImage.dataUrl.split(',')
+      const imageMime = header.replace('data:', '').replace(';base64', '') || 'image/jpeg'
+
+      // Submit generation
+      const res = await fetch('/api/v1/action-imitation/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          workspace_id: activeWorkspaceId,
+          image_base64: imageBase64,
+          image_mime: imageMime,
+          video_url: videoUpload.url,
+          video_duration: actionVideo.duration,
+        }),
+      })
+      const batch = await res.json()
+      if (!res.ok) {
+        throw new ApiError(res.status, batch?.error?.code ?? 'ACTION_IMITATION_ERROR', batch?.error?.message ?? '动作模仿生成失败')
+      }
+      onBatchCreated(batch)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error(err.message)
+      } else {
+        toast.error('动作模仿生成请求失败，请稍后重试')
+      }
+    } finally {
+      setIsActionGenerating(false)
+    }
+  }
+
   const handleGenerate = async () => {
     try {
       const batch = await generate()
@@ -570,6 +627,20 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               >
                 <UserSquare2 className="h-3.5 w-3.5" />
                 数字人
+              </button>
+            )}
+            {showActionImitationTab && (
+              <button
+                onClick={() => setMode('action_imitation')}
+                className={cn(
+                  'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
+                  mode === 'action_imitation'
+                    ? 'bg-card border-border text-foreground z-10'
+                    : 'bg-muted/60 border-muted text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                <Clapperboard className="h-3.5 w-3.5" />
+                动作模仿
               </button>
             )}
           </div>
@@ -944,6 +1015,119 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 onNext={referencePreviewIndex < videoReferenceImages.length - 1 ? () => setReferencePreviewIndex(referencePreviewIndex + 1) : undefined}
                 footer={<p className="text-sm text-white/80">参考图 {referencePreviewIndex + 1}/{videoReferenceImages.length}</p>}
               />
+            )}
+          </div>
+        ) : mode === 'action_imitation' ? (
+          <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
+            {/* 人物图片上传 — 占上半 */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              <p className="text-[11px] text-muted-foreground mb-1 shrink-0">人物图片（必填，≤4.7MB）</p>
+              {actionImage ? (
+                <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-muted group">
+                  <Image src={actionImage.previewUrl} alt="" fill className="object-contain" sizes="300px" unoptimized />
+                  <button
+                    onClick={() => setActionImage(null)}
+                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  >
+                    <X className="h-3 w-3 text-background" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => actionImageRef.current?.click()}
+                  className="flex-1 min-h-0 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
+                >
+                  <ImagePlus className="h-5 w-5 text-primary shrink-0" />
+                  <div className="text-left">
+                    <div className="text-sm font-medium text-primary">上传人物图片</div>
+                    <div className="text-[11px] text-primary/60">jpg / png · 最大 4.7MB</div>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {/* 驱动视频上传 — 占下半 */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              <p className="text-[11px] text-muted-foreground mb-1 shrink-0">驱动视频（必填，≤30秒）</p>
+              {actionVideo ? (
+                <div
+                  className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-black group cursor-pointer"
+                  onClick={() => setActionVideoPreviewOpen(true)}
+                >
+                  <video
+                    src={actionVideo.previewUrl}
+                    className="absolute inset-0 w-full h-full object-contain"
+                    muted
+                    playsInline
+                    preload="metadata"
+                    onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.001 }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                    <Play className="h-8 w-8 text-white drop-shadow" />
+                  </div>
+                  <div className="absolute bottom-1 left-1 right-7">
+                    <span className="text-[10px] bg-black/60 text-white rounded px-1 py-0.5 truncate block">
+                      {actionVideo.name} · {actionVideo.duration.toFixed(1)}s
+                    </span>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setActionVideo(null) }}
+                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  >
+                    <X className="h-3 w-3 text-background" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => actionVideoRef.current?.click()}
+                  className="flex-1 min-h-0 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
+                >
+                  <Clapperboard className="h-4 w-4 text-primary shrink-0" />
+                  <div className="text-sm font-medium text-primary">上传驱动视频</div>
+                  <div className="text-[11px] text-primary/60 ml-1">mp4 / mov / webm · 最大 30s</div>
+                </button>
+              )}
+            </div>
+
+            {/* 提示 */}
+            <p className="text-[11px] text-muted-foreground shrink-0">💡 图片与视频中人物比例越接近，效果越好</p>
+
+            {/* 隐藏文件输入 */}
+            <input ref={actionImageRef} type="file" accept="image/jpeg,image/png" className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                if (f.size > 4.7 * 1024 * 1024) { toast.error('图片不能超过 4.7MB'); return }
+                const img = await readFrameFile(f)
+                if (img) setActionImage(img)
+                e.target.value = ''
+              }}
+            />
+            <input ref={actionVideoRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                const url = URL.createObjectURL(f)
+                const video = document.createElement('video')
+                video.src = url
+                video.onloadedmetadata = () => {
+                  const dur = video.duration
+                  URL.revokeObjectURL(url)
+                  if (dur > 30) { toast.error('视频不能超过 30 秒'); return }
+                  const previewUrl = URL.createObjectURL(f)
+                  setActionVideo({ file: f, previewUrl, duration: dur, name: f.name })
+                }
+                e.target.value = ''
+              }}
+            />
+
+            {/* 视频预览对话框 */}
+            {actionVideoPreviewOpen && actionVideo && (
+              <Dialog open={actionVideoPreviewOpen} onOpenChange={setActionVideoPreviewOpen}>
+                <DialogContent className="max-w-2xl p-2">
+                  <video src={actionVideo.previewUrl} controls autoPlay className="w-full rounded-lg max-h-[70vh]" />
+                </DialogContent>
+              </Dialog>
             )}
           </div>
         ) : (
@@ -1462,7 +1646,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex-1" />
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
-              <span>{avatarAudio ? `${Math.ceil(avatarAudio.duration) * 100} 积分` : '100 积分/秒'}</span>
+              <span>{avatarAudio ? `${Math.ceil(avatarAudio.duration) * 50} 积分` : '50 积分/秒'}</span>
             </div>
             <Button
               variant="gradient"
@@ -1472,6 +1656,32 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               disabled={isAvatarGenerating || disabled || !avatarImage || !avatarAudio}
             >
               {isAvatarGenerating ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>
+              ) : (
+                <><Sparkles className="h-4 w-4" />生成</>
+              )}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {mode === 'action_imitation' && (
+        <>
+          {/* 底部操作栏 */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1" />
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <Coins className="h-4 w-4 text-amber-500" />
+              <span>{actionVideo ? `${Math.ceil(actionVideo.duration) * 20} 积分` : '20 积分/秒'}</span>
+            </div>
+            <Button
+              variant="gradient"
+              size="lg"
+              className="gap-2 px-8"
+              onClick={handleActionImitationGenerate}
+              disabled={isActionGenerating || disabled || !actionImage || !actionVideo}
+            >
+              {isActionGenerating ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>
               ) : (
                 <><Sparkles className="h-4 w-4" />生成</>
