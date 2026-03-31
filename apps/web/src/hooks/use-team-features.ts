@@ -8,5 +8,6 @@ export function useTeamFeatures() {
     isCompanyA,
     showVideoTab: !isCompanyA,
     showAvatarTab: activeTeam()?.team_type === 'avatar_enabled',
+    showActionImitationTab: activeTeam()?.team_type === 'avatar_enabled',
   }
 }

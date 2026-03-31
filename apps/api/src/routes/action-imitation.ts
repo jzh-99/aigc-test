@@ -9,56 +9,46 @@ import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
 
-const UPLOAD_DIR = '/tmp/avatar-uploads'
-const MAX_FILE_AGE_MS = 20 * 60 * 1000 // 20 minutes — enough for generation
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10 MB
-const MAX_AUDIO_SIZE = 20 * 1024 * 1024 // 20 MB
+const UPLOAD_DIR = '/tmp/action-imitation-uploads'
+const MAX_FILE_AGE_MS = 40 * 60 * 1000 // 40 minutes — covers upload + up to 35-min generation
+const MAX_VIDEO_SIZE = 200 * 1024 * 1024 // 200 MB
 
-const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp']
-const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac']
-const IMAGE_MIME: Record<string, string> = {
-  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+const VIDEO_EXTS = ['mp4', 'mov', 'webm']
+const VIDEO_MIME: Record<string, string> = {
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
 }
-const AUDIO_MIME: Record<string, string> = {
-  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac',
-}
-const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|mp3|wav|m4a|aac)$/
+const SAFE_ID = /^[\w-]+\.(mp4|mov|webm)$/
 
-const OMNI_REQ_KEY = 'jimeng_realman_avatar_picture_omni_v15'
-const OMNI_API_VERSION = '2022-08-31'
-const CREDITS_PER_SECOND = 50
+const ACTION_REQ_KEY = 'jimeng_dreamactor_m20_gen_video'
+const ACTION_API_VERSION = '2022-08-31'
+const CREDITS_PER_SECOND = 20
 
-export async function avatarRoutes(app: FastifyInstance): Promise<void> {
+export async function actionImitationRoutes(app: FastifyInstance): Promise<void> {
   await mkdir(UPLOAD_DIR, { recursive: true })
 
   const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
 
-  // ── POST /avatar/upload ─────────────────────────────────────────────────────
-  // Upload image or audio; returns temp_id + public URL for Volcengine to fetch
-  app.post('/avatar/upload', async (request, reply) => {
-    const data = await (request as any).file({ limits: { fileSize: MAX_AUDIO_SIZE } })
+  // ── POST /action-imitation/upload ───────────────────────────────────────────
+  // Upload driving video; returns temp_id + public URL for Volcengine to fetch
+  app.post('/action-imitation/upload', async (request, reply) => {
+    const data = await (request as any).file({ limits: { fileSize: MAX_VIDEO_SIZE } })
     if (!data) return reply.badRequest('No file provided')
 
     const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? ''
-    const isImage = IMAGE_EXTS.includes(ext)
-    const isAudio = AUDIO_EXTS.includes(ext)
-    if (!isImage && !isAudio) {
-      return reply.badRequest('Unsupported file type. Images: jpg/png/webp; Audio: mp3/wav/m4a/aac')
-    }
-    if (isImage && data.file.bytesRead > MAX_IMAGE_SIZE) {
-      return reply.badRequest('Image too large (max 10 MB)')
+    if (!VIDEO_EXTS.includes(ext)) {
+      return reply.badRequest('Unsupported file type. Video: mp4/mov/webm')
     }
 
     const id = `${randomUUID()}.${ext}`
     const filePath = join(UPLOAD_DIR, id)
     await pipeline(data.file, createWriteStream(filePath))
 
-    return { temp_id: id, url: `${BASE_URL}/api/v1/avatar/uploads/${id}` }
+    return { temp_id: id, url: `${BASE_URL}/api/v1/action-imitation/uploads/${id}` }
   })
 
-  // ── GET /avatar/uploads/:id ─────────────────────────────────────────────────
-  // Serve temp files publicly so Volcengine can fetch them (no auth)
-  app.get<{ Params: { id: string } }>('/avatar/uploads/:id', async (request, reply) => {
+  // ── GET /action-imitation/uploads/:id ──────────────────────────────────────
+  // Serve temp video files publicly so Volcengine can fetch them (no auth)
+  app.get<{ Params: { id: string } }>('/action-imitation/uploads/:id', async (request, reply) => {
     const { id } = request.params
     if (!SAFE_ID.test(id)) return reply.status(404).send()
 
@@ -70,7 +60,7 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(404).send()
       }
       const ext = id.split('.').pop()!
-      const mime = IMAGE_MIME[ext] ?? AUDIO_MIME[ext] ?? 'application/octet-stream'
+      const mime = VIDEO_MIME[ext] ?? 'application/octet-stream'
       reply.header('Content-Type', mime)
       reply.header('Content-Length', s.size)
       reply.header('Cache-Control', 'no-store')
@@ -81,34 +71,32 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  // ── POST /avatar/generate ───────────────────────────────────────────────────
+  // ── POST /action-imitation/generate ────────────────────────────────────────
   app.post<{
     Body: {
       workspace_id: string
-      image_url: string
-      audio_url: string
-      audio_duration: number   // seconds, detected client-side via HTML5 Audio
-      prompt?: string
-      resolution?: '720p' | '1080p'
+      image_base64: string   // base64 without data:xxx;base64, prefix
+      image_mime: string     // 'image/jpeg' | 'image/png'
+      video_url: string      // public URL of uploaded video
+      video_duration: number // seconds, detected client-side via HTML5 Video API
     }
-  }>('/avatar/generate', {
+  }>('/action-imitation/generate', {
     schema: {
       body: {
         type: 'object',
-        required: ['workspace_id', 'image_url', 'audio_url', 'audio_duration'],
+        required: ['workspace_id', 'image_base64', 'image_mime', 'video_url', 'video_duration'],
         properties: {
           workspace_id: { type: 'string', format: 'uuid' },
-          image_url: { type: 'string', minLength: 1 },
-          audio_url: { type: 'string', minLength: 1 },
-          audio_duration: { type: 'number', minimum: 1, maximum: 60 },
-          prompt: { type: 'string', maxLength: 2000 },
-          resolution: { type: 'string', enum: ['720p', '1080p'] },
+          image_base64: { type: 'string', minLength: 1 },
+          image_mime: { type: 'string', enum: ['image/jpeg', 'image/jpg', 'image/png'] },
+          video_url: { type: 'string', minLength: 1 },
+          video_duration: { type: 'number', minimum: 1, maximum: 30 },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { workspace_id: workspaceId, image_url, audio_url, audio_duration, prompt, resolution } = request.body
+    const { workspace_id: workspaceId, image_base64, image_mime, video_url, video_duration } = request.body
     const userId = request.user.id
     const db = getDb()
 
@@ -125,7 +113,7 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '你不是此工作区的成员' } })
     }
     if (wsMember?.role === 'viewer' && request.user.role !== 'admin') {
-      return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '查看者无权生成数字人视频' } })
+      return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '查看者无权使用动作模仿' } })
     }
 
     let teamId: string
@@ -137,24 +125,24 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
       teamId = workspace.team_id
     }
 
-    // Check concurrent avatar tasks — API only supports 1 concurrent
+    // Check concurrent action_imitation tasks — API only supports 1 concurrent
     const activeTasks = await db
       .selectFrom('tasks')
       .innerJoin('task_batches', 'tasks.batch_id', 'task_batches.id')
       .select(db.fn.count('tasks.id').as('count'))
       .where('tasks.status', '=', 'processing')
-      .where('task_batches.module', '=', 'avatar' as any)
+      .where('task_batches.module', '=', 'action_imitation' as any)
       .executeTakeFirstOrThrow()
 
     if (Number(activeTasks.count) >= 1) {
       return reply.status(429).send({
         success: false,
-        error: { code: 'AVATAR_CONCURRENT_LIMIT', message: '数字人生成同时只支持1个任务，请等待当前任务完成后再提交' },
+        error: { code: 'ACTION_IMITATION_CONCURRENT_LIMIT', message: '动作模仿同时只支持1个任务，请等待当前任务完成后再提交' },
       })
     }
 
-    // Calculate credits based on audio duration
-    const estimatedSeconds = Math.ceil(audio_duration)
+    // Calculate credits based on video duration
+    const estimatedSeconds = Math.ceil(video_duration)
     const estimatedCredits = estimatedSeconds * CREDITS_PER_SECOND
 
     // Freeze credits
@@ -180,15 +168,13 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
             team_id: teamId,
             workspace_id: workspaceId,
             credit_account_id: creditAccountId,
-            module: 'avatar',
+            module: 'action_imitation',
             provider: 'volcengine',
-            model: OMNI_REQ_KEY,
-            prompt: prompt ?? '',
+            model: ACTION_REQ_KEY,
+            prompt: '',
             params: JSON.stringify({
-              image_url,
-              audio_url,
-              audio_duration: estimatedSeconds,
-              resolution: resolution ?? '720p',
+              video_url,
+              video_duration: estimatedSeconds,
             }),
             quantity: 1,
             status: 'processing',
@@ -215,24 +201,23 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
       batchId = _bt.batchId
       taskId = _bt.taskId
     } catch (err) {
-      app.log.error({ err }, 'Failed to create avatar batch/task, refunding credits')
+      app.log.error({ err }, 'Failed to create action_imitation batch/task, refunding credits')
       try { await refundCredits(teamId, creditAccountId, userId, estimatedCredits) } catch { /* ignore */ }
       return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回' } })
     }
 
-    // Submit to Volcengine OmniHuman API
+    // Submit to Volcengine Action Imitation 2.0 API
     const volcBody: Record<string, unknown> = {
-      req_key: OMNI_REQ_KEY,
-      image_url,
-      audio_url,
-      enable_hd: resolution === '1080p',
+      req_key: ACTION_REQ_KEY,
+      binary_data_base64: [image_base64],
+      video_url,
+      cut_result_first_second_switch: true,
     }
-    if (prompt?.trim()) volcBody.prompt = prompt.trim()
 
     let externalTaskId: string | undefined
     let lastError = ''
     try {
-      const { url, headers, body: signedBody } = buildSignedRequest('CVSubmitTask', OMNI_API_VERSION, volcBody)
+      const { url, headers, body: signedBody } = buildSignedRequest('CVSync2AsyncSubmitTask', ACTION_API_VERSION, volcBody)
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 30_000)
       let res: Response
@@ -244,12 +229,12 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
 
       const json = (await res.json()) as { code: number; data?: { task_id?: string }; message?: string }
       if (json.code !== 10000 || !json.data?.task_id) {
-        throw new Error(`Volcengine Avatar API error ${json.code}: ${json.message ?? 'unknown'}`)
+        throw new Error(`Volcengine Action Imitation API error ${json.code}: ${json.message ?? 'unknown'}`)
       }
       externalTaskId = json.data.task_id
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
-      app.log.error({ taskId, batchId, err: lastError }, 'Avatar API submission failed')
+      app.log.error({ taskId, batchId, err: lastError }, 'Action Imitation API submission failed')
     }
 
     if (!externalTaskId) {
@@ -258,21 +243,21 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
         await trx.updateTable('task_batches').set({ status: 'failed', failed_count: sql`failed_count + 1` }).where('id', '=', batchId).execute()
         await trx.updateTable('credit_accounts').set({ frozen_credits: sql`frozen_credits - ${estimatedCredits}` }).where('id', '=', creditAccountId).execute()
         await trx.updateTable('team_members').set({ credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)` }).where('team_id', '=', teamId).where('user_id', '=', userId).execute()
-        await trx.insertInto('credits_ledger').values({ credit_account_id: creditAccountId, user_id: userId, amount: estimatedCredits, type: 'refund', task_id: taskId, batch_id: batchId, description: `Avatar generation failed to submit: ${lastError.slice(0, 200)}` }).execute()
+        await trx.insertInto('credits_ledger').values({ credit_account_id: creditAccountId, user_id: userId, amount: estimatedCredits, type: 'refund', task_id: taskId, batch_id: batchId, description: `Action Imitation failed to submit: ${lastError.slice(0, 200)}` }).execute()
       })
       try { await (request.server as any).redis.publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' })) } catch { /* ignore */ }
-      return reply.status(502).send({ success: false, error: { code: 'AVATAR_API_ERROR', message: `数字人生成服务暂时不可用：${lastError.slice(0, 300)}` } })
+      return reply.status(502).send({ success: false, error: { code: 'ACTION_IMITATION_API_ERROR', message: `动作模仿服务暂时不可用：${lastError.slice(0, 300)}` } })
     }
 
     await db.updateTable('tasks').set({ external_task_id: externalTaskId }).where('id', '=', taskId).execute()
 
     return reply.status(201).send({
       id: batchId,
-      module: 'avatar',
+      module: 'action_imitation',
       provider: 'volcengine',
-      model: OMNI_REQ_KEY,
-      prompt: prompt ?? '',
-      params: { image_url, audio_url, audio_duration: estimatedSeconds, resolution: resolution ?? '720p' },
+      model: ACTION_REQ_KEY,
+      prompt: '',
+      params: { video_url, video_duration: estimatedSeconds },
       quantity: 1,
       completed_count: 0,
       failed_count: 0,

@@ -17,6 +17,7 @@ import { transferWorker } from './workers/transfer.js'
 import { getRedis, closeRedis } from './lib/redis.js'
 import { startVideoPoller } from './pollers/video-poller.js'
 import { startAvatarPoller } from './pollers/avatar-poller.js'
+import { startActionImitationPoller } from './pollers/action-imitation-poller.js'
 
 const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
@@ -96,6 +97,10 @@ const videoPollerTimer = startVideoPoller()
 
 const avatarPollerTimer = startAvatarPoller()
 
+// ─── Action Imitation Poller ──────────────────────────────────────────────────
+
+const actionImitationPollerTimer = startActionImitationPoller()
+
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 
 const shutdown = async () => {
@@ -103,6 +108,7 @@ const shutdown = async () => {
   clearInterval(guardianTimer)
   clearInterval(videoPollerTimer)
   clearInterval(avatarPollerTimer)
+  clearInterval(actionImitationPollerTimer)
   await imageWorker.close()
   await transferWorker.close()
   await closeRedis()

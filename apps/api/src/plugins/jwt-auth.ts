@@ -12,6 +12,7 @@ const PUBLIC_ROUTES = [
   '/api/v1/assets/thumbnail',
   '/api/v1/ai-assistant/uploads/', // temp video files served to Gemini (public for API access)
   '/api/v1/avatar/uploads/',       // temp image/audio files served to Volcengine (public for API access)
+  '/api/v1/action-imitation/uploads/', // temp video files served to Volcengine (public for API access)
 ]
 
 export interface AuthUser {

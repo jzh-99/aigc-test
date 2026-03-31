@@ -30,6 +30,8 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'nano-banana-2-4k':                  '全能图片Pro 4K',
   'veo3.1-fast':                       '全能视频3.1 Fast',
   'veo3.1-components':                 '全能视频3.1',
+  'jimeng_realman_avatar_picture_omni_v15': 'OmniHuman 1.5 数字人',
+  'jimeng_dreamactor_m20_gen_video': '动作模仿2.0',
 }
 
 function groupByDate(assets: AssetItem[]): { date: string; items: AssetItem[] }[] {
