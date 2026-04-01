@@ -45,6 +45,9 @@ interface GenerationState {
   // Video generation state
   videoParams: VideoParams | null
 
+  // Pending module — set by applyBatch so the panel can switch to the right tab
+  pendingModule: string | null
+
   // Image generation actions
   setPrompt: (prompt: string) => void
   setModelType: (modelType: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0') => void
@@ -63,6 +66,7 @@ interface GenerationState {
 
   // Common actions
   applyBatch: (batch: BatchResponse) => void
+  clearPendingModule: () => void
   reset: () => void
 }
 
@@ -77,6 +81,7 @@ const defaults = {
   isGenerating: false,
   activeBatchId: null,
   videoParams: null as VideoParams | null,
+  pendingModule: null as string | null,
 }
 
 export const useGenerationStore = create<GenerationState>((set) => ({
@@ -96,12 +101,16 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   setActiveBatchId: (activeBatchId) => set({ activeBatchId }),
   setVideoParams: (videoParams) => set({ videoParams }),
   applyBatch: (batch) => {
-    const isVideo = (batch as any).module === 'video'
+    const module = (batch as any).module as string
+    const isVideo = module === 'video'
+    const isAvatar = module === 'avatar'
+    const isActionImitation = module === 'action_imitation'
 
     if (isVideo) {
       // Apply video parameters
       const params = batch.params as Record<string, unknown> | null
       set({
+        pendingModule: 'video',
         videoParams: {
           videoPrompt: batch.prompt,
           videoModel: batch.model,
@@ -109,18 +118,23 @@ export const useGenerationStore = create<GenerationState>((set) => ({
           videoUpsample: (params?.enable_upsample as boolean) || false,
         },
       })
+    } else if (isAvatar || isActionImitation) {
+      // Avatar / action imitation — just signal the module, no image params to restore
+      set({ pendingModule: module, videoParams: null })
     } else {
       // Apply image parameters
       const modelConfig = MODEL_REVERSE_MAP[batch.model]
       const params = batch.params as Record<string, unknown> | null
       set({
+        pendingModule: 'image',
         prompt: batch.prompt,
         quantity: batch.quantity,
         ...(modelConfig ? { modelType: modelConfig.modelType, resolution: modelConfig.resolution } : {}),
         ...(params?.aspect_ratio ? { aspectRatio: params.aspect_ratio as string } : {}),
-        videoParams: null, // Clear video params when applying image batch
+        videoParams: null,
       })
     }
   },
+  clearPendingModule: () => set({ pendingModule: null }),
   reset: () => set(defaults),
 }))

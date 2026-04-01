@@ -54,7 +54,7 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied }: BatchDet
         <SheetHeader>
           <SheetTitle>批次详情</SheetTitle>
           <SheetDescription className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-left">
-            {batch?.prompt ?? '加载中...'}
+            {((batch as any)?.module === 'action_imitation' && !batch?.prompt) ? '动作模仿任务' : (batch?.prompt ?? '加载中...')}
           </SheetDescription>
         </SheetHeader>
 

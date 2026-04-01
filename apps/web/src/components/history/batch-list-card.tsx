@@ -85,7 +85,7 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
         {/* Prompt + meta row */}
         <div className="flex items-start justify-between gap-3 min-w-0">
           <div className="flex-1 min-w-0 overflow-hidden">
-            <p className="text-sm font-medium truncate">{batch.prompt}</p>
+            <p className="text-sm font-medium truncate">{((batch as any).module === 'action_imitation' && !batch.prompt) ? '动作模仿任务' : batch.prompt}</p>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={status.variant} className="text-[10px]">
                 {status.label}

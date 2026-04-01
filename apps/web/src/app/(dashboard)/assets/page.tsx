@@ -197,7 +197,12 @@ export default function AssetsPage() {
       applyBatch(batch)
 
       // Navigate to appropriate generation page
-      if (asset.type === 'video') {
+      const batchModule = (batch as any).module as string
+      if (batchModule === 'avatar') {
+        router.push('/image?mode=avatar')
+      } else if (batchModule === 'action_imitation') {
+        router.push('/image?mode=action_imitation')
+      } else if (asset.type === 'video') {
         router.push('/image?mode=video')
       } else {
         router.push('/image')

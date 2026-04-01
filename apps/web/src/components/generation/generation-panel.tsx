@@ -235,25 +235,29 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   } = useGenerationStore()
 
   const clearReferenceImages = useGenerationStore((s) => s.clearReferenceImages)
+  const pendingModule = useGenerationStore((s) => s.pendingModule)
+  const clearPendingModule = useGenerationStore((s) => s.clearPendingModule)
 
-  // Apply video parameters from store when they change
+  // Switch to the right tab when applyBatch is called (from history / assets)
   useEffect(() => {
-    if (videoParams) {
-      setVideoPrompt(videoParams.videoPrompt)
-      setVideoModel(videoParams.videoModel)
-      setVideoAspectRatio(videoParams.videoAspectRatio)
-      setVideoUpsample(videoParams.videoUpsample)
-      // Auto-switch to video mode when video params are applied
+    if (!pendingModule) return
+    if (pendingModule === 'video') {
+      if (videoParams) {
+        setVideoPrompt(videoParams.videoPrompt)
+        setVideoModel(videoParams.videoModel)
+        setVideoAspectRatio(videoParams.videoAspectRatio)
+        setVideoUpsample(videoParams.videoUpsample)
+      }
       setMode('video')
-    }
-  }, [videoParams])
-
-  // Switch to image mode when image prompt is set and videoParams is null
-  useEffect(() => {
-    if (prompt && !videoParams) {
+    } else if (pendingModule === 'avatar') {
+      setMode('avatar')
+    } else if (pendingModule === 'action_imitation') {
+      setMode('action_imitation')
+    } else {
       setMode('image')
     }
-  }, [prompt, videoParams])
+    clearPendingModule()
+  }, [pendingModule]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset resolution if the selected model doesn't support the current resolution
   useEffect(() => {
@@ -1035,10 +1039,10 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               ) : (
                 <button
                   onClick={() => actionImageRef.current?.click()}
-                  className="flex-1 min-h-0 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
+                  className="flex-1 min-h-0 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex flex-col items-center justify-center gap-1"
                 >
                   <ImagePlus className="h-5 w-5 text-primary shrink-0" />
-                  <div className="text-left">
+                  <div className="text-center">
                     <div className="text-sm font-medium text-primary">上传人物图片</div>
                     <div className="text-[11px] text-primary/60">jpg / png · 最大 4.7MB</div>
                   </div>
@@ -1080,11 +1084,13 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               ) : (
                 <button
                   onClick={() => actionVideoRef.current?.click()}
-                  className="flex-1 min-h-0 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
+                  className="flex-1 min-h-0 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex flex-col items-center justify-center gap-1"
                 >
                   <Clapperboard className="h-4 w-4 text-primary shrink-0" />
-                  <div className="text-sm font-medium text-primary">上传驱动视频</div>
-                  <div className="text-[11px] text-primary/60 ml-1">mp4 / mov / webm · 最大 30s</div>
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-primary">上传驱动视频</div>
+                    <div className="text-[11px] text-primary/60">mp4 / mov / webm · 最大 30s</div>
+                  </div>
                 </button>
               )}
             </div>
