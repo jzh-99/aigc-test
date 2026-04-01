@@ -250,6 +250,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       }
       setMode('video')
     } else if (pendingModule === 'avatar') {
+      setAvatarPrompt(prompt)
       setMode('avatar')
     } else if (pendingModule === 'action_imitation') {
       setMode('action_imitation')

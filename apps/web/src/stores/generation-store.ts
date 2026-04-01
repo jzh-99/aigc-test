@@ -119,8 +119,8 @@ export const useGenerationStore = create<GenerationState>((set) => ({
         },
       })
     } else if (isAvatar || isActionImitation) {
-      // Avatar / action imitation — just signal the module, no image params to restore
-      set({ pendingModule: module, videoParams: null })
+      // Avatar / action imitation — signal module and carry the prompt; no image params
+      set({ pendingModule: module, prompt: batch.prompt ?? '', videoParams: null })
     } else {
       // Apply image parameters
       const modelConfig = MODEL_REVERSE_MAP[batch.model]
