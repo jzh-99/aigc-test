@@ -42,12 +42,12 @@ async function main() {
   const provider = providerResult[0]
   console.log(`  providers upserted (volcengine, id=${provider.id})`)
 
-  // 2. Upsert image models (credit_cost = 50 per image, flat rate for now)
+  // 2. Upsert image models
   const imageModels = [
     {
       code: 'seedream-5.0-lite',
       name: 'Seedream 5.0',
-      credit_cost: 50,
+      credit_cost: 11,
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -67,7 +67,7 @@ async function main() {
     {
       code: 'seedream-4.5',
       name: 'Seedream 4.5',
-      credit_cost: 50,
+      credit_cost: 13,
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -87,7 +87,7 @@ async function main() {
     {
       code: 'seedream-4.0',
       name: 'Seedream 4.0',
-      credit_cost: 50,
+      credit_cost: 10,
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
