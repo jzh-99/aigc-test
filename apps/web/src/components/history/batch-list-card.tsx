@@ -39,13 +39,13 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
     // Auto-navigate to appropriate generation page
     const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
     if ((batch as any).module === 'avatar') {
-      router.push('/image?mode=avatar')
+      router.push('/generation?mode=avatar')
     } else if ((batch as any).module === 'action_imitation') {
-      router.push('/image?mode=action_imitation')
+      router.push('/generation?mode=action_imitation')
     } else if (isVideo) {
-      router.push('/image?mode=video')
+      router.push('/generation?mode=video')
     } else {
-      router.push('/image')
+      router.push('/generation')
     }
 
     setTimeout(() => setApplied(false), 1500)

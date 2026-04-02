@@ -19,7 +19,7 @@ export function QuickGenerate() {
           </p>
         </div>
         <Button variant="gradient" className="gap-2 mt-2" asChild>
-          <Link href="/image">
+          <Link href="/generation">
             <Sparkles className="h-4 w-4" />
             立即生成
           </Link>
