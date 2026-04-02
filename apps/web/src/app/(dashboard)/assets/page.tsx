@@ -199,13 +199,13 @@ export default function AssetsPage() {
       // Navigate to appropriate generation page
       const batchModule = (batch as any).module as string
       if (batchModule === 'avatar') {
-        router.push('/image?mode=avatar')
+        router.push('/generation?mode=avatar')
       } else if (batchModule === 'action_imitation') {
-        router.push('/image?mode=action_imitation')
+        router.push('/generation?mode=action_imitation')
       } else if (asset.type === 'video') {
-        router.push('/image?mode=video')
+        router.push('/generation?mode=video')
       } else {
-        router.push('/image')
+        router.push('/generation')
       }
 
       toast.success('已复用提示词和参数')

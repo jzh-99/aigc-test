@@ -33,7 +33,7 @@ interface NavItem {
 
 const baseNavItems: NavItem[] = [
   { href: '/', label: '工作台', icon: LayoutDashboard },
-  { href: '/image', label: '创作生成', icon: Sparkles },
+  { href: '/generation', label: '创作生成', icon: Sparkles },
   { href: '/assets', label: '资产库', icon: Images },
 ]
 
