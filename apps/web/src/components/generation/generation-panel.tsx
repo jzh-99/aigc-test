@@ -26,6 +26,7 @@ import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 import { IMAGE_MODEL_CREDITS, VIDEO_PER_SECOND_CREDITS, VIDEO_FLAT_CREDITS } from '@/lib/credits'
+import { fetchWithAuth } from '@/lib/api-client'
 
 const MAX_REF_IMAGES = 10
 const MAX_FILE_MB = 20
@@ -629,15 +630,13 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     await handleMultimodalFiles(e.dataTransfer.files)
   }, [handleMultimodalFiles])
 
-  // Upload a dataUrl (base64) or File to /videos/upload; returns public URL.
+  // Upload a dataUrl (base64) to /videos/upload; returns public URL.
   const uploadToVideoTemp = async (dataUrl: string, filename: string): Promise<string> => {
     const res = await fetch(dataUrl)
     const blob = await res.blob()
     const form = new FormData()
     form.append('file', blob, filename)
-    const uploadRes = await fetch('/api/v1/videos/upload', { method: 'POST', body: form })
-    if (!uploadRes.ok) throw new Error(`文件上传失败: ${uploadRes.status}`)
-    const json = await uploadRes.json() as { url: string }
+    const json = await fetchWithAuth<{ url: string }>('/videos/upload', { method: 'POST', body: form })
     return json.url
   }
 
