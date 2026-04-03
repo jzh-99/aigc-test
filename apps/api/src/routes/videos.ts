@@ -487,6 +487,8 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
             errMsg = '参考视频时长过长（最长支持 15 秒），请裁剪后重试'
           } else if (errMsg.includes('video size') && errMsg.includes('52428800')) {
             errMsg = '参考视频文件过大（最大支持 50 MB），请压缩后重试'
+          } else if (errMsg.includes('may contain real person') || errMsg.includes('real person')) {
+            errMsg = '视频内容可能包含真实人物，不符合平台安全规范，请更换参考素材后重试'
           }
 
           lastError = errMsg
