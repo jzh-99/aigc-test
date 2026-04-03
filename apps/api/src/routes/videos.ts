@@ -483,8 +483,8 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           // 拦截 Volcengine API 常见的视频分辨率超限错误，给出友好的中文提示
           if (errMsg.includes('video pixel count') || errMsg.includes('must be less than or equal to 927408')) {
             errMsg = '参考视频分辨率过高（限制为 720p 级别，约 92.7 万像素以内），请降低视频分辨率后重试'
-          } else if (errMsg.includes('video duration') && errMsg.includes('15.2')) {
-            errMsg = '参考视频时长过长（最长支持 15 秒），请裁剪后重试'
+          } else if ((errMsg.includes('video duration') || errMsg.includes('audio duration')) && errMsg.includes('15.2')) {
+            errMsg = '参考音视频时长过长（最长支持 15 秒），请裁剪后重试'
           } else if (errMsg.includes('video size') && errMsg.includes('52428800')) {
             errMsg = '参考视频文件过大（最大支持 50 MB），请压缩后重试'
           } else if (errMsg.includes('may contain real person') || errMsg.includes('real person')) {

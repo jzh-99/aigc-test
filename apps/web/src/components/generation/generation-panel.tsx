@@ -615,10 +615,19 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   // 统一的音频校验 + 添加逻辑，供主上传区和素材管理弹窗共用
   const validateAndAddAudio = useCallback((f: File) => {
+    if (f.size > 52428800) {
+      toast.error(`音频 "${f.name}" 文件过大 (${(f.size / 1024 / 1024).toFixed(1)} MB)，最大支持 50 MB，请压缩后重新添加。`)
+      return
+    }
     const url = URL.createObjectURL(f)
     const audio = document.createElement('audio')
     audio.src = url
     audio.onloadedmetadata = () => {
+      if (audio.duration > 15.2) {
+        URL.revokeObjectURL(url)
+        toast.error(`音频 "${f.name}" 时长过长 (${audio.duration.toFixed(1)}s)，最长支持 15 秒，请裁剪后重新添加。`)
+        return
+      }
       setMultimodalAudios(prev => prev.length < 3 ? [...prev, {
         id: crypto.randomUUID(), file: f, previewUrl: url, name: f.name, duration: audio.duration,
       }] : prev)
