@@ -683,7 +683,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         reference_audios: referenceAudiosParam,
         aspect_ratio: videoAspectRatio || undefined,
         ...(isSeedance ? {
-          resolution: videoUpsample ? '1080p' : '720p',
           duration: videoDuration,
           generate_audio: videoGenerateAudio,
           camera_fixed: videoCameraFixed,
