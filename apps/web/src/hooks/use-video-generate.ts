@@ -6,7 +6,8 @@ interface VideoGenerateParams {
   prompt: string
   workspace_id: string
   model?: string
-  images?: string[]
+  images?: string[]           // 首尾帧（frames Tab）
+  reference_images?: string[] // 参考图（components Tab，Seedance 2.0 专用）
   aspect_ratio?: string
   enable_upsample?: boolean
   resolution?: string

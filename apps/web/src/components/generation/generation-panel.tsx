@@ -113,12 +113,20 @@ const ASPECT_RATIOS = [
 const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
 const VIDEO_MODEL_OPTIONS = {
+  multimodal: [
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '高级有声视频生成，支持多模态', credits: 5, isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '快速有声视频生成，支持多模态', credits: 5, isSeedance: true },
+  ],
   frames: [
     { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: 10, isSeedance: false },
-    { value: 'seedance-1.5-pro', label: 'Seedance 1.5 Pro', desc: '有声视频生成，支持首尾帧', credits: 100, isSeedance: true },
+    { value: 'seedance-1.5-pro', label: 'Seedance 1.5 Pro', desc: '有声视频生成，支持首尾帧', credits: 5, isSeedance: true },
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持首尾帧', credits: 5, isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持首尾帧', credits: 5, isSeedance: true },
   ],
   components: [
     { value: 'veo3.1-components', label: '全能视频3.1', desc: '基于参考图片生成视频', credits: 15, isSeedance: false },
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持参考图', credits: 5, isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持参考图', credits: 5, isSeedance: true },
   ],
 } as const
 
@@ -144,13 +152,14 @@ const VIDEO_RESOLUTIONS = [
 ] as const
 
 const SEEDANCE_DURATION_OPTIONS = [
-  { value: 4, label: '4s' },
-  { value: 5, label: '5s' },
-  { value: 6, label: '6s' },
-  { value: 8, label: '8s' },
-  { value: 10, label: '10s' },
-  { value: 12, label: '12s' },
-  { value: -1, label: '自动' },
+  { value: -1,  label: '自动' },
+  { value: 4,   label: '4秒' },
+  { value: 5,   label: '5秒' },
+  { value: 6,   label: '6秒' },
+  { value: 8,   label: '8秒' },
+  { value: 10,  label: '10秒' },
+  { value: 12,  label: '12秒' },
+  { value: 15,  label: '15秒' },
 ] as const
 
 interface FrameImage {
@@ -174,9 +183,9 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Video mode state
-  const [videoMode, setVideoMode] = useState<'frames' | 'components'>('frames')
+  const [videoMode, setVideoMode] = useState<'frames' | 'components' | 'multimodal'>('frames')
   const [videoPrompt, setVideoPrompt] = useState('')
-  const [videoModel, setVideoModel] = useState('veo3.1-fast')
+  const [videoModel, setVideoModel] = useState('seedance-2.0')
   const [videoAspectRatio, setVideoAspectRatio] = useState('')
   const [videoUpsample, setVideoUpsample] = useState(false)
   const [videoDuration, setVideoDuration] = useState<number>(5)
@@ -194,6 +203,25 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const referenceInputRef = useRef<HTMLInputElement>(null)
   const [isReferenceDragging, setIsReferenceDragging] = useState(false)
   const referenceDragCounterRef = useRef(0)
+
+  // Multimodal mode state
+  const [multimodalImages, setMultimodalImages] = useState<FrameImage[]>([])
+  const [multimodalVideos, setMultimodalVideos] = useState<{ id: string; file: File; previewUrl: string; dataUrl: string; name: string }[]>([])
+  const [multimodalAudios, setMultimodalAudios] = useState<{ id: string; file: File; dataUrl: string; name: string; duration: number }[]>([])
+  const [multimodalManagerOpen, setMultimodalManagerOpen] = useState(false)
+  const [isMultimodalDragging, setIsMultimodalDragging] = useState(false)
+  const multimodalDragCounterRef = useRef(0)
+  const multimodalImageInputRef = useRef<HTMLInputElement>(null)
+  const multimodalVideoInputRef = useRef<HTMLInputElement>(null)
+  const multimodalAudioInputRef = useRef<HTMLInputElement>(null)
+  const multimodalAllInputRef = useRef<HTMLInputElement>(null)
+  // 统一预览层：null=关闭，否则为当前预览的素材信息
+  const [mediaPreview, setMediaPreview] = useState<
+    | { type: 'image'; url: string; name: string; index: number; total: number }
+    | { type: 'video'; url: string; name: string }
+    | { type: 'audio'; url: string; name: string; duration: number }
+    | null
+  >(null)
 
   // Avatar (数字人) mode state
   const [avatarImage, setAvatarImage] = useState<FrameImage | null>(null)
@@ -270,7 +298,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   // Reset video aspect ratio when switching between Seedance and non-Seedance
   useEffect(() => {
-    const isSeedance = videoModel === 'seedance-1.5-pro'
+    const isSeedance = videoModel.startsWith('seedance-')
     if (isSeedance && !VIDEO_ASPECT_RATIOS_SEEDANCE.find(r => r.value === videoAspectRatio)) {
       setVideoAspectRatio('adaptive')
     } else if (!isSeedance && !VIDEO_ASPECT_RATIOS_DEFAULT.find(r => r.value === videoAspectRatio)) {
@@ -543,23 +571,117 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     setVideoReferenceImages([])
   }, [])
 
+  // Multimodal computed values
+  const totalMultimodalCount = multimodalImages.length + multimodalVideos.length + multimodalAudios.length
+
+  // Up to 3 stack previews: images first, then videos, then audio placeholders
+  const multimodalStackPreviews: { id: string; type: 'image' | 'video' | 'audio'; previewUrl: string }[] = [
+    ...multimodalImages.slice(0, 3).map(img => ({ id: img.id ?? img.previewUrl, type: 'image' as const, previewUrl: img.previewUrl })),
+    ...multimodalVideos.slice(0, 3).map(v => ({ id: v.id, type: 'video' as const, previewUrl: v.previewUrl })),
+    ...multimodalAudios.slice(0, 3).map(a => ({ id: a.id, type: 'audio' as const, previewUrl: '' })),
+  ].slice(0, 3)
+
+  const handleMultimodalDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    multimodalDragCounterRef.current++
+    if (multimodalDragCounterRef.current === 1) setIsMultimodalDragging(true)
+  }, [])
+
+  const handleMultimodalDragLeave = useCallback(() => {
+    multimodalDragCounterRef.current--
+    if (multimodalDragCounterRef.current === 0) setIsMultimodalDragging(false)
+  }, [])
+
+  const handleMultimodalFiles = useCallback(async (files: FileList | null) => {
+    if (!files) return
+    for (const f of Array.from(files)) {
+      if (f.type.startsWith('image/')) {
+        if (multimodalImages.length < 9) {
+          const img = await readFrameFile(f)
+          if (img) setMultimodalImages(prev => prev.length < 9 ? [...prev, img] : prev)
+        }
+      } else if (f.type.startsWith('video/')) {
+        if (multimodalVideos.length < 3) {
+          const url = URL.createObjectURL(f)
+          const reader = new FileReader()
+          reader.onload = () => setMultimodalVideos(prev => prev.length < 3 ? [...prev, {
+            id: crypto.randomUUID(), file: f, previewUrl: url,
+            dataUrl: reader.result as string, name: f.name,
+          }] : prev)
+          reader.readAsDataURL(f)
+        }
+      } else if (f.type.startsWith('audio/')) {
+        if (multimodalAudios.length < 3) {
+          const url = URL.createObjectURL(f)
+          const audio = document.createElement('audio')
+          audio.src = url
+          audio.onloadedmetadata = () => {
+            URL.revokeObjectURL(url)
+            const reader = new FileReader()
+            reader.onload = () => setMultimodalAudios(prev => prev.length < 3 ? [...prev, {
+              id: crypto.randomUUID(), file: f, dataUrl: reader.result as string,
+              name: f.name, duration: audio.duration,
+            }] : prev)
+            reader.readAsDataURL(f)
+          }
+        }
+      }
+    }
+  }, [multimodalImages.length, multimodalVideos.length, multimodalAudios.length, readFrameFile])
+
+  const handleMultimodalDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    multimodalDragCounterRef.current = 0
+    setIsMultimodalDragging(false)
+    await handleMultimodalFiles(e.dataTransfer.files)
+  }, [handleMultimodalFiles])
+
   const handleVideoGenerate = async () => {
     if (!videoPrompt.trim()) return
     try {
-      const images: string[] = []
+      const isSeedance2 = videoModel === 'seedance-2.0' || videoModel === 'seedance-2.0-fast'
+      const isSeedance = videoModel.startsWith('seedance-')
+
+      // frames Tab：首尾帧 → images 字段
+      // components Tab + Seedance 2.0：参考图 → reference_images 字段
+      // components Tab + veo3.1-components：参考图 → images 字段（旧逻辑）
+      // multimodal Tab：图片 → reference_images，视频/音频暂通过 images 传递（后续扩展）
+      let imagesParam: string[] | undefined
+      let referenceImagesParam: string[] | undefined
+
       if (videoMode === 'frames') {
-        if (firstFrame) images.push(firstFrame.dataUrl)
-        if (lastFrame) images.push(lastFrame.dataUrl)
+        const arr: string[] = []
+        if (firstFrame) arr.push(firstFrame.dataUrl)
+        if (lastFrame) arr.push(lastFrame.dataUrl)
+        imagesParam = arr.length > 0 ? arr : undefined
+      } else if (videoMode === 'multimodal') {
+        // 多模态：图片作为 reference_images，视频/音频作为 images（按位置依次合并）
+        referenceImagesParam = multimodalImages.length > 0
+          ? multimodalImages.map(img => img.dataUrl)
+          : undefined
+        const videoDataUrls = multimodalVideos.map(v => v.dataUrl)
+        const audioDataUrls = multimodalAudios.map(a => a.dataUrl)
+        const combined = [...videoDataUrls, ...audioDataUrls]
+        imagesParam = combined.length > 0 ? combined : undefined
       } else {
-        images.push(...videoReferenceImages.map(img => img.dataUrl))
+        // components mode
+        if (isSeedance2) {
+          referenceImagesParam = videoReferenceImages.length > 0
+            ? videoReferenceImages.map(img => img.dataUrl)
+            : undefined
+        } else {
+          imagesParam = videoReferenceImages.length > 0
+            ? videoReferenceImages.map(img => img.dataUrl)
+            : undefined
+        }
       }
 
-      const isSeedance = videoModel === 'seedance-1.5-pro'
       const batch = await generateVideo({
         prompt: videoPrompt.trim(),
         workspace_id: activeWorkspaceId ?? '',
         model: videoModel,
-        images: images.length > 0 ? images : undefined,
+        images: imagesParam,
+        reference_images: referenceImagesParam,
         aspect_ratio: videoAspectRatio || undefined,
         ...(isSeedance ? {
           resolution: videoUpsample ? '1080p' : '720p',
@@ -581,7 +703,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   }
 
   const currentModel = MODEL_OPTIONS.find(m => m.value === modelType)
-  const isSeedanceVideo = videoModel === 'seedance-1.5-pro'
+  const isSeedanceVideo = videoModel.startsWith('seedance-')
   const availableResolutions = ALL_RESOLUTION_OPTIONS.filter(r =>
     currentModel?.resolutions.includes(r.value) ?? true
   )
@@ -814,7 +936,9 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               <button
                 onClick={() => {
                   setVideoMode('components')
-                  setVideoModel('veo3.1-components')
+                  if (!VIDEO_MODEL_OPTIONS.components.find(m => m.value === videoModel)) {
+                    setVideoModel('veo3.1-components')
+                  }
                   setFirstFrame(null)
                   setLastFrame(null)
                 }}
@@ -826,6 +950,25 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 )}
               >
                 参考生视频
+              </button>
+              <button
+                onClick={() => {
+                  setVideoMode('multimodal')
+                  if (!VIDEO_MODEL_OPTIONS.multimodal.find(m => m.value === videoModel)) {
+                    setVideoModel('seedance-2.0')
+                  }
+                  setFirstFrame(null)
+                  setLastFrame(null)
+                  setVideoReferenceImages([])
+                }}
+                className={cn(
+                  'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
+                  videoMode === 'multimodal'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
+                )}
+              >
+                多模态
               </button>
             </div>
 
@@ -890,6 +1033,374 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                     </button>
                   )}
                 </div>
+              </div>
+            ) : videoMode === 'multimodal' ? (
+              /* ── 多模态：素材上传 + 素材管理 ── */
+              <div
+                className={cn(
+                  'shrink-0 relative transition-colors',
+                  isMultimodalDragging && 'opacity-50'
+                )}
+                onDragEnter={handleMultimodalDragEnter}
+                onDragLeave={handleMultimodalDragLeave}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleMultimodalDrop}
+              >
+                {isMultimodalDragging && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 pointer-events-none rounded-xl border-2 border-primary bg-primary/5">
+                    <ImagePlus className="h-8 w-8 text-primary" />
+                    <span className="text-sm font-medium text-primary">松开以添加素材</span>
+                  </div>
+                )}
+                {totalMultimodalCount > 0 ? (
+                  /* ── 已有素材：堆叠缩略图 + 管理入口 ── */
+                  <div className="flex items-center gap-3 h-[90px]">
+                    {/* 堆叠缩略图 */}
+                    <div
+                      className="relative w-20 h-[70px] shrink-0 cursor-pointer group"
+                      onClick={() => setMultimodalManagerOpen(true)}
+                    >
+                      {/* 最多展示3层堆叠 */}
+                      {multimodalStackPreviews.map((item, i) => (
+                        <div
+                          key={item.id}
+                          className="absolute rounded-lg border-2 border-background shadow-md overflow-hidden transition-transform group-hover:scale-105 bg-muted"
+                          style={{
+                            width: 48, height: 48,
+                            left: i * 13,
+                            top: i * 4,
+                            zIndex: 3 - i,
+                          }}
+                        >
+                          {item.type === 'image' && (
+                            <Image src={item.previewUrl} alt="" fill className="object-cover" sizes="48px" unoptimized />
+                          )}
+                          {item.type === 'video' && (
+                            <video src={item.previewUrl} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="metadata" onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.001 }} />
+                          )}
+                          {item.type === 'audio' && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-primary/10">
+                              <Music className="h-5 w-5 text-primary" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {/* 素材统计 + 操作 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">
+                        {totalMultimodalCount} 个素材
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5 space-x-1.5">
+                        {multimodalImages.length > 0 && <span>{multimodalImages.length} 图</span>}
+                        {multimodalVideos.length > 0 && <span>{multimodalVideos.length} 视频</span>}
+                        {multimodalAudios.length > 0 && <span>{multimodalAudios.length} 音频</span>}
+                      </div>
+                      <button
+                        onClick={() => setMultimodalManagerOpen(true)}
+                        className="mt-1 text-xs text-primary hover:underline"
+                      >
+                        点击管理素材
+                      </button>
+                    </div>
+                    {/* 继续添加 + 清空 */}
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button
+                        onClick={() => multimodalAllInputRef.current?.click()}
+                        className="h-7 px-2.5 rounded-md border text-xs font-medium hover:bg-muted transition-colors"
+                      >
+                        添加
+                      </button>
+                      <button
+                        onClick={() => { setMultimodalImages([]); setMultimodalVideos([]); setMultimodalAudios([]) }}
+                        className="h-7 px-2.5 rounded-md border text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                      >
+                        清空
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── 无素材：全宽上传区 ── */
+                  <div
+                    onClick={() => multimodalAllInputRef.current?.click()}
+                    className="h-[90px] w-full rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all cursor-pointer flex items-center gap-3 px-4"
+                  >
+                    <ImagePlus className="h-6 w-6 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-primary leading-tight">上传素材</div>
+                      <div className="text-[11px] text-primary/60 leading-tight mt-0.5">图片 / 视频 / 音频 · 支持拖拽</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 统一素材 input（接受图片+视频+音频） */}
+                <input
+                  ref={multimodalAllInputRef}
+                  type="file"
+                  accept="image/*,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/x-m4a"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleMultimodalFiles(e.target.files)}
+                />
+
+                {/* ── 素材管理弹窗 ── */}
+                {multimodalManagerOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setMultimodalManagerOpen(false)}>
+                    <div className="absolute inset-0 bg-black/40" />
+                    <div
+                      className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* 弹窗头部 */}
+                      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border shrink-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm">素材管理</span>
+                          <span className="text-xs text-muted-foreground">{totalMultimodalCount} 个</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => multimodalAllInputRef.current?.click()}
+                            className="h-7 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                          >
+                            继续添加
+                          </button>
+                          <button
+                            onClick={() => setMultimodalManagerOpen(false)}
+                            className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-muted transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 三栏内容 */}
+                      <div className="flex-1 overflow-y-auto">
+                        <div className="grid grid-cols-3 divide-x divide-border">
+
+                          {/* ── 图片栏 ── */}
+                          <div className="p-4 flex flex-col gap-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">图片 {multimodalImages.length}/9</span>
+                              {multimodalImages.length > 0 && (
+                                <button onClick={() => setMultimodalImages([])} className="text-[10px] text-destructive hover:underline">清空</button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {multimodalImages.map((img, idx) => (
+                                <div
+                                  key={img.id ?? idx}
+                                  className="relative aspect-square rounded-lg overflow-hidden border bg-muted group cursor-zoom-in"
+                                  onClick={() => setMediaPreview({ type: 'image', url: img.previewUrl, name: img.id ?? `图片${idx + 1}`, index: idx, total: multimodalImages.length })}
+                                >
+                                  <Image src={img.previewUrl} alt="" fill className="object-cover" sizes="120px" unoptimized />
+                                  {/* 悬浮遮罩 */}
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                    <Search className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                                  </div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setMultimodalImages(prev => prev.filter((_, i) => i !== idx)) }}
+                                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                  >
+                                    <X className="h-3 w-3 text-background" />
+                                  </button>
+                                </div>
+                              ))}
+                              {multimodalImages.length < 9 && (
+                                <button
+                                  onClick={() => multimodalImageInputRef.current?.click()}
+                                  className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+                                >
+                                  <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-[10px] text-muted-foreground">添加</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── 视频栏 ── */}
+                          <div className="p-4 flex flex-col gap-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">视频 {multimodalVideos.length}/3</span>
+                              {multimodalVideos.length > 0 && (
+                                <button onClick={() => setMultimodalVideos([])} className="text-[10px] text-destructive hover:underline">清空</button>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              {multimodalVideos.map((v, idx) => (
+                                <div key={v.id} className="relative rounded-lg overflow-hidden border bg-black group cursor-pointer aspect-video"
+                                  onClick={() => setMediaPreview({ type: 'video', url: v.previewUrl, name: v.name })}
+                                >
+                                  {/* 静态缩略帧 */}
+                                  <video
+                                    src={v.previewUrl}
+                                    className="absolute inset-0 w-full h-full object-cover"
+                                    muted playsInline preload="metadata"
+                                    onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.001 }}
+                                  />
+                                  {/* 播放按钮遮罩 */}
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
+                                    <div className="h-9 w-9 rounded-full bg-white/80 group-hover:bg-white flex items-center justify-center transition-colors shadow">
+                                      <Play className="h-4 w-4 text-black ml-0.5" />
+                                    </div>
+                                  </div>
+                                  {/* 文件名 */}
+                                  <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
+                                    <span className="text-[10px] text-white truncate block">{v.name}</span>
+                                  </div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setMultimodalVideos(prev => prev.filter((_, i) => i !== idx)) }}
+                                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-foreground/60 hover:bg-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                  >
+                                    <X className="h-3 w-3 text-background" />
+                                  </button>
+                                </div>
+                              ))}
+                              {multimodalVideos.length < 3 && (
+                                <button
+                                  onClick={() => multimodalVideoInputRef.current?.click()}
+                                  className="h-16 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+                                >
+                                  <Film className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-[10px] text-muted-foreground">添加视频</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── 音频栏 ── */}
+                          <div className="p-4 flex flex-col gap-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">音频 {multimodalAudios.length}/3</span>
+                              {multimodalAudios.length > 0 && (
+                                <button onClick={() => setMultimodalAudios([])} className="text-[10px] text-destructive hover:underline">清空</button>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-3">
+                              {multimodalAudios.map((a, idx) => (
+                                <div key={a.id} className="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg border bg-muted/50 group">
+                                  {/* 文件信息行 */}
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                      <Music className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium truncate">{a.name}</p>
+                                      <p className="text-[10px] text-muted-foreground">{a.duration.toFixed(1)}s</p>
+                                    </div>
+                                    <button
+                                      onClick={() => setMultimodalAudios(prev => prev.filter((_, i) => i !== idx))}
+                                      className="h-5 w-5 rounded-full hover:bg-foreground/10 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                  {/* 内嵌播放器 */}
+                                  <audio
+                                    src={a.dataUrl}
+                                    controls
+                                    className="w-full h-7"
+                                    style={{ accentColor: 'hsl(var(--primary))' }}
+                                  />
+                                </div>
+                              ))}
+                              {multimodalAudios.length < 3 && (
+                                <button
+                                  onClick={() => multimodalAudioInputRef.current?.click()}
+                                  className="h-12 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+                                >
+                                  <Music className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-[10px] text-muted-foreground">添加音频</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+
+                      {/* ── 图片全屏预览（ImageLightbox） ── */}
+                      {mediaPreview?.type === 'image' && (
+                        <ImageLightbox
+                          url={mediaPreview.url}
+                          alt={mediaPreview.name}
+                          onClose={() => setMediaPreview(null)}
+                          onPrev={mediaPreview.index > 0 ? () => {
+                            const prev = multimodalImages[mediaPreview.index - 1]
+                            setMediaPreview({ type: 'image', url: prev.previewUrl, name: prev.id ?? `图片${mediaPreview.index}`, index: mediaPreview.index - 1, total: mediaPreview.total })
+                          } : undefined}
+                          onNext={mediaPreview.index < mediaPreview.total - 1 ? () => {
+                            const next = multimodalImages[mediaPreview.index + 1]
+                            setMediaPreview({ type: 'image', url: next.previewUrl, name: next.id ?? `图片${mediaPreview.index + 2}`, index: mediaPreview.index + 1, total: mediaPreview.total })
+                          } : undefined}
+                          footer={<p className="text-sm text-white/80">{mediaPreview.index + 1} / {mediaPreview.total}</p>}
+                        />
+                      )}
+
+                      {/* ── 视频全屏播放器 ── */}
+                      {mediaPreview?.type === 'video' && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/80" onClick={() => setMediaPreview(null)}>
+                          <div className="relative w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between mb-2 px-1">
+                              <p className="text-sm text-white/80 truncate">{mediaPreview.name}</p>
+                              <button onClick={() => setMediaPreview(null)} className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+                                <X className="h-4 w-4 text-white" />
+                              </button>
+                            </div>
+                            <video
+                              src={mediaPreview.url}
+                              controls
+                              autoPlay
+                              className="w-full rounded-xl max-h-[70vh] bg-black"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 分类 hidden inputs（弹窗内用） */}
+                <input ref={multimodalImageInputRef} type="file" accept="image/*" multiple className="hidden"
+                  onChange={async (e) => {
+                    const files = e.target.files; if (!files) return
+                    const newImgs: FrameImage[] = []
+                    for (const f of Array.from(files)) {
+                      if (multimodalImages.length + newImgs.length >= 9) break
+                      const img = await readFrameFile(f); if (img) newImgs.push(img)
+                    }
+                    setMultimodalImages(prev => [...prev, ...newImgs]); e.target.value = ''
+                  }}
+                />
+                <input ref={multimodalVideoInputRef} type="file" accept="video/mp4,video/quicktime,video/webm" multiple className="hidden"
+                  onChange={(e) => {
+                    const files = e.target.files; if (!files) return
+                    for (const f of Array.from(files)) {
+                      if (multimodalVideos.length >= 3) break
+                      const url = URL.createObjectURL(f)
+                      const reader = new FileReader()
+                      reader.onload = () => setMultimodalVideos(prev => prev.length < 3 ? [...prev, { id: crypto.randomUUID(), file: f, previewUrl: url, dataUrl: reader.result as string, name: f.name }] : prev)
+                      reader.readAsDataURL(f)
+                    }
+                    e.target.value = ''
+                  }}
+                />
+                <input ref={multimodalAudioInputRef} type="file" accept="audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/x-m4a" multiple className="hidden"
+                  onChange={(e) => {
+                    const files = e.target.files; if (!files) return
+                    for (const f of Array.from(files)) {
+                      if (multimodalAudios.length >= 3) break
+                      const url = URL.createObjectURL(f)
+                      const audio = document.createElement('audio'); audio.src = url
+                      audio.onloadedmetadata = () => {
+                        URL.revokeObjectURL(url)
+                        const reader = new FileReader()
+                        reader.onload = () => setMultimodalAudios(prev => prev.length < 3 ? [...prev, { id: crypto.randomUUID(), file: f, dataUrl: reader.result as string, name: f.name, duration: audio.duration }] : prev)
+                        reader.readAsDataURL(f)
+                      }
+                    }
+                    e.target.value = ''
+                  }}
+                />
               </div>
             ) : (
               <div
@@ -960,7 +1471,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 )}
               </div>
             )}
-
             {/* Prompt */}
             <div className="flex-1 min-h-0">
               <Textarea
@@ -1598,7 +2108,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
               {isSeedanceVideo
-                ? <span>{(videoDuration === -1 ? 12 : videoDuration) * 100} 积分</span>
+                ? <span>{(videoDuration === -1 ? 15 : videoDuration) * (VIDEO_MODEL_OPTIONS[videoMode as keyof typeof VIDEO_MODEL_OPTIONS]?.find((m: any) => m.value === videoModel)?.credits ?? 5)} 积分</span>
                 : <span>{VIDEO_MODEL_OPTIONS[videoMode].find(m => m.value === videoModel)?.credits ?? 10} 积分</span>
               }
             </div>

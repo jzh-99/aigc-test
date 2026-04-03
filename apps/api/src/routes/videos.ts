@@ -6,14 +6,24 @@ import { freezeCredits, refundCredits } from '../services/credit.js'
 const VIDEO_CREDITS_MAP: Record<string, number> = {
   'veo3.1-fast': 10,
   'veo3.1-components': 15,
-  'seedance-1.5-pro': 100, // per-second price
+  'seedance-1.5-pro': 5, // per-second price
+  'seedance-2.0': 5,      // per-second price
+  'seedance-2.0-fast': 5, // per-second price
+}
+
+// Map frontend model codes → actual Volcengine model IDs
+const VOLCENGINE_MODEL_ID: Record<string, string> = {
+  'seedance-1.5-pro': 'doubao-seedance-1-5-pro-251215',
+  'seedance-2.0':     'doubao-seedance-2-0-260516',
+  'seedance-2.0-fast':'doubao-seedance-2-0-lite-260516',
 }
 
 interface VideoGenerateBody {
   prompt: string
   workspace_id: string
   model?: string
-  images?: string[]
+  images?: string[]           // 首尾帧（首尾帧 Tab）
+  reference_images?: string[] // 参考图（参考生视频 Tab，Seedance 2.0 专用）
   aspect_ratio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive'
   enable_upsample?: boolean
   resolution?: '720p' | '1080p'
@@ -33,14 +43,15 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           workspace_id: { type: 'string', format: 'uuid' },
           model: {
             type: 'string',
-            enum: ['veo3.1-fast', 'veo3.1-components', 'seedance-1.5-pro'],
+            enum: ['veo3.1-fast', 'veo3.1-components', 'seedance-1.5-pro', 'seedance-2.0', 'seedance-2.0-fast'],
             default: 'veo3.1-fast'
           },
-          images: { type: 'array', items: { type: 'string' }, maxItems: 3 },
+          images: { type: 'array', items: { type: 'string' }, maxItems: 2 },
+          reference_images: { type: 'array', items: { type: 'string' }, maxItems: 3 },
           aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'] },
           enable_upsample: { type: 'boolean' },
           resolution: { type: 'string', enum: ['720p', '1080p'] },
-          duration: { type: 'integer', minimum: -1, maximum: 12 },
+          duration: { type: 'integer', minimum: -1, maximum: 15 },
           generate_audio: { type: 'boolean' },
           camera_fixed: { type: 'boolean' },
         },
@@ -53,6 +64,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       workspace_id: workspaceId,
       model = 'veo3.1-fast',
       images,
+      reference_images,
       aspect_ratio,
       enable_upsample,
       resolution,
@@ -60,6 +72,9 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       generate_audio,
       camera_fixed,
     } = request.body
+
+    const isSeedance = model.startsWith('seedance-')
+    const isSeedance2 = model === 'seedance-2.0' || model === 'seedance-2.0-fast'
 
     // Validate images count based on model
     if (images) {
@@ -77,10 +92,10 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           })
         }
       }
-      if (model === 'seedance-1.5-pro' && images.length > 2) {
+      if (isSeedance && images.length > 2) {
         return reply.status(400).send({
           success: false,
-          error: { code: 'INVALID_IMAGES', message: 'seedance-1.5-pro 模型最多支持2张图片（首尾帧）' },
+          error: { code: 'INVALID_IMAGES', message: 'Seedance 模型首尾帧最多支持2张图片' },
         })
       }
     } else if (model === 'veo3.1-components') {
@@ -90,12 +105,18 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
+    if (reference_images && reference_images.length > 0 && !isSeedance2) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_PARAMS', message: 'reference_images 仅支持 Seedance 2.0 系列模型' },
+      })
+    }
+
     // Calculate credits: seedance uses per-second pricing, others use flat rate
-    const isSeedance = model === 'seedance-1.5-pro'
-    const CREDITS_PER_SECOND = VIDEO_CREDITS_MAP['seedance-1.5-pro']
+    const CREDITS_PER_SECOND = VIDEO_CREDITS_MAP[model] ?? 5
     const videoDuration = isSeedance ? (duration ?? 5) : undefined
     const VIDEO_CREDITS = isSeedance
-      ? (videoDuration === -1 ? 12 : videoDuration!) * CREDITS_PER_SECOND
+      ? (videoDuration === -1 ? 15 : videoDuration!) * CREDITS_PER_SECOND
       : VIDEO_CREDITS_MAP[model] ?? 10
 
     const userId = request.user.id
@@ -193,16 +214,24 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       if (model === 'veo3.1-components') {
         paramsForDb.has_reference_components = true
         paramsForDb.reference_count = images?.length ?? 0
-      } else if (model === 'seedance-1.5-pro') {
+      } else if (isSeedance) {
         paramsForDb.duration = videoDuration
         paramsForDb.generate_audio = generate_audio ?? true
         paramsForDb.camera_fixed = camera_fixed ?? false
+        if (isSeedance2 && reference_images && reference_images.length > 0) {
+          paramsForDb.has_reference_images = true
+          paramsForDb.reference_count = reference_images.length
+        }
+        if (images && images.length > 0) {
+          paramsForDb.has_first_frame = true
+          paramsForDb.has_last_frame = images.length > 1
+        }
       } else {
         paramsForDb.has_first_frame = (images?.length ?? 0) > 0
         paramsForDb.has_last_frame = (images?.length ?? 0) > 1
       }
 
-      const provider = model === 'seedance-1.5-pro' ? 'volcengine' : 'nano-banana'
+      const provider = isSeedance ? 'volcengine' : 'nano-banana'
 
       const batchResult = await trx
         .insertInto('task_batches')
@@ -260,19 +289,21 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     let lastError: string = ''
     const maxRetries = 1
 
-    if (model === 'seedance-1.5-pro') {
+    if (isSeedance) {
       // Volcengine Seedance API
       const volcengineApiUrl = 'https://ark.cn-beijing.volces.com/api/v3'
       const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
 
       const volcengineBody: Record<string, unknown> = {
-        model: 'doubao-seedance-1-5-pro-251215',
+        model: VOLCENGINE_MODEL_ID[model] ?? model,
         content: [{ type: 'text', text: prompt }],
         resolution: resolution ?? '720p',
         duration: videoDuration,
         generate_audio: generate_audio ?? true,
         camera_fixed: camera_fixed ?? false,
       }
+
+      // 首尾帧图片（frames Tab）：images 字段，role=first_frame/last_frame
       if (images && images.length > 0) {
         images.forEach((img, idx) => {
           const role = idx === 0 ? 'first_frame' : 'last_frame'
@@ -283,6 +314,18 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           })
         })
       }
+
+      // 参考图（components Tab，Seedance 2.0 专用）：reference_images 字段，role=reference
+      if (isSeedance2 && reference_images && reference_images.length > 0) {
+        reference_images.forEach((img) => {
+          ;(volcengineBody.content as any[]).push({
+            type: 'image_url',
+            image_url: { url: img },
+            role: 'reference',
+          })
+        })
+      }
+
       if (aspect_ratio) volcengineBody.ratio = aspect_ratio
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -436,7 +479,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(201).send({
       id: batchId,
       module: 'video',
-      provider: model === 'seedance-1.5-pro' ? 'volcengine' : 'nano-banana',
+      provider: isSeedance ? 'volcengine' : 'nano-banana',
       model,
       prompt,
       params: {},
