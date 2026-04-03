@@ -597,12 +597,22 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       } else if (f.type.startsWith('video/')) {
         if (multimodalVideos.length < 3) {
           const url = URL.createObjectURL(f)
-          const reader = new FileReader()
-          reader.onload = () => setMultimodalVideos(prev => prev.length < 3 ? [...prev, {
-            id: crypto.randomUUID(), file: f, previewUrl: url,
-            dataUrl: reader.result as string, name: f.name,
-          }] : prev)
-          reader.readAsDataURL(f)
+          const video = document.createElement('video')
+          video.src = url
+          video.onloadedmetadata = () => {
+            const pixels = video.videoWidth * video.videoHeight
+            if (pixels > 927408) {
+              toast.error(`视频 "${f.name}" 分辨率过高 (${video.videoWidth}x${video.videoHeight})，最高支持 720p 级别，请降低分辨率后重新添加。`)
+              URL.revokeObjectURL(url)
+              return
+            }
+            const reader = new FileReader()
+            reader.onload = () => setMultimodalVideos(prev => prev.length < 3 ? [...prev, {
+              id: crypto.randomUUID(), file: f, previewUrl: url,
+              dataUrl: reader.result as string, name: f.name,
+            }] : prev)
+            reader.readAsDataURL(f)
+          }
         }
       } else if (f.type.startsWith('audio/')) {
         if (multimodalAudios.length < 3) {
