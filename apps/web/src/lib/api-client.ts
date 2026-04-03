@@ -69,7 +69,7 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
-async function fetchWithAuth<T>(
+export async function fetchWithAuth<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
