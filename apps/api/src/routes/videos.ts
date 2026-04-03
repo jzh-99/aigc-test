@@ -478,9 +478,15 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           externalTaskId = json.id
           break
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : String(err)
+          let errMsg = err instanceof Error ? err.message : String(err)
+
+          // 拦截 Volcengine API 常见的视频分辨率超限错误，给出友好的中文提示
+          if (errMsg.includes('video pixel count') || errMsg.includes('must be less than or equal to 927408')) {
+            errMsg = '参考视频分辨率过高（限制为 720p 级别，约 92.7 万像素以内），请降低视频分辨率后重试'
+          }
+
           lastError = errMsg
-          const isTimeout = errMsg.includes('aborted') || errMsg.includes('timeout')
+          const isTimeout = errMsg.includes("aborted") || errMsg.includes("timeout")
           const isHttpError = errMsg.startsWith('Volcengine API ')
           const isNetworkError = errMsg.includes('fetch failed') || errMsg.includes('ECONNREFUSED') ||
                                 errMsg.includes('ENOTFOUND') || errMsg.includes('ETIMEDOUT') ||
