@@ -596,13 +596,25 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         }
       } else if (f.type.startsWith('video/')) {
         if (multimodalVideos.length < 3) {
+          // 文件大小限制：50 MB（火山引擎接口限制）
+          if (f.size > 52428800) {
+            toast.error(`视频 "${f.name}" 文件过大 (${(f.size / 1024 / 1024).toFixed(1)} MB)，最大支持 50 MB，请压缩后重新添加。`)
+            continue
+          }
           const url = URL.createObjectURL(f)
           const video = document.createElement('video')
           video.src = url
           video.onloadedmetadata = () => {
+            // 分辨率限制：≤ 720p（约 92.7 万像素）
             const pixels = video.videoWidth * video.videoHeight
             if (pixels > 927408) {
               toast.error(`视频 "${f.name}" 分辨率过高 (${video.videoWidth}x${video.videoHeight})，最高支持 720p 级别，请降低分辨率后重新添加。`)
+              URL.revokeObjectURL(url)
+              return
+            }
+            // 时长限制：≤ 15 秒（火山引擎接口限制 15.2 秒）
+            if (video.duration > 15.2) {
+              toast.error(`视频 "${f.name}" 时长过长 (${video.duration.toFixed(1)}s)，最长支持 15 秒，请裁剪后重新添加。`)
               URL.revokeObjectURL(url)
               return
             }
@@ -1010,7 +1022,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                     : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
                 )}
               >
-                多模态
+                全能参考
               </button>
             </div>
 
