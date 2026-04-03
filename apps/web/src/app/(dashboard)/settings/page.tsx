@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import { useAuthStore } from '@/stores/auth-store'
+import { useGenerationStore } from '@/stores/generation-store'
 import { apiPatch, apiPost, ApiError } from '@/lib/api-client'
 import type { UserProfile } from '@aigc/types'
 import { toast } from 'sonner'
@@ -17,6 +19,8 @@ export default function SettingsPage() {
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const updateUser = useAuthStore((s) => s.updateUser)
+  const watermark = useGenerationStore((s) => s.watermark)
+  const setWatermark = useGenerationStore((s) => s.setWatermark)
   const [username, setUsername] = useState(user?.username ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url ?? '')
   const [loading, setLoading] = useState(false)
@@ -222,6 +226,28 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>生成偏好</CardTitle>
+          <CardDescription>配置 AI 生成任务的全局默认设置</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="watermark-switch">生成水印</Label>
+              <p className="text-xs text-muted-foreground">
+                开启后，所有支持水印的生成任务（图片/视频）均会添加水印
+              </p>
+            </div>
+            <Switch
+              id="watermark-switch"
+              checked={watermark}
+              onCheckedChange={setWatermark}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Password change card - show at bottom if not required */}
       {!showPasswordWarning && (

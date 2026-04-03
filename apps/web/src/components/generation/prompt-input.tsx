@@ -9,14 +9,7 @@ import { Sparkles, Loader2, Coins } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
-
-const MODEL_CREDITS: Record<'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0', number> = {
-  gemini: 6,
-  'nano-banana-pro': 12,
-  'seedream-5.0-lite': 11,
-  'seedream-4.5': 13,
-  'seedream-4.0': 10,
-}
+import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 
 interface PromptInputProps {
   onBatchCreated: (batch: BatchResponse) => void
@@ -25,7 +18,7 @@ interface PromptInputProps {
 
 export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
   const { prompt, setPrompt, modelType, setModelType, resolution, setResolution, quantity, setQuantity, isGenerating } = useGenerationStore()
-  const estimatedCredits = (MODEL_CREDITS[modelType] ?? 5) * quantity
+  const estimatedCredits = (IMAGE_MODEL_CREDITS[modelType] ?? 5) * quantity
   const { generate } = useGenerate()
 
   const handleGenerate = async () => {
