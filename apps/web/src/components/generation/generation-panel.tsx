@@ -25,14 +25,7 @@ import { CompanyAImagePicker } from './company-a-image-picker'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
-
-const MODEL_CREDITS: Record<'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0', number> = {
-  gemini: 6,
-  'nano-banana-pro': 12,
-  'seedream-5.0-lite': 11,
-  'seedream-4.5': 13,
-  'seedream-4.0': 10,
-}
+import { IMAGE_MODEL_CREDITS, VIDEO_PER_SECOND_CREDITS, VIDEO_FLAT_CREDITS } from '@/lib/credits'
 
 const MAX_REF_IMAGES = 10
 const MAX_FILE_MB = 20
@@ -53,7 +46,7 @@ const MODEL_OPTIONS: Array<{
     label: '全能图片2',
     icon: Zap,
     desc: '快速生成，适合日常使用',
-    credits: MODEL_CREDITS['gemini'],
+    credits: IMAGE_MODEL_CREDITS['gemini'],
     resolutions: ['1k', '2k', '4k'],
     supportsWatermark: false,
   },
@@ -62,7 +55,7 @@ const MODEL_OPTIONS: Array<{
     label: '全能图片Pro',
     icon: Target,
     desc: '高质量输出，细节丰富',
-    credits: MODEL_CREDITS['nano-banana-pro'],
+    credits: IMAGE_MODEL_CREDITS['nano-banana-pro'],
     resolutions: ['1k', '2k', '4k'],
     supportsWatermark: false,
   },
@@ -71,7 +64,7 @@ const MODEL_OPTIONS: Array<{
     label: 'Seedream 5.0',
     icon: Sparkles,
     desc: '最新火山引擎模型，联网搜索增强',
-    credits: MODEL_CREDITS['seedream-5.0-lite'],
+    credits: IMAGE_MODEL_CREDITS['seedream-5.0-lite'],
     resolutions: ['2k', '3k'],
     supportsWatermark: true,
   },
@@ -80,7 +73,7 @@ const MODEL_OPTIONS: Array<{
     label: 'Seedream 4.5',
     icon: Sparkles,
     desc: '高分辨率图像生成',
-    credits: MODEL_CREDITS['seedream-4.5'],
+    credits: IMAGE_MODEL_CREDITS['seedream-4.5'],
     resolutions: ['2k', '4k'],
     supportsWatermark: true,
   },
@@ -89,7 +82,7 @@ const MODEL_OPTIONS: Array<{
     label: 'Seedream 4.0',
     icon: Sparkles,
     desc: '多分辨率图像生成',
-    credits: MODEL_CREDITS['seedream-4.0'],
+    credits: IMAGE_MODEL_CREDITS['seedream-4.0'],
     resolutions: ['1k', '2k', '4k'],
     supportsWatermark: true,
   },
@@ -114,21 +107,21 @@ const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
 const VIDEO_MODEL_OPTIONS = {
   multimodal: [
-    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '高级有声视频生成，支持多模态', credits: 5, isSeedance: true },
-    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '快速有声视频生成，支持多模态', credits: 5, isSeedance: true },
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '高级有声视频生成，支持多模态', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '快速有声视频生成，支持多模态', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], isSeedance: true },
   ],
   frames: [
-    { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: 10, isSeedance: false },
-    { value: 'seedance-1.5-pro', label: 'Seedance 1.5 Pro', desc: '有声视频生成，支持首尾帧', credits: 5, isSeedance: true },
-    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持首尾帧', credits: 5, isSeedance: true },
-    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持首尾帧', credits: 5, isSeedance: true },
+    { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: VIDEO_FLAT_CREDITS['veo3.1-fast'], isSeedance: false },
+    { value: 'seedance-1.5-pro', label: 'Seedance 1.5 Pro', desc: '有声视频生成，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-1.5-pro'], isSeedance: true },
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], isSeedance: true },
   ],
   components: [
-    { value: 'veo3.1-components', label: '全能视频3.1', desc: '基于参考图片生成视频', credits: 15, isSeedance: false },
-    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持参考图', credits: 5, isSeedance: true },
-    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持参考图', credits: 5, isSeedance: true },
+    { value: 'veo3.1-components', label: '全能视频3.1', desc: '基于参考图片生成视频', credits: VIDEO_FLAT_CREDITS['veo3.1-components'], isSeedance: false },
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持参考图', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持参考图', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], isSeedance: true },
   ],
-} as const
+}
 
 const VIDEO_ASPECT_RATIOS_DEFAULT = [
   { value: '', label: '自动' },
@@ -351,7 +344,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     await handleImageFiles(e.dataTransfer.files)
   }, [handleImageFiles])
 
-  const estimatedCredits = (MODEL_CREDITS[modelType] ?? 5) * quantity
+  const estimatedCredits = (IMAGE_MODEL_CREDITS[modelType] ?? 5) * quantity
 
   // Handle Company A image selection — fetch as blob so it integrates with existing upload flow
   const handleSelectCompanyAImage = useCallback(async (url: string, name: string) => {
@@ -1815,31 +1808,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                   ))}
                 </div>
               </div>
-
-              {/* 水印 - 仅 Seedream 模型显示 */}
-              {currentModel?.supportsWatermark && (
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-1 block">水印</Label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[{ value: false, label: '不加水印' }, { value: true, label: '添加水印' }].map((opt) => (
-                      <button
-                        key={String(opt.value)}
-                        onClick={() => setWatermark(opt.value)}
-                        disabled={disabled}
-                        className={cn(
-                          'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
-                          watermark === opt.value
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-border hover:border-primary/50',
-                          disabled && 'opacity-50 cursor-not-allowed'
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* 画面比例 */}
               <div>

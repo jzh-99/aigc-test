@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { BatchResponse } from '@aigc/types'
 
 interface ReferenceImage {
@@ -84,7 +85,9 @@ const defaults = {
   pendingModule: null as string | null,
 }
 
-export const useGenerationStore = create<GenerationState>((set) => ({
+export const useGenerationStore = create<GenerationState>()(
+  persist(
+    (set) => ({
   ...defaults,
   setPrompt: (prompt) => set({ prompt }),
   setModelType: (modelType) => set({ modelType }),
@@ -137,4 +140,10 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   },
   clearPendingModule: () => set({ pendingModule: null }),
   reset: () => set(defaults),
-}))
+    }),
+    {
+      name: 'aigc-generation-prefs',
+      partialize: (state) => ({ watermark: state.watermark }),
+    }
+  )
+)

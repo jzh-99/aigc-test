@@ -2,14 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
-
-const VIDEO_CREDITS_MAP: Record<string, number> = {
-  'veo3.1-fast': 10,
-  'veo3.1-components': 15,
-  'seedance-1.5-pro': 5, // per-second price
-  'seedance-2.0': 5,      // per-second price
-  'seedance-2.0-fast': 5, // per-second price
-}
+import { VIDEO_CREDITS_MAP } from '../lib/credits.js'
 
 // Map frontend model codes → actual Volcengine model IDs
 const VOLCENGINE_MODEL_ID: Record<string, string> = {
