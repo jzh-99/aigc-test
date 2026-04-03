@@ -22,14 +22,17 @@ interface VideoGenerateBody {
   prompt: string
   workspace_id: string
   model?: string
-  images?: string[]           // 首尾帧（首尾帧 Tab）
-  reference_images?: string[] // 参考图（参考生视频 Tab，Seedance 2.0 专用）
+  images?: string[]            // 首尾帧（首尾帧 Tab）
+  reference_images?: string[]  // 参考图（参考生视频 Tab / multimodal Tab，Seedance 2.0 专用）
+  reference_videos?: string[]  // 参考视频（multimodal Tab，Seedance 2.0 专用）
+  reference_audios?: string[]  // 参考音频（multimodal Tab，Seedance 2.0 专用）
   aspect_ratio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive'
   enable_upsample?: boolean
   resolution?: '720p' | '1080p'
   duration?: number
   generate_audio?: boolean
   camera_fixed?: boolean
+  watermark?: boolean
 }
 
 export async function videoRoutes(app: FastifyInstance): Promise<void> {
@@ -47,13 +50,16 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
             default: 'veo3.1-fast'
           },
           images: { type: 'array', items: { type: 'string' }, maxItems: 2 },
-          reference_images: { type: 'array', items: { type: 'string' }, maxItems: 3 },
+          reference_images: { type: 'array', items: { type: 'string' }, maxItems: 9 },
+          reference_videos: { type: 'array', items: { type: 'string' }, maxItems: 3 },
+          reference_audios: { type: 'array', items: { type: 'string' }, maxItems: 3 },
           aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'] },
           enable_upsample: { type: 'boolean' },
           resolution: { type: 'string', enum: ['720p', '1080p'] },
           duration: { type: 'integer', minimum: -1, maximum: 15 },
           generate_audio: { type: 'boolean' },
           camera_fixed: { type: 'boolean' },
+          watermark: { type: 'boolean' },
         },
         additionalProperties: false,
       },
@@ -65,12 +71,15 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       model = 'veo3.1-fast',
       images,
       reference_images,
+      reference_videos,
+      reference_audios,
       aspect_ratio,
       enable_upsample,
       resolution,
       duration,
       generate_audio,
       camera_fixed,
+      watermark,
     } = request.body
 
     const isSeedance = model.startsWith('seedance-')
@@ -109,6 +118,12 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({
         success: false,
         error: { code: 'INVALID_PARAMS', message: 'reference_images 仅支持 Seedance 2.0 系列模型' },
+      })
+    }
+    if ((reference_videos?.length || reference_audios?.length) && !isSeedance2) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_PARAMS', message: 'reference_videos / reference_audios 仅支持 Seedance 2.0 系列模型' },
       })
     }
 
@@ -222,6 +237,12 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           paramsForDb.has_reference_images = true
           paramsForDb.reference_count = reference_images.length
         }
+        if (isSeedance2 && (reference_videos?.length || reference_audios?.length)) {
+          paramsForDb.has_reference_videos = (reference_videos?.length ?? 0) > 0
+          paramsForDb.has_reference_audios = (reference_audios?.length ?? 0) > 0
+          paramsForDb.reference_video_count = reference_videos?.length ?? 0
+          paramsForDb.reference_audio_count = reference_audios?.length ?? 0
+        }
         if (images && images.length > 0) {
           paramsForDb.has_first_frame = true
           paramsForDb.has_last_frame = images.length > 1
@@ -300,8 +321,11 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
         resolution: resolution ?? '720p',
         duration: videoDuration,
         generate_audio: generate_audio ?? true,
-        camera_fixed: camera_fixed ?? false,
+        watermark: watermark ?? false,
       }
+
+      // camera_fixed 默认 false（不传也可，但显式传递保持一致）
+      if (camera_fixed !== undefined) volcengineBody.camera_fixed = camera_fixed
 
       // 首尾帧图片（frames Tab）：images 字段，role=first_frame/last_frame
       if (images && images.length > 0) {
@@ -315,18 +339,45 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
         })
       }
 
-      // 参考图（components Tab，Seedance 2.0 专用）：reference_images 字段，role=reference
+      // 参考图（components Tab / multimodal Tab，Seedance 2.0 专用）：role=reference_image
       if (isSeedance2 && reference_images && reference_images.length > 0) {
         reference_images.forEach((img) => {
           ;(volcengineBody.content as any[]).push({
             type: 'image_url',
             image_url: { url: img },
-            role: 'reference',
+            role: 'reference_image',
+          })
+        })
+      }
+
+      // 参考视频（multimodal Tab，Seedance 2.0 专用）：role=reference_video
+      if (isSeedance2 && reference_videos && reference_videos.length > 0) {
+        reference_videos.forEach((vid) => {
+          ;(volcengineBody.content as any[]).push({
+            type: 'video_url',
+            video_url: { url: vid },
+            role: 'reference_video',
+          })
+        })
+      }
+
+      // 参考音频（multimodal Tab，Seedance 2.0 专用）：role=reference_audio
+      if (isSeedance2 && reference_audios && reference_audios.length > 0) {
+        reference_audios.forEach((aud) => {
+          ;(volcengineBody.content as any[]).push({
+            type: 'audio_url',
+            audio_url: { url: aud },
+            role: 'reference_audio',
           })
         })
       }
 
       if (aspect_ratio) volcengineBody.ratio = aspect_ratio
+
+      // Seedance 2.0 默认开启联网搜索增强（仅纯文本输入时模型会自主决定是否搜索）
+      if (isSeedance2) {
+        volcengineBody.tools = [{ type: 'web_search' }]
+      }
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {

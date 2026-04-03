@@ -645,9 +645,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       // frames Tab：首尾帧 → images 字段
       // components Tab + Seedance 2.0：参考图 → reference_images 字段
       // components Tab + veo3.1-components：参考图 → images 字段（旧逻辑）
-      // multimodal Tab：图片 → reference_images，视频/音频暂通过 images 传递（后续扩展）
+      // multimodal Tab：图片 → reference_images，视频 → reference_videos，音频 → reference_audios
       let imagesParam: string[] | undefined
       let referenceImagesParam: string[] | undefined
+      let referenceVideosParam: string[] | undefined
+      let referenceAudiosParam: string[] | undefined
 
       if (videoMode === 'frames') {
         const arr: string[] = []
@@ -655,14 +657,16 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         if (lastFrame) arr.push(lastFrame.dataUrl)
         imagesParam = arr.length > 0 ? arr : undefined
       } else if (videoMode === 'multimodal') {
-        // 多模态：图片作为 reference_images，视频/音频作为 images（按位置依次合并）
+        // 多模态：各模态分别传递，后端按正确 role 组装给 Volcengine API
         referenceImagesParam = multimodalImages.length > 0
           ? multimodalImages.map(img => img.dataUrl)
           : undefined
-        const videoDataUrls = multimodalVideos.map(v => v.dataUrl)
-        const audioDataUrls = multimodalAudios.map(a => a.dataUrl)
-        const combined = [...videoDataUrls, ...audioDataUrls]
-        imagesParam = combined.length > 0 ? combined : undefined
+        referenceVideosParam = multimodalVideos.length > 0
+          ? multimodalVideos.map(v => v.dataUrl)
+          : undefined
+        referenceAudiosParam = multimodalAudios.length > 0
+          ? multimodalAudios.map(a => a.dataUrl)
+          : undefined
       } else {
         // components mode
         if (isSeedance2) {
@@ -682,12 +686,15 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         model: videoModel,
         images: imagesParam,
         reference_images: referenceImagesParam,
+        reference_videos: referenceVideosParam,
+        reference_audios: referenceAudiosParam,
         aspect_ratio: videoAspectRatio || undefined,
         ...(isSeedance ? {
           resolution: videoUpsample ? '1080p' : '720p',
           duration: videoDuration,
           generate_audio: videoGenerateAudio,
           camera_fixed: videoCameraFixed,
+          watermark: watermark,
         } : {
           enable_upsample: videoUpsample,
         }),

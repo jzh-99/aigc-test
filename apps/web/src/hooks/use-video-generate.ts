@@ -6,14 +6,17 @@ interface VideoGenerateParams {
   prompt: string
   workspace_id: string
   model?: string
-  images?: string[]           // 首尾帧（frames Tab）
-  reference_images?: string[] // 参考图（components Tab，Seedance 2.0 专用）
+  images?: string[]            // 首尾帧（frames Tab）
+  reference_images?: string[]  // 参考图（components/multimodal Tab，Seedance 2.0 专用）
+  reference_videos?: string[]  // 参考视频（multimodal Tab，Seedance 2.0 专用）
+  reference_audios?: string[]  // 参考音频（multimodal Tab，Seedance 2.0 专用）
   aspect_ratio?: string
   enable_upsample?: boolean
   resolution?: string
   duration?: number
   generate_audio?: boolean
   camera_fixed?: boolean
+  watermark?: boolean
 }
 
 export function useVideoGenerate() {
