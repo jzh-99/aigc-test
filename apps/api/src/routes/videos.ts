@@ -1,8 +1,32 @@
 import type { FastifyInstance } from 'fastify'
+import { createWriteStream, createReadStream } from 'node:fs'
+import { unlink, mkdir, stat } from 'node:fs/promises'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { pipeline } from 'node:stream/promises'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 import { VIDEO_CREDITS_MAP } from '../lib/credits.js'
+
+// ── Temp upload config ────────────────────────────────────────────────────────
+const UPLOAD_DIR = '/tmp/video-uploads'
+const MAX_FILE_AGE_MS = 60 * 60 * 1000 // 60 minutes
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024  // 20 MB
+const MAX_VIDEO_SIZE = 500 * 1024 * 1024 // 500 MB
+const MAX_AUDIO_SIZE = 50 * 1024 * 1024  // 50 MB
+
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp']
+const VIDEO_EXTS = ['mp4', 'mov', 'webm']
+const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac']
+const ALL_EXTS = [...IMAGE_EXTS, ...VIDEO_EXTS, ...AUDIO_EXTS]
+
+const MIME_MAP: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac',
+}
+const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|mp4|mov|webm|mp3|wav|m4a|aac)$/
 
 // Map frontend model codes → actual Volcengine model IDs
 const VOLCENGINE_MODEL_ID: Record<string, string> = {
@@ -29,6 +53,63 @@ interface VideoGenerateBody {
 }
 
 export async function videoRoutes(app: FastifyInstance): Promise<void> {
+  await mkdir(UPLOAD_DIR, { recursive: true })
+
+  const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
+
+  // ── POST /videos/upload ───────────────────────────────────────────────────
+  // Upload image / video / audio for Seedance multimodal; returns public URL.
+  app.post('/videos/upload', async (request, reply) => {
+    const maxSize = Math.max(MAX_IMAGE_SIZE, MAX_VIDEO_SIZE, MAX_AUDIO_SIZE)
+    const data = await (request as any).file({ limits: { fileSize: maxSize } })
+    if (!data) return reply.badRequest('No file provided')
+
+    const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? ''
+    if (!ALL_EXTS.includes(ext)) {
+      return reply.badRequest(`Unsupported file type: .${ext}`)
+    }
+
+    // Per-type size check
+    const isImage = IMAGE_EXTS.includes(ext)
+    const isVideo = VIDEO_EXTS.includes(ext)
+    const isAudio = AUDIO_EXTS.includes(ext)
+    const maxAllowed = isImage ? MAX_IMAGE_SIZE : isVideo ? MAX_VIDEO_SIZE : MAX_AUDIO_SIZE
+    if (data.file.bytesRead > maxAllowed) {
+      const mb = Math.round(maxAllowed / 1024 / 1024)
+      return reply.badRequest(`File too large (max ${mb} MB for ${isImage ? 'images' : isVideo ? 'videos' : 'audio'})`)
+    }
+
+    const id = `${randomUUID()}.${ext}`
+    const filePath = join(UPLOAD_DIR, id)
+    await pipeline(data.file, createWriteStream(filePath))
+
+    return { url: `${BASE_URL}/api/v1/videos/uploads/${id}` }
+  })
+
+  // ── GET /videos/uploads/:id ───────────────────────────────────────────────
+  // Serve temp files publicly so Volcengine can fetch them (no auth required).
+  app.get<{ Params: { id: string } }>('/videos/uploads/:id', async (request, reply) => {
+    const { id } = request.params
+    if (!SAFE_ID.test(id)) return reply.status(404).send()
+
+    const filePath = join(UPLOAD_DIR, id)
+    try {
+      const s = await stat(filePath)
+      if (Date.now() - s.mtimeMs > MAX_FILE_AGE_MS) {
+        await unlink(filePath).catch(() => {})
+        return reply.status(404).send()
+      }
+      const ext = id.split('.').pop()!
+      reply.header('Content-Type', MIME_MAP[ext] ?? 'application/octet-stream')
+      reply.header('Content-Length', s.size)
+      reply.header('Cache-Control', 'no-store')
+      reply.header('X-Robots-Tag', 'noindex')
+      return reply.send(createReadStream(filePath))
+    } catch {
+      return reply.status(404).send()
+    }
+  })
+
   app.post<{ Body: VideoGenerateBody }>('/videos/generate', {
     schema: {
       body: {

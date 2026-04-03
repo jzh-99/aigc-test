@@ -629,6 +629,18 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     await handleMultimodalFiles(e.dataTransfer.files)
   }, [handleMultimodalFiles])
 
+  // Upload a dataUrl (base64) or File to /videos/upload; returns public URL.
+  const uploadToVideoTemp = async (dataUrl: string, filename: string): Promise<string> => {
+    const res = await fetch(dataUrl)
+    const blob = await res.blob()
+    const form = new FormData()
+    form.append('file', blob, filename)
+    const uploadRes = await fetch('/api/v1/videos/upload', { method: 'POST', body: form })
+    if (!uploadRes.ok) throw new Error(`文件上传失败: ${uploadRes.status}`)
+    const json = await uploadRes.json() as { url: string }
+    return json.url
+  }
+
   const handleVideoGenerate = async () => {
     if (!videoPrompt.trim()) return
     try {
@@ -639,6 +651,9 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       // components Tab + Seedance 2.0：参考图 → reference_images 字段
       // components Tab + veo3.1-components：参考图 → images 字段（旧逻辑）
       // multimodal Tab：图片 → reference_images，视频 → reference_videos，音频 → reference_audios
+      //
+      // Seedance API 要求所有媒体文件必须是公网 https:// URL（不接受 base64 data URL）。
+      // 因此 Seedance 模型的所有图片/视频/音频均先上传到 /videos/upload 获取临时公网 URL。
       let imagesParam: string[] | undefined
       let referenceImagesParam: string[] | undefined
       let referenceVideosParam: string[] | undefined
@@ -646,26 +661,45 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
       if (videoMode === 'frames') {
         const arr: string[] = []
-        if (firstFrame) arr.push(firstFrame.dataUrl)
-        if (lastFrame) arr.push(lastFrame.dataUrl)
+        if (firstFrame) {
+          // Seedance 首尾帧也必须是 URL
+          const url = isSeedance
+            ? await uploadToVideoTemp(firstFrame.dataUrl, 'first_frame.jpg')
+            : firstFrame.dataUrl
+          arr.push(url)
+        }
+        if (lastFrame) {
+          const url = isSeedance
+            ? await uploadToVideoTemp(lastFrame.dataUrl, 'last_frame.jpg')
+            : lastFrame.dataUrl
+          arr.push(url)
+        }
         imagesParam = arr.length > 0 ? arr : undefined
       } else if (videoMode === 'multimodal') {
-        // 多模态：各模态分别传递，后端按正确 role 组装给 Volcengine API
-        referenceImagesParam = multimodalImages.length > 0
-          ? multimodalImages.map(img => img.dataUrl)
-          : undefined
-        referenceVideosParam = multimodalVideos.length > 0
-          ? multimodalVideos.map(v => v.dataUrl)
-          : undefined
-        referenceAudiosParam = multimodalAudios.length > 0
-          ? multimodalAudios.map(a => a.dataUrl)
-          : undefined
+        // 多模态：全部上传为公网 URL
+        if (multimodalImages.length > 0) {
+          referenceImagesParam = await Promise.all(
+            multimodalImages.map((img, i) => uploadToVideoTemp(img.dataUrl, `ref_image_${i}.jpg`))
+          )
+        }
+        if (multimodalVideos.length > 0) {
+          referenceVideosParam = await Promise.all(
+            multimodalVideos.map((v) => uploadToVideoTemp(v.dataUrl, v.name))
+          )
+        }
+        if (multimodalAudios.length > 0) {
+          referenceAudiosParam = await Promise.all(
+            multimodalAudios.map((a) => uploadToVideoTemp(a.dataUrl, a.name))
+          )
+        }
       } else {
         // components mode
         if (isSeedance2) {
-          referenceImagesParam = videoReferenceImages.length > 0
-            ? videoReferenceImages.map(img => img.dataUrl)
-            : undefined
+          if (videoReferenceImages.length > 0) {
+            referenceImagesParam = await Promise.all(
+              videoReferenceImages.map((img, i) => uploadToVideoTemp(img.dataUrl, `ref_image_${i}.jpg`))
+            )
+          }
         } else {
           imagesParam = videoReferenceImages.length > 0
             ? videoReferenceImages.map(img => img.dataUrl)
