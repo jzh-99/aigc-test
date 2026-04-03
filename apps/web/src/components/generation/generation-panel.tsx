@@ -200,8 +200,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   // Multimodal mode state
   const [multimodalImages, setMultimodalImages] = useState<FrameImage[]>([])
-  const [multimodalVideos, setMultimodalVideos] = useState<{ id: string; file: File; previewUrl: string; dataUrl: string; name: string }[]>([])
-  const [multimodalAudios, setMultimodalAudios] = useState<{ id: string; file: File; dataUrl: string; name: string; duration: number }[]>([])
+  const [multimodalVideos, setMultimodalVideos] = useState<{ id: string; file: File; previewUrl: string; name: string }[]>([])
+  const [multimodalAudios, setMultimodalAudios] = useState<{ id: string; file: File; previewUrl: string; name: string; duration: number }[]>([])
   const [multimodalManagerOpen, setMultimodalManagerOpen] = useState(false)
   const [isMultimodalDragging, setIsMultimodalDragging] = useState(false)
   const multimodalDragCounterRef = useRef(0)
@@ -586,6 +586,45 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     if (multimodalDragCounterRef.current === 0) setIsMultimodalDragging(false)
   }, [])
 
+  // 统一的视频校验 + 添加逻辑，供主上传区和素材管理弹窗共用
+  const validateAndAddVideo = useCallback((f: File) => {
+    if (f.size > 52428800) {
+      toast.error(`视频 "${f.name}" 文件过大 (${(f.size / 1024 / 1024).toFixed(1)} MB)，最大支持 50 MB，请压缩后重新添加。`)
+      return
+    }
+    const url = URL.createObjectURL(f)
+    const video = document.createElement('video')
+    video.src = url
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url)
+      const pixels = video.videoWidth * video.videoHeight
+      if (pixels > 927408) {
+        toast.error(`视频 "${f.name}" 分辨率过高 (${video.videoWidth}x${video.videoHeight})，最高支持 720p，请降低分辨率后重新添加。`)
+        return
+      }
+      if (video.duration > 15.2) {
+        toast.error(`视频 "${f.name}" 时长过长 (${video.duration.toFixed(1)}s)，最长支持 15 秒，请裁剪后重新添加。`)
+        return
+      }
+      const previewUrl = URL.createObjectURL(f)
+      setMultimodalVideos(prev => prev.length < 3 ? [...prev, {
+        id: crypto.randomUUID(), file: f, previewUrl, name: f.name,
+      }] : prev)
+    }
+  }, [])
+
+  // 统一的音频校验 + 添加逻辑，供主上传区和素材管理弹窗共用
+  const validateAndAddAudio = useCallback((f: File) => {
+    const url = URL.createObjectURL(f)
+    const audio = document.createElement('audio')
+    audio.src = url
+    audio.onloadedmetadata = () => {
+      setMultimodalAudios(prev => prev.length < 3 ? [...prev, {
+        id: crypto.randomUUID(), file: f, previewUrl: url, name: f.name, duration: audio.duration,
+      }] : prev)
+    }
+  }, [])
+
   const handleMultimodalFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
     for (const f of Array.from(files)) {
@@ -595,55 +634,12 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
           if (img) setMultimodalImages(prev => prev.length < 9 ? [...prev, img] : prev)
         }
       } else if (f.type.startsWith('video/')) {
-        if (multimodalVideos.length < 3) {
-          // 文件大小限制：50 MB（火山引擎接口限制）
-          if (f.size > 52428800) {
-            toast.error(`视频 "${f.name}" 文件过大 (${(f.size / 1024 / 1024).toFixed(1)} MB)，最大支持 50 MB，请压缩后重新添加。`)
-            continue
-          }
-          const url = URL.createObjectURL(f)
-          const video = document.createElement('video')
-          video.src = url
-          video.onloadedmetadata = () => {
-            // 分辨率限制：≤ 720p（约 92.7 万像素）
-            const pixels = video.videoWidth * video.videoHeight
-            if (pixels > 927408) {
-              toast.error(`视频 "${f.name}" 分辨率过高 (${video.videoWidth}x${video.videoHeight})，最高支持 720p 级别，请降低分辨率后重新添加。`)
-              URL.revokeObjectURL(url)
-              return
-            }
-            // 时长限制：≤ 15 秒（火山引擎接口限制 15.2 秒）
-            if (video.duration > 15.2) {
-              toast.error(`视频 "${f.name}" 时长过长 (${video.duration.toFixed(1)}s)，最长支持 15 秒，请裁剪后重新添加。`)
-              URL.revokeObjectURL(url)
-              return
-            }
-            const reader = new FileReader()
-            reader.onload = () => setMultimodalVideos(prev => prev.length < 3 ? [...prev, {
-              id: crypto.randomUUID(), file: f, previewUrl: url,
-              dataUrl: reader.result as string, name: f.name,
-            }] : prev)
-            reader.readAsDataURL(f)
-          }
-        }
+        if (multimodalVideos.length < 3) validateAndAddVideo(f)
       } else if (f.type.startsWith('audio/')) {
-        if (multimodalAudios.length < 3) {
-          const url = URL.createObjectURL(f)
-          const audio = document.createElement('audio')
-          audio.src = url
-          audio.onloadedmetadata = () => {
-            URL.revokeObjectURL(url)
-            const reader = new FileReader()
-            reader.onload = () => setMultimodalAudios(prev => prev.length < 3 ? [...prev, {
-              id: crypto.randomUUID(), file: f, dataUrl: reader.result as string,
-              name: f.name, duration: audio.duration,
-            }] : prev)
-            reader.readAsDataURL(f)
-          }
-        }
+        if (multimodalAudios.length < 3) validateAndAddAudio(f)
       }
     }
-  }, [multimodalImages.length, multimodalVideos.length, multimodalAudios.length, readFrameFile])
+  }, [multimodalImages.length, multimodalVideos.length, multimodalAudios.length, readFrameFile, validateAndAddVideo, validateAndAddAudio])
 
   const handleMultimodalDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
@@ -652,12 +648,16 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     await handleMultimodalFiles(e.dataTransfer.files)
   }, [handleMultimodalFiles])
 
-  // Upload a dataUrl (base64) to /videos/upload; returns public URL.
-  const uploadToVideoTemp = async (dataUrl: string, filename: string): Promise<string> => {
-    const res = await fetch(dataUrl)
-    const blob = await res.blob()
+  // Upload a File (or dataUrl for images) to /videos/upload; returns public URL.
+  const uploadToVideoTemp = async (fileOrDataUrl: File | string, filename: string): Promise<string> => {
     const form = new FormData()
-    form.append('file', blob, filename)
+    if (fileOrDataUrl instanceof File) {
+      form.append('file', fileOrDataUrl, fileOrDataUrl.name)
+    } else {
+      const res = await fetch(fileOrDataUrl)
+      const blob = await res.blob()
+      form.append('file', blob, filename)
+    }
     const json = await fetchWithAuth<{ url: string }>('/videos/upload', { method: 'POST', body: form })
     return json.url
   }
@@ -697,7 +697,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         }
         imagesParam = arr.length > 0 ? arr : undefined
       } else if (videoMode === 'multimodal') {
-        // 多模态：全部上传为公网 URL
+        // 全能参考：全部直接用 File 上传（跳过 base64 中转，避免卡顿）
         if (multimodalImages.length > 0) {
           referenceImagesParam = await Promise.all(
             multimodalImages.map((img, i) => uploadToVideoTemp(img.dataUrl, `ref_image_${i}.jpg`))
@@ -705,12 +705,12 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         }
         if (multimodalVideos.length > 0) {
           referenceVideosParam = await Promise.all(
-            multimodalVideos.map((v) => uploadToVideoTemp(v.dataUrl, v.name))
+            multimodalVideos.map((v) => uploadToVideoTemp(v.file, v.name))
           )
         }
         if (multimodalAudios.length > 0) {
           referenceAudiosParam = await Promise.all(
-            multimodalAudios.map((a) => uploadToVideoTemp(a.dataUrl, a.name))
+            multimodalAudios.map((a) => uploadToVideoTemp(a.file, a.name))
           )
         }
       } else {
@@ -1350,7 +1350,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                                   </div>
                                   {/* 内嵌播放器 */}
                                   <audio
-                                    src={a.dataUrl}
+                                    src={a.previewUrl}
                                     controls
                                     className="w-full h-7"
                                     style={{ accentColor: 'hsl(var(--primary))' }}
@@ -1430,10 +1430,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                     const files = e.target.files; if (!files) return
                     for (const f of Array.from(files)) {
                       if (multimodalVideos.length >= 3) break
-                      const url = URL.createObjectURL(f)
-                      const reader = new FileReader()
-                      reader.onload = () => setMultimodalVideos(prev => prev.length < 3 ? [...prev, { id: crypto.randomUUID(), file: f, previewUrl: url, dataUrl: reader.result as string, name: f.name }] : prev)
-                      reader.readAsDataURL(f)
+                      validateAndAddVideo(f)
                     }
                     e.target.value = ''
                   }}
@@ -1443,14 +1440,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                     const files = e.target.files; if (!files) return
                     for (const f of Array.from(files)) {
                       if (multimodalAudios.length >= 3) break
-                      const url = URL.createObjectURL(f)
-                      const audio = document.createElement('audio'); audio.src = url
-                      audio.onloadedmetadata = () => {
-                        URL.revokeObjectURL(url)
-                        const reader = new FileReader()
-                        reader.onload = () => setMultimodalAudios(prev => prev.length < 3 ? [...prev, { id: crypto.randomUUID(), file: f, dataUrl: reader.result as string, name: f.name, duration: audio.duration }] : prev)
-                        reader.readAsDataURL(f)
-                      }
+                      validateAndAddAudio(f)
                     }
                     e.target.value = ''
                   }}
