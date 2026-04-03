@@ -7,8 +7,8 @@ import { VIDEO_CREDITS_MAP } from '../lib/credits.js'
 // Map frontend model codes → actual Volcengine model IDs
 const VOLCENGINE_MODEL_ID: Record<string, string> = {
   'seedance-1.5-pro': 'doubao-seedance-1-5-pro-251215',
-  'seedance-2.0':     'doubao-seedance-2-0-260516',
-  'seedance-2.0-fast':'doubao-seedance-2-0-lite-260516',
+  'seedance-2.0':     'doubao-seedance-2-0-260128',
+  'seedance-2.0-fast':'doubao-seedance-2-0-lite-260128',
 }
 
 interface VideoGenerateBody {
@@ -311,8 +311,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       const volcengineBody: Record<string, unknown> = {
         model: VOLCENGINE_MODEL_ID[model] ?? model,
         content: [{ type: 'text', text: prompt }],
-        resolution: resolution ?? '720p',
-        duration: videoDuration,
+        duration: videoDuration === -1 ? undefined : videoDuration,
         generate_audio: generate_audio ?? true,
         watermark: watermark ?? false,
       }
