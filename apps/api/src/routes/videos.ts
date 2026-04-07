@@ -62,11 +62,12 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
   app.post('/videos/upload', async (request, reply) => {
     const maxSize = Math.max(MAX_IMAGE_SIZE, MAX_VIDEO_SIZE, MAX_AUDIO_SIZE)
     const data = await (request as any).file({ limits: { fileSize: maxSize } })
-    if (!data) return reply.badRequest('No file provided')
+    if (!data) return reply.badRequest('未检测到文件，请重新选择后上传')
 
     const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? ''
     if (!ALL_EXTS.includes(ext)) {
-      return reply.badRequest(`Unsupported file type: .${ext}`)
+      const allowed = `图片（${IMAGE_EXTS.join('/')}）、视频（${VIDEO_EXTS.join('/')}）、音频（${AUDIO_EXTS.join('/')}）`
+      return reply.badRequest(`不支持的文件格式「.${ext}」，请上传 ${allowed} 格式的文件`)
     }
 
     // Per-type size check
@@ -76,7 +77,8 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     const maxAllowed = isImage ? MAX_IMAGE_SIZE : isVideo ? MAX_VIDEO_SIZE : MAX_AUDIO_SIZE
     if (data.file.bytesRead > maxAllowed) {
       const mb = Math.round(maxAllowed / 1024 / 1024)
-      return reply.badRequest(`File too large (max ${mb} MB for ${isImage ? 'images' : isVideo ? 'videos' : 'audio'})`)
+      const typeLabel = isImage ? '图片' : isVideo ? '视频' : '音频'
+      return reply.badRequest(`${typeLabel}文件过大，最大支持 ${mb} MB，请压缩后重新上传`)
     }
 
     const id = `${randomUUID()}.${ext}`
@@ -483,6 +485,8 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           // 拦截 Volcengine API 常见的视频分辨率超限错误，给出友好的中文提示
           if (errMsg.includes('video pixel count') || errMsg.includes('must be less than or equal to 927408')) {
             errMsg = '参考视频分辨率过高（限制为 720p 级别，约 92.7 万像素以内），请降低视频分辨率后重试'
+          } else if (errMsg.includes('video total duration') && errMsg.includes('15.2')) {
+            errMsg = '参考视频总时长超限（所有视频累计时长不超过 15 秒），请删减视频后重试'
           } else if ((errMsg.includes('video duration') || errMsg.includes('audio duration')) && errMsg.includes('15.2')) {
             errMsg = '参考音视频时长过长（最长支持 15 秒），请裁剪后重试'
           } else if (errMsg.includes('video size') && errMsg.includes('52428800')) {

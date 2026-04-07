@@ -5,9 +5,12 @@ import Image from 'next/image'
 import { useGenerationStore } from '@/stores/generation-store'
 import { ImagePlus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 const MAX_IMAGES = 5
 const MAX_SIZE_MB = 10
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const ALLOWED_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -25,9 +28,22 @@ export function ReferenceImageUpload() {
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
     for (const file of Array.from(files)) {
-      if (referenceImages.length >= MAX_IMAGES) break
-      if (!file.type.startsWith('image/')) continue
-      if (file.size > MAX_SIZE_MB * 1024 * 1024) continue
+      if (referenceImages.length >= MAX_IMAGES) {
+        toast.error(`最多添加 ${MAX_IMAGES} 张参考图`)
+        break
+      }
+
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+      const isValidType = ALLOWED_TYPES.includes(file.type) || ALLOWED_EXTS.includes(ext)
+      if (!isValidType) {
+        toast.error(`文件「${file.name}」格式不支持，请上传 JPG / PNG / WEBP 格式的图片`)
+        continue
+      }
+
+      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+        toast.error(`图片「${file.name}」过大（${(file.size / 1024 / 1024).toFixed(1)} MB），单张不超过 ${MAX_SIZE_MB} MB`)
+        continue
+      }
 
       const dataUrl = await fileToDataUrl(file)
       addReferenceImage({
@@ -95,7 +111,7 @@ export function ReferenceImageUpload() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/gif"
         multiple
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
