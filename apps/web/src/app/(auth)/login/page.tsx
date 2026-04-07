@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,22 @@ import type { AuthResponse, LoginRequest } from '@aigc/types'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
+
+function KickedMessage() {
+  const searchParams = useSearchParams()
+  const isKicked = searchParams.get('reason') === 'kicked'
+  
+  if (!isKicked) return null
+  
+  return (
+    <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3.5 text-sm">
+      <p className="font-semibold text-yellow-600 dark:text-yellow-500 mb-1">账号已登出</p>
+      <p className="text-muted-foreground leading-relaxed">
+        您的账号已在其他设备登录。如果这不是您本人的操作，请修改密码。
+      </p>
+    </div>
+  )
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -84,6 +100,10 @@ export default function LoginPage() {
             </h2>
             <p className="text-sm text-muted-foreground">登录您的账户</p>
           </div>
+
+          <Suspense fallback={null}>
+            <KickedMessage />
+          </Suspense>
 
           {suspended && (
             <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-sm">

@@ -121,6 +121,18 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // Clear failed attempts on successful login
     await clearFailedAttempts(identifier)
 
+    // Revoke all older refresh tokens to enforce single session
+    await db
+      .updateTable('refresh_tokens')
+      .set({ revoked_at: sql`NOW()` })
+      .where('user_id', '=', user.id)
+      .where('revoked_at', 'is', null)
+      .execute()
+
+    // Publish kick event to other devices
+    const sessionVersion = Math.floor(Date.now() / 1000)
+    await redis.set(`user:session_version:${user.id}`, sessionVersion.toString(), 'EX', 7 * 24 * 60 * 60)
+
     const accessToken = signAccessToken({ id: user.id, account: user.account, role: user.role })
     const refreshToken = signRefreshToken()
     const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
@@ -359,6 +371,18 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       .select(['id', 'account', 'role'])
       .where('id', '=', result.userId)
       .executeTakeFirstOrThrow()
+
+    // Revoke all older refresh tokens to enforce single session
+    await db
+      .updateTable('refresh_tokens')
+      .set({ revoked_at: sql`NOW()` })
+      .where('user_id', '=', user.id)
+      .where('revoked_at', 'is', null)
+      .execute()
+
+    // Publish kick event to other devices
+    const sessionVersion = Math.floor(Date.now() / 1000)
+    await redis.set(`user:session_version:${user.id}`, sessionVersion.toString(), 'EX', 7 * 24 * 60 * 60)
 
     const accessToken = signAccessToken({ id: user.id, account: user.account, role: user.role })
     const refreshTokenStr = signRefreshToken()

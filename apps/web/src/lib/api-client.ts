@@ -81,6 +81,22 @@ export async function fetchWithAuth<T>(
   })
 
   if (res.status === 401) {
+    // 拦截 Token 被踢出的情况
+    try {
+      const clonedRes = res.clone()
+      const errorData = await clonedRes.json()
+      if (errorData?.error?.code === 'TOKEN_REVOKED' || errorData?.error?.code === 'TOKEN_REUSE_DETECTED') {
+        useAuthStore.getState().clearAuth()
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?reason=kicked'
+        }
+        throw new ApiError(401, 'TOKEN_REVOKED', '账号已在其他设备登录')
+      }
+    } catch (e) {
+      if (e instanceof ApiError) throw e
+      // 忽略 parse error
+    }
+
     // Skip refresh for auth endpoints — treat as normal error
     if (path.startsWith('/auth/')) {
       return handleResponse<T>(res)

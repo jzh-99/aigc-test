@@ -82,6 +82,12 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
       errorData = {}
     }
 
+    if (errorData.error?.code === 'TOKEN_REVOKED' || errorData.error?.code === 'TOKEN_REUSE_DETECTED') {
+      useAuthStore.getState().clearAuth()
+      window.location.href = '/login?reason=kicked'
+      return res
+    }
+
     if (errorData.error?.code === 'TOKEN_EXPIRED') {
       try {
         const refreshRes = await fetch('/api/v1/auth/refresh', {
