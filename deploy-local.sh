@@ -23,10 +23,13 @@ pnpm --filter @aigc/types build
 pnpm --filter @aigc/web build
 pnpm --filter @aigc/worker build
 
-# ── 2. 数据库迁移（幂等） ─────────────────────────────────
+# ── 2. 数据库迁移 + 种子数据（幂等） ──────────────────────
 info "执行数据库迁移..."
 set -a; source "$APP_DIR/.env"; set +a
 pnpm --filter @aigc/db migrate
+info "同步种子数据..."
+pnpm --filter @aigc/db exec tsx scripts/seed.ts
+pnpm --filter @aigc/db exec tsx scripts/seed-volcengine.ts
 
 # ── 3. 重启服务 ───────────────────────────────────────────
 info "重启 PM2 服务..."

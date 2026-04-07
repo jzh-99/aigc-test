@@ -44,70 +44,40 @@ async function main() {
   const ownerHash = await bcrypt.hash('owner123', 10)
   const editorHash = await bcrypt.hash('editor123', 10)
 
+  // Helper: insert user if not exists, otherwise fetch existing
+  async function upsertUser(values: {
+    email: string; username: string; password_hash: string
+    account: string; role: string; status: string; plan_tier: string
+  }) {
+    const rows = await db
+      .insertInto('users')
+      .values(values)
+      .onConflict((oc: any) => oc.column('email').doNothing())
+      .returningAll()
+      .execute()
+    if (rows.length > 0) return rows[0]
+    return db.selectFrom('users').selectAll().where('email', '=', values.email).executeTakeFirstOrThrow()
+  }
+
   // Admin user
-  const adminResult = await db
-    .insertInto('users')
-    .values({
-      email: 'admin@aigc.local',
-      username: 'admin',
-      password_hash: adminHash,
-      account: 'admin',
-      role: 'admin',
-      status: 'active',
-      plan_tier: 'free',
-    })
-    .onConflict((oc: any) => oc.column('email').doUpdateSet({
-      password_hash: adminHash,
-      role: 'admin',
-      status: 'active',
-    }))
-    .returningAll()
-    .execute()
-  const adminUser = adminResult[0]
+  const adminUser = await upsertUser({
+    email: 'admin@aigc.local', username: 'admin', password_hash: adminHash,
+    account: 'admin', role: 'admin', status: 'active', plan_tier: 'free',
+  })
   console.log('  users seeded (admin@aigc.local)')
 
   // Owner user
-  const ownerResult = await db
-    .insertInto('users')
-    .values({
-      email: 'owner@aigc.local',
-      username: 'teamowner',
-      password_hash: ownerHash,
-      account: 'owner',
-      role: 'member',
-      status: 'active',
-      plan_tier: 'free',
-    })
-    .onConflict((oc: any) => oc.column('email').doUpdateSet({
-      password_hash: ownerHash,
-      role: 'member',
-      status: 'active',
-    }))
-    .returningAll()
-    .execute()
-  const ownerUser = ownerResult[0]
+  const ownerUser = await upsertUser({
+    email: 'owner@aigc.local', username: 'teamowner', password_hash: ownerHash,
+    account: 'owner', role: 'member', status: 'active', plan_tier: 'free',
+  })
   console.log('  users seeded (owner@aigc.local)')
 
   // Editor user
-  const editorResult = await db
-    .insertInto('users')
-    .values({
-      email: 'editor@aigc.local',
-      username: 'editor',
-      password_hash: editorHash,
-      account: 'editor',
-      role: 'member',
-      status: 'active',
-      plan_tier: 'free',
-    })
-    .onConflict((oc: any) => oc.column('email').doUpdateSet({
-      password_hash: editorHash,
-      role: 'member',
-      status: 'active',
-    }))
-    .returningAll()
-    .execute()
-  const editorUser = editorResult[0]
+  const editorUser = await upsertUser({
+    email: 'editor@aigc.local', username: 'editor', password_hash: editorHash,
+    account: 'editor', role: 'member', status: 'active', plan_tier: 'free',
+  })
   console.log('  users seeded (editor@aigc.local)')
 
   // 3. User subscription for owner (active, 1 year) — skip if exists
