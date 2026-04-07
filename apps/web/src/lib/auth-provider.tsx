@@ -5,19 +5,19 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { toast } from 'sonner'
+import { apiGet } from '@/lib/api-client'
 
 const PUBLIC_PATHS = ['/login', '/accept-invite']
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { isInitialized, user, setAuth, clearAuth, setInitialized } = useAuthStore()
+  const { isInitialized, user, accessToken, setAuth, clearAuth, setInitialized } = useAuthStore()
   const resetGeneration = useGenerationStore((s) => s.reset)
 
   useEffect(() => {
     if (isInitialized) return
 
-    // Try to restore session via refresh token
     async function tryRefresh() {
       try {
         const res = await fetch('/api/v1/auth/refresh', {
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     tryRefresh()
-  }, [isInitialized, setAuth, clearAuth, setInitialized])
+  }, [isInitialized, setAuth, clearAuth, setInitialized, resetGeneration])
 
   useEffect(() => {
     if (!isInitialized) return
@@ -52,7 +52,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isInitialized, user, pathname, router])
 
-  // Show nothing while initializing (prevents flash)
+  // Setup periodic heartbeat to detect background kicks
+  useEffect(() => {
+    if (!isInitialized || !user || !accessToken) return
+
+    const interval = setInterval(async () => {
+      try {
+        // Just call a lightweight authenticated endpoint to trigger the JWT middleware
+        // If the token is revoked, the API client interceptor will automatically clear auth and redirect
+        await apiGet('/users/me')
+      } catch (err) {
+        // Expected to fail with ApiError when kicked, handled by api-client.ts
+      }
+    }, 30000) // Check every 30 seconds
+
+    return () => clearInterval(interval)
+  }, [isInitialized, user, accessToken])
+
   if (!isInitialized) {
     return (
       <div className="flex h-screen items-center justify-center">

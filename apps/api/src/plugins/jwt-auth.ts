@@ -10,10 +10,10 @@ const PUBLIC_ROUTES = [
   '/api/v1/auth/accept-invite',
   '/api/v1/assets/proxy',
   '/api/v1/assets/thumbnail',
-  '/api/v1/ai-assistant/uploads/', // temp video files served to Gemini (public for API access)
-  '/api/v1/avatar/uploads/',       // temp image/audio files served to Volcengine (public for API access)
-  '/api/v1/action-imitation/uploads/', // temp video files served to Volcengine (public for API access)
-  '/api/v1/videos/uploads/',       // temp image/video/audio files served to Seedance API (public for API access)
+  '/api/v1/ai-assistant/uploads/',
+  '/api/v1/avatar/uploads/',
+  '/api/v1/action-imitation/uploads/',
+  '/api/v1/videos/uploads/',
 ]
 
 export interface AuthUser {
@@ -35,6 +35,8 @@ export const jwtAuthPlugin = fp(async function jwtAuth(app: FastifyInstance): Pr
 
   app.decorateRequest('user', null)
 
+  const redis = (app as any).redis as import('ioredis').default
+
   app.addHook('onRequest', async (request, reply) => {
     if (PUBLIC_ROUTES.some((r) => request.url.startsWith(r))) return
 
@@ -48,10 +50,22 @@ export const jwtAuthPlugin = fp(async function jwtAuth(app: FastifyInstance): Pr
 
     try {
       const token = authHeader.slice(7)
-      const payload = jwt.verify(token, secret) as { sub: string; email: string; role: string }
+      const payload = jwt.verify(token, secret) as { sub: string; email: string; role: string; iat: number }
+      
+      // Check session version in Redis for kick mechanism
+      const sessionVersionStr = await redis.get(`user:session_version:${payload.sub}`)
+      if (sessionVersionStr) {
+        const sessionVersion = parseInt(sessionVersionStr, 10)
+        if (payload.iat < sessionVersion) {
+          return reply.status(401).send({
+            success: false,
+            error: { code: 'TOKEN_REVOKED', message: '账号已在其他设备登录' },
+          })
+        }
+      }
+
       request.user = { id: payload.sub, email: payload.email, role: payload.role as 'admin' | 'member' }
     } catch (err) {
-      // Distinguish between expired and invalid tokens for better client-side handling
       const isExpired = err instanceof jwt.TokenExpiredError
       return reply.status(401).send({
         success: false,
