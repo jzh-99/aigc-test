@@ -12,10 +12,10 @@ export const IMAGE_MODEL_CREDITS: Record<
   'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0',
   number
 > = {
-  'gemini':            6,
-  'nano-banana-pro':  12,
-  'seedream-5.0-lite': 11,
-  'seedream-4.5':     13,
+  'gemini':            5,
+  'nano-banana-pro':  10,
+  'seedream-5.0-lite': 10,
+  'seedream-4.5':     10,
   'seedream-4.0':     10,
 }
 

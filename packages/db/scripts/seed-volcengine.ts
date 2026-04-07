@@ -47,7 +47,7 @@ async function main() {
     {
       code: 'seedream-5.0-lite',
       name: 'Seedream 5.0',
-      credit_cost: 11,
+      credit_cost: 10,
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -67,7 +67,7 @@ async function main() {
     {
       code: 'seedream-4.5',
       name: 'Seedream 4.5',
-      credit_cost: 13,
+      credit_cost: 10,
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
