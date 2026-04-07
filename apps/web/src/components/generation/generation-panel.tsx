@@ -30,6 +30,25 @@ import { fetchWithAuth } from '@/lib/api-client'
 
 const MAX_REF_IMAGES = 10
 const MAX_FILE_MB = 20
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const ALLOWED_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm']
+const ALLOWED_VIDEO_EXTS = ['mp4', 'mov', 'webm']
+const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/x-m4a']
+const ALLOWED_AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac']
+
+function isValidImageFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return ALLOWED_IMAGE_TYPES.includes(file.type) || ALLOWED_IMAGE_EXTS.includes(ext)
+}
+function isValidVideoFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return ALLOWED_VIDEO_TYPES.includes(file.type) || ALLOWED_VIDEO_EXTS.includes(ext)
+}
+function isValidAudioFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return ALLOWED_AUDIO_TYPES.includes(file.type) || ALLOWED_AUDIO_EXTS.includes(ext)
+}
 
 type ModelResolution = '1k' | '2k' | '3k' | '4k'
 
@@ -178,6 +197,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   // Video mode state
   const [videoMode, setVideoMode] = useState<'frames' | 'components' | 'multimodal'>('frames')
+  const [isVideoUploading, setIsVideoUploading] = useState(false)   // 素材上传中（上传完才调 generateVideo）
   const [videoPrompt, setVideoPrompt] = useState('')
   const [videoModel, setVideoModel] = useState('seedance-2.0')
   const [videoAspectRatio, setVideoAspectRatio] = useState('')
@@ -200,7 +220,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   // Multimodal mode state
   const [multimodalImages, setMultimodalImages] = useState<FrameImage[]>([])
-  const [multimodalVideos, setMultimodalVideos] = useState<{ id: string; file: File; previewUrl: string; name: string }[]>([])
+  const [multimodalVideos, setMultimodalVideos] = useState<{ id: string; file: File; previewUrl: string; name: string; duration: number }[]>([])
   const [multimodalAudios, setMultimodalAudios] = useState<{ id: string; file: File; previewUrl: string; name: string; duration: number }[]>([])
   const [multimodalManagerOpen, setMultimodalManagerOpen] = useState(false)
   const [isMultimodalDragging, setIsMultimodalDragging] = useState(false)
@@ -304,9 +324,21 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const handleImageFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
     for (const file of Array.from(files)) {
-      if (referenceImages.length >= MAX_REF_IMAGES) break
-      if (!file.type.startsWith('image/')) continue
-      if (file.size > MAX_FILE_MB * 1024 * 1024) continue
+      if (referenceImages.length >= MAX_REF_IMAGES) {
+        toast.error(`最多添加 ${MAX_REF_IMAGES} 张参考图`)
+        break
+      }
+
+      if (!isValidImageFile(file)) {
+        toast.error(`文件「${file.name}」格式不支持，请上传 JPG / PNG / WEBP 格式的图片`)
+        continue
+      }
+
+      if (file.size > MAX_FILE_MB * 1024 * 1024) {
+        toast.error(`图片「${file.name}」过大（${(file.size / 1024 / 1024).toFixed(1)} MB），单张不超过 ${MAX_FILE_MB} MB`)
+        continue
+      }
+
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result as string)
@@ -507,9 +539,15 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     }
   }
 
-  const readFrameFile = useCallback(async (file: File): Promise<FrameImage | null> => {
-    if (!file.type.startsWith('image/')) return null
-    if (file.size > MAX_FILE_MB * 1024 * 1024) return null
+  const readFrameFile = useCallback(async (file: File, silent = false): Promise<FrameImage | null> => {
+    if (!isValidImageFile(file)) {
+      if (!silent) toast.error(`文件「${file.name}」格式不支持，请上传 JPG / PNG / WEBP 格式的图片`)
+      return null
+    }
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      if (!silent) toast.error(`图片「${file.name}」过大（${(file.size / 1024 / 1024).toFixed(1)} MB），不超过 ${MAX_FILE_MB} MB`)
+      return null
+    }
     return new Promise((resolve) => {
       const reader = new FileReader()
       reader.onload = () => resolve({
@@ -525,9 +563,13 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   // Handle reference images for components mode
   const handleReferenceFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
+    const MAX_COMPONENT_IMAGES = 3
     const newImages: FrameImage[] = []
     for (const file of Array.from(files)) {
-      if (videoReferenceImages.length + newImages.length >= 3) break
+      if (videoReferenceImages.length + newImages.length >= MAX_COMPONENT_IMAGES) {
+        toast.error(`最多添加 ${MAX_COMPONENT_IMAGES} 张参考图`)
+        break
+      }
       const img = await readFrameFile(file)
       if (img) newImages.push(img)
     }
@@ -586,35 +628,99 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     if (multimodalDragCounterRef.current === 0) setIsMultimodalDragging(false)
   }, [])
 
+  // Seedance 模型：所有参考视频的总时长不能超过 15.2 秒
+  const SEEDANCE_MAX_TOTAL_VIDEO_DURATION = 15.2
+
   // 统一的视频校验 + 添加逻辑，供主上传区和素材管理弹窗共用
-  const validateAndAddVideo = useCallback((f: File) => {
+  const validateAndAddVideo = useCallback((f: File, isSeedance: boolean = false) => {
     if (f.size > 52428800) {
       toast.error(`视频 "${f.name}" 文件过大 (${(f.size / 1024 / 1024).toFixed(1)} MB)，最大支持 50 MB，请压缩后重新添加。`)
       return
     }
+
+    // Seedance format validation
+    if (isSeedance) {
+      const validTypes = ['video/mp4', 'video/quicktime'];
+      if (!validTypes.includes(f.type)) {
+        toast.error(`视频 "${f.name}" 格式不支持，Seedance模型仅支持 MP4 / MOV 格式。`)
+        return
+      }
+    }
+
     const url = URL.createObjectURL(f)
     const video = document.createElement('video')
     video.src = url
     video.onloadedmetadata = () => {
       URL.revokeObjectURL(url)
       const pixels = video.videoWidth * video.videoHeight
-      if (pixels > 927408) {
+      const aspectRatio = video.videoWidth / video.videoHeight
+
+      // Seedance specific validations
+      if (isSeedance) {
+        if (aspectRatio < 0.4 || aspectRatio > 2.5) {
+          toast.error(`视频 "${f.name}" 宽高比为 ${aspectRatio.toFixed(2)}，Seedance模型支持的宽高比需在 [0.4, 2.5] 之间。`)
+          return
+        }
+        if (video.videoWidth < 300 || video.videoHeight < 300 || video.videoWidth > 6000 || video.videoHeight > 6000) {
+          toast.error(`视频 "${f.name}" 尺寸不符合要求，Seedance模型要求宽和高需在 [300, 6000] 像素之间。`)
+          return
+        }
+        if (pixels < 409600) {
+           toast.error(`视频 "${f.name}" 分辨率过低 (${video.videoWidth}x${video.videoHeight})，Seedance模型要求总像素数不低于 640x640。`)
+           return
+        }
+      }
+
+      if (isSeedance && pixels > 927408) {
+        toast.error(`视频 "${f.name}" 分辨率过高 (${video.videoWidth}x${video.videoHeight})，Seedance模型最大支持 720p，请降低分辨率后重新添加。`)
+        return
+      } else if (!isSeedance && pixels > 927408) {
         toast.error(`视频 "${f.name}" 分辨率过高 (${video.videoWidth}x${video.videoHeight})，最高支持 720p，请降低分辨率后重新添加。`)
         return
       }
-      if (video.duration > 15.2) {
-        toast.error(`视频 "${f.name}" 时长过长 (${video.duration.toFixed(1)}s)，最长支持 15 秒，请裁剪后重新添加。`)
-        return
+
+      if (isSeedance) {
+        if (video.duration < 2) {
+          toast.error(`视频 "${f.name}" 时长过短 (${video.duration.toFixed(1)}s)，Seedance模型要求单个视频时长不少于 2 秒。`)
+          return
+        }
+        if (video.duration > SEEDANCE_MAX_TOTAL_VIDEO_DURATION) {
+          toast.error(`视频 "${f.name}" 时长过长 (${video.duration.toFixed(1)}s)，单个视频不超过 ${SEEDANCE_MAX_TOTAL_VIDEO_DURATION} 秒。`)
+          return
+        }
+      } else {
+        if (video.duration > 15.2) {
+          toast.error(`视频 "${f.name}" 时长过长 (${video.duration.toFixed(1)}s)，最长支持 15 秒，请裁剪后重新添加。`)
+          return
+        }
       }
+
+      const newDuration = video.duration
       const previewUrl = URL.createObjectURL(f)
-      setMultimodalVideos(prev => prev.length < 3 ? [...prev, {
-        id: crypto.randomUUID(), file: f, previewUrl, name: f.name,
-      }] : prev)
+
+      setMultimodalVideos(prev => {
+        if (prev.length >= 3) return prev
+
+        // Seedance：校验加入后的总时长是否超限
+        if (isSeedance) {
+          const currentTotal = prev.reduce((sum, v) => sum + v.duration, 0)
+          if (currentTotal + newDuration > SEEDANCE_MAX_TOTAL_VIDEO_DURATION) {
+            const remaining = SEEDANCE_MAX_TOTAL_VIDEO_DURATION - currentTotal
+            toast.error(
+              `视频 "${f.name}" 时长 ${newDuration.toFixed(1)}s 加入后总时长将超过 ${SEEDANCE_MAX_TOTAL_VIDEO_DURATION}s 限制` +
+              `（当前已用 ${currentTotal.toFixed(1)}s，剩余可用 ${remaining.toFixed(1)}s），请使用更短的视频。`
+            )
+            return prev
+          }
+        }
+
+        return [...prev, { id: crypto.randomUUID(), file: f, previewUrl, name: f.name, duration: newDuration }]
+      })
     }
   }, [])
 
   // 统一的音频校验 + 添加逻辑，供主上传区和素材管理弹窗共用
-  const validateAndAddAudio = useCallback((f: File) => {
+  const validateAndAddAudio = useCallback((f: File, isSeedance: boolean = false) => {
     if (f.size > 52428800) {
       toast.error(`音频 "${f.name}" 文件过大 (${(f.size / 1024 / 1024).toFixed(1)} MB)，最大支持 50 MB，请压缩后重新添加。`)
       return
@@ -636,16 +742,31 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   const handleMultimodalFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
+    const MAX_MULTIMODAL_IMAGES = 9
+    const MAX_MULTIMODAL_VIDEOS = 3
+    const MAX_MULTIMODAL_AUDIOS = 3
     for (const f of Array.from(files)) {
-      if (f.type.startsWith('image/')) {
-        if (multimodalImages.length < 9) {
-          const img = await readFrameFile(f)
-          if (img) setMultimodalImages(prev => prev.length < 9 ? [...prev, img] : prev)
+      if (isValidImageFile(f)) {
+        if (multimodalImages.length >= MAX_MULTIMODAL_IMAGES) {
+          toast.error(`最多添加 ${MAX_MULTIMODAL_IMAGES} 张参考图`)
+        } else {
+          const img = await readFrameFile(f, true)
+          if (img) setMultimodalImages(prev => prev.length < MAX_MULTIMODAL_IMAGES ? [...prev, img] : prev)
         }
-      } else if (f.type.startsWith('video/')) {
-        if (multimodalVideos.length < 3) validateAndAddVideo(f)
-      } else if (f.type.startsWith('audio/')) {
-        if (multimodalAudios.length < 3) validateAndAddAudio(f)
+      } else if (isValidVideoFile(f)) {
+        if (multimodalVideos.length >= MAX_MULTIMODAL_VIDEOS) {
+          toast.error(`最多添加 ${MAX_MULTIMODAL_VIDEOS} 个参考视频`)
+        } else {
+          validateAndAddVideo(f, isSeedance)
+        }
+      } else if (isValidAudioFile(f)) {
+        if (multimodalAudios.length >= MAX_MULTIMODAL_AUDIOS) {
+          toast.error(`最多添加 ${MAX_MULTIMODAL_AUDIOS} 个参考音频`)
+        } else {
+          validateAndAddAudio(f, isSeedance)
+        }
+      } else {
+        toast.error(`文件「${f.name}」格式不支持，请上传 JPG/PNG/WEBP 图片、MP4/MOV/WEBM 视频或 MP3/WAV/M4A/AAC 音频`)
       }
     }
   }, [multimodalImages.length, multimodalVideos.length, multimodalAudios.length, readFrameFile, validateAndAddVideo, validateAndAddAudio])
@@ -673,6 +794,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   const handleVideoGenerate = async () => {
     if (!videoPrompt.trim()) return
+    setIsVideoUploading(true)
     try {
       const isSeedance2 = videoModel === 'seedance-2.0' || videoModel === 'seedance-2.0-fast'
       const isSeedance = videoModel.startsWith('seedance-')
@@ -762,11 +884,13 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       } else {
         toast.error('视频生成请求失败，请稍后重试')
       }
+    } finally {
+      setIsVideoUploading(false)
     }
   }
 
   const currentModel = MODEL_OPTIONS.find(m => m.value === modelType)
-  const isSeedanceVideo = videoModel.startsWith('seedance-')
+  const isSeedance = videoModel.startsWith('seedance-')
   const availableResolutions = ALL_RESOLUTION_OPTIONS.filter(r =>
     currentModel?.resolutions.includes(r.value) ?? true
   )
@@ -1200,7 +1324,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 <input
                   ref={multimodalAllInputRef}
                   type="file"
-                  accept="image/*,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/x-m4a"
+                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/x-m4a"
                   multiple
                   className="hidden"
                   onChange={(e) => handleMultimodalFiles(e.target.files)}
@@ -1423,12 +1547,16 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 )}
 
                 {/* 分类 hidden inputs（弹窗内用） */}
-                <input ref={multimodalImageInputRef} type="file" accept="image/*" multiple className="hidden"
+                <input ref={multimodalImageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple className="hidden"
                   onChange={async (e) => {
                     const files = e.target.files; if (!files) return
+                    const MAX_MM_IMAGES = 9
                     const newImgs: FrameImage[] = []
                     for (const f of Array.from(files)) {
-                      if (multimodalImages.length + newImgs.length >= 9) break
+                      if (multimodalImages.length + newImgs.length >= MAX_MM_IMAGES) {
+                        toast.error(`最多添加 ${MAX_MM_IMAGES} 张参考图`)
+                        break
+                      }
                       const img = await readFrameFile(f); if (img) newImgs.push(img)
                     }
                     setMultimodalImages(prev => [...prev, ...newImgs]); e.target.value = ''
@@ -1438,8 +1566,15 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                   onChange={(e) => {
                     const files = e.target.files; if (!files) return
                     for (const f of Array.from(files)) {
-                      if (multimodalVideos.length >= 3) break
-                      validateAndAddVideo(f)
+                      if (multimodalVideos.length >= 3) {
+                        toast.error('最多添加 3 个参考视频')
+                        break
+                      }
+                      if (!isValidVideoFile(f)) {
+                        toast.error(`文件「${f.name}」格式不支持，请上传 MP4 / MOV / WEBM 格式的视频`)
+                        continue
+                      }
+                      validateAndAddVideo(f, isSeedance)
                     }
                     e.target.value = ''
                   }}
@@ -1448,8 +1583,15 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                   onChange={(e) => {
                     const files = e.target.files; if (!files) return
                     for (const f of Array.from(files)) {
-                      if (multimodalAudios.length >= 3) break
-                      validateAndAddAudio(f)
+                      if (multimodalAudios.length >= 3) {
+                        toast.error('最多添加 3 个参考音频')
+                        break
+                      }
+                      if (!isValidAudioFile(f)) {
+                        toast.error(`文件「${f.name}」格式不支持，请上传 MP3 / WAV / M4A / AAC 格式的音频`)
+                        continue
+                      }
+                      validateAndAddAudio(f, isSeedance)
                     }
                     e.target.value = ''
                   }}
@@ -1536,21 +1678,21 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             </div>
 
             {/* Hidden file inputs */}
-            <input ref={firstFrameRef} type="file" accept="image/*" className="hidden"
+            <input ref={firstFrameRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden"
               onChange={async (e) => {
                 const f = e.target.files?.[0]
                 if (f) setFirstFrame(await readFrameFile(f))
                 e.target.value = ''
               }}
             />
-            <input ref={lastFrameRef} type="file" accept="image/*" className="hidden"
+            <input ref={lastFrameRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden"
               onChange={async (e) => {
                 const f = e.target.files?.[0]
                 if (f) setLastFrame(await readFrameFile(f))
                 e.target.value = ''
               }}
             />
-            <input ref={referenceInputRef} type="file" accept="image/*" multiple className="hidden"
+            <input ref={referenceInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple className="hidden"
               onChange={(e) => handleReferenceFiles(e.target.files)}
             />
 
@@ -1667,8 +1809,13 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               onChange={async (e) => {
                 const f = e.target.files?.[0]
                 if (!f) return
-                if (f.size > 4.7 * 1024 * 1024) { toast.error('图片不能超过 4.7MB'); return }
-                const img = await readFrameFile(f)
+                if (!isValidImageFile(f)) {
+                  toast.error(`文件「${f.name}」格式不支持，请上传 JPG / PNG 格式的图片`)
+                  e.target.value = ''
+                  return
+                }
+                if (f.size > 4.7 * 1024 * 1024) { toast.error('人物图片不能超过 4.7 MB'); e.target.value = ''; return }
+                const img = await readFrameFile(f, true)
                 if (img) setActionImage(img)
                 e.target.value = ''
               }}
@@ -1677,13 +1824,18 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               onChange={(e) => {
                 const f = e.target.files?.[0]
                 if (!f) return
+                if (!isValidVideoFile(f)) {
+                  toast.error(`文件「${f.name}」格式不支持，请上传 MP4 / MOV / WEBM 格式的视频`)
+                  e.target.value = ''
+                  return
+                }
                 const url = URL.createObjectURL(f)
                 const video = document.createElement('video')
                 video.src = url
                 video.onloadedmetadata = () => {
                   const dur = video.duration
                   URL.revokeObjectURL(url)
-                  if (dur > 30) { toast.error('视频不能超过 30 秒'); return }
+                  if (dur > 30) { toast.error('驱动视频时长不能超过 30 秒'); return }
                   const previewUrl = URL.createObjectURL(f)
                   setActionVideo({ file: f, previewUrl, duration: dur, name: f.name })
                 }
@@ -1769,8 +1921,13 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               onChange={async (e) => {
                 const f = e.target.files?.[0]
                 if (!f) return
-                if (f.size > 5 * 1024 * 1024) { toast.error('图片不能超过 5MB'); return }
-                const img = await readFrameFile(f)
+                if (!isValidImageFile(f)) {
+                  toast.error(`文件「${f.name}」格式不支持，请上传 JPG / PNG / WEBP 格式的图片`)
+                  e.target.value = ''
+                  return
+                }
+                if (f.size > 5 * 1024 * 1024) { toast.error('人物图片不能超过 5 MB'); e.target.value = ''; return }
+                const img = await readFrameFile(f, true)
                 if (img) setAvatarImage(img)
                 e.target.value = ''
               }}
@@ -1779,13 +1936,18 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               onChange={(e) => {
                 const f = e.target.files?.[0]
                 if (!f) return
+                if (!isValidAudioFile(f)) {
+                  toast.error(`文件「${f.name}」格式不支持，请上传 MP3 / WAV / M4A / AAC 格式的音频`)
+                  e.target.value = ''
+                  return
+                }
                 const url = URL.createObjectURL(f)
                 const audio = document.createElement('audio')
                 audio.src = url
                 audio.onloadedmetadata = () => {
                   const dur = audio.duration
                   URL.revokeObjectURL(url)
-                  if (dur > 60) { toast.error('音频不能超过 60 秒'); return }
+                  if (dur > 60) { toast.error('驱动音频时长不能超过 60 秒'); return }
                   const reader = new FileReader()
                   reader.onload = () => setAvatarAudio({ id: crypto.randomUUID(), name: f.name, dataUrl: reader.result as string, duration: dur })
                   reader.readAsDataURL(f)
@@ -1953,7 +2115,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp,image/gif"
             multiple
             className="hidden"
             onChange={(e) => handleImageFiles(e.target.files)}
@@ -2027,7 +2189,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               </div>
 
               {/* Row 2: 比例 [buttons veo] | 比例+时长 [dropdowns seedance] */}
-              {isSeedanceVideo ? (
+              {isSeedance ? (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1 block">比例</Label>
@@ -2081,7 +2243,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               )}
 
               {/* Row 3 (Seedance only): 音频 + 镜头 */}
-              {isSeedanceVideo && (
+              {isSeedance && (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1 block">音频</Label>
@@ -2135,7 +2297,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex-1" />
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
-              {isSeedanceVideo
+              {isSeedance
                 ? <span>{(videoDuration === -1 ? 15 : videoDuration) * (VIDEO_MODEL_OPTIONS[videoMode as keyof typeof VIDEO_MODEL_OPTIONS]?.find((m: any) => m.value === videoModel)?.credits ?? 5)} 积分</span>
                 : <span>{VIDEO_MODEL_OPTIONS[videoMode].find(m => m.value === videoModel)?.credits ?? 10} 积分</span>
               }
@@ -2145,9 +2307,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               size="lg"
               className="gap-2 px-8"
               onClick={handleVideoGenerate}
-              disabled={isVideoGenerating || disabled || !videoPrompt.trim() || (videoMode === 'components' && videoReferenceImages.length === 0)}
+              disabled={isVideoGenerating || isVideoUploading || disabled || !videoPrompt.trim() || (videoMode === 'components' && videoReferenceImages.length === 0)}
             >
-              {isVideoGenerating ? (
+              {isVideoUploading ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />上传中...</>
+              ) : isVideoGenerating ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>
               ) : (
                 <><Sparkles className="h-4 w-4" />生成</>

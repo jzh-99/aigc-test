@@ -69,6 +69,16 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /quota exceeded|limit exceeded/i, message: '已超出配额限制' },
   { pattern: /rate limit/i, message: '请求过于频繁，请稍后再试' },
 
+  // 上传相关
+  { pattern: /未检测到文件/i, message: '未检测到文件，请重新选择后上传' },
+  { pattern: /不支持的文件格式/i, message: '文件格式不支持，请检查后重新上传' },
+  { pattern: /file too large|文件过大/i, message: '文件过大，请压缩后重新上传' },
+  { pattern: /no file provided/i, message: '未检测到文件，请重新选择后上传' },
+  { pattern: /unsupported file type/i, message: '不支持的文件格式，请检查后重新上传' },
+  { pattern: /image too large/i, message: '图片文件过大，请压缩后重新上传' },
+  { pattern: /video too large/i, message: '视频文件过大，请压缩后重新上传' },
+  { pattern: /audio too large/i, message: '音频文件过大，请压缩后重新上传' },
+
   // AI 生成相关
   { pattern: /could not generate|generation failed/i, message: '生成失败，请尝试修改提示词后重试' },
   { pattern: /prompt (blocked|rejected|filtered)/i, message: '提示词包含敏感内容，请修改后重试' },
