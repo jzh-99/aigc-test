@@ -58,11 +58,12 @@ export async function buildApp() {
     await redis.quit()
   })
 
-  // Global rate limit: 300 requests per minute per IP (applies to all routes unless overridden)
+  // Global rate limit: 1200 requests per minute per client identity.
+  // Fine-grained routes (e.g. login/generate) define stricter per-route limits.
   // Keyed by Authorization header user-id when present, falling back to IP — prevents NAT/proxy users from sharing a bucket
   await app.register(rateLimit, {
     global: true,
-    max: 300,
+    max: 1200,
     timeWindow: '1 minute',
     redis,
     keyGenerator: (request) => {

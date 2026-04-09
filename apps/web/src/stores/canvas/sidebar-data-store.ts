@@ -53,6 +53,21 @@ function ensureBucket(state: CanvasSidebarDataState, canvasId: string): CanvasSi
   return state.byCanvas[canvasId] ?? makeBucket()
 }
 
+function shouldRetryRateLimited(err: any): boolean {
+  const msg = String(err?.message ?? '').toLowerCase()
+  return msg.includes('请求过于频繁') || msg.includes('rate') || msg.includes('429')
+}
+
+async function retryOnceIfRateLimited<T>(fn: () => Promise<T>) {
+  try {
+    return await fn()
+  } catch (err) {
+    if (!shouldRetryRateLimited(err)) throw err
+    await new Promise((resolve) => setTimeout(resolve, 1200 + Math.floor(Math.random() * 400)))
+    return await fn()
+  }
+}
+
 export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, get) => ({
   byCanvas: {},
 
@@ -91,7 +106,7 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
     })
 
     try {
-      const data = await fetchCanvasHistory(canvasId, token)
+      const data = await retryOnceIfRateLimited(() => fetchCanvasHistory(canvasId, token))
       set((state) => {
         const bucket = ensureBucket(state, canvasId)
         return {
@@ -158,7 +173,7 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
     })
 
     try {
-      const data = await fetchCanvasAssets(canvasId, token)
+      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token))
       set((state) => {
         const bucket = ensureBucket(state, canvasId)
         return {
@@ -223,7 +238,7 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
     })
 
     try {
-      const data = await fetchCanvasHistory(canvasId, token, current.history.nextCursor)
+      const data = await retryOnceIfRateLimited(() => fetchCanvasHistory(canvasId, token, current.history.nextCursor))
       set((state) => {
         const bucket = ensureBucket(state, canvasId)
         return {
@@ -287,7 +302,7 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
     })
 
     try {
-      const data = await fetchCanvasAssets(canvasId, token, current.assets.nextCursor)
+      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token, current.assets.nextCursor))
       set((state) => {
         const bucket = ensureBucket(state, canvasId)
         return {
