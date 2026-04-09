@@ -5,6 +5,21 @@ import { fetchCanvasActiveTasks, fetchNodeOutputs } from '@/lib/canvas/canvas-ap
 import { useAuthStore } from '@/stores/auth-store'
 
 const POLL_INTERVAL = 2000
+const OUTPUTS_LOAD_CONCURRENCY = 4
+
+async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
+  if (!items.length) return
+  const size = Math.max(1, Math.min(limit, items.length))
+  let index = 0
+
+  await Promise.all(Array.from({ length: size }, async () => {
+    while (index < items.length) {
+      const current = items[index]
+      index += 1
+      await worker(current)
+    }
+  }))
+}
 
 export function useCanvasPoller(canvasId: string | null) {
   const lastVersion = useRef<number>(-1)
@@ -35,7 +50,9 @@ export function useCanvasPoller(canvasId: string | null) {
   const loadAllNodeOutputs = useCallback(async () => {
     if (!canvasId) return
     const nodes = useCanvasStructureStore.getState().nodes
-    await Promise.all(nodes.map((n) => loadNodeOutputs(n.id)))
+    await runWithConcurrency(nodes, OUTPUTS_LOAD_CONCURRENCY, async (node) => {
+      await loadNodeOutputs(node.id)
+    })
   }, [canvasId, loadNodeOutputs])
 
   const poll = useCallback(async () => {
