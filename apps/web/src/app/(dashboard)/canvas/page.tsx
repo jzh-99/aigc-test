@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PlusCircle, Loader2 } from 'lucide-react'
@@ -22,15 +22,12 @@ export default function CanvasGalleryPage() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
 
-  useEffect(() => {
-    fetchCanvases()
-  }, [])
-
-  async function fetchCanvases() {
+  const fetchCanvases = useCallback(async () => {
+    if (!token) return
     setLoading(true)
     try {
       const res = await fetch('/api/v1/canvases', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error('Failed to fetch')
       setCanvases(await res.json())
@@ -39,16 +36,21 @@ export default function CanvasGalleryPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
+
+  useEffect(() => {
+    fetchCanvases()
+  }, [fetchCanvases])
 
   async function createNewCanvas() {
+    if (!token) return
     setCreating(true)
     try {
       const res = await fetch('/api/v1/canvases', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name: '未命名画布' }),
       })
