@@ -41,15 +41,10 @@ export interface NodeExecutionState {
   isGenerating: boolean;
   progress: number;
   errorMessage?: string;
-
-  // 对于支持多次生成的生图节点，可能有多个输出结果
   outputs: NodeOutputAsset[];
-
-  // is_selected=true 的那条定稿输出，传给下游做参考
   selectedOutputId?: string | null;
-
-  // UI 层附加的非阻塞告警，比如 "参考节点未定稿"
   warningMessage?: string;
+  startedAt: number | null; // timestamp ms, for elapsed timer
 }
 
 // ---------------------------------------------------------

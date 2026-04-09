@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
@@ -8,12 +8,22 @@ import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X } from 'lucide-react
 import { cn } from '@/lib/utils'
 import type { CanvasNodeData } from '@/lib/canvas/types'
 
-// Derive node width from aspect ratio so the card shape matches the image
 function nodeWidthFromRatio(w: number, h: number): number {
   const ratio = w / h
-  // Keep height roughly constant at ~220px, vary width by ratio
-  // Clamp between 180px and 400px
   return Math.min(400, Math.max(180, Math.round(220 * ratio)))
+}
+
+function useElapsedTimer(startedAt: number | null): string {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!startedAt) { setElapsed(0); return }
+    const tick = () => setElapsed(Math.floor((Date.now() - startedAt) / 1000))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [startedAt])
+  if (!startedAt) return ''
+  return `${elapsed}s`
 }
 
 export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<any> }) {
@@ -22,10 +32,11 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
 
-  const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId } = execState
+  const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
   const selectedOutput = outputs.find((o) => o.id === selectedOutputId)
   const currentImageUrl = selectedOutput?.url
   const currentIndex = outputs.findIndex((o) => o.id === selectedOutputId)
+  const elapsed = useElapsedTimer(isGenerating ? startedAt : null)
 
   function handlePrev(e: React.MouseEvent) {
     e.stopPropagation()
@@ -36,7 +47,6 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
     if (currentIndex < outputs.length - 1) selectNodeOutput(id, outputs[currentIndex + 1].id)
   }
 
-  // Node width: adapt to image aspect ratio when image is loaded, else default 260
   const nodeWidth = imgSize ? nodeWidthFromRatio(imgSize.w, imgSize.h) : 260
 
   return (
@@ -67,7 +77,12 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
         <span className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
           {data.label}
         </span>
-        {isGenerating && <Loader2 className="w-3 h-3 text-blue-500 animate-spin shrink-0" />}
+        {isGenerating && (
+          <div className="flex items-center gap-1">
+            {elapsed && <span className="font-mono text-[10px] text-blue-400">⏱ {elapsed}</span>}
+            <Loader2 className="w-3 h-3 text-blue-500 animate-spin shrink-0" />
+          </div>
+        )}
       </div>
 
       {/* Preview */}
@@ -102,7 +117,6 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
         )}
       </div>
 
-      {/* Status messages */}
       {warningMessage && (
         <div className="bg-yellow-50 text-yellow-600 text-[11px] px-3 py-1 flex items-center gap-1.5">
           <AlertCircle className="w-3 h-3 shrink-0" />{warningMessage}
@@ -137,15 +151,12 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
         </div>
       )}
 
-      {/* Input handle */}
       <Handle
         type="target"
         position={Position.Left}
         id="any-in"
         className="!w-2 !h-2 !bg-zinc-300 !border !border-zinc-400 !-left-1 hover:!bg-blue-400 transition-colors"
       />
-
-      {/* Output handle */}
       <Handle
         type="source"
         position={Position.Right}

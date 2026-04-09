@@ -6,7 +6,7 @@ import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { executeCanvasNode } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
-import { X, Play, Loader2, Sparkles, Zap, Target } from 'lucide-react'
+import { X, Play, Loader2, Sparkles, Zap, Target, ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import type { AppNode } from '@/lib/canvas/types'
@@ -48,6 +48,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
   const nodes = useCanvasStructureStore((s) => s.nodes)
   const edges = useCanvasStructureStore((s) => s.edges)
+  const executionNodes = useCanvasExecutionStore((s) => s.nodes)
   const setNodeProgress = useCanvasExecutionStore((s) => s.setNodeProgress)
   const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
   const token = useAuthStore((s) => s.accessToken)
@@ -56,8 +57,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const cfg = node.data.config ?? {}
   const isImageGen = node.type === 'image_gen'
   const isTextInput = node.type === 'text_input'
+  const isAsset = node.type === 'asset'
 
-  // image_gen config
   const modelType: ModelType = cfg.modelType ?? 'gemini'
   const resolution: Resolution = cfg.resolution ?? '2k'
   const aspectRatio: string = cfg.aspectRatio ?? '1:1'
@@ -67,6 +68,30 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
 
   const currentModel = MODEL_OPTIONS.find((m) => m.value === modelType) ?? MODEL_OPTIONS[0]
   const credits = IMAGE_MODEL_CREDITS[modelType] ?? 5
+
+  // Collect upstream nodes connected to this node
+  const upstreamNodes = edges
+    .filter((e) => e.target === node.id)
+    .map((e) => nodes.find((n) => n.id === e.source))
+    .filter(Boolean) as AppNode[]
+
+  const upstreamTexts = upstreamNodes
+    .filter((n) => n.type === 'text_input')
+    .map((n) => (n.data.config as any)?.text ?? '')
+    .filter(Boolean)
+
+  // Collect reference image URLs from upstream image_gen and asset nodes
+  const upstreamImageUrls = upstreamNodes
+    .filter((n) => n.type === 'image_gen' || n.type === 'asset')
+    .map((n) => {
+      if (n.type === 'asset') return (n.data.config as any)?.url as string | undefined
+      // For image_gen: use selected output from execution store
+      const execState = executionNodes[n.id]
+      if (!execState) return undefined
+      const selected = execState.outputs.find((o) => o.id === execState.selectedOutputId)
+      return selected?.url
+    })
+    .filter((url): url is string => !!url)
 
   function updateCfg(patch: Record<string, any>) {
     updateNodeData(node.id, { config: { ...cfg, ...patch } })
@@ -82,23 +107,21 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     const modelCode = MODEL_CODE_MAP[modelType][resolution]
     if (!modelCode) { toast.error('模型配置错误'); return }
 
-    // Collect text from upstream text_input nodes connected to this node
-    const upstreamTexts = edges
-      .filter((e) => e.target === node.id)
-      .map((e) => nodes.find((n) => n.id === e.source))
-      .filter((n) => n?.type === 'text_input')
-      .map((n) => (n!.data.config as any)?.text ?? '')
-      .filter(Boolean)
-
-    // Merge: upstream text nodes prepended, then node's own prompt
     const finalPrompt = [...upstreamTexts, prompt].filter(Boolean).join('\n')
-
     if (!canvasId || !finalPrompt.trim()) { toast.error('请先填写提示词'); return }
+
     setExecuting(true)
     setNodeProgress(node.id, 0, true)
     try {
       await executeCanvasNode(
-        { canvasId, canvasNodeId: node.id, type: 'image_gen', config: { prompt: finalPrompt, modelType, resolution, aspectRatio, quantity, watermark }, workspaceId: workspaceId ?? undefined },
+        {
+          canvasId,
+          canvasNodeId: node.id,
+          type: 'image_gen',
+          config: { prompt: finalPrompt, model: modelCode, aspectRatio, quantity, watermark, resolution },
+          workspaceId: workspaceId ?? undefined,
+          referenceImageUrls: upstreamImageUrls.length > 0 ? upstreamImageUrls : undefined,
+        },
         token ?? undefined
       )
       toast.success('已提交生成任务')
@@ -109,7 +132,10 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     } finally {
       setExecuting(false)
     }
-  }, [canvasId, node.id, prompt, modelType, resolution, aspectRatio, quantity, watermark, workspaceId, token, nodes, edges, setNodeProgress, setNodeError, onExecuted])
+  }, [canvasId, node.id, prompt, modelType, resolution, aspectRatio, quantity, watermark, workspaceId, token,
+      upstreamTexts, upstreamImageUrls, setNodeProgress, setNodeError, onExecuted])
+
+  const hasPrompt = prompt.trim() || upstreamTexts.length > 0
 
   return (
     <div className="bg-background border border-border rounded-xl shadow-2xl overflow-hidden">
@@ -120,6 +146,20 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* ── Asset node ── */}
+      {isAsset && (
+        <div className="p-3 space-y-2">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span>素材节点 · 只读</span>
+          </div>
+          {cfg.url && (
+            <img src={cfg.url} alt={cfg.name} className="w-full rounded-lg object-contain max-h-48" />
+          )}
+          {cfg.name && <p className="text-[10px] text-muted-foreground truncate">{cfg.name}</p>}
+        </div>
+      )}
 
       {/* ── Text input node ── */}
       {isTextInput && (
@@ -134,11 +174,10 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
         </div>
       )}
 
-      {/* ── Image gen node — horizontal layout ── */}
+      {/* ── Image gen node ── */}
       {isImageGen && (
         <div className="flex gap-0 divide-x divide-border">
-
-          {/* Col 1: Prompt */}
+          {/* Col 1: Prompt + reference preview */}
           <div className="p-3 flex flex-col gap-1" style={{ width: 200 }}>
             <label className="text-[11px] font-medium text-muted-foreground">提示词</label>
             <textarea
@@ -147,6 +186,16 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
               value={prompt}
               onChange={(e) => updateCfg({ prompt: e.target.value })}
             />
+            {upstreamImageUrls.length > 0 && (
+              <div className="mt-1">
+                <label className="text-[10px] text-muted-foreground mb-1 block">参考图 ({upstreamImageUrls.length})</label>
+                <div className="flex gap-1 flex-wrap">
+                  {upstreamImageUrls.map((url, i) => (
+                    <img key={i} src={url} alt="" className="w-10 h-10 object-cover rounded border border-border" />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Col 2: Model */}
@@ -253,7 +302,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
 
             <button
               onClick={handleExecute}
-              disabled={executing || (!prompt.trim() && !edges.some((e) => e.target === node.id && nodes.find((n) => n.id === e.source)?.type === 'text_input'))}
+              disabled={executing || !hasPrompt}
               className="mt-auto w-full flex items-center justify-center gap-1 bg-primary text-primary-foreground py-2 rounded-lg text-[11px] font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               {executing ? (

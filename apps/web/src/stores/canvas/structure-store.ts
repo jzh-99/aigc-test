@@ -26,6 +26,7 @@ interface CanvasStructureState {
   onConnect: (connection: Connection) => void
 
   addNode: (type: string, position: { x: number; y: number }) => void
+  addNodeWithConfig: (type: string, position: { x: number; y: number }, config: any, id?: string) => void
   removeNodes: (nodeIds: string[]) => void
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
 }
@@ -95,9 +96,13 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
 
   addNode: (type, position) => {
     const newNode = nodeRegistry.createNodeInstance(type, position)
-    set((state) => ({
-      nodes: state.nodes.concat(newNode),
-    }))
+    set((state) => ({ nodes: state.nodes.concat(newNode) }))
+  },
+
+  addNodeWithConfig: (type, position, config, id) => {
+    const newNode = nodeRegistry.createNodeInstance(type, position, id)
+    newNode.data.config = { ...newNode.data.config, ...config }
+    set((state) => ({ nodes: state.nodes.concat(newNode) }))
   },
 
   removeNodes: (nodeIds) => {

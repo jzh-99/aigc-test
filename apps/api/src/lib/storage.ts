@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import crypto from 'node:crypto'
 
@@ -97,6 +97,25 @@ export async function signAssetUrl(storageUrl: string | null | undefined): Promi
  */
 export async function signAssetUrls(urls: string[]): Promise<string[]> {
   return Promise.all(urls.map(async (url) => (await signAssetUrl(url)) ?? url))
+}
+
+/**
+ * Upload a buffer to S3, returns the public storage URL (STORAGE_PUBLIC_URL/key).
+ */
+export async function uploadToS3(
+  key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<string> {
+  const s3 = getS3()
+  await s3.send(new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  }))
+  const publicUrl = process.env.STORAGE_PUBLIC_URL ?? ''
+  return `${publicUrl}/${key}`
 }
 
 /**
