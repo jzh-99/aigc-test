@@ -12,6 +12,70 @@ export interface ExecuteNodeParams {
   referenceImageUrls?: string[] // upstream image/asset node outputs
 }
 
+export interface CanvasHistoryItem {
+  id: string
+  canvas_node_id: string | null
+  model: string
+  prompt: string
+  quantity: number
+  completed_count: number
+  failed_count: number
+  status: string
+  actual_credits: number | null
+  created_at: string
+}
+
+export interface CanvasAssetItem {
+  id: string
+  type: string
+  storage_url: string | null
+  original_url: string | null
+  created_at: string
+  batch_id: string
+  canvas_node_id: string | null
+  prompt: string
+  model: string
+}
+
+interface CursorListResponse<T> {
+  items: T[]
+  nextCursor: string | null
+}
+
+const READ_MIN_INTERVAL_MS = 1200
+const readSlotAt = new Map<string, number>()
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitForReadSlot(key: string) {
+  const now = Date.now()
+  const allowedAt = readSlotAt.get(key) ?? now
+  const waitMs = Math.max(0, allowedAt - now)
+  if (waitMs > 0) await sleep(waitMs)
+  readSlotAt.set(key, Date.now() + READ_MIN_INTERVAL_MS)
+}
+
+async function fetchWithBackoff(input: RequestInfo | URL, init?: RequestInit, maxRetries = 2): Promise<Response> {
+  let attempt = 0
+  while (true) {
+    const res = await fetch(input, init)
+    if (![429, 503].includes(res.status) || attempt >= maxRetries) {
+      return res
+    }
+
+    const retryAfterHeader = res.headers.get('retry-after')
+    const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : NaN
+    const retryAfterMs = Number.isFinite(retryAfterSec) ? Math.max(0, retryAfterSec * 1000) : 0
+    const backoffMs = Math.min(3000, 600 * 2 ** attempt)
+    const jitter = Math.floor(Math.random() * 200)
+
+    await sleep(Math.max(retryAfterMs, backoffMs + jitter))
+    attempt += 1
+  }
+}
+
 export async function executeCanvasNode(params: ExecuteNodeParams, token?: string) {
   const cfg = params.config
   const modelCode = cfg.modelCode || cfg.model || 'gemini-3.1-flash-image-preview-2k'
@@ -31,12 +95,9 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
     },
   }
 
-  // Pass reference images if provided
+  // Pass reference images as array — worker adapters expect params.image to be string[]
   if (params.referenceImageUrls && params.referenceImageUrls.length > 0) {
-    payload.params.image = params.referenceImageUrls[0]       // primary reference
-    if (params.referenceImageUrls.length > 1) {
-      payload.params.reference_images = params.referenceImageUrls // all references
-    }
+    payload.params.image = params.referenceImageUrls
   }
 
   const res = await fetch('/api/v1/generate/image', {
@@ -82,7 +143,8 @@ export async function uploadAssetFile(file: File, token?: string): Promise<strin
  * 拉取节点历史输出
  */
 export async function fetchNodeOutputs(canvasId: string, nodeId: string, token?: string) {
-  const res = await fetch(`/api/v1/canvases/${canvasId}/node-outputs/${nodeId}`, {
+  await waitForReadSlot(`node-outputs:${canvasId}:${nodeId}`)
+  const res = await fetchWithBackoff(`/api/v1/canvases/${canvasId}/node-outputs/${nodeId}`, {
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     signal: AbortSignal.timeout(5000),
   })
@@ -96,10 +158,68 @@ export async function fetchNodeOutputs(canvasId: string, nodeId: string, token?:
 }
 
 export async function fetchCanvasActiveTasks(canvasId: string, token?: string) {
-  const res = await fetch(`/api/v1/canvases/${canvasId}/active-tasks`, {
+  await waitForReadSlot(`active-tasks:${canvasId}`)
+  const res = await fetchWithBackoff(`/api/v1/canvases/${canvasId}/active-tasks`, {
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     signal: AbortSignal.timeout(5000),
   })
   if (!res.ok) throw new Error('拉取节点进度失败')
   return await res.json()
+}
+
+export async function fetchCanvasHistory(canvasId: string, token?: string, cursor?: string | null) {
+  const qs = new URLSearchParams()
+  if (cursor) qs.set('cursor', cursor)
+
+  await waitForReadSlot(`history:${canvasId}`)
+  const res = await fetchWithBackoff(`/api/v1/canvases/${canvasId}/history${qs.size ? `?${qs.toString()}` : ''}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    signal: AbortSignal.timeout(8000),
+  })
+
+  if (!res.ok) throw new Error('拉取任务记录失败')
+  return await res.json() as CursorListResponse<CanvasHistoryItem>
+}
+
+export async function fetchCanvasAssets(
+  canvasId: string,
+  token?: string,
+  cursor?: string | null,
+  type?: string,
+) {
+  const qs = new URLSearchParams()
+  if (cursor) qs.set('cursor', cursor)
+  if (type) qs.set('type', type)
+
+  await waitForReadSlot(`assets:${canvasId}`)
+  const res = await fetchWithBackoff(`/api/v1/canvases/${canvasId}/assets${qs.size ? `?${qs.toString()}` : ''}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    signal: AbortSignal.timeout(8000),
+  })
+
+  if (!res.ok) throw new Error('拉取资产库失败')
+  return await res.json() as CursorListResponse<CanvasAssetItem>
+}
+
+export async function selectNodeOutputForCanvas(
+  canvasId: string,
+  nodeId: string,
+  outputId: string,
+  token?: string,
+) {
+  const res = await fetch(`/api/v1/canvases/${canvasId}/node-outputs/${nodeId}/select`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ output_id: outputId }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error?.message || '设置定稿失败')
+  }
+
+  return await res.json() as { success: boolean; selected_output_id: string }
 }

@@ -171,7 +171,14 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // GET /canvases/:id/active-tasks — polling endpoint for execution progress
-  app.get<{ Params: { id: string } }>('/canvases/:id/active-tasks', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/canvases/:id/active-tasks', {
+    config: {
+      rateLimit: {
+        max: 600,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     const db = getDb()
     const { id } = request.params
 
@@ -244,11 +251,78 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(signed)
   })
 
+  // POST /canvases/:id/node-outputs/:nodeId/select — set selected output for a node
+  app.post<{
+    Params: { id: string; nodeId: string }
+    Body: { output_id?: string }
+  }>('/canvases/:id/node-outputs/:nodeId/select', async (request, reply) => {
+    const db = getDb()
+    const { id, nodeId } = request.params
+    const { output_id } = request.body ?? {}
+
+    if (!output_id) {
+      return reply.badRequest('output_id is required')
+    }
+
+    const canvas = await db
+      .selectFrom('canvases')
+      .select('workspace_id')
+      .where('id', '=', id)
+      .executeTakeFirst()
+    if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
+
+    const member = await db
+      .selectFrom('workspace_members')
+      .select('role')
+      .where('workspace_id', '=', canvas.workspace_id)
+      .where('user_id', '=', request.user.id)
+      .executeTakeFirst()
+    if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权修改该画布' } })
+
+    const target = await db
+      .selectFrom('canvas_node_outputs')
+      .select('id')
+      .where('id', '=', output_id)
+      .where('canvas_id', '=', id)
+      .where('node_id', '=', nodeId)
+      .executeTakeFirst()
+
+    if (!target) {
+      return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '目标输出不存在' } })
+    }
+
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('canvas_node_outputs')
+        .set({ is_selected: false })
+        .where('canvas_id', '=', id)
+        .where('node_id', '=', nodeId)
+        .execute()
+
+      await trx
+        .updateTable('canvas_node_outputs')
+        .set({ is_selected: true })
+        .where('id', '=', output_id)
+        .where('canvas_id', '=', id)
+        .where('node_id', '=', nodeId)
+        .execute()
+    })
+
+    return reply.send({ success: true, selected_output_id: output_id })
+  })
+
   // GET /canvases/:id/history — batch list for this canvas (with tasks+asset info)
   app.get<{
     Params: { id: string }
     Querystring: { limit?: string; cursor?: string }
-  }>('/canvases/:id/history', async (request, reply) => {
+  }>('/canvases/:id/history', {
+    config: {
+      rateLimit: {
+        max: 600,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     const db = getDb()
     const { id } = request.params
     const limitN = Math.min(parseInt(request.query.limit ?? '30', 10) || 30, 100)
@@ -303,7 +377,14 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   app.get<{
     Params: { id: string }
     Querystring: { limit?: string; cursor?: string; type?: string }
-  }>('/canvases/:id/assets', async (request, reply) => {
+  }>('/canvases/:id/assets', {
+    config: {
+      rateLimit: {
+        max: 600,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     const db = getDb()
     const { id } = request.params
     const limitN = Math.min(parseInt(request.query.limit ?? '50', 10) || 50, 200)

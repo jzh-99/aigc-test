@@ -4,8 +4,11 @@ import { useState, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
+import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
+import { toast } from 'sonner'
 import type { CanvasNodeData } from '@/lib/canvas/types'
 
 function nodeWidthFromRatio(w: number, h: number): number {
@@ -30,7 +33,10 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
   const execState = useNodeExecutionState(id)
   const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
+  const canvasId = useCanvasStructureStore((s) => s.canvasId)
+  const token = useAuthStore((s) => s.accessToken)
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
+  const [confirming, setConfirming] = useState(false)
 
   const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
   const selectedOutput = outputs.find((o) => o.id === selectedOutputId)
@@ -48,6 +54,21 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
   }
 
   const nodeWidth = imgSize ? nodeWidthFromRatio(imgSize.w, imgSize.h) : 260
+
+  async function handleConfirmSelect(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!canvasId || !token || !selectedOutputId) return
+
+    setConfirming(true)
+    try {
+      await selectNodeOutputForCanvas(canvasId, id, selectedOutputId, token)
+      toast.success('已设为定稿图')
+    } catch (err: any) {
+      toast.error(err?.message ?? '设为定稿失败')
+    } finally {
+      setConfirming(false)
+    }
+  }
 
   return (
     <div
@@ -138,9 +159,19 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
-          <span className="font-mono text-[10px] text-zinc-400">
-            {currentIndex + 1} / {outputs.length}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] text-zinc-400">
+              {currentIndex + 1} / {outputs.length}
+            </span>
+            <button
+              onClick={handleConfirmSelect}
+              disabled={!token || !canvasId || !selectedOutputId || confirming}
+              className="px-1.5 py-0.5 text-[10px] rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 flex items-center gap-1"
+            >
+              {confirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              设为定稿
+            </button>
+          </div>
           <button
             onClick={handleNext}
             disabled={currentIndex >= outputs.length - 1}
