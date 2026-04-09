@@ -7,6 +7,8 @@ export interface GenerateImageRequest {
   quantity?: number
   params?: Record<string, unknown>
   workspace_id: string
+  canvas_id?: string
+  canvas_node_id?: string
 }
 
 export interface TaskResponse {

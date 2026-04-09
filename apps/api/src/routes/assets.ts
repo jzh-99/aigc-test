@@ -132,6 +132,7 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
           'b.model',
         ])
         .where('b.workspace_id', '=', workspace_id)
+        .where('b.canvas_id', 'is', null)
         .where('a.is_deleted', '=', false)
         .where((eb: any) => eb.or([
           eb('a.transfer_status', '=', 'completed'),

@@ -20,6 +20,7 @@ import {
   Settings,
   Users,
   Shield,
+  Palette,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -34,6 +35,7 @@ interface NavItem {
 const baseNavItems: NavItem[] = [
   { href: '/', label: '工作台', icon: LayoutDashboard },
   { href: '/generation', label: '创作生成', icon: Sparkles },
+  { href: '/canvas', label: '画布', icon: Palette },
   { href: '/assets', label: '资产库', icon: Images },
 ]
 

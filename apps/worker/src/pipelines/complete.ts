@@ -139,6 +139,34 @@ export async function completePipeline(
   // 6. Publish SSE event (outside transaction)
   await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
 
+  // 6b. Canvas output tracking: write canvas_node_outputs + increment dirty version
+  if (jobData.canvasId && jobData.canvasNodeId) {
+    const canvasId = jobData.canvasId
+    const nodeId = jobData.canvasNodeId
+    const paramsSnapshot = JSON.stringify({ prompt: jobData.prompt, model: jobData.model, params: jobData.params })
+
+    // Deselect all previous outputs for this node, then insert new selected one
+    await db.updateTable('canvas_node_outputs')
+      .set({ is_selected: false })
+      .where('canvas_id', '=', canvasId)
+      .where('node_id', '=', nodeId)
+      .execute()
+
+    await db.insertInto('canvas_node_outputs')
+      .values({
+        canvas_id: canvasId,
+        node_id: nodeId,
+        batch_id: batchId,
+        output_urls: sql`ARRAY[${outputUrl}]::text[]`,
+        params_snapshot: sql`${paramsSnapshot}::jsonb`,
+        is_selected: true,
+      })
+      .execute()
+
+    // Increment Redis dirty version so the poller detects a change
+    await getPubRedis().incr(`canvas:dirty:${canvasId}`)
+  }
+
   // 7. Enqueue transfer job
   await getTransferQueue().add('transfer', {
     taskId,
