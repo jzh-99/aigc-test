@@ -91,11 +91,13 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
   const history = useCanvasData<BatchItem>(canvasId, 'history', token)
   const assets  = useCanvasData<AssetItem>(canvasId, 'assets', token)
 
+  const historyRefresh = history.refresh
+  const assetsRefresh = assets.refresh
   useEffect(() => {
     if (!token) return
-    if (tab === 'history') history.refresh()
-    if (tab === 'assets')  assets.refresh()
-  }, [tab, token]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (tab === 'history') historyRefresh()
+    if (tab === 'assets')  assetsRefresh()
+  }, [tab, token, historyRefresh, assetsRefresh])
 
   return (
     <>
