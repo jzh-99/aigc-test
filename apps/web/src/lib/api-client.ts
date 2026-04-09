@@ -49,23 +49,27 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json()
 }
 
-let refreshPromise: Promise<string | null> | null = null
+let refreshPromise: Promise<{ token: string | null; rateLimited: boolean }> | null = null
 
-async function refreshAccessToken(): Promise<string | null> {
+async function refreshAccessToken(): Promise<{ token: string | null; rateLimited: boolean }> {
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     })
-    if (!res.ok) return null
+    if (res.status === 429) {
+      // Rate limited — do NOT clear auth, user is still logged in
+      return { token: null, rateLimited: true }
+    }
+    if (!res.ok) return { token: null, rateLimited: false }
     const data = await res.json()
     const newToken = data.access_token
     if (newToken && data.user) {
       useAuthStore.getState().setAuth(data.user, newToken)
     }
-    return newToken
+    return { token: newToken, rateLimited: false }
   } catch {
-    return null
+    return { token: null, rateLimited: false }
   }
 }
 
@@ -107,10 +111,14 @@ export async function fetchWithAuth<T>(
         refreshPromise = null
       })
     }
-    const newToken = await refreshPromise
-    if (newToken) {
+    const refreshResult = await refreshPromise
+    if (refreshResult.rateLimited) {
+      // Server is rate-limiting us — do NOT log out, just surface the error
+      throw new ApiError(429, 'RATE_LIMITED', '请求过于频繁，请稍后再试')
+    }
+    if (refreshResult.token) {
       // Retry original request
-      const retryHeaders = { ...init.headers, Authorization: `Bearer ${newToken}` } as Record<string, string>
+      const retryHeaders = { ...init.headers, Authorization: `Bearer ${refreshResult.token}` } as Record<string, string>
       const retryRes = await fetch(`${API_BASE}${path}`, {
         ...init,
         headers: retryHeaders,
@@ -118,7 +126,7 @@ export async function fetchWithAuth<T>(
       })
       return handleResponse<T>(retryRes)
     }
-    // Refresh failed — clear auth, redirect
+    // Refresh failed (truly invalid/expired) — clear auth, redirect
     useAuthStore.getState().clearAuth()
     if (typeof window !== 'undefined') {
       window.location.href = '/login'

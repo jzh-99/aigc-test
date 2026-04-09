@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { signAssetUrl, signAssetUrls } from '../lib/storage.js'
+import { signAssetUrl, signAssetUrls, uploadToS3 } from '../lib/storage.js'
+import { randomUUID } from 'node:crypto'
 
 export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   // GET /canvases — list user's canvases (via workspace membership)
@@ -369,5 +370,28 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       : null
 
     return reply.send({ items: signedItems, nextCursor })
+  })
+
+  // POST /canvases/asset-upload — upload an image/video file to S3 for use as an asset node
+  app.post('/canvases/asset-upload', async (request, reply) => {
+    const data = await (request as any).file({ limits: { fileSize: 50 * 1024 * 1024 } })
+    if (!data) return reply.badRequest('No file provided')
+
+    const mimeType: string = data.mimetype ?? ''
+    if (!mimeType.startsWith('image/') && !mimeType.startsWith('video/')) {
+      return reply.badRequest('Only image and video files are supported')
+    }
+
+    const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? 'bin'
+    const key = `canvas-assets/${randomUUID()}.${ext}`
+
+    const chunks: Buffer[] = []
+    for await (const chunk of data.file) chunks.push(chunk as Buffer)
+    const body = Buffer.concat(chunks)
+
+    const storageUrl = await uploadToS3(key, body, mimeType)
+    const signedUrl = await signAssetUrl(storageUrl)
+
+    return reply.send({ url: signedUrl ?? storageUrl, storageUrl })
   })
 }

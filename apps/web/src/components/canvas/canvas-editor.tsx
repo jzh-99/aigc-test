@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactFlow, {
   Controls,
@@ -16,20 +16,20 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { nodeRegistry } from '@/lib/canvas/registry'
 import { useCanvasPoller } from '@/hooks/canvas/use-canvas-poller'
 import { useCanvasAutosave } from '@/hooks/canvas/use-canvas-autosave'
+import { useAuthStore } from '@/stores/auth-store'
+import { uploadAssetFile } from '@/lib/canvas/canvas-api'
+import { toast } from 'sonner'
 import { NodeParamPanel } from './node-param-panel'
 import type { AppNode } from '@/lib/canvas/types'
 
 const nodeTypes = nodeRegistry.getReactFlowTypesMapping()
 
-// Approximate canvas-space heights for each node type (used to position panel below)
 const NODE_CANVAS_H: Record<string, number> = {
-  image_gen: 260,   // header ~32 + aspect 4:3 preview of 280px wide ≈ 210 + pager ~18
-  text_input: 130,  // header + textarea
+  image_gen: 260,
+  text_input: 130,
+  asset: 200,
 }
 
-// ── Floating param panel ───────────────────────────────────────────────────
-// Renders as a fixed-position portal so it's immune to canvas zoom.
-// Subscribes to ReactFlow viewport store to track node screen position live.
 function FloatingParamPanel({
   node,
   canvasId,
@@ -43,9 +43,7 @@ function FloatingParamPanel({
   onClose: () => void
   onExecuted: () => void
 }) {
-  // Subscribe to viewport — re-renders on every pan/zoom automatically
-  const transform = useStore((s) => s.transform) // [tx, ty, zoom]
-
+  const transform = useStore((s) => s.transform)
   const rect = wrapperRef.current?.getBoundingClientRect()
   if (!rect) return null
 
@@ -53,20 +51,16 @@ function FloatingParamPanel({
   const PANEL_W = 640
   const NODE_W = 280
 
-  // Node top-left in screen coords
   const sx = rect.left + node.position.x * zoom + tx
   const sy = rect.top + node.position.y * zoom + ty
 
-  // Bottom of node in screen coords
   const nodeScreenH = (NODE_CANVAS_H[node.type ?? ''] ?? 200) * zoom
   const rawTop = sy + nodeScreenH + 8
 
-  // Center panel horizontally under node
   const nodeScreenW = NODE_W * zoom
   let left = sx + nodeScreenW / 2 - PANEL_W / 2
   left = Math.max(rect.left + 8, Math.min(left, window.innerWidth - PANEL_W - 8))
 
-  // Clamp so panel doesn't go below viewport
   const top = Math.min(rawTop, window.innerHeight - 200)
 
   return createPortal(
@@ -82,37 +76,118 @@ function FloatingParamPanel({
   )
 }
 
-// ── Flow ───────────────────────────────────────────────────────────────────
-function Flow({ canvasId, onSave, saving }: { canvasId: string; onSave: () => void; saving: boolean }) {
+function Flow({
+  canvasId,
+  onSave,
+  saving,
+  lastSaved,
+}: {
+  canvasId: string
+  onSave: () => void
+  saving: boolean
+  lastSaved: Date | null
+}) {
   const store = useCanvasStructureStore()
   const { project } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const token = useAuthStore((s) => s.accessToken)
+  const [uploading, setUploading] = useState(false)
 
   const { kickPoll } = useCanvasPoller(canvasId)
 
   const handleAddNode = useCallback((type: string) => {
     const rect = wrapperRef.current?.getBoundingClientRect()
     if (!rect) return
-    // Project the visual center of the canvas viewport to flow coordinates
     const position = project({ x: rect.width / 2, y: rect.height / 2 })
     store.addNode(type, position)
   }, [store, project])
 
+  // Delete key: remove selected node
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedNodeId) return
+      // Don't fire when typing in input/textarea
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        store.removeNodes([selectedNodeId])
+        setSelectedNodeId(null)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedNodeId, store])
+
+  // Drop file onto canvas → create asset node
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files).filter(
+      (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
+    )
+    if (!files.length) return
+    if (!token) { toast.error('请先登录'); return }
+
+    const rect = wrapperRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    setUploading(true)
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        const position = project({
+          x: e.clientX - rect.left + i * 180,
+          y: e.clientY - rect.top,
+        })
+        try {
+          const url = await uploadAssetFile(file, token)
+          const nodeId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+          store.addNodeWithConfig('asset', position, {
+            url,
+            name: file.name,
+            mimeType: file.type,
+          }, nodeId)
+        } catch (err: any) {
+          toast.error(`上传 ${file.name} 失败: ${err.message}`)
+        }
+      }
+    } finally {
+      setUploading(false)
+    }
+  }, [token, project, store])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }, [])
+
   const selectedNode = store.nodes.find((n) => n.id === selectedNodeId) ?? null
+
+  const saveLabel = saving
+    ? '保存中…'
+    : lastSaved
+    ? `已保存 ${lastSaved.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+    : '保存'
 
   return (
     <div
       className="w-full h-full relative"
       ref={wrapperRef}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
       style={{
         background: '#fafafa',
-        // Tapnow canvas perf
         transform: 'translateZ(0)',
         backfaceVisibility: 'hidden',
         WebkitFontSmoothing: 'antialiased',
       } as React.CSSProperties}
     >
+      {uploading && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/20 pointer-events-none">
+          <div className="bg-white rounded-xl px-4 py-2 shadow-lg text-sm font-medium text-zinc-700">上传中…</div>
+        </div>
+      )}
+
       <ReactFlow
         nodes={store.nodes}
         edges={store.edges}
@@ -129,12 +204,13 @@ function Flow({ canvasId, onSave, saving }: { canvasId: string; onSave: () => vo
         maxZoom={4}
         proOptions={{ hideAttribution: true }}
         style={{ background: '#fafafa' }}
+        deleteKeyCode={null} // we handle delete ourselves
       >
         <Controls
           className="!bg-white !border-zinc-200 [&>button]:!bg-white [&>button]:!border-zinc-200 [&>button]:!text-zinc-500 [&>button:hover]:!bg-zinc-100 [&>button:hover]:!text-zinc-800"
         />
         <MiniMap
-          nodeColor={(n) => (n.type === 'text_input' ? '#eab308' : '#3b82f6')}
+          nodeColor={(n) => (n.type === 'text_input' ? '#eab308' : n.type === 'asset' ? '#22c55e' : '#3b82f6')}
           maskColor="rgba(250,250,250,0.7)"
           className="!bg-white !border !border-zinc-200 rounded-lg shadow-md"
         />
@@ -159,14 +235,14 @@ function Flow({ canvasId, onSave, saving }: { canvasId: string; onSave: () => vo
           <button
             onClick={onSave}
             disabled={saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-600 rounded-lg border border-zinc-200 shadow-sm transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors disabled:opacity-60 min-w-[80px] justify-center"
           >
-            {saving ? '保存中…' : '保存'}
+            {saving && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />}
+            {saveLabel}
           </button>
         </Panel>
       </ReactFlow>
 
-      {/* Floating param panel — fixed size, tracks node position */}
       {selectedNode && (
         <FloatingParamPanel
           node={selectedNode}
@@ -181,10 +257,10 @@ function Flow({ canvasId, onSave, saving }: { canvasId: string; onSave: () => vo
 }
 
 export function CanvasEditor({ canvasId }: { canvasId: string }) {
-  const { save, saving } = useCanvasAutosave(canvasId)
+  const { save, saving, lastSaved } = useCanvasAutosave(canvasId)
   return (
     <ReactFlowProvider>
-      <Flow canvasId={canvasId} onSave={save} saving={saving} />
+      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} />
     </ReactFlowProvider>
   )
 }

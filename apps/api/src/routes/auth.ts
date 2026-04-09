@@ -6,7 +6,6 @@ import crypto from 'node:crypto'
 import { sql } from 'kysely'
 import type { LoginRequest, AcceptInviteRequest } from '@aigc/types'
 import { buildUserProfile } from '../services/user-profile.js'
-import rateLimit from '@fastify/rate-limit'
 
 const MAX_LOGIN_ATTEMPTS = 5
 const LOCKOUT_WINDOW = 10 * 60 // 10 minutes in seconds
@@ -26,18 +25,6 @@ function signRefreshToken(): string {
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
-
-  // Rate limit auth endpoints: 10 attempts per minute per IP
-  await app.register(rateLimit, {
-    max: 10,
-    timeWindow: '1 minute',
-    keyGenerator: (request) => request.ip,
-    errorResponseBuilder: (_request, context) => ({
-      statusCode: 429,
-      success: false,
-      error: { code: 'RATE_LIMITED', message: `请求过于频繁，请 ${Math.ceil(context.ttl / 1000)} 秒后再试` },
-    }),
-  })
 
   // Account lockout helpers using Redis
   const redis = (app as any).redis as import('ioredis').default
@@ -67,6 +54,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /auth/login
   app.post<{ Body: LoginRequest }>('/auth/login', {
+    config: {
+      // Stricter rate limit for login: 10 attempts per minute per IP
+      rateLimit: {
+        max: 10,
+        timeWindow: '1 minute',
+        keyGenerator: (request: any) => request.ip,
+        errorResponseBuilder: (_request: any, context: any) => ({
+          statusCode: 429,
+          success: false,
+          error: { code: 'RATE_LIMITED', message: `请求过于频繁，请 ${Math.ceil(context.ttl / 1000)} 秒后再试` },
+        }),
+      },
+    },
     schema: {
       body: {
         type: 'object',

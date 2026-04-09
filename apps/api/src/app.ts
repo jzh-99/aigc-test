@@ -58,13 +58,24 @@ export async function buildApp() {
     await redis.quit()
   })
 
-  // Global rate limit: 200 requests per minute per IP (applies to all routes)
+  // Global rate limit: 300 requests per minute per IP (applies to all routes unless overridden)
+  // Keyed by Authorization header user-id when present, falling back to IP — prevents NAT/proxy users from sharing a bucket
   await app.register(rateLimit, {
     global: true,
-    max: 200,
+    max: 300,
     timeWindow: '1 minute',
     redis,
-    keyGenerator: (request) => request.ip,
+    keyGenerator: (request) => {
+      // If an Authorization header is present, key by the bearer token prefix (first 16 chars are unique per user)
+      // This stops multiple users behind the same NAT from colliding in the same bucket
+      const auth = request.headers.authorization
+      if (auth?.startsWith('Bearer ')) {
+        // Use first 16 chars of the token as a per-user discriminator (not the full token for security)
+        const tokenPrefix = auth.slice(7, 23)
+        return `${request.ip}:${tokenPrefix}`
+      }
+      return request.ip
+    },
     errorResponseBuilder: (_request, context) => ({
       statusCode: 429,
       success: false,

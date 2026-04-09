@@ -62,9 +62,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // If the token is revoked, the API client interceptor will automatically clear auth and redirect
         await apiGet('/users/me')
       } catch (err) {
-        // Expected to fail with ApiError when kicked, handled by api-client.ts
+        // 429 (rate limited) — server is busy but user is still logged in, do nothing
+        // TOKEN_REVOKED / AUTH_REQUIRED — handled by api-client.ts (clears auth + redirects)
       }
-    }, 30000) // Check every 30 seconds
+    }, 60000) // Check every 60 seconds (was 30s — halved to reduce pressure on rate limiter)
 
     return () => clearInterval(interval)
   }, [isInitialized, user, accessToken])
