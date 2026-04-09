@@ -18,6 +18,7 @@ import { useCanvasPoller } from '@/hooks/canvas/use-canvas-poller'
 import { useCanvasAutosave } from '@/hooks/canvas/use-canvas-autosave'
 import { useAuthStore } from '@/stores/auth-store'
 import { uploadAssetFile } from '@/lib/canvas/canvas-api'
+import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { toast } from 'sonner'
 import { NodeParamPanel } from './node-param-panel'
 import type { AppNode } from '@/lib/canvas/types'
@@ -258,6 +259,14 @@ function Flow({
 
 export function CanvasEditor({ canvasId }: { canvasId: string }) {
   const { save, saving, lastSaved } = useCanvasAutosave(canvasId)
+  const token = useAuthStore((s) => s.accessToken)
+  const prefetchSidebar = useCanvasSidebarDataStore((s) => s.prefetch)
+
+  useEffect(() => {
+    if (!canvasId || !token) return
+    prefetchSidebar(canvasId, token)
+  }, [canvasId, token, prefetchSidebar])
+
   return (
     <ReactFlowProvider>
       <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} />

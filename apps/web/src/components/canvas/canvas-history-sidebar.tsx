@@ -1,86 +1,25 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { X, Loader2, ChevronDown, ImageIcon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { BatchDetail } from '@/components/history/batch-detail'
 import { cn } from '@/lib/utils'
+import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
+import type { CanvasAssetItem, CanvasHistoryItem } from '@/lib/canvas/canvas-api'
 
 type Tab = 'history' | 'assets'
-
-interface BatchItem {
-  id: string
-  canvas_node_id: string | null
-  model: string
-  prompt: string
-  quantity: number
-  completed_count: number
-  failed_count: number
-  status: string
-  actual_credits: number | null
-  created_at: string
-}
-
-interface AssetItem {
-  id: string
-  type: string
-  storage_url: string | null
-  original_url: string | null
-  created_at: string
-  batch_id: string
-  canvas_node_id: string | null
-  prompt: string
-  model: string
-}
 
 interface Props {
   canvasId: string
   onClose: () => void
 }
 
-function useCanvasData<T>(canvasId: string, endpoint: string, token: string | null) {
-  const [items, setItems] = useState<T[]>([])
-  const [loading, setLoading] = useState(true)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-
-  const load = useCallback(async (cursor?: string) => {
-    if (!token) { setLoading(false); return }
-    setLoading(true)
-    try {
-      const qs = cursor ? `?cursor=${cursor}` : ''
-      const res = await fetch(`/api/v1/canvases/${canvasId}/${endpoint}${qs}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) return
-      const data = await res.json()
-      setItems((prev) => cursor ? [...prev, ...data.items] : data.items)
-      setNextCursor(data.nextCursor)
-      setHasMore(!!data.nextCursor)
-    } finally {
-      setLoading(false)
-    }
-  }, [canvasId, endpoint, token])
-
-  const refresh = useCallback(() => {
-    setItems([])
-    setNextCursor(null)
-    setHasMore(false)
-    load()
-  }, [load])
-
-  const loadMore = useCallback(() => {
-    if (nextCursor && !loading) load(nextCursor)
-  }, [nextCursor, loading, load])
-
-  return { items, loading, hasMore, refresh, loadMore }
-}
-
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  completed:  { label: '完成',  cls: 'bg-green-100 text-green-700' },
+  completed: { label: '完成', cls: 'bg-green-100 text-green-700' },
   processing: { label: '生成中', cls: 'bg-blue-100 text-blue-700' },
-  pending:    { label: '排队中', cls: 'bg-yellow-100 text-yellow-700' },
-  failed:     { label: '失败',  cls: 'bg-red-100 text-red-600' },
+  pending: { label: '排队中', cls: 'bg-yellow-100 text-yellow-700' },
+  failed: { label: '失败', cls: 'bg-red-100 text-red-600' },
 }
 
 export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
@@ -88,16 +27,48 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('history')
   const [detailBatchId, setDetailBatchId] = useState<string | null>(null)
 
-  const history = useCanvasData<BatchItem>(canvasId, 'history', token)
-  const assets  = useCanvasData<AssetItem>(canvasId, 'assets', token)
+  const byCanvas = useCanvasSidebarDataStore((s) => s.byCanvas)
+  const refreshHistory = useCanvasSidebarDataStore((s) => s.refreshHistory)
+  const refreshAssets = useCanvasSidebarDataStore((s) => s.refreshAssets)
+  const loadMoreHistory = useCanvasSidebarDataStore((s) => s.loadMoreHistory)
+  const loadMoreAssets = useCanvasSidebarDataStore((s) => s.loadMoreAssets)
 
-  const historyRefresh = history.refresh
-  const assetsRefresh = assets.refresh
+  const bucket = byCanvas[canvasId]
+
   useEffect(() => {
     if (!token) return
-    if (tab === 'history') historyRefresh()
-    if (tab === 'assets')  assetsRefresh()
-  }, [tab, token, historyRefresh, assetsRefresh])
+    if (tab === 'history' && !bucket?.history.loaded && !bucket?.history.loading) {
+      refreshHistory(canvasId, token)
+      return
+    }
+    if (tab === 'assets' && !bucket?.assets.loaded && !bucket?.assets.loading) {
+      refreshAssets(canvasId, token)
+    }
+  }, [tab, token, canvasId, bucket?.history.loaded, bucket?.history.loading, bucket?.assets.loaded, bucket?.assets.loading, refreshHistory, refreshAssets])
+
+  const historyData = useMemo(() => {
+    const fallback = { items: [] as CanvasHistoryItem[], loading: true, loaded: false, nextCursor: null as string | null }
+    const section = bucket?.history ?? fallback
+    return {
+      items: section.items,
+      loading: token ? section.loading : true,
+      loaded: section.loaded,
+      hasMore: !!section.nextCursor,
+      loadMore: () => token && loadMoreHistory(canvasId, token),
+    }
+  }, [bucket?.history, token, loadMoreHistory, canvasId])
+
+  const assetsData = useMemo(() => {
+    const fallback = { items: [] as CanvasAssetItem[], loading: true, loaded: false, nextCursor: null as string | null }
+    const section = bucket?.assets ?? fallback
+    return {
+      items: section.items,
+      loading: token ? section.loading : true,
+      loaded: section.loaded,
+      hasMore: !!section.nextCursor,
+      loadMore: () => token && loadMoreAssets(canvasId, token),
+    }
+  }, [bucket?.assets, token, loadMoreAssets, canvasId])
 
   return (
     <>
@@ -129,10 +100,10 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {tab === 'history' && (
-            <HistoryTab data={history} onOpenDetail={setDetailBatchId} />
+            <HistoryTab data={historyData} onOpenDetail={setDetailBatchId} />
           )}
           {tab === 'assets' && (
-            <AssetsTab data={assets} onOpenDetail={setDetailBatchId} />
+            <AssetsTab data={assetsData} onOpenDetail={setDetailBatchId} />
           )}
         </div>
       </div>
@@ -141,7 +112,9 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
       <BatchDetail
         batchId={detailBatchId}
         open={!!detailBatchId}
-        onOpenChange={(open) => { if (!open) setDetailBatchId(null) }}
+        onOpenChange={(open) => {
+          if (!open) setDetailBatchId(null)
+        }}
       />
     </>
   )
@@ -151,15 +124,25 @@ function HistoryTab({
   data,
   onOpenDetail,
 }: {
-  data: ReturnType<typeof useCanvasData<BatchItem>>
+  data: {
+    items: CanvasHistoryItem[]
+    loading: boolean
+    loaded: boolean
+    hasMore: boolean
+    loadMore: () => void
+  }
   onOpenDetail: (id: string) => void
 }) {
-  const { items, loading, hasMore, loadMore } = data
+  const { items, loading, loaded, hasMore, loadMore } = data
 
   if (loading && items.length === 0) {
-    return <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-zinc-400" /></div>
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+      </div>
+    )
   }
-  if (!loading && items.length === 0) {
+  if (loaded && !loading && items.length === 0) {
     return <div className="text-center py-10 text-xs text-zinc-400">暂无任务记录</div>
   }
 
@@ -182,9 +165,19 @@ function HistoryTab({
             <p className="text-xs text-zinc-700 line-clamp-2 mb-1.5">{batch.prompt || '(无提示词)'}</p>
             <div className="flex items-center gap-2 text-[10px] text-zinc-400">
               <span>{batch.completed_count}/{batch.quantity} 张</span>
-              {batch.actual_credits != null && <><span>·</span><span>{batch.actual_credits} 积分</span></>}
+              {batch.actual_credits != null && (
+                <>
+                  <span>·</span>
+                  <span>{batch.actual_credits} 积分</span>
+                </>
+              )}
               <span className="ml-auto">
-                {new Date(batch.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                {new Date(batch.created_at).toLocaleString('zh-CN', {
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
               </span>
             </div>
           </button>
@@ -208,15 +201,25 @@ function AssetsTab({
   data,
   onOpenDetail,
 }: {
-  data: ReturnType<typeof useCanvasData<AssetItem>>
+  data: {
+    items: CanvasAssetItem[]
+    loading: boolean
+    loaded: boolean
+    hasMore: boolean
+    loadMore: () => void
+  }
   onOpenDetail: (id: string) => void
 }) {
-  const { items, loading, hasMore, loadMore } = data
+  const { items, loading, loaded, hasMore, loadMore } = data
 
   if (loading && items.length === 0) {
-    return <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-zinc-400" /></div>
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+      </div>
+    )
   }
-  if (!loading && items.length === 0) {
+  if (loaded && !loading && items.length === 0) {
     return <div className="text-center py-10 text-xs text-zinc-400">暂无资产</div>
   }
 
@@ -242,7 +245,12 @@ function AssetsTab({
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5">
                 <p className="text-[9px] text-white line-clamp-2 text-left">{asset.prompt || '—'}</p>
                 <p className="text-[9px] text-white/60 mt-0.5 text-left">
-                  {new Date(asset.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  {new Date(asset.created_at).toLocaleString('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </p>
               </div>
             </button>
