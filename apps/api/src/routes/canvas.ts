@@ -213,7 +213,14 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // GET /canvases/:id/node-outputs/:nodeId — load history outputs for a node
-  app.get<{ Params: { id: string; nodeId: string } }>('/canvases/:id/node-outputs/:nodeId', async (request, reply) => {
+  app.get<{ Params: { id: string; nodeId: string } }>('/canvases/:id/node-outputs/:nodeId', {
+    config: {
+      rateLimit: {
+        max: 1200,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     const db = getDb()
     const { id, nodeId } = request.params
 
@@ -255,7 +262,14 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   app.post<{
     Params: { id: string; nodeId: string }
     Body: { output_id?: string }
-  }>('/canvases/:id/node-outputs/:nodeId/select', async (request, reply) => {
+  }>('/canvases/:id/node-outputs/:nodeId/select', {
+    config: {
+      rateLimit: {
+        max: 300,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     const db = getDb()
     const { id, nodeId } = request.params
     const { output_id } = request.body ?? {}
