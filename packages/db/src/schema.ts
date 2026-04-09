@@ -167,6 +167,8 @@ export interface TaskBatchesTable {
   is_hidden: Generated<boolean>
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
+  canvas_id: string | null
+  canvas_node_id: string | null
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>
 }
@@ -290,6 +292,31 @@ export interface PromptFilterRulesTable {
   created_at: Generated<Timestamp>
 }
 
+// ─── Canvas ───────────────────────────────────────────────────────────────────
+
+export interface CanvasesTable {
+  id: Generated<string>
+  workspace_id: string
+  user_id: string
+  name: string
+  thumbnail_url: string | null
+  structure_data: ColumnType<unknown, string, string>
+  version: Generated<number>
+  created_at: Generated<Timestamp>
+  updated_at: Generated<Timestamp>
+}
+
+export interface CanvasNodeOutputsTable {
+  id: Generated<string>
+  canvas_id: string
+  node_id: string
+  batch_id: string | null
+  output_urls: ColumnType<string[], string, string>
+  params_snapshot: ColumnType<unknown, string | null, string | null> | null
+  is_selected: Generated<boolean>
+  created_at: Generated<Timestamp>
+}
+
 // ─── Database Interface ───────────────────────────────────────────────────────
 
 export interface Database {
@@ -315,4 +342,6 @@ export interface Database {
   provider_models: ProviderModelsTable
   voice_profiles: VoiceProfilesTable
   prompt_filter_rules: PromptFilterRulesTable
+  canvases: CanvasesTable
+  canvas_node_outputs: CanvasNodeOutputsTable
 }

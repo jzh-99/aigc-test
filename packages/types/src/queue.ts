@@ -9,6 +9,8 @@ export interface GenerationJobData {
   prompt: string
   params: Record<string, unknown>
   estimatedCredits: number
+  canvasId?: string
+  canvasNodeId?: string
 }
 
 export interface CompletionJobData {

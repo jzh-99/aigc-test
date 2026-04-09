@@ -68,12 +68,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
           quantity: { type: 'integer', minimum: 1, maximum: 5, default: 1 },
           workspace_id: { type: 'string', format: 'uuid' },
           params: { type: 'object', default: {} },
+          canvas_id: { type: 'string', format: 'uuid' },
+          canvas_node_id: { type: 'string', maxLength: 128 },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { idempotency_key, model, prompt, quantity = 1, params: rawParams = {}, workspace_id: workspaceId } = request.body
+    const { idempotency_key, model, prompt, quantity = 1, params: rawParams = {}, workspace_id: workspaceId, canvas_id, canvas_node_id } = request.body
 
     // Sanitize params: whitelist keys, validate types
     const params = sanitizeParams(rawParams)
@@ -290,6 +292,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
             quantity,
             status: 'pending',
             estimated_credits: totalCost,
+            ...(canvas_id ? { canvas_id, canvas_node_id: canvas_node_id ?? null } : {}),
           })
           .returningAll()
           .executeTakeFirstOrThrow()
@@ -324,6 +327,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
           prompt,
           params,
           estimatedCredits: providerModel.credit_cost,
+          ...(canvas_id ? { canvasId: canvas_id, canvasNodeId: canvas_node_id ?? undefined } : {}),
         }, { priority: jobPriority })
       }
     } catch (err) {

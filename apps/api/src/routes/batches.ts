@@ -146,6 +146,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           'actual_credits', 'created_at', 'user_id', 'workspace_id', 'is_deleted',
         ])
         .where('is_deleted', '=', false)
+        .where('canvas_id', 'is', null)
         .orderBy('created_at', 'desc')
         .orderBy('id', 'desc')
         .limit(limit + 1) // fetch one extra to determine if there's a next page
