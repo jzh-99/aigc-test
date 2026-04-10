@@ -7,9 +7,10 @@ import { getRedis } from '../lib/redis.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { mkdtemp, rm, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, readFile, writeFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 const execFileAsync = promisify(execFile)
 const pino = pino_ as any
@@ -64,22 +65,29 @@ async function uploadToExternalStorage(taskId: string, sourceUrl: string, assetT
   return rewriteStorageUrl(body.data.url)
 }
 
-// Upload a local file buffer to external storage as an image
+// Upload a buffer to external storage by writing to a temp file and serving via API
 async function uploadBufferToExternalStorage(taskId: string, buffer: Buffer): Promise<string> {
-  const base64 = buffer.toString('base64')
-  const dataUrl = `data:image/jpeg;base64,${base64}`
+  const baseUrl = process.env.AI_UPLOAD_BASE_URL ?? process.env.INTERNAL_API_URL ?? ''
+  if (!baseUrl) throw new Error('AI_UPLOAD_BASE_URL or INTERNAL_API_URL is required for thumbnail upload')
 
-  // Use the same API but pass a data URL — fallback: upload as jpg type
-  const res = await fetch(EXTERNAL_STORAGE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uuid: `${taskId}-thumb`, url: dataUrl, type: 'jpg' }),
-  })
+  const fileId = `${randomUUID()}.jpg`
+  const filePath = join(tmpdir(), fileId)
+  await writeFile(filePath, buffer)
 
-  if (!res.ok) throw new Error(`Thumbnail upload error: ${res.status}`)
-  const body = (await res.json()) as ExternalStorageResponse
-  if (body.code !== 10000 || !body.data?.url) throw new Error(`Thumbnail upload failed: ${body.msg}`)
-  return rewriteStorageUrl(body.data.url)
+  try {
+    const publicUrl = `${baseUrl}/api/v1/canvases/uploads/${fileId}`
+    const res = await fetch(EXTERNAL_STORAGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uuid: `${taskId}-thumb`, url: publicUrl, type: 'jpg' }),
+    })
+    if (!res.ok) throw new Error(`Thumbnail upload error: ${res.status}`)
+    const body = (await res.json()) as ExternalStorageResponse
+    if (body.code !== 10000 || !body.data?.url) throw new Error(`Thumbnail upload failed: ${body.msg}`)
+    return rewriteStorageUrl(body.data.url)
+  } finally {
+    unlink(filePath).catch(() => {})
+  }
 }
 
 // Extract first frame from a video URL using ffmpeg, return as JPEG buffer
