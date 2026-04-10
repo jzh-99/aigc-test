@@ -16,6 +16,7 @@ interface CanvasExecutionState {
   nodes: Record<string, NodeExecutionState>
   activeVideoNodeId: string | null
   highlightedNodeIds: Set<string>  // upstream lineage highlight
+  generatingNodeIds: Set<string>
 
   initNodeState: (nodeId: string, state?: Partial<NodeExecutionState>) => void
   setNodeProgress: (nodeId: string, progress: number, isGenerating: boolean) => void
@@ -33,22 +34,48 @@ export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) =
   nodes: {},
   activeVideoNodeId: null,
   highlightedNodeIds: new Set(),
+  generatingNodeIds: new Set(),
 
   initNodeState: (nodeId, state) => {
-    set((s) => ({
-      nodes: { ...s.nodes, [nodeId]: { ...DEFAULT_NODE_STATE, ...state } },
-    }))
+    set((s) => {
+      const nextNodeState = { ...DEFAULT_NODE_STATE, ...state }
+      let nextGeneratingNodeIds = s.generatingNodeIds
+      if (nextNodeState.isGenerating && !s.generatingNodeIds.has(nodeId)) {
+        nextGeneratingNodeIds = new Set(s.generatingNodeIds)
+        nextGeneratingNodeIds.add(nodeId)
+      }
+      if (!nextNodeState.isGenerating && s.generatingNodeIds.has(nodeId)) {
+        nextGeneratingNodeIds = new Set(s.generatingNodeIds)
+        nextGeneratingNodeIds.delete(nodeId)
+      }
+      return {
+        nodes: { ...s.nodes, [nodeId]: nextNodeState },
+        generatingNodeIds: nextGeneratingNodeIds,
+      }
+    })
   },
 
   setNodeProgress: (nodeId, progress, isGenerating) => {
     set((s) => {
       const prev = s.nodes[nodeId] || DEFAULT_NODE_STATE
       const startedAt = isGenerating && !prev.isGenerating ? Date.now() : (isGenerating ? prev.startedAt : null)
+
+      let nextGeneratingNodeIds = s.generatingNodeIds
+      if (prev.isGenerating !== isGenerating) {
+        nextGeneratingNodeIds = new Set(s.generatingNodeIds)
+        if (isGenerating) {
+          nextGeneratingNodeIds.add(nodeId)
+        } else {
+          nextGeneratingNodeIds.delete(nodeId)
+        }
+      }
+
       return {
         nodes: {
           ...s.nodes,
           [nodeId]: { ...prev, progress, isGenerating, startedAt, warningMessage: undefined, errorMessage: undefined },
         },
+        generatingNodeIds: nextGeneratingNodeIds,
       }
     })
   },
@@ -79,12 +106,21 @@ export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) =
   },
 
   setNodeError: (nodeId, error) => {
-    set((s) => ({
-      nodes: {
-        ...s.nodes,
-        [nodeId]: { ...(s.nodes[nodeId] || DEFAULT_NODE_STATE), errorMessage: error, isGenerating: false, startedAt: null },
-      },
-    }))
+    set((s) => {
+      let nextGeneratingNodeIds = s.generatingNodeIds
+      if (s.generatingNodeIds.has(nodeId)) {
+        nextGeneratingNodeIds = new Set(s.generatingNodeIds)
+        nextGeneratingNodeIds.delete(nodeId)
+      }
+
+      return {
+        nodes: {
+          ...s.nodes,
+          [nodeId]: { ...(s.nodes[nodeId] || DEFAULT_NODE_STATE), errorMessage: error, isGenerating: false, startedAt: null },
+        },
+        generatingNodeIds: nextGeneratingNodeIds,
+      }
+    })
   },
 
   setActiveVideo: (nodeId) => set({ activeVideoNodeId: nodeId }),
@@ -101,14 +137,22 @@ export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) =
   reconcileNodes: (activeNodeIds) => {
     set((s) => {
       let changed = false
+      const activeNodeIdSet = new Set(activeNodeIds)
       const newNodes = { ...s.nodes }
       Object.keys(newNodes).forEach((id) => {
-        if (newNodes[id].isGenerating && !activeNodeIds.includes(id)) {
+        if (newNodes[id].isGenerating && !activeNodeIdSet.has(id)) {
           newNodes[id] = { ...newNodes[id], isGenerating: false, progress: 100, startedAt: null }
           changed = true
         }
       })
-      return changed ? { nodes: newNodes } : {}
+
+      const hasSameGeneratingMembers =
+        s.generatingNodeIds.size === activeNodeIdSet.size &&
+        Array.from(s.generatingNodeIds).every((id) => activeNodeIdSet.has(id))
+
+      return changed || !hasSameGeneratingMembers
+        ? { nodes: newNodes, generatingNodeIds: activeNodeIdSet }
+        : {}
     })
   },
 }))
