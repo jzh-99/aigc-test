@@ -111,7 +111,8 @@ export function useCanvasPoller(canvasId: string | null) {
     }
 
     document.addEventListener('visibilitychange', onVisibility)
-    loadAllNodeOutputs().then(() => poll())
+    poll()
+    loadAllNodeOutputs()
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)

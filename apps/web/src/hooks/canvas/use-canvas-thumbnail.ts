@@ -8,7 +8,6 @@ import { uploadCanvasThumbnail, updateCanvasThumbnail } from '@/lib/canvas/canva
 export function useCanvasThumbnail(canvasId: string) {
   const { getViewport } = useReactFlow()
   const token = useAuthStore((s) => s.accessToken)
-  const localVersion = useCanvasStructureStore((s) => s.localVersion)
   const inProgress = useRef(false)
 
   const capture = useCallback(async () => {
@@ -28,6 +27,7 @@ export function useCanvasThumbnail(canvasId: string) {
 
       const blob = await (await fetch(dataUrl)).blob()
       const storageUrl = await uploadCanvasThumbnail(blob, token)
+      const { localVersion } = useCanvasStructureStore.getState()
       await updateCanvasThumbnail(canvasId, storageUrl, localVersion, token)
     } catch (e) {
       // thumbnail is non-critical — swallow silently
@@ -35,7 +35,7 @@ export function useCanvasThumbnail(canvasId: string) {
     } finally {
       inProgress.current = false
     }
-  }, [canvasId, token, localVersion, getViewport])
+  }, [canvasId, token, getViewport])
 
   // Wrap in requestIdleCallback so it never blocks user interaction
   const captureWhenIdle = useCallback(() => {
