@@ -31,7 +31,7 @@ async function doSave(canvasId: string, token: string) {
   return false
 }
 
-export function useCanvasAutosave(canvasId: string | null) {
+export function useCanvasAutosave(canvasId: string | null, onSaved?: () => void) {
   const token = useAuthStore((s) => s.accessToken)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
   const isFirstRender = useRef(true)
@@ -49,14 +49,17 @@ export function useCanvasAutosave(canvasId: string | null) {
     setSaving(true)
     try {
       const ok = await doSave(canvasId, token)
-      if (ok) setLastSaved(new Date())
+      if (ok) {
+        setLastSaved(new Date())
+        onSaved?.()
+      }
     } catch (e) {
       console.warn('[Autosave] 保存失败:', e)
     } finally {
       isSaving.current = false
       setSaving(false)
     }
-  }, [canvasId, token])
+  }, [canvasId, token, onSaved])
 
   // Debounce on any nodes/edges change
   useEffect(() => {
