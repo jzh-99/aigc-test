@@ -32,7 +32,7 @@ const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|mp4|mov|webm|mp3|wav|m4a|aac)$/
 const VOLCENGINE_MODEL_ID: Record<string, string> = {
   'seedance-1.5-pro': 'doubao-seedance-1-5-pro-251215',
   'seedance-2.0':     'doubao-seedance-2-0-260128',
-  'seedance-2.0-fast':'doubao-seedance-2-0-lite-260128',
+  'seedance-2.0-fast':'doubao-seedance-2-0-fast-260128',
 }
 
 interface VideoGenerateBody {
