@@ -264,7 +264,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/canvases/:id/active-tasks', {
     config: {
       rateLimit: {
-        max: 600,
+        max: 240,
         timeWindow: '1 minute',
       },
     },
@@ -306,7 +306,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string; nodeId: string } }>('/canvases/:id/node-outputs/:nodeId', {
     config: {
       rateLimit: {
-        max: 1200,
+        max: 480,
         timeWindow: '1 minute',
       },
     },

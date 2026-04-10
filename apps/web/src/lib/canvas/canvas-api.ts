@@ -16,6 +16,7 @@ export interface ExecuteVideoNodeParams {
   canvasId: string
   canvasNodeId: string
   workspaceId?: string
+  idempotencyKey?: string
   prompt: string
   model: string
   videoMode: 'multiref' | 'keyframe'
@@ -280,6 +281,7 @@ export async function selectNodeOutputForCanvas(
 
 export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: string) {
   const body: Record<string, any> = {
+    idempotency_key: params.idempotencyKey ?? `canvas_video_${params.canvasNodeId}_${Date.now()}`,
     prompt: params.prompt,
     workspace_id: params.workspaceId ?? '',
     model: params.model,
