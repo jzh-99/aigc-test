@@ -16,6 +16,7 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { nodeRegistry } from '@/lib/canvas/registry'
 import { useCanvasPoller } from '@/hooks/canvas/use-canvas-poller'
 import { useCanvasAutosave } from '@/hooks/canvas/use-canvas-autosave'
+import { useCanvasThumbnail } from '@/hooks/canvas/use-canvas-thumbnail'
 import { useAuthStore } from '@/stores/auth-store'
 import { uploadAssetFile } from '@/lib/canvas/canvas-api'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
@@ -82,11 +83,13 @@ function Flow({
   onSave,
   saving,
   lastSaved,
+  onSavedRef,
 }: {
   canvasId: string
   onSave: () => void
   saving: boolean
   lastSaved: Date | null
+  onSavedRef: React.MutableRefObject<(() => void) | null>
 }) {
   const store = useCanvasStructureStore()
   const { project } = useReactFlow()
@@ -96,6 +99,72 @@ function Flow({
   const [uploading, setUploading] = useState(false)
 
   const { kickPoll } = useCanvasPoller(canvasId)
+  const { captureWhenIdle } = useCanvasThumbnail(canvasId)
+
+  // Wire thumbnail capture to fire after each successful save
+  useEffect(() => {
+    onSavedRef.current = captureWhenIdle
+  }, [onSavedRef, captureWhenIdle])
+
+  // Right-click context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
+
+  const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const rect = wrapperRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const canvasPos = project({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    setContextMenu({ x: e.clientX, y: e.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y })
+  }, [project])
+
+  const handleContextMenuAdd = useCallback((type: string) => {
+    if (!contextMenu) return
+    store.addNode(type, { x: contextMenu.canvasX, y: contextMenu.canvasY })
+    setContextMenu(null)
+  }, [contextMenu, store])
+
+  // Ctrl+C / Ctrl+V copy-paste
+  const copiedNodeRef = useRef<AppNode | null>(null)
+  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const trackMouse = (e: MouseEvent) => { mousePosRef.current = { x: e.clientX, y: e.clientY } }
+    window.addEventListener('mousemove', trackMouse)
+    return () => window.removeEventListener('mousemove', trackMouse)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
+
+      const isMod = e.metaKey || e.ctrlKey
+
+      if (isMod && e.key === 'c' && selectedNodeId) {
+        const node = store.nodes.find((n) => n.id === selectedNodeId)
+        if (node) copiedNodeRef.current = node
+        return
+      }
+
+      if (isMod && e.key === 'v' && copiedNodeRef.current) {
+        const rect = wrapperRef.current?.getBoundingClientRect()
+        if (!rect) return
+        const pos = project({
+          x: mousePosRef.current.x - rect.left,
+          y: mousePosRef.current.y - rect.top,
+        })
+        const newId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+        store.addNodeWithConfig(
+          copiedNodeRef.current.type!,
+          { x: pos.x + 20, y: pos.y + 20 },
+          { ...copiedNodeRef.current.data.config },
+          newId,
+        )
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedNodeId, store, project])
 
   const handleAddNode = useCallback((type: string) => {
     const rect = wrapperRef.current?.getBoundingClientRect()
@@ -199,13 +268,14 @@ function Flow({
         onNodeClick={(_e, node) =>
           setSelectedNodeId((prev) => (prev === node.id ? null : node.id))
         }
-        onPaneClick={() => setSelectedNodeId(null)}
+        onPaneClick={() => { setSelectedNodeId(null); setContextMenu(null) }}
+        onPaneContextMenu={handlePaneContextMenu as any}
         fitView
         minZoom={0.1}
         maxZoom={4}
         proOptions={{ hideAttribution: true }}
         style={{ background: '#fafafa' }}
-        deleteKeyCode={null} // we handle delete ourselves
+        deleteKeyCode={null}
       >
         <Controls
           className="!bg-white !border-zinc-200 [&>button]:!bg-white [&>button]:!border-zinc-200 [&>button]:!text-zinc-500 [&>button:hover]:!bg-zinc-100 [&>button:hover]:!text-zinc-800"
@@ -253,14 +323,46 @@ function Flow({
           onExecuted={kickPoll}
         />
       )}
+
+      {/* Right-click context menu */}
+      {contextMenu && createPortal(
+        <div
+          className="fixed z-50 bg-white border border-zinc-200 rounded-xl shadow-xl py-1 min-w-[140px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onMouseLeave={() => setContextMenu(null)}
+        >
+          <button
+            onClick={() => handleContextMenuAdd('text_input')}
+            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            + 纯文本节点
+          </button>
+          <button
+            onClick={() => handleContextMenuAdd('image_gen')}
+            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            + AI 生图节点
+          </button>
+          <button
+            onClick={() => handleContextMenuAdd('asset')}
+            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            + 素材节点
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
 
 export function CanvasEditor({ canvasId }: { canvasId: string }) {
-  const { save, saving, lastSaved } = useCanvasAutosave(canvasId)
   const token = useAuthStore((s) => s.accessToken)
   const prefetchSidebar = useCanvasSidebarDataStore((s) => s.prefetch)
+
+  // onSaved callback is set inside Flow (needs useReactFlow), so we use a ref to pass it up
+  const onSavedRef = useRef<(() => void) | null>(null)
+  const { save, saving, lastSaved } = useCanvasAutosave(canvasId, () => onSavedRef.current?.())
 
   useEffect(() => {
     if (!canvasId || !token) return
@@ -269,7 +371,7 @@ export function CanvasEditor({ canvasId }: { canvasId: string }) {
 
   return (
     <ReactFlowProvider>
-      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} />
+      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} onSavedRef={onSavedRef} />
     </ReactFlowProvider>
   )
 }

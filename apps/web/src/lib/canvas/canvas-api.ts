@@ -118,6 +118,42 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
 }
 
 /**
+ * 上传画布缩略图 Blob，返回永久 URL
+ */
+export async function uploadCanvasThumbnail(blob: Blob, token?: string): Promise<string> {
+  const formData = new FormData()
+  formData.append('file', blob, 'thumbnail.jpg')
+
+  const res = await fetch('/api/v1/canvases/asset-upload', {
+    method: 'POST',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error?.message || '缩略图上传失败')
+  }
+
+  const data = await res.json()
+  return data.storageUrl as string
+}
+
+/**
+ * 更新画布 thumbnail_url
+ */
+export async function updateCanvasThumbnail(canvasId: string, thumbnailUrl: string, version: number, token?: string): Promise<void> {
+  await fetch(`/api/v1/canvases/${canvasId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ version, thumbnail_url: thumbnailUrl }),
+  })
+}
+
+/**
  * 上传素材文件，返回 S3 URL
  */
 export async function uploadAssetFile(file: File, token?: string): Promise<string> {
