@@ -1,27 +1,32 @@
 'use client'
 
+import { memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { Image as ImageIcon, X, FileVideo } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CanvasNodeData } from '@/lib/canvas/types'
+import { InlineLabel } from './inline-label'
 
 export interface AssetNodeConfig {
-  url: string        // S3 / proxy URL
+  url: string
   name?: string
-  mimeType?: string  // 'image/*' | 'video/*'
+  mimeType?: string
 }
 
-export function AssetNode({ id, data }: { id: string; data: CanvasNodeData<AssetNodeConfig> }) {
+export const AssetNode = memo(function AssetNode({ id, data }: { id: string; data: CanvasNodeData<AssetNodeConfig> }) {
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
+  const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const cfg = data.config as AssetNodeConfig
   const isVideo = cfg.mimeType?.startsWith('video')
+  const isUpstream = !!(data as any).isUpstream
 
   return (
     <div
       className={cn(
         'group relative flex flex-col rounded-xl shadow-md border transition-all duration-200',
         'bg-white border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
+        isUpstream && 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
       )}
       style={{ width: 160 }}
@@ -40,9 +45,7 @@ export function AssetNode({ id, data }: { id: string; data: CanvasNodeData<Asset
         {isVideo
           ? <FileVideo className="w-3 h-3 text-zinc-400 shrink-0" />
           : <ImageIcon className="w-3 h-3 text-zinc-400 shrink-0" />}
-        <span className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase truncate">
-          {data.label}
-        </span>
+        <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase truncate cursor-text select-none" />
       </div>
 
       {/* Preview */}
@@ -82,4 +85,5 @@ export function AssetNode({ id, data }: { id: string; data: CanvasNodeData<Asset
       />
     </div>
   )
-}
+})
+AssetNode.displayName = 'AssetNode'

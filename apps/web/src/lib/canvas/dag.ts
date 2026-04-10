@@ -50,6 +50,22 @@ export function getDownstreamNodeIds(nodeId: string, edges: AppEdge[]): string[]
   return edges.filter((e) => e.source === nodeId).map((e) => e.target)
 }
 
+// 获取某个节点的所有上游节点 ID（BFS，仅向上游方向遍历）
+export function getAllUpstreamNodeIds(nodeId: string, edges: AppEdge[]): Set<string> {
+  const visited = new Set<string>()
+  const queue = [nodeId]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const id of getUpstreamNodeIds(current, edges)) {
+      if (!visited.has(id)) {
+        visited.add(id)
+        queue.push(id)
+      }
+    }
+  }
+  return visited
+}
+
 // 获取完整的连通分量 (为了高亮或者提取局部依赖)
 export function getConnectedComponent(startNodeId: string, edges: AppEdge[]): Set<string> {
   const connected = new Set<string>()

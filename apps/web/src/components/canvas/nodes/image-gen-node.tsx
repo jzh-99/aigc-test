@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
 import type { CanvasNodeData } from '@/lib/canvas/types'
+import { InlineLabel } from './inline-label'
 
 function nodeWidthFromRatio(w: number, h: number): number {
   const ratio = w / h
@@ -29,16 +30,18 @@ function useElapsedTimer(startedAt: number | null): string {
   return `${elapsed}s`
 }
 
-export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<any> }) {
+export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<any> }) {
   const execState = useNodeExecutionState(id)
   const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
+  const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
   const token = useAuthStore((s) => s.accessToken)
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
   const [confirming, setConfirming] = useState(false)
 
   const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
+  const isUpstream = !!(data as any).isUpstream
   const selectedOutput = outputs.find((o) => o.id === selectedOutputId)
   const currentImageUrl = selectedOutput?.url
   const currentIndex = outputs.findIndex((o) => o.id === selectedOutputId)
@@ -77,6 +80,8 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
         'bg-white',
         isGenerating
           ? 'border-blue-400 shadow-blue-200 ring-1 ring-blue-400'
+          : isUpstream
+          ? 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100'
           : 'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
         '[contain:layout_style] [will-change:transform]',
@@ -95,9 +100,7 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
 
       {/* Header */}
       <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50 flex items-center justify-between">
-        <span className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
-          {data.label}
-        </span>
+        <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
         {isGenerating && (
           <div className="flex items-center gap-1">
             {elapsed && <span className="font-mono text-[10px] text-blue-400">⏱ {elapsed}</span>}
@@ -196,4 +199,5 @@ export function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<an
       />
     </div>
   )
-}
+})
+ImageGenNode.displayName = 'ImageGenNode'

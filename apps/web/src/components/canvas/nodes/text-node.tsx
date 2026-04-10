@@ -1,16 +1,19 @@
 'use client'
 
+import { memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState } from '@/stores/canvas/execution-store'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CanvasNodeData } from '@/lib/canvas/types'
+import { InlineLabel } from './inline-label'
 
-export function TextNode({ id, data }: { id: string; data: CanvasNodeData<{ text: string }> }) {
+export const TextNode = memo(function TextNode({ id, data }: { id: string; data: CanvasNodeData<{ text: string }> }) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const { isGenerating } = useNodeExecutionState(id)
+  const isUpstream = !!(data as any).isUpstream
 
   return (
     <div
@@ -19,6 +22,7 @@ export function TextNode({ id, data }: { id: string; data: CanvasNodeData<{ text
         'bg-white',
         'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
         isGenerating && 'ring-1 ring-blue-400 shadow-blue-200',
+        isUpstream && !isGenerating && 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
         '[contain:layout_style] [will-change:transform]',
         '[-webkit-font-smoothing:antialiased]',
@@ -36,9 +40,7 @@ export function TextNode({ id, data }: { id: string; data: CanvasNodeData<{ text
 
       {/* Header */}
       <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50">
-        <span className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
-          {data.label}
-        </span>
+        <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
       </div>
 
       {/* Body */}
@@ -69,4 +71,5 @@ export function TextNode({ id, data }: { id: string; data: CanvasNodeData<{ text
       />
     </div>
   )
-}
+})
+TextNode.displayName = 'TextNode'
