@@ -117,7 +117,33 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .orderBy('updated_at', 'desc')
       .execute()
 
-    return reply.send(canvases)
+    // Attach up to 4 recent output URLs per canvas for preview grid
+    const canvasIds = canvases.map((c) => c.id)
+    let previewMap: Record<string, string[]> = {}
+    if (canvasIds.length > 0) {
+      const rows = await db
+        .selectFrom('canvas_node_outputs')
+        .select(['canvas_id', 'output_urls'])
+        .where('canvas_id', 'in', canvasIds)
+        .orderBy('created_at', 'desc')
+        .execute()
+
+      for (const row of rows) {
+        const cid = row.canvas_id as string
+        if (!previewMap[cid]) previewMap[cid] = []
+        if (previewMap[cid].length < 4) {
+          const url = (row.output_urls as string[] | null)?.[0]
+          if (url) previewMap[cid].push(url)
+        }
+      }
+
+      // Sign all collected URLs
+      for (const cid of Object.keys(previewMap)) {
+        previewMap[cid] = await signAssetUrls(previewMap[cid])
+      }
+    }
+
+    return reply.send(canvases.map((c) => ({ ...c, preview_urls: previewMap[c.id] ?? [] })))
   })
 
   // POST /canvases — create new canvas

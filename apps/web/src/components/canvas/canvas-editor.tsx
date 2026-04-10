@@ -16,7 +16,6 @@ import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { nodeRegistry } from '@/lib/canvas/registry'
 import { useCanvasPoller } from '@/hooks/canvas/use-canvas-poller'
 import { useCanvasAutosave } from '@/hooks/canvas/use-canvas-autosave'
-import { useCanvasThumbnail } from '@/hooks/canvas/use-canvas-thumbnail'
 import { useAuthStore } from '@/stores/auth-store'
 import { uploadAssetFile } from '@/lib/canvas/canvas-api'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
@@ -85,13 +84,11 @@ function Flow({
   onSave,
   saving,
   lastSaved,
-  onSavedRef,
 }: {
   canvasId: string
   onSave: () => void
   saving: boolean
   lastSaved: Date | null
-  onSavedRef: React.MutableRefObject<(() => void) | null>
 }) {
   const nodes = useCanvasStructureStore((s) => s.nodes)
   const edges = useCanvasStructureStore((s) => s.edges)
@@ -111,12 +108,6 @@ function Flow({
   const [uploading, setUploading] = useState(false)
 
   const { kickPoll } = useCanvasPoller(canvasId)
-  const { captureWhenIdle } = useCanvasThumbnail(canvasId)
-
-  // Wire thumbnail capture to fire after each successful save
-  useEffect(() => {
-    onSavedRef.current = captureWhenIdle
-  }, [onSavedRef, captureWhenIdle])
 
   // Right-click context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
@@ -441,9 +432,7 @@ export function CanvasEditor({ canvasId }: { canvasId: string }) {
   const token = useAuthStore((s) => s.accessToken)
   const prefetchSidebar = useCanvasSidebarDataStore((s) => s.prefetch)
 
-  // onSaved callback is set inside Flow (needs useReactFlow), so we use a ref to pass it up
-  const onSavedRef = useRef<(() => void) | null>(null)
-  const { save, saving, lastSaved } = useCanvasAutosave(canvasId, () => onSavedRef.current?.())
+  const { save, saving, lastSaved } = useCanvasAutosave(canvasId)
 
   useEffect(() => {
     if (!canvasId || !token) return
@@ -452,7 +441,7 @@ export function CanvasEditor({ canvasId }: { canvasId: string }) {
 
   return (
     <ReactFlowProvider>
-      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} onSavedRef={onSavedRef} />
+      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} />
     </ReactFlowProvider>
   )
 }

@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth-store'
 type Canvas = {
   id: string
   name: string
-  thumbnail_url?: string
+  preview_urls?: string[]
   created_at?: string
 }
 
@@ -102,15 +102,27 @@ export default function CanvasGalleryPage() {
                 href={`/canvas/editor/${canvas.id}`}
                 className="group border rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-card"
               >
-                <div className="aspect-video bg-muted flex items-center justify-center overflow-hidden">
-                  {canvas.thumbnail_url ? (
-                    <img
-                      src={canvas.thumbnail_url}
-                      alt={canvas.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
+                <div className="aspect-video bg-muted overflow-hidden">
+                  {canvas.preview_urls && canvas.preview_urls.length > 0 ? (
+                    <div className="grid grid-cols-2 w-full h-full">
+                      {Array.from({ length: 4 }).map((_, i) => {
+                        const url = canvas.preview_urls![i]
+                        return url ? (
+                          <img
+                            key={i}
+                            src={url}
+                            alt=""
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                        ) : (
+                          <div key={i} className="w-full h-full bg-muted-foreground/5" />
+                        )
+                      })}
+                    </div>
                   ) : (
-                    <PlusCircle className="w-8 h-8 opacity-30" />
+                    <div className="w-full h-full flex items-center justify-center">
+                      <PlusCircle className="w-8 h-8 opacity-20" />
+                    </div>
                   )}
                 </div>
                 <div className="p-3 border-t">
