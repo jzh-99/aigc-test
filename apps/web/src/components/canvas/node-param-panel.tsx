@@ -77,8 +77,10 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     useShallow((s) => s.edges.filter((e) => e.target === node.id))
   )
   const sourceNodeIds = useMemo(() => incomingEdges.map((e) => e.source), [incomingEdges])
-  const upstreamNodes = useCanvasStructureStore(
-    useShallow((s) => s.nodes.filter((n) => sourceNodeIds.includes(n.id)))
+  const allNodes = useCanvasStructureStore(useShallow((s) => s.nodes))
+  const upstreamNodes = useMemo(
+    () => allNodes.filter((n) => sourceNodeIds.includes(n.id)),
+    [allNodes, sourceNodeIds]
   )
 
   const upstreamTexts = useMemo(
@@ -109,10 +111,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     return upstreamSelectedOutputs[sourceId]
   }, [upstreamNodes, upstreamSelectedOutputs])
 
-  // For image_gen: all incoming edges in order → ref-1, ref-2, ref-3 (single any-in handle)
+  // For image_gen and video_gen multiref: all any-in edges in order → 参1, 参2, 参3
   const orderedImageRefs = useMemo(() =>
     incomingEdges
       .filter((e) => {
+        if (e.targetHandle && e.targetHandle !== 'any-in') return false
         const n = upstreamNodes.find((u) => u.id === e.source)
         return n && n.type !== 'text_input'
       })
@@ -121,11 +124,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     [incomingEdges, upstreamNodes, resolveSourceUrl]
   )
 
-  // For video_gen: named handles (frame-start, frame-end, ref-1/2/3)
+  // For video_gen keyframe: named handles only
   const namedRefUrls = useMemo(() => {
     const map: Record<string, string | undefined> = {}
     for (const edge of incomingEdges) {
-      if (!edge.targetHandle) continue
+      if (!edge.targetHandle || edge.targetHandle === 'any-in') continue
       map[edge.targetHandle] = resolveSourceUrl(edge.source)
     }
     return map
@@ -292,8 +295,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     if (newMode === videoMode) return
     updateCfg({ videoMode: newMode })
     if (newMode === 'keyframe') {
-      // switching to keyframe: remove multiref handles
-      removeEdgesByTarget(node.id, ['ref-1', 'ref-2', 'ref-3'])
+      // switching to keyframe: remove multiref any-in edges
+      removeEdgesByTarget(node.id, ['any-in'])
     } else {
       // switching to multiref: remove keyframe handles
       removeEdgesByTarget(node.id, ['frame-start', 'frame-end'])
@@ -318,9 +321,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           duration: videoDuration,
           generateAudio,
           watermark: videoWatermark,
-          referenceImages: videoMode === 'multiref'
-            ? ['ref-1','ref-2','ref-3'].map((k) => namedRefUrls[k]).filter((u): u is string => !!u)
-            : undefined,
+          referenceImages: videoMode === 'multiref' ? orderedImageRefs : undefined,
           frameStart: videoMode === 'keyframe' ? namedRefUrls['frame-start'] : undefined,
           frameEnd:   videoMode === 'keyframe' ? namedRefUrls['frame-end']   : undefined,
         },

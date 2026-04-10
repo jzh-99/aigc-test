@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useAuthStore } from '@/stores/auth-store'
 
-const DEBOUNCE_MS = 2500
+const DEBOUNCE_MS = 180000 // 3 minutes
 
 async function doSave(canvasId: string, token: string) {
   // Always read latest state from store — avoids stale closure version bug
