@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
@@ -67,6 +67,7 @@ interface Props {
 
 export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
+  const removeEdgesByTarget = useCanvasStructureStore((s) => s.removeEdgesByTarget)
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
   const token = useAuthStore((s) => s.accessToken)
   const [executing, setExecuting] = useState(false)
@@ -100,27 +101,35 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     ))
   )
 
-  // Named ref map: { 'ref-1': url, 'ref-2': url, 'frame-start': url, ... }
+  // Helper: resolve a source node's current output URL
+  const resolveSourceUrl = useCallback((sourceId: string): string | undefined => {
+    const n = upstreamNodes.find((u) => u.id === sourceId)
+    if (!n) return undefined
+    if (n.type === 'asset') return (n.data.config as any)?.url as string | undefined
+    return upstreamSelectedOutputs[sourceId]
+  }, [upstreamNodes, upstreamSelectedOutputs])
+
+  // For image_gen: all incoming edges in order → ref-1, ref-2, ref-3 (single any-in handle)
+  const orderedImageRefs = useMemo(() =>
+    incomingEdges
+      .filter((e) => {
+        const n = upstreamNodes.find((u) => u.id === e.source)
+        return n && n.type !== 'text_input'
+      })
+      .map((e) => resolveSourceUrl(e.source))
+      .filter((u): u is string => !!u),
+    [incomingEdges, upstreamNodes, resolveSourceUrl]
+  )
+
+  // For video_gen: named handles (frame-start, frame-end, ref-1/2/3)
   const namedRefUrls = useMemo(() => {
     const map: Record<string, string | undefined> = {}
     for (const edge of incomingEdges) {
       if (!edge.targetHandle) continue
-      const n = upstreamNodes.find((u) => u.id === edge.source)
-      if (!n) continue
-      if (n.type === 'asset') {
-        map[edge.targetHandle] = (n.data.config as any)?.url as string | undefined
-      } else {
-        map[edge.targetHandle] = upstreamSelectedOutputs[edge.source]
-      }
+      map[edge.targetHandle] = resolveSourceUrl(edge.source)
     }
     return map
-  }, [incomingEdges, upstreamNodes, upstreamSelectedOutputs])
-
-  // Ordered image refs for image_gen (ref-1 → ref-2 → ref-3)
-  const orderedImageRefs = useMemo(() =>
-    ['ref-1', 'ref-2', 'ref-3'].map((k) => namedRefUrls[k]).filter((u): u is string => !!u),
-    [namedRefUrls]
-  )
+  }, [incomingEdges, resolveSourceUrl])
 
   const setNodeProgress = useCanvasExecutionStore((s) => s.setNodeProgress)
   const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
@@ -137,14 +146,89 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const aspectRatio: string = cfg.aspectRatio ?? '1:1'
   const quantity: number = cfg.quantity ?? 1
   const watermark: boolean = cfg.watermark ?? false
-  const prompt: string = cfg.prompt ?? ''
+  const promptFromConfig: string = cfg.prompt ?? ''
+  const textFromConfig: string = cfg.text ?? ''
+
+  const [textDraft, setTextDraft] = useState(textFromConfig)
+  const [promptDraft, setPromptDraft] = useState(promptFromConfig)
+  const textDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const promptDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const currentModel = IMAGE_MODEL_OPTIONS.find((m) => m.value === modelType) ?? IMAGE_MODEL_OPTIONS[0]
   const credits = IMAGE_MODEL_CREDITS[modelType] ?? 5
 
-  function updateCfg(patch: Record<string, any>) {
-    updateNodeData(node.id, { config: { ...cfg, ...patch } })
-  }
+  const updateCfg = useCallback((patch: Record<string, any>) => {
+    const latestNode = useCanvasStructureStore.getState().nodes.find((n) => n.id === node.id)
+    const latestCfg = (latestNode?.data.config ?? {}) as Record<string, any>
+    updateNodeData(node.id, { config: { ...latestCfg, ...patch } })
+  }, [node.id, updateNodeData])
+
+  useEffect(() => {
+    setTextDraft(textFromConfig)
+  }, [node.id, textFromConfig])
+
+  useEffect(() => {
+    setPromptDraft(promptFromConfig)
+  }, [node.id, promptFromConfig])
+
+  const flushTextDraft = useCallback(() => {
+    if (!isTextInput) return
+    if (textDebounceRef.current) {
+      clearTimeout(textDebounceRef.current)
+      textDebounceRef.current = null
+    }
+    if (textDraft !== textFromConfig) {
+      updateCfg({ text: textDraft })
+    }
+  }, [isTextInput, textDraft, textFromConfig, updateCfg])
+
+  const flushPromptDraft = useCallback(() => {
+    if (!isImageGen && !isVideoGen) return
+    if (promptDebounceRef.current) {
+      clearTimeout(promptDebounceRef.current)
+      promptDebounceRef.current = null
+    }
+    if (promptDraft !== promptFromConfig) {
+      updateCfg({ prompt: promptDraft })
+    }
+  }, [isImageGen, isVideoGen, promptDraft, promptFromConfig, updateCfg])
+
+  useEffect(() => {
+    if (!isTextInput) return
+    if (textDraft === textFromConfig) return
+
+    if (textDebounceRef.current) clearTimeout(textDebounceRef.current)
+    textDebounceRef.current = setTimeout(() => {
+      updateCfg({ text: textDraft })
+      textDebounceRef.current = null
+    }, 200)
+
+    return () => {
+      if (textDebounceRef.current) clearTimeout(textDebounceRef.current)
+    }
+  }, [isTextInput, textDraft, textFromConfig, updateCfg])
+
+  useEffect(() => {
+    if (!isImageGen && !isVideoGen) return
+    if (promptDraft === promptFromConfig) return
+
+    if (promptDebounceRef.current) clearTimeout(promptDebounceRef.current)
+    promptDebounceRef.current = setTimeout(() => {
+      updateCfg({ prompt: promptDraft })
+      promptDebounceRef.current = null
+    }, 200)
+
+    return () => {
+      if (promptDebounceRef.current) clearTimeout(promptDebounceRef.current)
+    }
+  }, [isImageGen, isVideoGen, promptDraft, promptFromConfig, updateCfg])
+
+  useEffect(() => {
+    return () => {
+      if (textDebounceRef.current) clearTimeout(textDebounceRef.current)
+      if (promptDebounceRef.current) clearTimeout(promptDebounceRef.current)
+    }
+  }, [])
 
   function handleModelChange(val: ModelType) {
     const model = IMAGE_MODEL_OPTIONS.find((m) => m.value === val)!
@@ -155,7 +239,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const handleExecuteImage = useCallback(async () => {
     const modelCode = MODEL_CODE_MAP[modelType][resolution]
     if (!modelCode) { toast.error('模型配置错误'); return }
-    const finalPrompt = [...upstreamTexts, prompt].filter(Boolean).join('\n')
+    const finalPrompt = [...upstreamTexts, promptDraft].filter(Boolean).join('\n')
     if (!canvasId || !finalPrompt.trim()) { toast.error('请先填写提示词'); return }
     setExecuting(true)
     setNodeProgress(node.id, 0, true)
@@ -179,7 +263,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     } finally {
       setExecuting(false)
     }
-  }, [canvasId, node.id, prompt, modelType, resolution, aspectRatio, quantity, watermark, workspaceId, token,
+  }, [canvasId, node.id, promptDraft, modelType, resolution, aspectRatio, quantity, watermark, workspaceId, token,
       upstreamTexts, orderedImageRefs, setNodeProgress, setNodeError, onExecuted])
 
   // ── Video gen state ──────────────────────────────────────────────────────────
@@ -189,7 +273,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const videoDuration: number = cfg.duration ?? 5
   const generateAudio: boolean = cfg.generateAudio ?? true
   const videoWatermark: boolean = cfg.watermark ?? false
-  const videoPrompt: string = cfg.prompt ?? ''
 
   const currentVideoModel = VIDEO_MODEL_OPTIONS.find((m) => m.value === videoModel) ?? VIDEO_MODEL_OPTIONS[0]
   const videoCredits = videoModel === 'veo3.1-fast'
@@ -204,8 +287,21 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     updateCfg({ model: val, videoMode: newMode })
   }
 
+  // When mode changes, remove edges connected to handles that are now hidden
+  function handleVideoModeChange(newMode: VideoMode) {
+    if (newMode === videoMode) return
+    updateCfg({ videoMode: newMode })
+    if (newMode === 'keyframe') {
+      // switching to keyframe: remove multiref handles
+      removeEdgesByTarget(node.id, ['ref-1', 'ref-2', 'ref-3'])
+    } else {
+      // switching to multiref: remove keyframe handles
+      removeEdgesByTarget(node.id, ['frame-start', 'frame-end'])
+    }
+  }
+
   const handleExecuteVideo = useCallback(async () => {
-    const finalPrompt = [...upstreamTexts, videoPrompt].filter(Boolean).join('\n')
+    const finalPrompt = [...upstreamTexts, promptDraft].filter(Boolean).join('\n')
     if (!canvasId || !finalPrompt.trim()) { toast.error('请先填写提示词'); return }
     setExecuting(true)
     setNodeProgress(node.id, 0, true)
@@ -238,11 +334,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     } finally {
       setExecuting(false)
     }
-  }, [canvasId, node.id, videoPrompt, videoModel, videoMode, videoAspect, videoDuration, generateAudio,
+  }, [canvasId, node.id, promptDraft, videoModel, videoMode, videoAspect, videoDuration, generateAudio,
       videoWatermark, workspaceId, token, upstreamTexts, namedRefUrls, setNodeProgress, setNodeError, onExecuted])
 
-  const hasImagePrompt = prompt.trim() || upstreamTexts.length > 0
-  const hasVideoPrompt = videoPrompt.trim() || upstreamTexts.length > 0
+  const hasImagePrompt = promptDraft.trim() || upstreamTexts.length > 0
+  const hasVideoPrompt = promptDraft.trim() || upstreamTexts.length > 0
 
   return (
     <div className="bg-background border border-border rounded-xl shadow-2xl overflow-hidden">
@@ -273,8 +369,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           <textarea
             className="w-full h-20 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary"
             placeholder="输入提示词内容..."
-            value={cfg.text ?? ''}
-            onChange={(e) => updateCfg({ text: e.target.value })}
+            value={textDraft}
+            onChange={(e) => setTextDraft(e.target.value)}
+            onBlur={flushTextDraft}
           />
         </div>
       )}
@@ -288,8 +385,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
             <textarea
               className="flex-1 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary min-h-[100px]"
               placeholder="描述你想生成的图片..."
-              value={prompt}
-              onChange={(e) => updateCfg({ prompt: e.target.value })}
+              value={promptDraft}
+              onChange={(e) => setPromptDraft(e.target.value)}
+              onBlur={flushPromptDraft}
             />
             {orderedImageRefs.length > 0 && (
               <div className="mt-1">
@@ -383,13 +481,13 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
             {/* Mode toggle */}
             <div className="flex rounded-lg overflow-hidden border border-border text-[11px] font-medium">
               <button
-                onClick={() => updateCfg({ videoMode: 'multiref' })}
+                onClick={() => handleVideoModeChange('multiref')}
                 disabled={!currentVideoModel.supportsMultiref}
                 className={cn('flex-1 py-1 transition-colors',
                   videoMode === 'multiref' ? 'bg-primary text-primary-foreground' : 'bg-muted/40 text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed'
                 )}>多模态参考</button>
               <button
-                onClick={() => updateCfg({ videoMode: 'keyframe' })}
+                onClick={() => handleVideoModeChange('keyframe')}
                 className={cn('flex-1 py-1 transition-colors',
                   videoMode === 'keyframe' ? 'bg-primary text-primary-foreground' : 'bg-muted/40 text-muted-foreground hover:bg-muted'
                 )}>首尾帧</button>
@@ -399,8 +497,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
             <textarea
               className="flex-1 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary min-h-[80px]"
               placeholder="描述视频内容..."
-              value={videoPrompt}
-              onChange={(e) => updateCfg({ prompt: e.target.value })}
+              value={promptDraft}
+              onChange={(e) => setPromptDraft(e.target.value)}
+              onBlur={flushPromptDraft}
             />
 
             {/* Reference preview */}

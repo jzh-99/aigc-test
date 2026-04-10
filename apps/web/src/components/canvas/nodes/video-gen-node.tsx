@@ -201,8 +201,12 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         </div>
       )}
       {errorMessage && (
-        <div className="bg-red-50 text-red-500 text-[11px] px-3 py-1 flex items-center gap-1.5">
-          <AlertCircle className="w-3 h-3 shrink-0" />{errorMessage}
+        <div className="bg-red-50 text-red-500 text-[11px] px-3 py-1.5 flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <AlertCircle className="w-3 h-3 shrink-0" />
+            <span className="truncate">{errorMessage}</span>
+          </div>
+          <span className="text-[10px] text-red-400 shrink-0 underline underline-offset-2 cursor-pointer">点击重试</span>
         </div>
       )}
 

@@ -28,6 +28,7 @@ interface CanvasStructureState {
   addNode: (type: string, position: { x: number; y: number }) => void
   addNodeWithConfig: (type: string, position: { x: number; y: number }, config: any, id?: string) => void
   removeNodes: (nodeIds: string[]) => void
+  removeEdgesByTarget: (nodeId: string, handleIds: string[]) => void
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
 }
 
@@ -114,14 +115,30 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
     }))
   },
 
-  updateNodeData: (nodeId, partialData) => {
+  removeEdgesByTarget: (nodeId, handleIds) => {
     set((state) => ({
-      nodes: state.nodes.map((node) => {
-        if (node.id === nodeId) {
-          return { ...node, data: { ...node.data, ...partialData } }
-        }
-        return node
-      }),
+      edges: state.edges.filter(
+        (e) => !(e.target === nodeId && e.targetHandle && handleIds.includes(e.targetHandle))
+      ),
     }))
+  },
+
+  updateNodeData: (nodeId, partialData) => {
+    set((state) => {
+      if (!partialData || Object.keys(partialData).length === 0) return {}
+
+      const index = state.nodes.findIndex((node) => node.id === nodeId)
+      if (index === -1) return {}
+
+      const target = state.nodes[index]
+      const updatedNode: AppNode = {
+        ...target,
+        data: { ...target.data, ...partialData },
+      }
+
+      const nextNodes = state.nodes.slice()
+      nextNodes[index] = updatedNode
+      return { nodes: nextNodes }
+    })
   },
 }))
