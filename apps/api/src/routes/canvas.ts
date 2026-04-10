@@ -1,8 +1,16 @@
 import type { FastifyInstance } from 'fastify'
+import { createWriteStream, createReadStream } from 'node:fs'
+import { unlink, mkdir, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { signAssetUrl, signAssetUrls, uploadToS3 } from '../lib/storage.js'
 import { randomUUID } from 'node:crypto'
+import { pipeline } from 'node:stream/promises'
+
+const CANVAS_UPLOAD_DIR = '/tmp/canvas-uploads'
+const CANVAS_UPLOAD_MAX_AGE_MS = 10 * 60 * 1000 // 10 min — enough for external storage to fetch
+const SAFE_CANVAS_ID = /^[\w-]+\.(jpg|jpeg|png|webp|gif|mp4|mov|webm)$/
 
 function hasS3UploadConfig(): boolean {
   return Boolean(
@@ -27,28 +35,21 @@ function rewriteExternalStorageUrl(url: string): string {
   }
 }
 
-async function uploadBufferToExternalStorage(body: Buffer, mimeType: string): Promise<string> {
+async function uploadViaLocalTemp(fileId: string, mimeType: string): Promise<string> {
   const externalStorageUrl = process.env.EXTERNAL_STORAGE_URL
-  if (!externalStorageUrl) {
-    throw new Error('上传存储服务未配置')
-  }
+  if (!externalStorageUrl) throw new Error('上传存储服务未配置')
 
+  const baseUrl = process.env.AI_UPLOAD_BASE_URL ?? process.env.INTERNAL_API_URL ?? ''
+  const publicUrl = `${baseUrl}/api/v1/canvases/uploads/${fileId}`
   const fileType = mimeType.startsWith('video/') ? 'mp4' : 'jpg'
-  const dataUrl = `data:${mimeType};base64,${body.toString('base64')}`
 
   const res = await fetch(externalStorageUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      uuid: randomUUID(),
-      url: dataUrl,
-      type: fileType,
-    }),
+    body: JSON.stringify({ uuid: randomUUID(), url: publicUrl, type: fileType }),
   })
 
-  if (!res.ok) {
-    throw new Error(`外部存储服务异常(${res.status})`)
-  }
+  if (!res.ok) throw new Error(`外部存储服务异常(${res.status})`)
 
   const payload = await res.json() as any
   if (payload?.code !== 10000 || !payload?.data?.url) {
@@ -59,10 +60,39 @@ async function uploadBufferToExternalStorage(body: Buffer, mimeType: string): Pr
 }
 
 export async function canvasRoutes(app: FastifyInstance): Promise<void> {
-  // GET /canvases — list user's canvases (via workspace membership)
-  app.get('/canvases', async (request, reply) => {
+  await mkdir(CANVAS_UPLOAD_DIR, { recursive: true })
+
+  // GET /canvases/uploads/:id — serve temp files publicly (no auth) for external storage to fetch
+  app.get<{ Params: { id: string } }>('/canvases/uploads/:id', async (request, reply) => {
+    const { id } = request.params
+    if (!SAFE_CANVAS_ID.test(id)) return reply.status(404).send()
+    const filePath = join(CANVAS_UPLOAD_DIR, id)
+    try {
+      const s = await stat(filePath)
+      if (Date.now() - s.mtimeMs > CANVAS_UPLOAD_MAX_AGE_MS) {
+        await unlink(filePath).catch(() => {})
+        return reply.status(404).send()
+      }
+      const ext = id.split('.').pop()!
+      const mimeMap: Record<string, string> = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+        gif: 'image/gif', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+      }
+      reply.header('Content-Type', mimeMap[ext] ?? 'application/octet-stream')
+      reply.header('Content-Length', s.size)
+      reply.header('Cache-Control', 'no-store')
+      reply.header('X-Robots-Tag', 'noindex')
+      return reply.send(createReadStream(filePath))
+    } catch {
+      return reply.status(404).send()
+    }
+  })
+
+  // GET /canvases — list user's canvases, optionally filtered by workspace_id
+  app.get<{ Querystring: { workspace_id?: string } }>('/canvases', async (request, reply) => {
     const db = getDb()
     const userId = request.user.id
+    const filterWsId = (request.query as any).workspace_id as string | undefined
 
     // Get all workspace IDs the user belongs to
     const memberships = await db
@@ -74,10 +104,16 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     const wsIds = memberships.map((m: any) => m.workspace_id)
     if (wsIds.length === 0) return reply.send([])
 
+    // If workspace_id filter provided, verify membership then narrow
+    const targetWsIds = filterWsId
+      ? wsIds.filter((id) => id === filterWsId)
+      : wsIds
+    if (targetWsIds.length === 0) return reply.send([])
+
     const canvases = await db
       .selectFrom('canvases')
       .select(['id', 'name', 'thumbnail_url', 'created_at', 'updated_at'])
-      .where('workspace_id', 'in', wsIds)
+      .where('workspace_id', 'in', targetWsIds)
       .orderBy('updated_at', 'desc')
       .execute()
 
@@ -521,7 +557,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ items: signedItems, nextCursor })
   })
 
-  // POST /canvases/asset-upload — upload an image/video file to S3 for use as an asset node
+  // POST /canvases/asset-upload — upload an image/video file for use as an asset node
   app.post('/canvases/asset-upload', async (request, reply) => {
     const data = await (request as any).file({ limits: { fileSize: 50 * 1024 * 1024 } })
     if (!data) return reply.badRequest('No file provided')
@@ -531,25 +567,27 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       return reply.badRequest('Only image and video files are supported')
     }
 
-    const chunks: Buffer[] = []
-    for await (const chunk of data.file) chunks.push(chunk as Buffer)
-    const body = Buffer.concat(chunks)
+    const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? 'bin'
+    const fileId = `${randomUUID()}.${ext}`
+    const filePath = join(CANVAS_UPLOAD_DIR, fileId)
+
+    // Stream to disk first
+    await pipeline(data.file, createWriteStream(filePath))
 
     try {
       let storageUrl: string
 
       if (hasS3UploadConfig()) {
-        const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? 'bin'
-        const key = `canvas-assets/${randomUUID()}.${ext}`
-
+        const key = `canvas-assets/${fileId}`
         try {
-          storageUrl = await uploadToS3(key, body, mimeType)
+          const buf = await import('node:fs/promises').then((m) => m.readFile(filePath))
+          storageUrl = await uploadToS3(key, buf, mimeType)
         } catch (err: any) {
           app.log.warn({ err: err?.message ?? String(err) }, 'S3 upload failed, fallback to external storage')
-          storageUrl = await uploadBufferToExternalStorage(body, mimeType)
+          storageUrl = await uploadViaLocalTemp(fileId, mimeType)
         }
       } else {
-        storageUrl = await uploadBufferToExternalStorage(body, mimeType)
+        storageUrl = await uploadViaLocalTemp(fileId, mimeType)
       }
 
       const signedUrl = await signAssetUrl(storageUrl)
@@ -563,6 +601,9 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
           message: err?.message ?? '上传服务暂时不可用，请稍后重试',
         },
       })
+    } finally {
+      // Clean up temp file regardless of outcome
+      unlink(filePath).catch(() => {})
     }
   })
 }

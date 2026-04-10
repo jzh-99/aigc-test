@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactFlow, {
   Controls,
-  MiniMap,
   Panel,
   ReactFlowProvider,
   useReactFlow,
@@ -279,11 +278,6 @@ function Flow({
       >
         <Controls
           className="!bg-white !border-zinc-200 [&>button]:!bg-white [&>button]:!border-zinc-200 [&>button]:!text-zinc-500 [&>button:hover]:!bg-zinc-100 [&>button:hover]:!text-zinc-800"
-        />
-        <MiniMap
-          nodeColor={(n) => (n.type === 'text_input' ? '#eab308' : n.type === 'asset' ? '#22c55e' : '#3b82f6')}
-          maskColor="rgba(250,250,250,0.7)"
-          className="!bg-white !border !border-zinc-200 rounded-lg shadow-md"
         />
         <Panel
           position="top-left"

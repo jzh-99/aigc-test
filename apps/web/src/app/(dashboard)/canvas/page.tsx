@@ -18,6 +18,7 @@ type Canvas = {
 export default function CanvasGalleryPage() {
   const router = useRouter()
   const token = useAuthStore((s) => s.accessToken)
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const [canvases, setCanvases] = useState<Canvas[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -26,7 +27,8 @@ export default function CanvasGalleryPage() {
     if (!token) return
     setLoading(true)
     try {
-      const res = await fetch('/api/v1/canvases', {
+      const qs = activeWorkspaceId ? `?workspace_id=${activeWorkspaceId}` : ''
+      const res = await fetch(`/api/v1/canvases${qs}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error('Failed to fetch')
@@ -36,7 +38,7 @@ export default function CanvasGalleryPage() {
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, activeWorkspaceId])
 
   useEffect(() => {
     fetchCanvases()
@@ -52,7 +54,10 @@ export default function CanvasGalleryPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name: '未命名画布' }),
+        body: JSON.stringify({
+          name: '未命名画布',
+          ...(activeWorkspaceId ? { workspace_id: activeWorkspaceId } : {}),
+        }),
       })
       if (!res.ok) throw new Error('Failed to create')
       const canvas: Canvas = await res.json()

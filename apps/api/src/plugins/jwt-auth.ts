@@ -14,6 +14,7 @@ const PUBLIC_ROUTES = [
   '/api/v1/avatar/uploads/',
   '/api/v1/action-imitation/uploads/',
   '/api/v1/videos/uploads/',
+  '/api/v1/canvases/uploads/',
 ]
 
 export interface AuthUser {
