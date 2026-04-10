@@ -38,6 +38,9 @@ const VOLCENGINE_MODEL_ID: Record<string, string> = {
 interface VideoGenerateBody {
   prompt: string
   workspace_id: string
+  idempotency_key?: string
+  canvas_id?: string
+  canvas_node_id?: string
   model?: string
   images?: string[]            // 首尾帧（首尾帧 Tab）
   reference_images?: string[]  // 参考图（参考生视频 Tab / multimodal Tab，Seedance 2.0 专用）
@@ -120,6 +123,9 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
         properties: {
           prompt: { type: 'string', minLength: 1, maxLength: 4000 },
           workspace_id: { type: 'string', format: 'uuid' },
+          idempotency_key: { type: 'string', minLength: 1, maxLength: 128 },
+          canvas_id: { type: 'string', format: 'uuid' },
+          canvas_node_id: { type: 'string', maxLength: 128 },
           model: {
             type: 'string',
             enum: ['veo3.1-fast', 'veo3.1-components', 'seedance-1.5-pro', 'seedance-2.0', 'seedance-2.0-fast'],
@@ -144,6 +150,9 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     const {
       prompt,
       workspace_id: workspaceId,
+      idempotency_key: idempotencyKey,
+      canvas_id: canvasId,
+      canvas_node_id: canvasNodeId,
       model = 'veo3.1-fast',
       images,
       reference_images,
@@ -279,6 +288,52 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
+    // Idempotency: if caller retries with same key, return existing batch directly
+    if (idempotencyKey) {
+      const existing = await db
+        .selectFrom('task_batches')
+        .selectAll()
+        .where('idempotency_key', '=', idempotencyKey)
+        .where('user_id', '=', userId)
+        .where('module', '=', 'video')
+        .executeTakeFirst()
+
+      if (existing) {
+        const tasks = await db
+          .selectFrom('tasks')
+          .selectAll()
+          .where('batch_id', '=', existing.id)
+          .execute()
+
+        return reply.send({
+          id: existing.id,
+          module: existing.module,
+          provider: existing.provider,
+          model: existing.model,
+          prompt: existing.prompt,
+          params: {},
+          quantity: existing.quantity,
+          completed_count: existing.completed_count,
+          failed_count: existing.failed_count,
+          status: existing.status,
+          estimated_credits: existing.estimated_credits,
+          actual_credits: existing.actual_credits,
+          created_at: String(existing.created_at),
+          tasks: tasks.map((t: any) => ({
+            id: t.id,
+            version_index: t.version_index,
+            status: t.status,
+            estimated_credits: t.estimated_credits,
+            credits_cost: t.credits_cost,
+            error_message: t.error_message,
+            processing_started_at: t.processing_started_at?.toISOString?.() ?? t.processing_started_at ?? null,
+            completed_at: t.completed_at?.toISOString?.() ?? t.completed_at ?? null,
+            asset: null,
+          })),
+        })
+      }
+    }
+
     // Freeze credits
     let creditAccountId: string
     try {
@@ -333,7 +388,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       const batchResult = await trx
         .insertInto('task_batches')
         .values({
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: idempotencyKey ?? crypto.randomUUID(),
           user_id: userId,
           team_id: teamId,
           workspace_id: workspaceId,
@@ -346,6 +401,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           quantity: 1,
           status: 'processing',
           estimated_credits: VIDEO_CREDITS,
+          ...(canvasId ? { canvas_id: canvasId, canvas_node_id: canvasNodeId ?? null } : {}),
         })
         .returning('id')
         .executeTakeFirstOrThrow()
