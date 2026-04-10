@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq'
 import pino_ from 'pino'
 import { getDb } from '@aigc/db'
+import { sql } from 'kysely'
 import type { TransferJobData } from '@aigc/types'
 import { getRedis } from '../lib/redis.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
@@ -149,7 +150,7 @@ export const transferWorker = new Worker<TransferJobData>(
       await db
         .updateTable('canvas_node_outputs')
         .set({ output_urls: sql`array_replace(output_urls, ${originalUrl}::text, ${storageUrl}::text)` })
-        .where(sql`${originalUrl}::text = ANY(output_urls)`)
+        .where(sql<boolean>`${originalUrl}::text = ANY(output_urls)`)
         .execute()
 
       logger.info({ jobId: job.id, taskId, storageUrl }, 'Transfer completed')
