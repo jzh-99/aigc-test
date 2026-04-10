@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useState, useEffect, useRef } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
@@ -14,6 +14,24 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const { isGenerating } = useNodeExecutionState(id)
   const isUpstream = useNodeHighlighted(id)
+
+  // Local state for textarea — debounce writes to store to avoid per-keystroke node array rebuilds
+  const [localText, setLocalText] = useState(data.config?.text ?? '')
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+
+  // Sync if store value changes externally (e.g. paste from Ctrl+V node copy)
+  useEffect(() => {
+    setLocalText(data.config?.text ?? '')
+  }, [data.config?.text])
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value
+    setLocalText(val)
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      updateNodeData(id, { config: { ...data.config, text: val } })
+    }, 300)
+  }
 
   return (
     <div
@@ -29,7 +47,6 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
       )}
       style={{ width: 240 }}
     >
-      {/* Delete button */}
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
         className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-white text-zinc-400 hover:text-red-500 border-zinc-200"
@@ -38,37 +55,24 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
         <X size={11} />
       </button>
 
-      {/* Header */}
       <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50">
         <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
       </div>
 
-      {/* Body */}
       <div className="p-2 flex-1">
         <textarea
           className="w-full h-20 p-2 text-xs bg-zinc-50 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-blue-400/50 placeholder:text-zinc-400 text-zinc-700"
           placeholder="输入提示词内容..."
-          value={data.config?.text ?? ''}
-          onChange={(e) => updateNodeData(id, { config: { ...data.config, text: e.target.value } })}
+          value={localText}
+          onChange={handleChange}
           onMouseDown={(e) => e.stopPropagation()}
         />
       </div>
 
-      {/* Input handle */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="any-in"
-        className="!w-2 !h-2 !bg-zinc-300 !border !border-zinc-400 !-left-1 hover:!bg-blue-400 transition-colors"
-      />
-
-      {/* Output handle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="text-out"
-        className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all"
-      />
+      <Handle type="target" position={Position.Left} id="any-in"
+        className="!w-2 !h-2 !bg-zinc-300 !border !border-zinc-400 !-left-1 hover:!bg-blue-400 transition-colors" />
+      <Handle type="source" position={Position.Right} id="text-out"
+        className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all" />
     </div>
   )
 })

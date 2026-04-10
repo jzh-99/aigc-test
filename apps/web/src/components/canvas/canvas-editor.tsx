@@ -102,7 +102,10 @@ function Flow({
   const addNode = useCanvasStructureStore((s) => s.addNode)
   const addNodeWithConfig = useCanvasStructureStore((s) => s.addNodeWithConfig)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
-  const executionNodes = useCanvasExecutionStore(useShallow((s) => s.nodes))
+  // Only track which nodes are currently generating — not the full execution state
+  const generatingNodeIds = useCanvasExecutionStore(
+    useShallow((s) => new Set(Object.entries(s.nodes).filter(([, n]) => n.isGenerating).map(([id]) => id)))
+  )
   const setHighlightedNodes = useCanvasExecutionStore((s) => s.setHighlightedNodes)
   const { project } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -254,17 +257,17 @@ function Flow({
     [selectedNodeId, edges]
   )
 
-  // Style edges — only recompute when edges, selection, or generating state changes
+  // Style edges — only recompute when edges, selection, or generating set changes
   const styledEdges = useMemo<AppEdge[]>(() => edges.map((edge) => {
     const isUpstream = selectedNodeId
       ? (edge.target === selectedNodeId || upstreamIds.has(edge.source))
       : false
-    const isActive = executionNodes[edge.target]?.isGenerating || executionNodes[edge.source]?.isGenerating
+    const isActive = generatingNodeIds.has(edge.target) || generatingNodeIds.has(edge.source)
 
     if (isActive) return { ...edge, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }
     if (isUpstream) return { ...edge, animated: false, style: { stroke: '#a78bfa', strokeWidth: 2 } }
     return { ...edge, animated: false, style: { stroke: '#d4d4d8', strokeWidth: 1.5 } }
-  }), [edges, selectedNodeId, upstreamIds, executionNodes])
+  }), [edges, selectedNodeId, upstreamIds, generatingNodeIds])
 
   // Push upstream highlight set into execution store so nodes read it directly
   // (avoids recreating all node data objects on selection change)

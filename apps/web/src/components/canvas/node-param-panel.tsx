@@ -85,27 +85,36 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     [upstreamNodes]
   )
 
-  const execNodes = useCanvasExecutionStore(useShallow((s) => s.nodes))
-
-  // Resolve a node's current output URL (asset → config.url, gen nodes → selected output)
-  const resolveNodeUrl = useCallback((nodeId: string): string | undefined => {
-    const n = upstreamNodes.find((u) => u.id === nodeId)
-    if (!n) return undefined
-    if (n.type === 'asset') return (n.data.config as any)?.url as string | undefined
-    const exec = execNodes[nodeId]
-    if (!exec) return undefined
-    return exec.outputs.find((o) => o.id === exec.selectedOutputId)?.url
-  }, [upstreamNodes, execNodes])
+  // Only subscribe to selectedOutputId of upstream gen nodes — not full execution state
+  const upstreamGenIds = useMemo(
+    () => upstreamNodes.filter((n) => n.type === 'image_gen' || n.type === 'video_gen').map((n) => n.id),
+    [upstreamNodes]
+  )
+  const upstreamSelectedOutputs = useCanvasExecutionStore(
+    useShallow((s) => Object.fromEntries(
+      upstreamGenIds.map((id) => {
+        const st = s.nodes[id]
+        const url = st?.outputs.find((o) => o.id === st.selectedOutputId)?.url
+        return [id, url]
+      })
+    ))
+  )
 
   // Named ref map: { 'ref-1': url, 'ref-2': url, 'frame-start': url, ... }
   const namedRefUrls = useMemo(() => {
     const map: Record<string, string | undefined> = {}
     for (const edge of incomingEdges) {
       if (!edge.targetHandle) continue
-      map[edge.targetHandle] = resolveNodeUrl(edge.source)
+      const n = upstreamNodes.find((u) => u.id === edge.source)
+      if (!n) continue
+      if (n.type === 'asset') {
+        map[edge.targetHandle] = (n.data.config as any)?.url as string | undefined
+      } else {
+        map[edge.targetHandle] = upstreamSelectedOutputs[edge.source]
+      }
     }
     return map
-  }, [incomingEdges, resolveNodeUrl])
+  }, [incomingEdges, upstreamNodes, upstreamSelectedOutputs])
 
   // Ordered image refs for image_gen (ref-1 → ref-2 → ref-3)
   const orderedImageRefs = useMemo(() =>
