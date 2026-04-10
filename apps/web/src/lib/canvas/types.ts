@@ -1,13 +1,20 @@
 export type HandleType = 'image' | 'text' | 'video' | 'audio' | 'any';
 
+// Slot roles for named handles — used by video/image nodes to distinguish
+// which upstream connection fills which semantic slot
+export type HandleRole =
+  | 'ref-1' | 'ref-2' | 'ref-3'          // multiref: ordered reference images
+  | 'frame-start' | 'frame-end'           // keyframe: first/last frame
+  | 'text-in' | 'image-out' | 'video-out' // generic I/O
+
 // 引脚方向约定：
 // position: 'left' -> 输入引脚 (Target Handle) -> 接收上游参考
 // position: 'right' -> 输出引脚 (Source Handle) -> 为下游提供参考
 export interface CanvasNodeHandle {
-  id: string; // 唯一标识，例如 'image-in', 'text-out'
+  id: string; // 唯一标识，例如 'ref-1', 'frame-start', 'text-out'
   type: HandleType;
   position: 'left' | 'right';
-  label?: string;
+  label?: string;   // 显示在引脚旁的短标签，如 "参1" "首帧"
   isList?: boolean; // 是否接受多条连线，默认为 false
 }
 

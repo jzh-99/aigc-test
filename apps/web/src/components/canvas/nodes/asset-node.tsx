@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
+import { useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { Image as ImageIcon, X, FileVideo } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CanvasNodeData } from '@/lib/canvas/types'
@@ -19,7 +20,7 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const cfg = data.config as AssetNodeConfig
   const isVideo = cfg.mimeType?.startsWith('video')
-  const isUpstream = !!(data as any).isUpstream
+  const isUpstream = useNodeHighlighted(id)
 
   return (
     <div
