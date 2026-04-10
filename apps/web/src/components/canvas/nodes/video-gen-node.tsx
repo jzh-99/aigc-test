@@ -4,6 +4,7 @@ import { useState, useEffect, memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
+import { useShallow } from 'zustand/react/shallow'
 import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -37,14 +38,6 @@ function useElapsedTimer(startedAt: number | null): string {
   return `${elapsed}s`
 }
 
-// Named handle positions — vertically distributed on the left side
-// We use inline style top% to space them evenly
-const MULTIREF_HANDLES = [
-  { id: 'ref-1', label: '参1', top: '28%' },
-  { id: 'ref-2', label: '参2', top: '50%' },
-  { id: 'ref-3', label: '参3', top: '72%' },
-]
-
 const KEYFRAME_HANDLES = [
   { id: 'frame-start', label: '首', top: '35%' },
   { id: 'frame-end',   label: '尾', top: '65%' },
@@ -55,6 +48,10 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
+  // Count incoming multiref edges (any-in handle)
+  const multirefCount = useCanvasStructureStore(
+    useShallow((s) => s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in')).length)
+  )
   const token = useAuthStore((s) => s.accessToken)
   const [confirming, setConfirming] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -62,7 +59,6 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
   const isUpstream = useNodeHighlighted(id)
   const videoMode: VideoMode = data.config?.videoMode ?? 'multiref'
-  const handles = videoMode === 'keyframe' ? KEYFRAME_HANDLES : MULTIREF_HANDLES
 
   const selectedOutput = outputs.find((o) => o.id === selectedOutputId)
   const currentUrl = selectedOutput?.url
@@ -73,7 +69,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
     e.stopPropagation()
     if (currentIndex > 0) {
       const store = useCanvasStructureStore.getState()
-      store.updateNodeData // no-op, just need selectNodeOutput
+      void store // no-op, selectNodeOutput is in execution store
     }
   }
   function handleNext(e: React.MouseEvent) { e.stopPropagation() }
@@ -125,7 +121,6 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
           <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {/* Mode badge */}
           <span className={cn(
             'text-[9px] font-medium px-1 py-0.5 rounded',
             videoMode === 'keyframe'
@@ -233,27 +228,48 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         </div>
       )}
 
-      {/* Named input handles */}
-      {handles.map((h) => (
-        <div key={h.id}>
-          {/* Label tag */}
-          <div
-            className="absolute flex items-center pointer-events-none"
-            style={{ top: h.top, left: 0, transform: 'translate(-100%, -50%)' }}
-          >
-            <span className="text-[9px] font-medium text-zinc-400 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-              {h.label}
-            </span>
-          </div>
+      {/* Input handles */}
+      {videoMode === 'multiref' ? (
+        <>
+          {multirefCount > 0 && (
+            <div
+              className="absolute flex items-center pointer-events-none"
+              style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
+            >
+              <span className="text-[9px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                参×{multirefCount}
+              </span>
+            </div>
+          )}
           <Handle
             type="target"
             position={Position.Left}
-            id={h.id}
-            style={{ top: h.top }}
+            id="any-in"
+            style={{ top: '50%' }}
             className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
           />
-        </div>
-      ))}
+        </>
+      ) : (
+        KEYFRAME_HANDLES.map((h) => (
+          <div key={h.id}>
+            <div
+              className="absolute flex items-center pointer-events-none"
+              style={{ top: h.top, left: 0, transform: 'translate(-100%, -50%)' }}
+            >
+              <span className="text-[9px] font-medium text-zinc-400 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                {h.label}
+              </span>
+            </div>
+            <Handle
+              type="target"
+              position={Position.Left}
+              id={h.id}
+              style={{ top: h.top }}
+              className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
+            />
+          </div>
+        ))
+      )}
 
       {/* Output handle */}
       <Handle
