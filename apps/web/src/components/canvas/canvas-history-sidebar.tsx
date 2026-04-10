@@ -26,6 +26,7 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [tab, setTab] = useState<Tab>('history')
   const [detailBatchId, setDetailBatchId] = useState<string | null>(null)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const byCanvas = useCanvasSidebarDataStore((s) => s.byCanvas)
   const refreshHistory = useCanvasSidebarDataStore((s) => s.refreshHistory)
@@ -103,7 +104,7 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
             <HistoryTab data={historyData} onOpenDetail={setDetailBatchId} />
           )}
           {tab === 'assets' && (
-            <AssetsTab data={assetsData} onOpenDetail={setDetailBatchId} />
+            <AssetsTab data={assetsData} onOpenDetail={setDetailBatchId} onOpenLightbox={setLightboxUrl} />
           )}
         </div>
       </div>
@@ -116,6 +117,28 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
           if (!open) setDetailBatchId(null)
         }}
       />
+
+      {/* Lightbox for asset preview */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-1"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <X size={24} />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   )
 }
@@ -200,6 +223,7 @@ function HistoryTab({
 function AssetsTab({
   data,
   onOpenDetail,
+  onOpenLightbox,
 }: {
   data: {
     items: CanvasAssetItem[]
@@ -209,6 +233,7 @@ function AssetsTab({
     loadMore: () => void
   }
   onOpenDetail: (id: string) => void
+  onOpenLightbox: (url: string) => void
 }) {
   const { items, loading, loaded, hasMore, loadMore } = data
 
@@ -231,7 +256,7 @@ function AssetsTab({
           return (
             <button
               key={asset.id}
-              onClick={() => onOpenDetail(asset.batch_id)}
+              onClick={() => url ? onOpenLightbox(url) : onOpenDetail(asset.batch_id)}
               className="group relative rounded-lg overflow-hidden bg-zinc-100 aspect-square focus:outline-none"
             >
               {url ? (
