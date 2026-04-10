@@ -13,7 +13,6 @@ import 'reactflow/dist/style.css'
 
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
-import { useShallow } from 'zustand/react/shallow'
 import { nodeRegistry } from '@/lib/canvas/registry'
 import { useCanvasPoller } from '@/hooks/canvas/use-canvas-poller'
 import { useCanvasAutosave } from '@/hooks/canvas/use-canvas-autosave'
@@ -102,14 +101,12 @@ function Flow({
   const addNode = useCanvasStructureStore((s) => s.addNode)
   const addNodeWithConfig = useCanvasStructureStore((s) => s.addNodeWithConfig)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
-  // Only track which nodes are currently generating — not the full execution state
-  const generatingNodeIds = useCanvasExecutionStore(
-    useShallow((s) => new Set(Object.entries(s.nodes).filter(([, n]) => n.isGenerating).map(([id]) => id)))
-  )
+  const generatingNodeIds = useCanvasExecutionStore((s) => s.generatingNodeIds)
   const setHighlightedNodes = useCanvasExecutionStore((s) => s.setHighlightedNodes)
   const { project } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const token = useAuthStore((s) => s.accessToken)
   const [uploading, setUploading] = useState(false)
 
@@ -184,25 +181,30 @@ function Flow({
   const handleAddNode = useCallback((type: string) => {
     const rect = wrapperRef.current?.getBoundingClientRect()
     if (!rect) return
-    const position = project({ x: rect.width / 2, y: rect.height / 2 })
+    const existingCount = nodes.filter((n) => n.type === type).length
+    const offset = existingCount * 40
+    const position = project({ x: rect.width / 2 + offset, y: rect.height / 2 + offset })
     addNode(type, position)
-  }, [addNode, project])
+  }, [addNode, project, nodes])
 
-  // Delete key: remove selected node
+  // Delete key: remove selected node or edge
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!selectedNodeId) return
-      // Don't fire when typing in input/textarea
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        removeNodes([selectedNodeId])
-        setSelectedNodeId(null)
+        if (selectedEdgeId) {
+          onEdgesChange([{ type: 'remove', id: selectedEdgeId }])
+          setSelectedEdgeId(null)
+        } else if (selectedNodeId) {
+          removeNodes([selectedNodeId])
+          setSelectedNodeId(null)
+        }
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, removeNodes])
+  }, [selectedNodeId, selectedEdgeId, removeNodes, onEdgesChange])
 
   // Drop file onto canvas → create asset node
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
@@ -263,11 +265,13 @@ function Flow({
       ? (edge.target === selectedNodeId || upstreamIds.has(edge.source))
       : false
     const isActive = generatingNodeIds.has(edge.target) || generatingNodeIds.has(edge.source)
+    const isSelected = edge.id === selectedEdgeId
 
+    if (isSelected) return { ...edge, animated: false, style: { stroke: '#ef4444', strokeWidth: 2 } }
     if (isActive) return { ...edge, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }
     if (isUpstream) return { ...edge, animated: false, style: { stroke: '#a78bfa', strokeWidth: 2 } }
     return { ...edge, animated: false, style: { stroke: '#d4d4d8', strokeWidth: 1.5 } }
-  }), [edges, selectedNodeId, upstreamIds, generatingNodeIds])
+  }), [edges, selectedNodeId, selectedEdgeId, upstreamIds, generatingNodeIds])
 
   // Push upstream highlight set into execution store so nodes read it directly
   // (avoids recreating all node data objects on selection change)
@@ -301,6 +305,28 @@ function Flow({
         </div>
       )}
 
+      {/* Empty state */}
+      {nodes.length === 0 && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-3 text-zinc-400">
+            <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-zinc-300 flex items-center justify-center">
+              <span className="text-2xl">✦</span>
+            </div>
+            <p className="text-sm font-medium text-zinc-500">右键画布或点击顶部按钮添加节点</p>
+            <p className="text-xs text-zinc-400">拖拽图片到画布可快速创建素材节点</p>
+          </div>
+        </div>
+      )}
+
+      {/* Selected edge delete hint */}
+      {selectedEdgeId && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="bg-zinc-800/90 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg">
+            按 Delete 删除连线
+          </div>
+        </div>
+      )}
+
       <ReactFlow
         nodes={nodes}
         edges={styledEdges}
@@ -308,10 +334,15 @@ function Flow({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
-        onNodeClick={(_e, node) =>
+        onNodeClick={(_e, node) => {
+          setSelectedEdgeId(null)
           setSelectedNodeId((prev) => (prev === node.id ? null : node.id))
-        }
-        onPaneClick={() => { setSelectedNodeId(null); setContextMenu(null) }}
+        }}
+        onEdgeClick={(_e, edge) => {
+          setSelectedNodeId(null)
+          setSelectedEdgeId((prev) => (prev === edge.id ? null : edge.id))
+        }}
+        onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setContextMenu(null) }}
         onPaneContextMenu={handlePaneContextMenu as any}
         fitView
         minZoom={0.1}

@@ -27,9 +27,7 @@ export class NodeRegistry {
       label: 'AI 生图',
       CanvasComponent: ImageGenNode as any,
       inputs: [
-        { id: 'ref-1', type: 'image', position: 'left', label: '参1' },
-        { id: 'ref-2', type: 'image', position: 'left', label: '参2' },
-        { id: 'ref-3', type: 'image', position: 'left', label: '参3' },
+        { id: 'any-in', type: 'image', position: 'left', isList: true },
       ],
       outputs: [{ id: 'image-out', type: 'image', position: 'right' }],
       defaultConfig: { prompt: '', modelType: 'gemini', resolution: '2k', aspectRatio: '1:1', quantity: 1, watermark: false },

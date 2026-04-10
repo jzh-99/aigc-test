@@ -4,6 +4,7 @@ import { useState, useEffect, memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
+import { useShallow } from 'zustand/react/shallow'
 import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -36,6 +37,10 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
+  // Count incoming edges to show ref count badge
+  const incomingCount = useCanvasStructureStore(
+    useShallow((s) => s.edges.filter((e) => e.target === id).length)
+  )
   const token = useAuthStore((s) => s.accessToken)
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -61,7 +66,6 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
   async function handleConfirmSelect(e: React.MouseEvent) {
     e.stopPropagation()
     if (!canvasId || !token || !selectedOutputId) return
-
     setConfirming(true)
     try {
       await selectNodeOutputForCanvas(canvasId, id, selectedOutputId, token)
@@ -147,8 +151,12 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
         </div>
       )}
       {errorMessage && (
-        <div className="bg-red-50 text-red-500 text-[11px] px-3 py-1 flex items-center gap-1.5">
-          <AlertCircle className="w-3 h-3 shrink-0" />{errorMessage}
+        <div className="bg-red-50 text-red-500 text-[11px] px-3 py-1.5 flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <AlertCircle className="w-3 h-3 shrink-0" />
+            <span className="truncate">{errorMessage}</span>
+          </div>
+          <span className="text-[10px] text-red-400 shrink-0 underline underline-offset-2 cursor-pointer">点击重试</span>
         </div>
       )}
 
@@ -185,30 +193,24 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
         </div>
       )}
 
-      {/* Named input handles: ref-1, ref-2, ref-3 */}
-      {[
-        { id: 'ref-1', label: '参1', top: '28%' },
-        { id: 'ref-2', label: '参2', top: '50%' },
-        { id: 'ref-3', label: '参3', top: '72%' },
-      ].map((h) => (
-        <div key={h.id}>
-          <div
-            className="absolute flex items-center pointer-events-none"
-            style={{ top: h.top, left: 0, transform: 'translate(-100%, -50%)' }}
-          >
-            <span className="text-[9px] font-medium text-zinc-400 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-              {h.label}
-            </span>
-          </div>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id={h.id}
-            style={{ top: h.top }}
-            className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
-          />
+      {/* Single input handle — ref count badge shown when connected */}
+      {incomingCount > 0 && (
+        <div
+          className="absolute flex items-center pointer-events-none"
+          style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
+        >
+          <span className="text-[9px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+            参×{incomingCount}
+          </span>
         </div>
-      ))}
+      )}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="any-in"
+        style={{ top: '50%' }}
+        className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
+      />
       <Handle
         type="source"
         position={Position.Right}
