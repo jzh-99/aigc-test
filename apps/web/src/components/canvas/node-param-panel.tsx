@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -46,13 +47,51 @@ interface Props {
 export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
-  const nodes = useCanvasStructureStore((s) => s.nodes)
-  const edges = useCanvasStructureStore((s) => s.edges)
-  const executionNodes = useCanvasExecutionStore((s) => s.nodes)
-  const setNodeProgress = useCanvasExecutionStore((s) => s.setNodeProgress)
-  const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
   const token = useAuthStore((s) => s.accessToken)
   const [executing, setExecuting] = useState(false)
+
+  // Only subscribe to edges targeting this node — avoids re-render on unrelated node changes
+  const sourceNodeIds = useCanvasStructureStore(
+    useShallow((s) => s.edges.filter((e) => e.target === node.id).map((e) => e.source))
+  )
+
+  // Get upstream node configs — only re-renders when those specific nodes change
+  const upstreamNodes = useCanvasStructureStore(
+    useShallow((s) => s.nodes.filter((n) => sourceNodeIds.includes(n.id)))
+  )
+
+  const upstreamTexts = useMemo(
+    () => upstreamNodes.filter((n) => n.type === 'text_input').map((n) => (n.data.config as any)?.text ?? '').filter(Boolean),
+    [upstreamNodes]
+  )
+
+  const upstreamAssetUrls = useMemo(
+    () => upstreamNodes.filter((n) => n.type === 'asset').map((n) => (n.data.config as any)?.url as string | undefined).filter((u): u is string => !!u),
+    [upstreamNodes]
+  )
+
+  // For image_gen upstream nodes: get selected output URL from execution store per-node
+  const upstreamImageGenIds = useMemo(
+    () => upstreamNodes.filter((n) => n.type === 'image_gen').map((n) => n.id),
+    [upstreamNodes]
+  )
+
+  const upstreamImageGenUrls = useCanvasExecutionStore(
+    useShallow((s) => upstreamImageGenIds.map((id) => {
+      const execState = s.nodes[id]
+      if (!execState) return undefined
+      const selected = execState.outputs.find((o) => o.id === execState.selectedOutputId)
+      return selected?.url
+    }).filter((u): u is string => !!u))
+  )
+
+  const upstreamImageUrls = useMemo(
+    () => [...upstreamAssetUrls, ...upstreamImageGenUrls],
+    [upstreamAssetUrls, upstreamImageGenUrls]
+  )
+
+  const setNodeProgress = useCanvasExecutionStore((s) => s.setNodeProgress)
+  const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
 
   const cfg = node.data.config ?? {}
   const isImageGen = node.type === 'image_gen'
@@ -68,30 +107,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
 
   const currentModel = MODEL_OPTIONS.find((m) => m.value === modelType) ?? MODEL_OPTIONS[0]
   const credits = IMAGE_MODEL_CREDITS[modelType] ?? 5
-
-  // Collect upstream nodes connected to this node
-  const upstreamNodes = edges
-    .filter((e) => e.target === node.id)
-    .map((e) => nodes.find((n) => n.id === e.source))
-    .filter(Boolean) as AppNode[]
-
-  const upstreamTexts = upstreamNodes
-    .filter((n) => n.type === 'text_input')
-    .map((n) => (n.data.config as any)?.text ?? '')
-    .filter(Boolean)
-
-  // Collect reference image URLs from upstream image_gen and asset nodes
-  const upstreamImageUrls = upstreamNodes
-    .filter((n) => n.type === 'image_gen' || n.type === 'asset')
-    .map((n) => {
-      if (n.type === 'asset') return (n.data.config as any)?.url as string | undefined
-      // For image_gen: use selected output from execution store
-      const execState = executionNodes[n.id]
-      if (!execState) return undefined
-      const selected = execState.outputs.find((o) => o.id === execState.selectedOutputId)
-      return selected?.url
-    })
-    .filter((url): url is string => !!url)
 
   function updateCfg(patch: Record<string, any>) {
     updateNodeData(node.id, { config: { ...cfg, ...patch } })
