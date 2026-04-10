@@ -12,6 +12,8 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
+import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
+import { useShallow } from 'zustand/react/shallow'
 import { nodeRegistry } from '@/lib/canvas/registry'
 import { useCanvasPoller } from '@/hooks/canvas/use-canvas-poller'
 import { useCanvasAutosave } from '@/hooks/canvas/use-canvas-autosave'
@@ -21,7 +23,8 @@ import { uploadAssetFile } from '@/lib/canvas/canvas-api'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { toast } from 'sonner'
 import { NodeParamPanel } from './node-param-panel'
-import type { AppNode } from '@/lib/canvas/types'
+import type { AppNode, AppEdge } from '@/lib/canvas/types'
+import { getAllUpstreamNodeIds } from '@/lib/canvas/dag'
 
 const nodeTypes = nodeRegistry.getReactFlowTypesMapping()
 
@@ -90,7 +93,15 @@ function Flow({
   lastSaved: Date | null
   onSavedRef: React.MutableRefObject<(() => void) | null>
 }) {
-  const store = useCanvasStructureStore()
+  const nodes = useCanvasStructureStore((s) => s.nodes)
+  const edges = useCanvasStructureStore((s) => s.edges)
+  const onNodesChange = useCanvasStructureStore((s) => s.onNodesChange)
+  const onEdgesChange = useCanvasStructureStore((s) => s.onEdgesChange)
+  const onConnect = useCanvasStructureStore((s) => s.onConnect)
+  const addNode = useCanvasStructureStore((s) => s.addNode)
+  const addNodeWithConfig = useCanvasStructureStore((s) => s.addNodeWithConfig)
+  const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
+  const executionNodes = useCanvasExecutionStore(useShallow((s) => s.nodes))
   const { project } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -118,9 +129,9 @@ function Flow({
 
   const handleContextMenuAdd = useCallback((type: string) => {
     if (!contextMenu) return
-    store.addNode(type, { x: contextMenu.canvasX, y: contextMenu.canvasY })
+    addNode(type, { x: contextMenu.canvasX, y: contextMenu.canvasY })
     setContextMenu(null)
-  }, [contextMenu, store])
+  }, [contextMenu, addNode])
 
   // Ctrl+C / Ctrl+V copy-paste
   const copiedNodeRef = useRef<AppNode | null>(null)
@@ -140,7 +151,7 @@ function Flow({
       const isMod = e.metaKey || e.ctrlKey
 
       if (isMod && e.key === 'c' && selectedNodeId) {
-        const node = store.nodes.find((n) => n.id === selectedNodeId)
+        const node = nodes.find((n) => n.id === selectedNodeId)
         if (node) copiedNodeRef.current = node
         return
       }
@@ -153,7 +164,7 @@ function Flow({
           y: mousePosRef.current.y - rect.top,
         })
         const newId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`
-        store.addNodeWithConfig(
+        addNodeWithConfig(
           copiedNodeRef.current.type!,
           { x: pos.x + 20, y: pos.y + 20 },
           { ...copiedNodeRef.current.data.config },
@@ -163,14 +174,14 @@ function Flow({
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, store, project])
+  }, [selectedNodeId, nodes, addNodeWithConfig, project])
 
   const handleAddNode = useCallback((type: string) => {
     const rect = wrapperRef.current?.getBoundingClientRect()
     if (!rect) return
     const position = project({ x: rect.width / 2, y: rect.height / 2 })
-    store.addNode(type, position)
-  }, [store, project])
+    addNode(type, position)
+  }, [addNode, project])
 
   // Delete key: remove selected node
   useEffect(() => {
@@ -180,13 +191,13 @@ function Flow({
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        store.removeNodes([selectedNodeId])
+        removeNodes([selectedNodeId])
         setSelectedNodeId(null)
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, store])
+  }, [selectedNodeId, removeNodes])
 
   // Drop file onto canvas → create asset node
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
@@ -211,7 +222,7 @@ function Flow({
         try {
           const url = await uploadAssetFile(file, token)
           const nodeId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`
-          store.addNodeWithConfig('asset', position, {
+          addNodeWithConfig('asset', position, {
             url,
             name: file.name,
             mimeType: file.type,
@@ -223,14 +234,50 @@ function Flow({
     } finally {
       setUploading(false)
     }
-  }, [token, project, store])
+  }, [token, project, addNodeWithConfig])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
   }, [])
 
-  const selectedNode = store.nodes.find((n) => n.id === selectedNodeId) ?? null
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
+
+  // Compute upstream node IDs for lineage highlighting
+  const upstreamIds = selectedNodeId
+    ? getAllUpstreamNodeIds(selectedNodeId, edges)
+    : new Set<string>()
+
+  // Style edges: highlight upstream lineage, color by execution state
+  const styledEdges: AppEdge[] = edges.map((edge) => {
+    const isUpstream = selectedNodeId
+      ? (edge.target === selectedNodeId || upstreamIds.has(edge.source))
+      : false
+    const targetExec = executionNodes[edge.target]
+    const sourceExec = executionNodes[edge.source]
+    const isActive = targetExec?.isGenerating || sourceExec?.isGenerating
+
+    let stroke = '#d4d4d8'
+    let strokeWidth = 1.5
+    let animated = false
+
+    if (isActive) {
+      stroke = '#3b82f6'
+      strokeWidth = 2
+      animated = true
+    } else if (isUpstream) {
+      stroke = '#a78bfa'
+      strokeWidth = 2
+    }
+
+    return { ...edge, animated, style: { stroke, strokeWidth } }
+  })
+
+  // Inject isUpstream flag into node data for ring highlight
+  const styledNodes: AppNode[] = nodes.map((node) => ({
+    ...node,
+    data: { ...node.data, isUpstream: upstreamIds.has(node.id) },
+  }))
 
   const saveLabel = saving
     ? '保存中…'
@@ -258,11 +305,11 @@ function Flow({
       )}
 
       <ReactFlow
-        nodes={store.nodes}
-        edges={store.edges}
-        onNodesChange={store.onNodesChange}
-        onEdgesChange={store.onEdgesChange}
-        onConnect={store.onConnect}
+        nodes={styledNodes}
+        edges={styledEdges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
         nodeTypes={nodeTypes}
         onNodeClick={(_e, node) =>
           setSelectedNodeId((prev) => (prev === node.id ? null : node.id))
