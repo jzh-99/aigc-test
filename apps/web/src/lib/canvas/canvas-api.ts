@@ -9,7 +9,25 @@ export interface ExecuteNodeParams {
   type: string
   config: any
   workspaceId?: string
-  referenceImageUrls?: string[] // upstream image/asset node outputs
+  referenceImageUrls?: string[] // upstream image/asset node outputs (ordered: ref-1, ref-2, ref-3)
+}
+
+export interface ExecuteVideoNodeParams {
+  canvasId: string
+  canvasNodeId: string
+  workspaceId?: string
+  prompt: string
+  model: string
+  videoMode: 'multiref' | 'keyframe'
+  aspectRatio?: string
+  duration?: number
+  generateAudio?: boolean
+  watermark?: boolean
+  // multiref mode: ordered reference images (ref-1, ref-2, ref-3)
+  referenceImages?: string[]
+  // keyframe mode: first and last frame
+  frameStart?: string
+  frameEnd?: string
 }
 
 export interface CanvasHistoryItem {
@@ -258,4 +276,54 @@ export async function selectNodeOutputForCanvas(
   }
 
   return await res.json() as { success: boolean; selected_output_id: string }
+}
+
+export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: string) {
+  const body: Record<string, any> = {
+    prompt: params.prompt,
+    workspace_id: params.workspaceId ?? '',
+    model: params.model,
+    aspect_ratio: params.aspectRatio ?? '16:9',
+    generate_audio: params.generateAudio ?? true,
+    watermark: params.watermark ?? false,
+    canvas_id: params.canvasId,
+    canvas_node_id: params.canvasNodeId,
+  }
+
+  if (params.duration && params.duration > 0) {
+    body.duration = params.duration
+  }
+
+  if (params.videoMode === 'keyframe') {
+    // images[0] = first frame, images[1] = last frame
+    const frames = [params.frameStart, params.frameEnd].filter(Boolean) as string[]
+    if (frames.length > 0) body.images = frames
+  } else {
+    // multiref: reference_images for Seedance 2.0, images for others
+    const refs = (params.referenceImages ?? []).filter(Boolean)
+    if (refs.length > 0) {
+      const isSeedance2 = params.model === 'seedance-2.0' || params.model === 'seedance-2.0-fast'
+      if (isSeedance2) {
+        body.reference_images = refs
+      } else {
+        body.images = refs
+      }
+    }
+  }
+
+  const res = await fetch('/api/v1/videos/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw new Error(error.error?.message || '视频生成任务提交失败')
+  }
+
+  return await res.json()
 }

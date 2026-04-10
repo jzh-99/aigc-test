@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactFlow, {
   Controls,
@@ -32,6 +32,7 @@ const NODE_CANVAS_H: Record<string, number> = {
   image_gen: 260,
   text_input: 130,
   asset: 200,
+  video_gen: 220,
 }
 
 function FloatingParamPanel({
@@ -102,6 +103,7 @@ function Flow({
   const addNodeWithConfig = useCanvasStructureStore((s) => s.addNodeWithConfig)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const executionNodes = useCanvasExecutionStore(useShallow((s) => s.nodes))
+  const setHighlightedNodes = useCanvasExecutionStore((s) => s.setHighlightedNodes)
   const { project } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -241,44 +243,36 @@ function Flow({
     e.dataTransfer.dropEffect = 'copy'
   }, [])
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedNodeId) ?? null,
+    [nodes, selectedNodeId]
+  )
 
   // Compute upstream node IDs for lineage highlighting
-  const upstreamIds = selectedNodeId
-    ? getAllUpstreamNodeIds(selectedNodeId, edges)
-    : new Set<string>()
+  const upstreamIds = useMemo(
+    () => selectedNodeId ? getAllUpstreamNodeIds(selectedNodeId, edges) : new Set<string>(),
+    [selectedNodeId, edges]
+  )
 
-  // Style edges: highlight upstream lineage, color by execution state
-  const styledEdges: AppEdge[] = edges.map((edge) => {
+  // Style edges — only recompute when edges, selection, or generating state changes
+  const styledEdges = useMemo<AppEdge[]>(() => edges.map((edge) => {
     const isUpstream = selectedNodeId
       ? (edge.target === selectedNodeId || upstreamIds.has(edge.source))
       : false
-    const targetExec = executionNodes[edge.target]
-    const sourceExec = executionNodes[edge.source]
-    const isActive = targetExec?.isGenerating || sourceExec?.isGenerating
+    const isActive = executionNodes[edge.target]?.isGenerating || executionNodes[edge.source]?.isGenerating
 
-    let stroke = '#d4d4d8'
-    let strokeWidth = 1.5
-    let animated = false
+    if (isActive) return { ...edge, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }
+    if (isUpstream) return { ...edge, animated: false, style: { stroke: '#a78bfa', strokeWidth: 2 } }
+    return { ...edge, animated: false, style: { stroke: '#d4d4d8', strokeWidth: 1.5 } }
+  }), [edges, selectedNodeId, upstreamIds, executionNodes])
 
-    if (isActive) {
-      stroke = '#3b82f6'
-      strokeWidth = 2
-      animated = true
-    } else if (isUpstream) {
-      stroke = '#a78bfa'
-      strokeWidth = 2
-    }
+  // Push upstream highlight set into execution store so nodes read it directly
+  // (avoids recreating all node data objects on selection change)
+  useEffect(() => {
+    setHighlightedNodes(upstreamIds)
+  }, [upstreamIds, setHighlightedNodes])
 
-    return { ...edge, animated, style: { stroke, strokeWidth } }
-  })
-
-  // Inject isUpstream flag into node data for ring highlight
-  const styledNodes: AppNode[] = nodes.map((node) => ({
-    ...node,
-    data: { ...node.data, isUpstream: upstreamIds.has(node.id) },
-  }))
-
+  // nodes passed to ReactFlow are stable — no data mutation needed
   const saveLabel = saving
     ? '保存中…'
     : lastSaved
@@ -305,7 +299,7 @@ function Flow({
       )}
 
       <ReactFlow
-        nodes={styledNodes}
+        nodes={nodes}
         edges={styledEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -341,6 +335,12 @@ function Flow({
             className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow transition-colors"
           >
             + AI生图
+          </button>
+          <button
+            onClick={() => handleAddNode('video_gen')}
+            className="px-3 py-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white rounded-lg shadow transition-colors"
+          >
+            + AI视频
           </button>
         </Panel>
         <Panel position="top-right">
@@ -389,6 +389,12 @@ function Flow({
             className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
           >
             + 素材节点
+          </button>
+          <button
+            onClick={() => handleContextMenuAdd('video_gen')}
+            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            + AI 视频节点
           </button>
         </div>,
         document.body

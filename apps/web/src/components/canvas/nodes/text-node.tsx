@@ -3,7 +3,7 @@
 import { memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
-import { useNodeExecutionState } from '@/stores/canvas/execution-store'
+import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CanvasNodeData } from '@/lib/canvas/types'
@@ -13,7 +13,7 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const { isGenerating } = useNodeExecutionState(id)
-  const isUpstream = !!(data as any).isUpstream
+  const isUpstream = useNodeHighlighted(id)
 
   return (
     <div

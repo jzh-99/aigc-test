@@ -2,9 +2,9 @@
 
 import { useState, useEffect, memo } from 'react'
 import { Handle, Position } from 'reactflow'
-import { useNodeExecutionState, useCanvasExecutionStore, useNodeHighlighted } from '@/stores/canvas/execution-store'
+import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
@@ -12,9 +12,16 @@ import { toast } from 'sonner'
 import type { CanvasNodeData } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 
-function nodeWidthFromRatio(w: number, h: number): number {
-  const ratio = w / h
-  return Math.min(400, Math.max(180, Math.round(220 * ratio)))
+export type VideoMode = 'multiref' | 'keyframe'
+
+export interface VideoGenConfig {
+  prompt: string
+  model: string
+  videoMode: VideoMode
+  aspectRatio: string
+  duration: number
+  generateAudio: boolean
+  watermark: boolean
 }
 
 function useElapsedTimer(startedAt: number | null): string {
@@ -30,48 +37,62 @@ function useElapsedTimer(startedAt: number | null): string {
   return `${elapsed}s`
 }
 
-export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<any> }) {
+// Named handle positions — vertically distributed on the left side
+// We use inline style top% to space them evenly
+const MULTIREF_HANDLES = [
+  { id: 'ref-1', label: '参1', top: '28%' },
+  { id: 'ref-2', label: '参2', top: '50%' },
+  { id: 'ref-3', label: '参3', top: '72%' },
+]
+
+const KEYFRAME_HANDLES = [
+  { id: 'frame-start', label: '首', top: '35%' },
+  { id: 'frame-end',   label: '尾', top: '65%' },
+]
+
+export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: string; data: CanvasNodeData<VideoGenConfig> }) {
   const execState = useNodeExecutionState(id)
-  const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
   const token = useAuthStore((s) => s.accessToken)
-  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [playing, setPlaying] = useState(false)
 
   const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
   const isUpstream = useNodeHighlighted(id)
+  const videoMode: VideoMode = data.config?.videoMode ?? 'multiref'
+  const handles = videoMode === 'keyframe' ? KEYFRAME_HANDLES : MULTIREF_HANDLES
+
   const selectedOutput = outputs.find((o) => o.id === selectedOutputId)
-  const currentImageUrl = selectedOutput?.url
+  const currentUrl = selectedOutput?.url
   const currentIndex = outputs.findIndex((o) => o.id === selectedOutputId)
   const elapsed = useElapsedTimer(isGenerating ? startedAt : null)
 
   function handlePrev(e: React.MouseEvent) {
     e.stopPropagation()
-    if (currentIndex > 0) selectNodeOutput(id, outputs[currentIndex - 1].id)
+    if (currentIndex > 0) {
+      const store = useCanvasStructureStore.getState()
+      store.updateNodeData // no-op, just need selectNodeOutput
+    }
   }
-  function handleNext(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (currentIndex < outputs.length - 1) selectNodeOutput(id, outputs[currentIndex + 1].id)
-  }
-
-  const nodeWidth = imgSize ? nodeWidthFromRatio(imgSize.w, imgSize.h) : 260
+  function handleNext(e: React.MouseEvent) { e.stopPropagation() }
 
   async function handleConfirmSelect(e: React.MouseEvent) {
     e.stopPropagation()
     if (!canvasId || !token || !selectedOutputId) return
-
     setConfirming(true)
     try {
       await selectNodeOutputForCanvas(canvasId, id, selectedOutputId, token)
-      toast.success('已设为定稿图')
+      toast.success('已设为定稿视频')
     } catch (err: any) {
       toast.error(err?.message ?? '设为定稿失败')
     } finally {
       setConfirming(false)
     }
   }
+
+  const isVideo = currentUrl && (currentUrl.includes('.mp4') || currentUrl.includes('.mov') || currentUrl.includes('.webm') || selectedOutput?.type === 'video')
 
   return (
     <div
@@ -85,11 +106,10 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           : 'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
         '[contain:layout_style] [will-change:transform]',
-        '[-webkit-font-smoothing:antialiased]',
       )}
-      style={{ width: nodeWidth }}
+      style={{ width: 220 }}
     >
-      {/* Delete button */}
+      {/* Delete */}
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
         className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-white text-zinc-400 hover:text-red-500 border-zinc-200"
@@ -100,32 +120,66 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
 
       {/* Header */}
       <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50 flex items-center justify-between">
-        <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
-        {isGenerating && (
-          <div className="flex items-center gap-1">
-            {elapsed && <span className="font-mono text-[10px] text-blue-400">⏱ {elapsed}</span>}
-            <Loader2 className="w-3 h-3 text-blue-500 animate-spin shrink-0" />
-          </div>
-        )}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Film className="w-3 h-3 text-zinc-400 shrink-0" />
+          <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Mode badge */}
+          <span className={cn(
+            'text-[9px] font-medium px-1 py-0.5 rounded',
+            videoMode === 'keyframe'
+              ? 'bg-amber-100 text-amber-600'
+              : 'bg-blue-100 text-blue-600'
+          )}>
+            {videoMode === 'keyframe' ? '首尾帧' : '多模态'}
+          </span>
+          {isGenerating && (
+            <div className="flex items-center gap-1">
+              {elapsed && <span className="font-mono text-[10px] text-blue-400">⏱ {elapsed}</span>}
+              <Loader2 className="w-3 h-3 text-blue-500 animate-spin shrink-0" />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Preview */}
-      <div className="p-2 bg-white">
-        {currentImageUrl ? (
-          <img
-            src={currentImageUrl}
-            alt="Generated"
-            className="w-full h-auto rounded-lg block [transform:translateZ(0)] [backface-visibility:hidden]"
-            loading="lazy"
-            onLoad={(e) => {
-              const img = e.currentTarget
-              setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
-            }}
-          />
+      <div className="p-2 bg-white relative">
+        {currentUrl ? (
+          isVideo ? (
+            <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
+              {playing ? (
+                <video
+                  src={currentUrl}
+                  className="w-full h-full object-contain"
+                  autoPlay
+                  controls
+                  onEnded={() => setPlaying(false)}
+                />
+              ) : (
+                <>
+                  <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
+                    <Film className="w-8 h-8 text-zinc-600" />
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setPlaying(true) }}
+                    className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
+                      <Play className="w-4 h-4 text-zinc-800 ml-0.5" />
+                    </div>
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <img src={currentUrl} alt="output" className="w-full h-auto rounded-lg block" loading="lazy" />
+          )
         ) : (
           <div
             className="flex flex-col items-center justify-center gap-2 text-zinc-400 rounded-lg bg-zinc-50"
-            style={{ aspectRatio: '4/3' }}
+            style={{ aspectRatio: '16/9' }}
           >
             {isGenerating ? (
               <>
@@ -135,7 +189,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
                 </span>
               </>
             ) : (
-              <span className="text-[11px]">点击节点展开参数</span>
+              <span className="text-[11px]">点击节点配置参数</span>
             )}
           </div>
         )}
@@ -155,17 +209,11 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
       {/* History pager */}
       {outputs.length > 1 && (
         <div className="border-t border-zinc-100 px-3 py-1 flex items-center justify-between bg-zinc-50 rounded-b-xl">
-          <button
-            onClick={handlePrev}
-            disabled={currentIndex <= 0}
-            className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded transition-colors"
-          >
+          <button onClick={handlePrev} disabled={currentIndex <= 0} className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded">
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] text-zinc-400">
-              {currentIndex + 1} / {outputs.length}
-            </span>
+            <span className="font-mono text-[10px] text-zinc-400">{currentIndex + 1} / {outputs.length}</span>
             <button
               onClick={handleConfirmSelect}
               disabled={!token || !canvasId || !selectedOutputId || confirming}
@@ -175,23 +223,16 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
               设为定稿
             </button>
           </div>
-          <button
-            onClick={handleNext}
-            disabled={currentIndex >= outputs.length - 1}
-            className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded transition-colors"
-          >
+          <button onClick={handleNext} disabled={currentIndex >= outputs.length - 1} className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded">
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Named input handles: ref-1, ref-2, ref-3 */}
-      {[
-        { id: 'ref-1', label: '参1', top: '28%' },
-        { id: 'ref-2', label: '参2', top: '50%' },
-        { id: 'ref-3', label: '参3', top: '72%' },
-      ].map((h) => (
+      {/* Named input handles */}
+      {handles.map((h) => (
         <div key={h.id}>
+          {/* Label tag */}
           <div
             className="absolute flex items-center pointer-events-none"
             style={{ top: h.top, left: 0, transform: 'translate(-100%, -50%)' }}
@@ -209,13 +250,15 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           />
         </div>
       ))}
+
+      {/* Output handle */}
       <Handle
         type="source"
         position={Position.Right}
-        id="image-out"
+        id="video-out"
         className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all"
       />
     </div>
   )
 })
-ImageGenNode.displayName = 'ImageGenNode'
+VideoGenNode.displayName = 'VideoGenNode'

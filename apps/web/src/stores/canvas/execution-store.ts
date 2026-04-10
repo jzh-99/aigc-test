@@ -15,6 +15,7 @@ export const DEFAULT_NODE_STATE: NodeExecutionState = {
 interface CanvasExecutionState {
   nodes: Record<string, NodeExecutionState>
   activeVideoNodeId: string | null
+  highlightedNodeIds: Set<string>  // upstream lineage highlight
 
   initNodeState: (nodeId: string, state?: Partial<NodeExecutionState>) => void
   setNodeProgress: (nodeId: string, progress: number, isGenerating: boolean) => void
@@ -23,6 +24,7 @@ interface CanvasExecutionState {
   setNodeWarning: (nodeId: string, warning?: string) => void
   setNodeError: (nodeId: string, error?: string) => void
   setActiveVideo: (nodeId: string | null) => void
+  setHighlightedNodes: (nodeIds: Set<string>) => void
   updateNodeFromBatch: (nodeId: string, batchInfo: any) => void
   reconcileNodes: (activeNodeIds: string[]) => void
 }
@@ -30,6 +32,7 @@ interface CanvasExecutionState {
 export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) => ({
   nodes: {},
   activeVideoNodeId: null,
+  highlightedNodeIds: new Set(),
 
   initNodeState: (nodeId, state) => {
     set((s) => ({
@@ -86,6 +89,8 @@ export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) =
 
   setActiveVideo: (nodeId) => set({ activeVideoNodeId: nodeId }),
 
+  setHighlightedNodes: (nodeIds) => set({ highlightedNodeIds: nodeIds }),
+
   updateNodeFromBatch: (nodeId, batchInfo) => {
     const isGenerating = ['pending', 'processing'].includes(batchInfo.status)
     const progress = batchInfo.quantity > 0 ? (batchInfo.completed_count / batchInfo.quantity) * 100 : 0
@@ -112,4 +117,8 @@ export function useNodeExecutionState(nodeId: string) {
   return useCanvasExecutionStore(
     useShallow((state) => state.nodes[nodeId] || DEFAULT_NODE_STATE)
   )
+}
+
+export function useNodeHighlighted(nodeId: string) {
+  return useCanvasExecutionStore((state) => state.highlightedNodeIds.has(nodeId))
 }
