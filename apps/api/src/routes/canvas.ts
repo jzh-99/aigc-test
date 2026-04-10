@@ -4,6 +4,60 @@ import { sql } from 'kysely'
 import { signAssetUrl, signAssetUrls, uploadToS3 } from '../lib/storage.js'
 import { randomUUID } from 'node:crypto'
 
+function hasS3UploadConfig(): boolean {
+  return Boolean(
+    process.env.STORAGE_ENDPOINT
+    && process.env.STORAGE_ACCESS_KEY
+    && process.env.STORAGE_SECRET_KEY
+    && process.env.STORAGE_PUBLIC_URL
+  )
+}
+
+function rewriteExternalStorageUrl(url: string): string {
+  const base = process.env.EXTERNAL_STORAGE_BASE
+  if (!base) return url
+  try {
+    const parsed = new URL(url)
+    const internal = new URL(base)
+    parsed.protocol = internal.protocol
+    parsed.host = internal.host
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
+async function uploadBufferToExternalStorage(body: Buffer, mimeType: string): Promise<string> {
+  const externalStorageUrl = process.env.EXTERNAL_STORAGE_URL
+  if (!externalStorageUrl) {
+    throw new Error('上传存储服务未配置')
+  }
+
+  const fileType = mimeType.startsWith('video/') ? 'mp4' : 'jpg'
+  const dataUrl = `data:${mimeType};base64,${body.toString('base64')}`
+
+  const res = await fetch(externalStorageUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      uuid: randomUUID(),
+      url: dataUrl,
+      type: fileType,
+    }),
+  })
+
+  if (!res.ok) {
+    throw new Error(`外部存储服务异常(${res.status})`)
+  }
+
+  const payload = await res.json() as any
+  if (payload?.code !== 10000 || !payload?.data?.url) {
+    throw new Error(payload?.msg ?? '外部存储返回异常')
+  }
+
+  return rewriteExternalStorageUrl(payload.data.url)
+}
+
 export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   // GET /canvases — list user's canvases (via workspace membership)
   app.get('/canvases', async (request, reply) => {
@@ -477,16 +531,38 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       return reply.badRequest('Only image and video files are supported')
     }
 
-    const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? 'bin'
-    const key = `canvas-assets/${randomUUID()}.${ext}`
-
     const chunks: Buffer[] = []
     for await (const chunk of data.file) chunks.push(chunk as Buffer)
     const body = Buffer.concat(chunks)
 
-    const storageUrl = await uploadToS3(key, body, mimeType)
-    const signedUrl = await signAssetUrl(storageUrl)
+    try {
+      let storageUrl: string
 
-    return reply.send({ url: signedUrl ?? storageUrl, storageUrl })
+      if (hasS3UploadConfig()) {
+        const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? 'bin'
+        const key = `canvas-assets/${randomUUID()}.${ext}`
+
+        try {
+          storageUrl = await uploadToS3(key, body, mimeType)
+        } catch (err: any) {
+          app.log.warn({ err: err?.message ?? String(err) }, 'S3 upload failed, fallback to external storage')
+          storageUrl = await uploadBufferToExternalStorage(body, mimeType)
+        }
+      } else {
+        storageUrl = await uploadBufferToExternalStorage(body, mimeType)
+      }
+
+      const signedUrl = await signAssetUrl(storageUrl)
+      return reply.send({ url: signedUrl ?? storageUrl, storageUrl })
+    } catch (err: any) {
+      app.log.error({ err: err?.message ?? String(err) }, 'Canvas asset upload failed')
+      return reply.status(502).send({
+        success: false,
+        error: {
+          code: 'UPLOAD_FAILED',
+          message: err?.message ?? '上传服务暂时不可用，请稍后重试',
+        },
+      })
+    }
   })
 }

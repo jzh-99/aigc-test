@@ -145,6 +145,13 @@ export const transferWorker = new Worker<TransferJobData>(
         .where('id', '=', assetId)
         .execute()
 
+      // Update canvas_node_outputs: replace original provider URL with permanent storage URL
+      await db
+        .updateTable('canvas_node_outputs')
+        .set({ output_urls: sql`array_replace(output_urls, ${originalUrl}::text, ${storageUrl}::text)` })
+        .where(sql`${originalUrl}::text = ANY(output_urls)`)
+        .execute()
+
       logger.info({ jobId: job.id, taskId, storageUrl }, 'Transfer completed')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
