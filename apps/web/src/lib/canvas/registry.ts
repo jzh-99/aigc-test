@@ -47,20 +47,22 @@ export class NodeRegistry {
       label: 'AI 视频',
       CanvasComponent: VideoGenNode as any,
       inputs: [
-        // multiref mode: single handle, accepts multiple connections
+        // 全能参考 mode: single handle, accepts multiple connections (images/videos/audios)
         { id: 'any-in', type: 'any', position: 'left', isList: true },
         // keyframe mode handles
         { id: 'frame-start', type: 'image', position: 'left', label: '首帧' },
         { id: 'frame-end',   type: 'image', position: 'left', label: '尾帧' },
+        { id: 'text-in',     type: 'text',  position: 'left', label: '文本' },
       ],
       outputs: [{ id: 'video-out', type: 'video', position: 'right' }],
       defaultConfig: {
         prompt: '',
-        model: 'seedance-2.0-fast',
+        model: 'seedance-2.0',
         videoMode: 'multiref',
-        aspectRatio: '16:9',
+        aspectRatio: 'adaptive',
         duration: 5,
         generateAudio: true,
+        cameraFixed: false,
         watermark: false,
       },
     })

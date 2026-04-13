@@ -22,6 +22,7 @@ export interface VideoGenConfig {
   aspectRatio: string
   duration: number
   generateAudio: boolean
+  cameraFixed: boolean
   watermark: boolean
 }
 
@@ -39,8 +40,9 @@ function useElapsedTimer(startedAt: number | null): string {
 }
 
 const KEYFRAME_HANDLES = [
-  { id: 'frame-start', label: '首', top: '35%' },
-  { id: 'frame-end',   label: '尾', top: '65%' },
+  { id: 'frame-start', label: '首', top: '30%' },
+  { id: 'frame-end',   label: '尾', top: '55%' },
+  { id: 'text-in',     label: '文', top: '80%' },
 ]
 
 export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: string; data: CanvasNodeData<VideoGenConfig> }) {
@@ -52,10 +54,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const multirefCount = useCanvasStructureStore(
     useShallow((s) => {
       const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
-      return incoming.filter((e) => {
-        const src = s.nodes.find((n) => n.id === e.source)
-        return src && src.type !== 'text_input'
-      }).length
+      return incoming.length
     })
   )
   // Upstream text node labels
@@ -144,7 +143,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
               ? 'bg-amber-100 text-amber-600'
               : 'bg-blue-100 text-blue-600'
           )}>
-            {videoMode === 'keyframe' ? '首尾帧' : '多模态'}
+            {videoMode === 'keyframe' ? '首尾帧' : '全能参考'}
           </span>
           {isGenerating && (
             <div className="flex items-center gap-1">
@@ -254,7 +253,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
               style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
             >
               <span className="text-[9px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-                参×{multirefCount}
+                全能×{multirefCount}
               </span>
             </div>
           )}

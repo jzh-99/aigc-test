@@ -23,9 +23,13 @@ export interface ExecuteVideoNodeParams {
   aspectRatio?: string
   duration?: number
   generateAudio?: boolean
+  cameraFixed?: boolean
+  enableUpsample?: boolean
   watermark?: boolean
-  // multiref mode: ordered reference images (ref-1, ref-2, ref-3)
+  // multiref mode: reference images, videos, audios
   referenceImages?: string[]
+  referenceVideos?: string[]
+  referenceAudios?: string[]
   // keyframe mode: first and last frame
   frameStart?: string
   frameEnd?: string
@@ -301,20 +305,27 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
     throw new Error('缺少工作区信息，请刷新页面后重试')
   }
 
+  const isSeedance = params.model.startsWith('seedance-')
+  const isSeedance2 = params.model === 'seedance-2.0' || params.model === 'seedance-2.0-fast'
+
   const body: Record<string, any> = {
     idempotency_key: params.idempotencyKey ?? `canvas_video_${params.canvasNodeId}_${Date.now()}`,
     prompt: params.prompt,
     workspace_id: params.workspaceId,
     model: params.model,
-    aspect_ratio: params.aspectRatio ?? '16:9',
-    generate_audio: params.generateAudio ?? true,
-    watermark: params.watermark ?? false,
     canvas_id: params.canvasId,
     canvas_node_id: params.canvasNodeId,
   }
 
-  if (params.duration && params.duration > 0) {
-    body.duration = params.duration
+  if (params.aspectRatio) body.aspect_ratio = params.aspectRatio
+
+  if (isSeedance) {
+    if (params.duration && params.duration !== 0) body.duration = params.duration
+    body.generate_audio = params.generateAudio ?? true
+    body.camera_fixed = params.cameraFixed ?? false
+    body.watermark = params.watermark ?? false
+  } else {
+    body.enable_upsample = params.enableUpsample ?? false
   }
 
   if (params.videoMode === 'keyframe') {
@@ -322,15 +333,17 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
     const frames = [params.frameStart, params.frameEnd].filter(Boolean) as string[]
     if (frames.length > 0) body.images = frames
   } else {
-    // multiref: reference_images for Seedance 2.0, images for others
-    const refs = (params.referenceImages ?? []).filter(Boolean)
-    if (refs.length > 0) {
-      const isSeedance2 = params.model === 'seedance-2.0' || params.model === 'seedance-2.0-fast'
-      if (isSeedance2) {
-        body.reference_images = refs
-      } else {
-        body.images = refs
-      }
+    // multiref (全能参考): reference_images/videos/audios for Seedance 2.0
+    const refImages = (params.referenceImages ?? []).filter(Boolean)
+    const refVideos = (params.referenceVideos ?? []).filter(Boolean)
+    const refAudios = (params.referenceAudios ?? []).filter(Boolean)
+    if (isSeedance2) {
+      if (refImages.length > 0) body.reference_images = refImages
+      if (refVideos.length > 0) body.reference_videos = refVideos
+      if (refAudios.length > 0) body.reference_audios = refAudios
+    } else {
+      // non-seedance2 multiref: use images field
+      if (refImages.length > 0) body.images = refImages
     }
   }
 
