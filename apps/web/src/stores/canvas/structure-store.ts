@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { temporal } from 'zundo'
 import {
   Connection,
   EdgeChange,
@@ -32,7 +33,9 @@ interface CanvasStructureState {
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
 }
 
-export const useCanvasStructureStore = create<CanvasStructureState>((set, get) => ({
+export const useCanvasStructureStore = create<CanvasStructureState>()(
+  temporal(
+    (set, get) => ({
   canvasId: null,
   workspaceId: null,
   nodes: [],
@@ -41,6 +44,8 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
 
   initCanvas: (canvasId, nodes, edges, version, workspaceId) => {
     set({ canvasId, nodes, edges, localVersion: version, workspaceId: workspaceId ?? null })
+    // Clear undo history so users can't undo past the loaded state
+    useCanvasStructureStore.temporal.getState().clear()
   },
 
   setLocalVersion: (version) => {
@@ -141,4 +146,13 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
       return { nodes: nextNodes }
     })
   },
-}))
+}),
+    {
+      partialize: (state) => ({
+        nodes: state.nodes,
+        edges: state.edges,
+      }),
+      limit: 50,
+    },
+  )
+)

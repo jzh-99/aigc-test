@@ -225,6 +225,14 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params
     const { name, structure_data, version, thumbnail_url } = request.body
 
+    // Guard: reject oversized structure_data (2 MB)
+    if (structure_data !== undefined) {
+      const size = JSON.stringify(structure_data).length
+      if (size > 2 * 1024 * 1024) {
+        return reply.status(413).send({ success: false, error: { code: 'PAYLOAD_TOO_LARGE', message: 'structure_data 超过 2MB 限制' } })
+      }
+    }
+
     const canvas = await db
       .selectFrom('canvases')
       .select(['workspace_id', 'version'])
@@ -372,6 +380,60 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     )
 
     return reply.send(signed)
+  })
+
+  // GET /canvases/:id/all-node-outputs — batch load outputs for all nodes in one request
+  app.get<{ Params: { id: string } }>('/canvases/:id/all-node-outputs', {
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+
+    const canvas = await db
+      .selectFrom('canvases')
+      .select('workspace_id')
+      .where('id', '=', id)
+      .executeTakeFirst()
+    if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
+
+    const member = await db
+      .selectFrom('workspace_members')
+      .select('role')
+      .where('workspace_id', '=', canvas.workspace_id)
+      .where('user_id', '=', request.user.id)
+      .executeTakeFirst()
+    if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
+
+    const outputs = await db
+      .selectFrom('canvas_node_outputs')
+      .selectAll()
+      .where('canvas_id', '=', id)
+      .orderBy('created_at', 'desc')
+      .execute()
+
+    // Group by node_id and sign URLs
+    const grouped: Record<string, any[]> = {}
+    for (const row of outputs) {
+      const nodeId = row.node_id as string
+      if (!grouped[nodeId]) grouped[nodeId] = []
+      grouped[nodeId].push(row)
+    }
+
+    for (const nodeId of Object.keys(grouped)) {
+      grouped[nodeId] = await Promise.all(
+        grouped[nodeId].map(async (row) => ({
+          ...row,
+          output_urls: await signAssetUrls(row.output_urls ?? []),
+        }))
+      )
+    }
+
+    return reply.send(grouped)
   })
 
   // POST /canvases/:id/node-outputs/:nodeId/select — set selected output for a node
@@ -584,7 +646,14 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // POST /canvases/asset-upload — upload an image/video file for use as an asset node
-  app.post('/canvases/asset-upload', async (request, reply) => {
+  app.post('/canvases/asset-upload', {
+    config: {
+      rateLimit: {
+        max: 30,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     const data = await (request as any).file({ limits: { fileSize: 50 * 1024 * 1024 } })
     if (!data) return reply.badRequest('No file provided')
 

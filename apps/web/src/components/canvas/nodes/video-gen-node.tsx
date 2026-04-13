@@ -2,7 +2,7 @@
 
 import { useState, useEffect, memo } from 'react'
 import { Handle, Position } from 'reactflow'
-import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
+import { useNodeExecutionState, useCanvasExecutionStore, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useShallow } from 'zustand/react/shallow'
 import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Film } from 'lucide-react'
@@ -57,6 +57,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const [playing, setPlaying] = useState(false)
 
   const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
+  const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
   const isUpstream = useNodeHighlighted(id)
   const videoMode: VideoMode = data.config?.videoMode ?? 'multiref'
 
@@ -67,12 +68,12 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
 
   function handlePrev(e: React.MouseEvent) {
     e.stopPropagation()
-    if (currentIndex > 0) {
-      const store = useCanvasStructureStore.getState()
-      void store // no-op, selectNodeOutput is in execution store
-    }
+    if (currentIndex > 0) selectNodeOutput(id, outputs[currentIndex - 1].id)
   }
-  function handleNext(e: React.MouseEvent) { e.stopPropagation() }
+  function handleNext(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (currentIndex < outputs.length - 1) selectNodeOutput(id, outputs[currentIndex + 1].id)
+  }
 
   async function handleConfirmSelect(e: React.MouseEvent) {
     e.stopPropagation()

@@ -1,6 +1,11 @@
 import type { AppNode, AppEdge } from './types'
 
-// 检测是否有环路 (死循环)
+/**
+ * Detect cycles in the DAG using DFS with a recursion stack.
+ * Complexity: O(V + E) — called on every new connection attempt.
+ * For very large graphs (>1000 nodes), consider incremental cycle
+ * detection that only checks the newly added edge's path.
+ */
 export function hasCycle(nodes: AppNode[], edges: AppEdge[]): boolean {
   const adjacencyList: Map<string, string[]> = new Map()
 

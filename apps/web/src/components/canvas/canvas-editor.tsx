@@ -33,6 +33,23 @@ const NODE_CANVAS_H: Record<string, number> = {
   video_gen: 220,
 }
 
+/** Subscribe to ReactFlow transform throttled to one update per animation frame */
+function useThrottledTransform() {
+  const rawTransform = useStore((s) => s.transform)
+  const [throttled, setThrottled] = useState(rawTransform)
+  const rafRef = useRef(0)
+
+  useEffect(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      setThrottled(rawTransform)
+    })
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [rawTransform])
+
+  return throttled
+}
+
 function FloatingParamPanel({
   node,
   canvasId,
@@ -46,7 +63,7 @@ function FloatingParamPanel({
   onClose: () => void
   onExecuted: () => void
 }) {
-  const transform = useStore((s) => s.transform)
+  const transform = useThrottledTransform()
   const rect = wrapperRef.current?.getBoundingClientRect()
   if (!rect) return null
 
@@ -126,15 +143,11 @@ function Flow({
     setContextMenu(null)
   }, [contextMenu, addNode])
 
-  // Ctrl+C / Ctrl+V copy-paste
+  // Ctrl+C / Ctrl+V copy-paste + Ctrl+Z / Ctrl+Shift+Z undo/redo
   const copiedNodeRef = useRef<AppNode | null>(null)
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
-
-  useEffect(() => {
-    const trackMouse = (e: MouseEvent) => { mousePosRef.current = { x: e.clientX, y: e.clientY } }
-    window.addEventListener('mousemove', trackMouse)
-    return () => window.removeEventListener('mousemove', trackMouse)
-  }, [])
+  const trackingMouseRef = useRef(false)
+  const trackMouse = useCallback((e: MouseEvent) => { mousePosRef.current = { x: e.clientX, y: e.clientY } }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -143,9 +156,28 @@ function Flow({
 
       const isMod = e.metaKey || e.ctrlKey
 
+      // Undo: Ctrl+Z
+      if (isMod && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        useCanvasStructureStore.temporal.getState().undo()
+        return
+      }
+      // Redo: Ctrl+Shift+Z or Ctrl+Y
+      if ((isMod && e.key === 'z' && e.shiftKey) || (isMod && e.key === 'y')) {
+        e.preventDefault()
+        useCanvasStructureStore.temporal.getState().redo()
+        return
+      }
+
       if (isMod && e.key === 'c' && selectedNodeId) {
         const node = nodes.find((n) => n.id === selectedNodeId)
-        if (node) copiedNodeRef.current = node
+        if (node) {
+          copiedNodeRef.current = node
+          if (!trackingMouseRef.current) {
+            trackingMouseRef.current = true
+            window.addEventListener('mousemove', trackMouse, { passive: true })
+          }
+        }
         return
       }
 
@@ -156,18 +188,26 @@ function Flow({
           x: mousePosRef.current.x - rect.left,
           y: mousePosRef.current.y - rect.top,
         })
-        const newId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+        const newId = `node_${crypto.randomUUID()}`
         addNodeWithConfig(
           copiedNodeRef.current.type!,
           { x: pos.x + 20, y: pos.y + 20 },
           { ...copiedNodeRef.current.data.config },
           newId,
         )
+        window.removeEventListener('mousemove', trackMouse)
+        trackingMouseRef.current = false
       }
     }
     document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, nodes, addNodeWithConfig, project])
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      if (trackingMouseRef.current) {
+        window.removeEventListener('mousemove', trackMouse)
+        trackingMouseRef.current = false
+      }
+    }
+  }, [selectedNodeId, nodes, addNodeWithConfig, project, trackMouse])
 
   const handleAddNode = useCallback((type: string) => {
     const rect = wrapperRef.current?.getBoundingClientRect()
@@ -219,7 +259,7 @@ function Flow({
         })
         try {
           const url = await uploadAssetFile(file, token)
-          const nodeId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+          const nodeId = `node_${crypto.randomUUID()}`
           addNodeWithConfig('asset', position, {
             url,
             name: file.name,
@@ -250,7 +290,9 @@ function Flow({
     [selectedNodeId, edges]
   )
 
-  // Style edges — only recompute when edges, selection, or generating set changes
+  // Style edges — full .map() on every selection/generation change.
+  // At <200 edges the cost is <1ms; if edge counts grow significantly,
+  // consider a diffing approach that only spreads changed edges.
   const styledEdges = useMemo<AppEdge[]>(() => edges.map((edge) => {
     const isUpstream = selectedNodeId
       ? (edge.target === selectedNodeId || upstreamIds.has(edge.source))
@@ -368,7 +410,21 @@ function Flow({
             + AI视频
           </button>
         </Panel>
-        <Panel position="top-right">
+        <Panel position="top-right" className="flex gap-1.5">
+          <button
+            onClick={() => useCanvasStructureStore.temporal.getState().undo()}
+            className="px-2 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors"
+            title="撤销 (Ctrl+Z)"
+          >
+            ↩
+          </button>
+          <button
+            onClick={() => useCanvasStructureStore.temporal.getState().redo()}
+            className="px-2 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors"
+            title="重做 (Ctrl+Shift+Z)"
+          >
+            ↪
+          </button>
           <button
             onClick={onSave}
             disabled={saving}

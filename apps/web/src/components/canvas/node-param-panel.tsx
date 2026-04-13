@@ -77,10 +77,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     useShallow((s) => s.edges.filter((e) => e.target === node.id))
   )
   const sourceNodeIds = useMemo(() => incomingEdges.map((e) => e.source), [incomingEdges])
-  const allNodes = useCanvasStructureStore(useShallow((s) => s.nodes))
-  const upstreamNodes = useMemo(
-    () => allNodes.filter((n) => sourceNodeIds.includes(n.id)),
-    [allNodes, sourceNodeIds]
+  const upstreamNodes = useCanvasStructureStore(
+    useShallow((s) => s.nodes.filter((n) => sourceNodeIds.includes(n.id)))
   )
 
   const upstreamTexts = useMemo(
