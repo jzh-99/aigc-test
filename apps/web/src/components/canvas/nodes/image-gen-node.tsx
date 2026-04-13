@@ -37,14 +37,20 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
-  // Count incoming edges to show ref count badge
+  // Count incoming image/asset edges (non-text) to show ref count badge
   const incomingCount = useCanvasStructureStore(
-    useShallow((s) => s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in')).length)
+    useShallow((s) => {
+      const incoming = s.edges.filter((e) => e.target === id)
+      return incoming.filter((e) => {
+        const src = s.nodes.find((n) => n.id === e.source)
+        return src && src.type !== 'text_input'
+      }).length
+    })
   )
-  // Upstream text node labels connected via text-in
+  // Upstream text node labels
   const upstreamTextLabels = useCanvasStructureStore(
     useShallow((s) => {
-      const textEdges = s.edges.filter((e) => e.target === id && e.targetHandle === 'text-in')
+      const textEdges = s.edges.filter((e) => e.target === id)
       return textEdges
         .map((e) => s.nodes.find((n) => n.id === e.source))
         .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
@@ -203,7 +209,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
         </div>
       )}
 
-      {/* Single input handle — ref count badge shown when connected */}
+      {/* Single input handle — ref/text count badges shown when connected */}
       {incomingCount > 0 && (
         <div
           className="absolute flex items-center pointer-events-none"
@@ -214,18 +220,10 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           </span>
         </div>
       )}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="any-in"
-        style={{ top: '50%' }}
-        className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
-      />
-      {/* Text prompt injection handle */}
       {upstreamTextLabels.length > 0 && (
         <div
           className="absolute flex items-center pointer-events-none"
-          style={{ top: '20%', left: 0, transform: 'translate(-100%, -50%)' }}
+          style={{ top: 'calc(50% + 16px)', left: 0, transform: 'translate(-100%, -50%)' }}
         >
           <span className="text-[9px] font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
             文×{upstreamTextLabels.length}
@@ -235,9 +233,9 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
       <Handle
         type="target"
         position={Position.Left}
-        id="text-in"
-        style={{ top: '20%' }}
-        className="!w-2.5 !h-2.5 !bg-blue-200 !border !border-blue-400 hover:!bg-blue-400 transition-colors"
+        id="any-in"
+        style={{ top: '50%' }}
+        className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
       />
       <Handle
         type="source"

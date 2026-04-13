@@ -16,17 +16,15 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
   const { isGenerating } = useNodeExecutionState(id)
   const isUpstream = useNodeHighlighted(id)
 
-  // Upstream text nodes connected via text-in
-  const incomingEdges = useCanvasStructureStore(
-    useShallow((s) => s.edges.filter((e) => e.target === id && e.targetHandle === 'text-in'))
-  )
+  // Upstream text nodes connected via any-in
   const upstreamTextLabels = useCanvasStructureStore(
-    useShallow((s) =>
-      incomingEdges
+    useShallow((s) => {
+      const textEdges = s.edges.filter((e) => e.target === id)
+      return textEdges
         .map((e) => s.nodes.find((n) => n.id === e.source))
         .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
         .map((n) => n.data.label ?? '文本')
-    )
+    })
   )
 
   // Local state for textarea — debounce writes to store to avoid per-keystroke node array rebuilds
@@ -92,7 +90,7 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
         />
       </div>
 
-      <Handle type="target" position={Position.Left} id="text-in"
+      <Handle type="target" position={Position.Left} id="any-in"
         className="!w-2 !h-2 !bg-zinc-300 !border !border-zinc-400 !-left-1 hover:!bg-blue-400 transition-colors" />
       <Handle type="source" position={Position.Right} id="text-out"
         className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all" />

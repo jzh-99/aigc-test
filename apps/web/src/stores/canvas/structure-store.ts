@@ -10,7 +10,31 @@ import {
 } from 'reactflow'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
 import { hasCycle } from '@/lib/canvas/dag'
-import { nodeRegistry } from '@/lib/canvas/registry'
+
+// Deep equality check for undo history — prevents recording no-op changes
+// and works with the throttle to batch rapid mutations (e.g. dragging)
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true
+  if (a == null || b == null) return a === b
+  if (typeof a !== typeof b) return false
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false
+    }
+    return true
+  }
+  if (typeof a === 'object') {
+    const keysA = Object.keys(a)
+    const keysB = Object.keys(b)
+    if (keysA.length !== keysB.length) return false
+    for (const key of keysA) {
+      if (!deepEqual(a[key], b[key])) return false
+    }
+    return true
+  }
+  return false
+}
 
 interface CanvasStructureState {
   canvasId: string | null
@@ -74,29 +98,6 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
       return
     }
 
-    const sourceNode = nodes.find((n) => n.id === connection.source)
-    const targetNode = nodes.find((n) => n.id === connection.target)
-
-    if (sourceNode && targetNode) {
-      const sourceDef = nodeRegistry.getDefinition(sourceNode.type!)
-      const targetDef = nodeRegistry.getDefinition(targetNode.type!)
-
-      const sourceHandleDef = sourceDef?.outputs.find((h) => h.id === connection.sourceHandle)
-      const targetHandleDef = targetDef?.inputs.find((h) => h.id === connection.targetHandle)
-
-      if (
-        sourceHandleDef &&
-        targetHandleDef &&
-        sourceHandleDef.type !== targetHandleDef.type &&
-        targetHandleDef.type !== 'any'
-      ) {
-        console.warn(
-          `[Canvas] 连线类型不匹配: 无法将 ${sourceHandleDef.type} 连入 ${targetHandleDef.type}`
-        )
-        return
-      }
-    }
-
     set({ edges: simulatedEdges })
   },
 
@@ -153,6 +154,19 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
         edges: state.edges,
       }),
       limit: 50,
+      // Throttle history snapshots so rapid changes (dragging, etc.) merge into one entry
+      handleSet: (handleSetCb) => {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        return (state: Parameters<typeof handleSetCb>[0]) => {
+          clearTimeout(timer)
+          timer = setTimeout(() => {
+            handleSetCb(state)
+          }, 500)
+        }
+      },
+      // Skip recording if nothing actually changed
+      equality: (pastState, currentState) =>
+        deepEqual(pastState, currentState),
     },
   )
 )

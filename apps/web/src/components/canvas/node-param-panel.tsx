@@ -82,24 +82,13 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   )
 
   const upstreamTexts = useMemo(
-    () =>
-      incomingEdges
-        .filter((e) => e.targetHandle === 'text-in')
-        .map((e) => upstreamNodes.find((n) => n.id === e.source))
-        .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
-        .map((n) => (n.data.config as any)?.text ?? '')
-        .filter(Boolean),
-    [incomingEdges, upstreamNodes]
+    () => upstreamNodes.filter((n) => n.type === 'text_input').map((n) => (n.data.config as any)?.text ?? '').filter(Boolean),
+    [upstreamNodes]
   )
 
   const upstreamTextNodeLabels = useMemo(
-    () =>
-      incomingEdges
-        .filter((e) => e.targetHandle === 'text-in')
-        .map((e) => upstreamNodes.find((n) => n.id === e.source))
-        .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
-        .map((n) => n.data.label ?? '文本'),
-    [incomingEdges, upstreamNodes]
+    () => upstreamNodes.filter((n) => n.type === 'text_input').map((n) => n.data.label ?? '文本'),
+    [upstreamNodes]
   )
 
   // Only subscribe to selectedOutputId of upstream gen nodes — not full execution state
