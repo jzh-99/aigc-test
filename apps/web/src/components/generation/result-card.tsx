@@ -1,11 +1,9 @@
 'use client'
 
-import { useState } from 'react'
 import Image from 'next/image'
 import type { TaskResponse } from '@aigc/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Loader2, AlertCircle, Download, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,11 +18,10 @@ const fadeIn = {
 
 interface ResultCardProps {
   task: TaskResponse
+  onPreview?: () => void
 }
 
-export function ResultCard({ task }: ResultCardProps) {
-  const [lightboxOpen, setLightboxOpen] = useState(false)
-
+export function ResultCard({ task, onPreview }: ResultCardProps) {
   const imageUrl = task.asset?.storage_url ?? task.asset?.original_url
 
   if (task.status === 'pending') {
@@ -78,56 +75,44 @@ export function ResultCard({ task }: ResultCardProps) {
   }
 
   return (
-    <>
-      <motion.div {...fadeIn} className={cn(
-        'group relative aspect-square rounded-lg overflow-hidden border bg-card cursor-pointer transition-shadow hover:shadow-md'
-      )}>
-        <Image
-          src={imageUrl}
-          alt="Generated image"
-          fill
-          className="object-cover"
-          sizes="(max-width: 768px) 50vw, 25vw"
-          unoptimized
-        />
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-end p-2 opacity-0 group-hover:opacity-100">
-          <div className="flex gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 bg-background/80 hover:bg-background"
-              onClick={() => setLightboxOpen(true)}
-            >
-              <Maximize2 className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 bg-background/80 hover:bg-background"
-              onClick={() => downloadImage(imageUrl)}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-          </div>
+    <motion.div {...fadeIn} className={cn(
+      'group relative aspect-square rounded-lg overflow-hidden border bg-card cursor-pointer transition-shadow hover:shadow-md'
+    )}>
+      <Image
+        src={imageUrl}
+        alt="Generated image"
+        fill
+        className="object-cover"
+        sizes="(max-width: 768px) 50vw, 25vw"
+        unoptimized
+      />
+      {/* Hover overlay */}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-end p-2 opacity-0 group-hover:opacity-100">
+        <div className="flex gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 bg-background/80 hover:bg-background"
+            onClick={(e) => {
+              e.stopPropagation()
+              onPreview?.()
+            }}
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 bg-background/80 hover:bg-background"
+            onClick={(e) => {
+              e.stopPropagation()
+              downloadImage(imageUrl)
+            }}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
         </div>
-      </motion.div>
-
-      {/* Lightbox */}
-      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
-        <DialogContent className="max-w-4xl p-2">
-          <DialogTitle className="sr-only">图片预览</DialogTitle>
-          <div className="relative aspect-square w-full">
-            <Image
-              src={imageUrl}
-              alt="Generated image"
-              fill
-              className="object-contain"
-              unoptimized
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+      </div>
+    </motion.div>
   )
 }
