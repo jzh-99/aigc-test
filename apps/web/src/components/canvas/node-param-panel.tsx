@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import type { AppNode } from '@/lib/canvas/types'
 import type { VideoMode } from './nodes/video-gen-node'
+import { getAllUpstreamNodeIds } from '@/lib/canvas/dag'
 
 // ── Image gen types ──────────────────────────────────────────────────────────
 type ModelType = 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
@@ -76,9 +77,12 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const incomingEdges = useCanvasStructureStore(
     useShallow((s) => s.edges.filter((e) => e.target === node.id))
   )
-  const sourceNodeIds = useMemo(() => incomingEdges.map((e) => e.source), [incomingEdges])
+  // All upstream node IDs (recursive, not just direct parents) — so text from a→b propagates to c
+  const allUpstreamNodeIds = useCanvasStructureStore(
+    useShallow((s) => getAllUpstreamNodeIds(node.id, s.edges))
+  )
   const upstreamNodes = useCanvasStructureStore(
-    useShallow((s) => s.nodes.filter((n) => sourceNodeIds.includes(n.id)))
+    useShallow((s) => s.nodes.filter((n) => allUpstreamNodeIds.has(n.id)))
   )
 
   const upstreamTexts = useMemo(
@@ -333,13 +337,17 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
       toast.success('已提交视频生成任务')
       onExecuted()
     } catch (err: any) {
-      toast.error(err.message ?? '执行失败')
-      setNodeError(node.id, err.message ?? '执行失败')
+      const msg = err.message ?? '执行失败'
+      // 任务提交失败时后端已退款，给出明确提示
+      const isSubmitFail = msg.includes('视频生成服务暂时不可用') || msg.includes('任务创建失败')
+      toast.error(isSubmitFail ? `${msg}（积分已退回）` : msg)
+      setNodeError(node.id, isSubmitFail ? '提交失败，积分已退回' : msg)
+      setNodeProgress(node.id, 0, false)
     } finally {
       setExecuting(false)
     }
   }, [canvasId, node.id, promptDraft, videoModel, videoMode, videoAspect, videoDuration, generateAudio,
-      videoWatermark, workspaceId, token, upstreamTexts, namedRefUrls, setNodeProgress, setNodeError, onExecuted])
+      videoWatermark, workspaceId, token, upstreamTexts, orderedImageRefs, namedRefUrls, setNodeProgress, setNodeError, onExecuted])
 
   const hasImagePrompt = promptDraft.trim() || upstreamTexts.length > 0
   const hasVideoPrompt = promptDraft.trim() || upstreamTexts.length > 0
@@ -534,23 +542,28 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
             />
 
             {/* Reference preview */}
-            {videoMode === 'multiref' && (
+            {videoMode === 'multiref' && orderedImageRefs.length > 0 && (
               <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">参考图（参1→参2→参3）</label>
+                <label className="text-[10px] text-muted-foreground mb-1 block">参考图（按连接顺序）</label>
+                <div className="flex gap-1 flex-wrap">
+                  {orderedImageRefs.map((url, i) => (
+                    <div key={i} className="relative w-14 h-14 rounded border border-border">
+                      <img src={url} alt="" className="w-full h-full object-cover rounded" />
+                      <span className="absolute -top-1 -left-1 text-[8px] bg-primary text-primary-foreground rounded px-0.5 font-bold">参{i+1}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {videoMode === 'multiref' && orderedImageRefs.length === 0 && (
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 block">参考图（可选）</label>
                 <div className="flex gap-1">
-                  {['ref-1','ref-2','ref-3'].map((k, i) => {
-                    const url = namedRefUrls[k]
-                    return (
-                      <div key={k} className={cn('relative w-14 h-14 rounded border flex items-center justify-center text-[9px] text-muted-foreground',
-                        url ? 'border-border' : 'border-dashed border-muted-foreground/30 bg-muted/20')}>
-                        {url
-                          ? <><img src={url} alt="" className="w-full h-full object-cover rounded" />
-                              <span className="absolute -top-1 -left-1 text-[8px] bg-primary text-primary-foreground rounded px-0.5 font-bold">参{i+1}</span></>
-                          : <span>参{i+1}</span>
-                        }
-                      </div>
-                    )
-                  })}
+                  {[0,1,2].map((i) => (
+                    <div key={i} className="relative w-14 h-14 rounded border border-dashed border-muted-foreground/30 bg-muted/20 flex items-center justify-center text-[9px] text-muted-foreground">
+                      <span>参{i+1}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
