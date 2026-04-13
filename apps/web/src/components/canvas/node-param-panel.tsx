@@ -77,12 +77,12 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const incomingEdges = useCanvasStructureStore(
     useShallow((s) => s.edges.filter((e) => e.target === node.id))
   )
-  // All upstream node IDs (recursive, not just direct parents) — so text from a→b propagates to c
+  // All upstream node IDs (recursive) — sorted array so useShallow can do element-wise comparison
   const allUpstreamNodeIds = useCanvasStructureStore(
-    useShallow((s) => getAllUpstreamNodeIds(node.id, s.edges))
+    useShallow((s) => Array.from(getAllUpstreamNodeIds(node.id, s.edges)).sort())
   )
   const upstreamNodes = useCanvasStructureStore(
-    useShallow((s) => s.nodes.filter((n) => allUpstreamNodeIds.has(n.id)))
+    useShallow((s) => s.nodes.filter((n) => allUpstreamNodeIds.includes(n.id)))
   )
 
   const upstreamTexts = useMemo(
