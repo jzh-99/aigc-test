@@ -1,6 +1,8 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { ResultCard } from './result-card'
+import { ImageLightbox } from '@/components/ui/image-lightbox'
 import type { BatchResponse } from '@aigc/types'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -19,6 +21,30 @@ interface BatchResultGridProps {
 }
 
 export function BatchResultGrid({ batch }: BatchResultGridProps) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+
+  const previewUrls = useMemo(() => {
+    if (!batch) return []
+    return batch.tasks
+      .map((task) => task.asset?.storage_url ?? task.asset?.original_url)
+      .filter((url): url is string => Boolean(url))
+  }, [batch])
+
+  const taskPreviewIndex = useMemo(() => {
+    if (!batch) return new Map<string, number>()
+
+    const map = new Map<string, number>()
+    let idx = 0
+    for (const task of batch.tasks) {
+      const url = task.asset?.storage_url ?? task.asset?.original_url
+      if (url) {
+        map.set(task.id, idx)
+        idx += 1
+      }
+    }
+    return map
+  }, [batch])
+
   if (!batch) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -29,6 +55,8 @@ export function BatchResultGrid({ batch }: BatchResultGridProps) {
       </div>
     )
   }
+
+  const currentUrl = lightboxIndex !== null ? previewUrls[lightboxIndex] : null
 
   return (
     <div className="space-y-3">
@@ -46,13 +74,28 @@ export function BatchResultGrid({ batch }: BatchResultGridProps) {
         key={batch.id}
       >
         <AnimatePresence mode="popLayout">
-          {batch.tasks.map((task) => (
-            <motion.div key={task.id} variants={itemVariants} layout>
-              <ResultCard task={task} />
-            </motion.div>
-          ))}
+          {batch.tasks.map((task) => {
+            const previewIndex = taskPreviewIndex.get(task.id)
+            return (
+              <motion.div key={task.id} variants={itemVariants} layout>
+                <ResultCard
+                  task={task}
+                  onPreview={previewIndex !== undefined ? () => setLightboxIndex(previewIndex) : undefined}
+                />
+              </motion.div>
+            )
+          })}
         </AnimatePresence>
       </motion.div>
+
+      {currentUrl && (
+        <ImageLightbox
+          url={currentUrl}
+          onClose={() => setLightboxIndex(null)}
+          onPrev={lightboxIndex! > 0 ? () => setLightboxIndex((i) => i! - 1) : undefined}
+          onNext={lightboxIndex! < previewUrls.length - 1 ? () => setLightboxIndex((i) => i! + 1) : undefined}
+        />
+      )}
     </div>
   )
 }
