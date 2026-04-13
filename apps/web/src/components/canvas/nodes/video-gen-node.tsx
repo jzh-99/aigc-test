@@ -52,6 +52,16 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const multirefCount = useCanvasStructureStore(
     useShallow((s) => s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in')).length)
   )
+  // Upstream text node labels connected via text-in
+  const upstreamTextLabels = useCanvasStructureStore(
+    useShallow((s) => {
+      const textEdges = s.edges.filter((e) => e.target === id && e.targetHandle === 'text-in')
+      return textEdges
+        .map((e) => s.nodes.find((n) => n.id === e.source))
+        .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
+        .map((n) => n.data.label ?? '文本')
+    })
+  )
   const token = useAuthStore((s) => s.accessToken)
   const [confirming, setConfirming] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -271,6 +281,25 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
           </div>
         ))
       )}
+
+      {/* Text prompt injection handle */}
+      {upstreamTextLabels.length > 0 && (
+        <div
+          className="absolute flex items-center pointer-events-none"
+          style={{ top: '20%', left: 0, transform: 'translate(-100%, -50%)' }}
+        >
+          <span className="text-[9px] font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+            文×{upstreamTextLabels.length}
+          </span>
+        </div>
+      )}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="text-in"
+        style={{ top: '20%' }}
+        className="!w-2.5 !h-2.5 !bg-blue-200 !border !border-blue-400 hover:!bg-blue-400 transition-colors"
+      />
 
       {/* Output handle */}
       <Handle
