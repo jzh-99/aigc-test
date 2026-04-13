@@ -297,10 +297,14 @@ export async function selectNodeOutputForCanvas(
 }
 
 export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: string) {
+  if (!params.workspaceId) {
+    throw new Error('缺少工作区信息，请刷新页面后重试')
+  }
+
   const body: Record<string, any> = {
     idempotency_key: params.idempotencyKey ?? `canvas_video_${params.canvasNodeId}_${Date.now()}`,
     prompt: params.prompt,
-    workspace_id: params.workspaceId ?? '',
+    workspace_id: params.workspaceId,
     model: params.model,
     aspect_ratio: params.aspectRatio ?? '16:9',
     generate_audio: params.generateAudio ?? true,
