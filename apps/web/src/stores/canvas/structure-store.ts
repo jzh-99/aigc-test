@@ -49,7 +49,7 @@ interface CanvasStructureState {
 
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
-  onConnect: (connection: Connection) => void
+  onConnect: (connection: Connection) => string | null  // returns error message or null
 
   addNode: (type: string, position: { x: number; y: number }) => void
   addNodeWithConfig: (type: string, position: { x: number; y: number }, config: any, id?: string) => void
@@ -91,15 +91,50 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
 
   onConnect: (connection) => {
     const { nodes, edges } = get()
-    if (connection.source === connection.target) return
+    if (connection.source === connection.target) return null
+
+    // Enforce connection limits for video_gen any-in handle
+    if (connection.targetHandle === 'any-in' || !connection.targetHandle) {
+      const targetNode = nodes.find((n) => n.id === connection.target)
+      if (targetNode?.type === 'video_gen') {
+        const sourceNode = nodes.find((n) => n.id === connection.source)
+        const mimeType = (sourceNode?.data.config as any)?.mimeType as string | undefined
+        const existingAnyIn = edges.filter((e) => e.target === connection.target && (!e.targetHandle || e.targetHandle === 'any-in'))
+
+        const existingImages = existingAnyIn.filter((e) => {
+          const src = nodes.find((n) => n.id === e.source)
+          const mt = (src?.data.config as any)?.mimeType as string | undefined
+          return !mt || mt.startsWith('image')
+        }).length
+        const existingVideos = existingAnyIn.filter((e) => {
+          const src = nodes.find((n) => n.id === e.source)
+          const mt = (src?.data.config as any)?.mimeType as string | undefined
+          return mt?.startsWith('video')
+        }).length
+        const existingAudios = existingAnyIn.filter((e) => {
+          const src = nodes.find((n) => n.id === e.source)
+          const mt = (src?.data.config as any)?.mimeType as string | undefined
+          return mt?.startsWith('audio')
+        }).length
+
+        const isVideo = mimeType?.startsWith('video')
+        const isAudio = mimeType?.startsWith('audio')
+        const isImage = !isVideo && !isAudio
+
+        if (isImage && existingImages >= 9) return '参考图最多 9 张'
+        if (isVideo && existingVideos >= 3) return '参考视频最多 3 个'
+        if (isAudio && existingAudios >= 3) return '参考音频最多 3 个'
+      }
+    }
 
     const simulatedEdges = addEdge(connection, edges) as AppEdge[]
     if (hasCycle(nodes, simulatedEdges)) {
       console.warn('[Canvas] 禁止产生循环依赖连线')
-      return
+      return null
     }
 
     set({ edges: simulatedEdges })
+    return null
   },
 
   addNode: (type, position) => {

@@ -29,6 +29,8 @@ interface CanvasSidebarDataState {
   loadMoreHistory: (canvasId: string, token: string) => Promise<void>
   loadMoreAssets: (canvasId: string, token: string) => Promise<void>
   clearCanvasData: (canvasId: string) => void
+  prependHistoryItem: (canvasId: string, item: CanvasHistoryItem) => void
+  updateHistoryItemStatus: (canvasId: string, batchId: string, patch: Partial<CanvasHistoryItem>) => void
 }
 
 function makeSection<T>(): CursorSection<T> {
@@ -350,6 +352,49 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
       const byCanvas = { ...state.byCanvas }
       delete byCanvas[canvasId]
       return { byCanvas }
+    })
+  },
+
+  prependHistoryItem: (canvasId, item) => {
+    if (!canvasId) return
+    set((state) => {
+      const bucket = ensureBucket(state, canvasId)
+      // Skip if not yet loaded (will appear on next refresh) or already present
+      if (!bucket.history.loaded) return state
+      if (bucket.history.items.some((i) => i.id === item.id)) return state
+      return {
+        byCanvas: {
+          ...state.byCanvas,
+          [canvasId]: {
+            ...bucket,
+            history: {
+              ...bucket.history,
+              items: [item, ...bucket.history.items],
+            },
+          },
+        },
+      }
+    })
+  },
+
+  updateHistoryItemStatus: (canvasId, batchId, patch) => {
+    if (!canvasId) return
+    set((state) => {
+      const bucket = ensureBucket(state, canvasId)
+      if (!bucket.history.loaded) return state
+      const idx = bucket.history.items.findIndex((i) => i.id === batchId)
+      if (idx === -1) return state
+      const updated = [...bucket.history.items]
+      updated[idx] = { ...updated[idx], ...patch }
+      return {
+        byCanvas: {
+          ...state.byCanvas,
+          [canvasId]: {
+            ...bucket,
+            history: { ...bucket.history, items: updated },
+          },
+        },
+      }
     })
   },
 }))

@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
 import { X, Play, Loader2, Sparkles, Zap, Target, ImageIcon, Film, Music, Video } from 'lucide-react'
@@ -285,7 +286,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     setExecuting(true)
     setNodeProgress(node.id, 0, true)
     try {
-      await executeCanvasNode(
+      const result = await executeCanvasNode(
         {
           canvasId,
           canvasNodeId: node.id,
@@ -296,6 +297,19 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
         },
         token ?? undefined
       )
+      // Optimistic update: prepend new batch to history sidebar immediately
+      useCanvasSidebarDataStore.getState().prependHistoryItem(canvasId, {
+        id: result.id,
+        canvas_node_id: node.id,
+        model: modelCode,
+        prompt: finalPrompt,
+        quantity: result.quantity ?? quantity,
+        completed_count: 0,
+        failed_count: 0,
+        status: 'pending',
+        actual_credits: result.estimated_credits ?? 0,
+        created_at: new Date().toISOString(),
+      })
       toast.success('已提交生成任务')
       onExecuted()
     } catch (err: any) {

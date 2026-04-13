@@ -8,6 +8,7 @@ import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 import { VIDEO_CREDITS_MAP } from '../lib/credits.js'
+import { encryptProxyUrl } from '../lib/storage.js'
 
 // ── Temp upload config ────────────────────────────────────────────────────────
 const UPLOAD_DIR = '/tmp/video-uploads'
@@ -59,6 +60,27 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
   await mkdir(UPLOAD_DIR, { recursive: true })
 
   const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
+
+  /**
+   * Convert a URL to a publicly accessible absolute URL for AI API calls.
+   * - Internal HTTP URLs (http://...) → encrypted proxy URL
+   * - Relative proxy paths (/api/v1/assets/proxy?...) → prepend BASE_URL
+   * - Already absolute HTTPS URLs → return as-is
+   */
+  function toPublicUrl(url: string): string {
+    if (url.startsWith('http://')) {
+      return `${BASE_URL}/api/v1/assets/proxy?token=${encryptProxyUrl(url)}`
+    }
+    if (url.startsWith('/')) {
+      return `${BASE_URL}${url}`
+    }
+    return url
+  }
+
+  function toPublicUrls(urls: string[] | undefined): string[] | undefined {
+    if (!urls || urls.length === 0) return urls
+    return urls.map(toPublicUrl)
+  }
 
   // ── POST /videos/upload ───────────────────────────────────────────────────
   // Upload image / video / audio for Seedance multimodal; returns public URL.
@@ -154,10 +176,10 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       canvas_id: canvasId,
       canvas_node_id: canvasNodeId,
       model = 'veo3.1-fast',
-      images,
-      reference_images,
-      reference_videos,
-      reference_audios,
+      images: rawImages,
+      reference_images: rawReferenceImages,
+      reference_videos: rawReferenceVideos,
+      reference_audios: rawReferenceAudios,
       aspect_ratio,
       enable_upsample,
       resolution,
@@ -169,6 +191,13 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
 
     const isSeedance = model.startsWith('seedance-')
     const isSeedance2 = model === 'seedance-2.0' || model === 'seedance-2.0-fast'
+
+    // Convert internal storage URLs (http://...) to publicly accessible proxy URLs
+    // so that Volcengine / Veo APIs can fetch the reference media.
+    const images           = toPublicUrls(rawImages)
+    const reference_images = toPublicUrls(rawReferenceImages)
+    const reference_videos = toPublicUrls(rawReferenceVideos)
+    const reference_audios = toPublicUrls(rawReferenceAudios)
 
     // Validate images count based on model
     if (images) {
@@ -388,7 +417,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       const batchResult = await trx
         .insertInto('task_batches')
         .values({
-          idempotency_key: idempotencyKey ?? crypto.randomUUID(),
+          idempotency_key: idempotencyKey ?? randomUUID(),
           user_id: userId,
           team_id: teamId,
           workspace_id: workspaceId,

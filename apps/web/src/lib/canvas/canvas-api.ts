@@ -177,7 +177,7 @@ export async function updateCanvasThumbnail(canvasId: string, thumbnailUrl: stri
 }
 
 /**
- * 上传素材文件，返回 S3 URL
+ * 上传素材文件，返回 proxy URL（公网可访问，用于前端显示和 AI 调用）
  */
 export async function uploadAssetFile(file: File, token?: string): Promise<string> {
   const formData = new FormData()

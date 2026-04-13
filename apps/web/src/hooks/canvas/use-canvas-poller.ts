@@ -3,6 +3,7 @@ import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { fetchCanvasActiveTasks, fetchNodeOutputs, fetchAllNodeOutputs } from '@/lib/canvas/canvas-api'
 import { useAuthStore } from '@/stores/auth-store'
+import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { toast } from 'sonner'
 
 const POLL_INTERVAL_ACTIVE = 2000   // while tasks are running
@@ -10,6 +11,7 @@ const POLL_INTERVAL_IDLE   = 8000   // no active tasks but version may change
 const POLL_IDLE_STOP_AFTER = 5      // stop polling after N consecutive idle polls
 const OUTPUTS_LOAD_CONCURRENCY = 4
 const MAX_CONSECUTIVE_ERRORS = 10
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'partial_complete'])
 
 async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
   if (!items.length) return
@@ -29,6 +31,8 @@ export function useCanvasPoller(canvasId: string | null) {
   const idleCountRef = useRef(0)
   const consecutiveErrorRef = useRef(0)
   const loadingAllRef = useRef(false)
+  const prevBatchStatusRef = useRef<Record<string, string>>({})
+  const historyRefreshTimerRef = useRef<ReturnType<typeof setTimeout>>()
   // Use refs for token/stores to avoid re-creating poll closure on every auth change
   const tokenRef = useRef<string | null>(null)
   tokenRef.current = useAuthStore((s) => s.accessToken)
@@ -99,6 +103,23 @@ export function useCanvasPoller(canvasId: string | null) {
         }
         store.reconcileNodes(data.batches.map((b: any) => b.canvas_node_id))
 
+        // Detect batch terminal transitions → refresh history sidebar
+        let anyBatchJustFinished = false
+        for (const batch of data.batches) {
+          const prev = prevBatchStatusRef.current[batch.id]
+          if (TERMINAL_STATUSES.has(batch.status) && (!prev || !TERMINAL_STATUSES.has(prev))) {
+            anyBatchJustFinished = true
+          }
+          prevBatchStatusRef.current[batch.id] = batch.status
+        }
+        if (anyBatchJustFinished && canvasId) {
+          clearTimeout(historyRefreshTimerRef.current)
+          historyRefreshTimerRef.current = setTimeout(() => {
+            const token = tokenRef.current
+            if (token) useCanvasSidebarDataStore.getState().refreshHistory(canvasId, token)
+          }, 500)
+        }
+
         // Load outputs for nodes that just finished (skip if bulk load is in progress)
         if (prevVersion !== -1 && !loadingAllRef.current) {
           const execState = useCanvasExecutionStore.getState()
@@ -148,6 +169,7 @@ export function useCanvasPoller(canvasId: string | null) {
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)
       clearTimeout(timerRef.current)
+      clearTimeout(historyRefreshTimerRef.current)
     }
   }, [canvasId, poll, loadAllNodeOutputs])
 
