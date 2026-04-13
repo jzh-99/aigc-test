@@ -1,6 +1,15 @@
 import type { ImageGenerationAdapter, AdapterGenerateResult } from './base.js'
+import sharp from 'sharp'
 
 const VOLCENGINE_API_URL = 'https://ark.cn-beijing.volces.com/api/v3'
+
+// Volcengine image constraints (per API docs)
+const VOLCENGINE_MAX_IMAGES = 14
+const VOLCENGINE_MAX_SIZE_BYTES = 10 * 1024 * 1024  // 10 MB
+const VOLCENGINE_MAX_PIXELS = 6000 * 6000            // 36M px
+const VOLCENGINE_MAX_LONG_SIDE = 6000
+const VOLCENGINE_JPEG_QUALITY = 85
+const VOLCENGINE_ALLOWED_FORMATS = new Set(['jpeg', 'jpg', 'png', 'webp', 'bmp', 'tiff', 'gif'])
 
 // ---------------------------------------------------------------------------
 // aspect_ratio + resolution → size (pixel dimensions) lookup table
@@ -54,9 +63,62 @@ function resolveSize(aspectRatio: string, resolution: string): string {
   return SIZE_MAP[res][ar]
 }
 
+/** Download a URL or decode a data URI, returning raw buffer + detected mime type. */
+async function fetchImageBuffer(urlOrDataUri: string, index: number): Promise<{ buffer: Buffer; mimeType: string }> {
+  if (urlOrDataUri.startsWith('data:')) {
+    const commaIdx = urlOrDataUri.indexOf(',')
+    const meta = urlOrDataUri.slice(5, commaIdx)          // e.g. "image/png;base64"
+    const mimeType = meta.split(';')[0] ?? 'image/jpeg'
+    const buffer = Buffer.from(urlOrDataUri.slice(commaIdx + 1), 'base64')
+    return { buffer, mimeType }
+  }
+  const res = await fetch(urlOrDataUri)
+  if (!res.ok) throw new Error(`Failed to fetch reference image ${index + 1}: HTTP ${res.status}`)
+  const buffer = Buffer.from(await res.arrayBuffer())
+  const ct = res.headers.get('content-type') ?? 'image/jpeg'
+  const mimeType = ct.split(';')[0].trim()
+  return { buffer, mimeType }
+}
+
 /**
- * Map frontend model code → Volcengine doubao model ID.
+ * Prepare a reference image for Volcengine API:
+ * - Validates format (jpeg/png/webp/bmp/tiff/gif)
+ * - Ensures total pixels ≤ 36M and size ≤ 10MB (resizes/recompresses if needed)
+ * - Returns data URI: data:image/<format>;base64,...
  */
+async function prepareVolcengineImage(urlOrDataUri: string, index: number): Promise<string> {
+  const { buffer, mimeType } = await fetchImageBuffer(urlOrDataUri, index)
+
+  const format = mimeType.replace('image/', '').toLowerCase()
+  if (!VOLCENGINE_ALLOWED_FORMATS.has(format)) {
+    throw new Error(`Reference image ${index + 1}: unsupported format "${format}" (allowed: jpeg/png/webp/bmp/tiff/gif)`)
+  }
+
+  // Check pixel count and size — resize/recompress if needed
+  const meta = await sharp(buffer).metadata()
+  const w = meta.width ?? 0
+  const h = meta.height ?? 0
+  const pixels = w * h
+  const needsResize = pixels > VOLCENGINE_MAX_PIXELS || Math.max(w, h) > VOLCENGINE_MAX_LONG_SIDE
+  const needsRecompress = buffer.length > VOLCENGINE_MAX_SIZE_BYTES
+
+  let outBuffer = buffer
+  let outMime = mimeType
+
+  if (needsResize || needsRecompress) {
+    const pipeline = sharp(buffer)
+    if (needsResize) {
+      pipeline.resize(VOLCENGINE_MAX_LONG_SIDE, VOLCENGINE_MAX_LONG_SIDE, { fit: 'inside', withoutEnlargement: true })
+    }
+    outBuffer = await pipeline.jpeg({ quality: VOLCENGINE_JPEG_QUALITY }).toBuffer()
+    outMime = 'image/jpeg'
+    console.log(`[volcengine-image] image[${index}]: resized/recompressed ${(buffer.length / 1024 / 1024).toFixed(1)}MB → ${(outBuffer.length / 1024).toFixed(0)}KB`)
+  }
+
+  return `data:${outMime};base64,${outBuffer.toString('base64')}`
+}
+
+
 const MODEL_ID_MAP: Record<string, string> = {
   'seedream-5.0-lite': 'doubao-seedream-5-0-lite-260128',
   'seedream-4.5':      'doubao-seedream-4-5-251128',
@@ -103,11 +165,19 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
       body.output_format = 'png'
     }
 
-    // Reference images: pass through as-is (URL or base64 data URI)
-    const images = extraParams.image
-    if (Array.isArray(images) && images.length > 0) {
-      // Volcengine accepts single string or array; use array for multi-image
-      body.image = images.length === 1 ? images[0] : images
+    // Reference images: download and convert to base64 data URI
+    // (storage_url may be an internal address unreachable by Volcengine servers)
+    const rawImages = extraParams.image
+    if (Array.isArray(rawImages) && rawImages.length > 0) {
+      const capped = (rawImages as string[]).slice(0, VOLCENGINE_MAX_IMAGES)
+      try {
+        const prepared = await Promise.all(capped.map((url, i) => prepareVolcengineImage(url, i)))
+        body.image = prepared.length === 1 ? prepared[0] : prepared
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[volcengine-image] Failed to prepare reference images: ${msg}`)
+        return { success: false, errorMessage: msg }
+      }
     }
 
     const controller = new AbortController()

@@ -22,25 +22,30 @@ async function compressBuffer(input: Buffer): Promise<Buffer> {
 }
 
 /**
- * Compress a base64 data URI.  HTTP/HTTPS URLs are returned unchanged
- * (the API fetches them directly).  Images already under SKIP_THRESHOLD
- * are also returned unchanged to avoid unnecessary re-encoding.
+ * Compress a base64 data URI.  Also handles HTTP/HTTPS URLs by downloading first.
+ * Images already under SKIP_THRESHOLD are returned as-is (data URI).
  */
-async function compressDataUri(dataUri: string, index: number): Promise<string> {
-  if (!dataUri.startsWith('data:')) return dataUri  // HTTP URL — skip
+async function prepareDataUri(urlOrDataUri: string, index: number): Promise<string> {
+  let inputBuffer: Buffer
 
-  const commaIdx = dataUri.indexOf(',')
-  const data = dataUri.slice(commaIdx + 1)
-  const inputBytes = Buffer.from(data, 'base64')
-
-  if (inputBytes.length < SKIP_THRESHOLD) {
-    console.log(`[nano-banana] image[${index}]: ${(inputBytes.length / 1024).toFixed(0)} KB — skip compression`)
-    return dataUri
+  if (urlOrDataUri.startsWith('data:')) {
+    const commaIdx = urlOrDataUri.indexOf(',')
+    inputBuffer = Buffer.from(urlOrDataUri.slice(commaIdx + 1), 'base64')
+  } else {
+    // Download URL (may be internal address — worker fetches it directly)
+    const res = await fetch(urlOrDataUri)
+    if (!res.ok) throw new Error(`Failed to fetch reference image ${index + 1}: HTTP ${res.status}`)
+    inputBuffer = Buffer.from(await res.arrayBuffer())
   }
 
-  const compressed = await compressBuffer(inputBytes)
+  if (inputBuffer.length < SKIP_THRESHOLD) {
+    console.log(`[nano-banana] image[${index}]: ${(inputBuffer.length / 1024).toFixed(0)} KB — skip compression`)
+    return `data:image/jpeg;base64,${inputBuffer.toString('base64')}`
+  }
+
+  const compressed = await compressBuffer(inputBuffer)
   console.log(
-    `[nano-banana] image[${index}]: ${(inputBytes.length / 1024 / 1024).toFixed(1)} MB → ` +
+    `[nano-banana] image[${index}]: ${(inputBuffer.length / 1024 / 1024).toFixed(1)} MB → ` +
     `${(compressed.length / 1024).toFixed(0)} KB (JPEG q${JPEG_QUALITY})`
   )
   return `data:image/jpeg;base64,${compressed.toString('base64')}`
@@ -103,8 +108,8 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     const body: Record<string, unknown> = { model, prompt, response_format: 'url' }
     if (extraParams.aspect_ratio) body.aspect_ratio = extraParams.aspect_ratio
     if (imageUrls && imageUrls.length > 0) {
-      // Compress data URI images before embedding in JSON body
-      body.image = await Promise.all(imageUrls.map((url, i) => compressDataUri(url, i)))
+      // Download URLs and convert to base64 data URI before embedding in JSON body
+      body.image = await Promise.all(imageUrls.map((url, i) => prepareDataUri(url, i)))
     }
 
     const controller = new AbortController()

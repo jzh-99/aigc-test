@@ -25,7 +25,8 @@ async function fetchWithTimeout(url: string, timeoutMs: number, headers?: Record
   }
 }
 
-const PROXY_TIMEOUT_MS = 20_000 // 20 seconds — external storage SLA
+const PROXY_TIMEOUT_MS = 20_000       // 20 seconds — for images
+const PROXY_VIDEO_TIMEOUT_MS = 120_000 // 2 minutes — for video/audio files
 
 export async function proxyRoutes(app: FastifyInstance) {
   // In-memory thumbnail cache: key = "url:width", value = WebP Buffer
@@ -124,9 +125,10 @@ export async function proxyRoutes(app: FastifyInstance) {
       const rangeHeader = request.headers['range']
       if (rangeHeader) upstreamHeaders['Range'] = rangeHeader
 
+      // Use longer timeout for pass-through (may serve large video/audio files)
       let upstream: Response
       try {
-        upstream = await fetchWithTimeout(url, PROXY_TIMEOUT_MS, upstreamHeaders)
+        upstream = await fetchWithTimeout(url, PROXY_VIDEO_TIMEOUT_MS, upstreamHeaders)
       } catch (err: any) {
         if (err?.name === 'AbortError') {
           return reply.code(504).send({ error: 'Gateway timeout' })

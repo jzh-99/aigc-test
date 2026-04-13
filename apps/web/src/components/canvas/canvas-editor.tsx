@@ -135,7 +135,8 @@ function Flow({
 
   const handleConnect = useCallback((connection: any) => {
     connectCompletedRef.current = true
-    onConnect(connection)
+    const err = onConnect(connection)
+    if (err) toast.error(err)
   }, [onConnect])
 
   const handleConnectEnd = useCallback((event: MouseEvent | TouchEvent) => {
@@ -161,12 +162,13 @@ function Flow({
     if (!targetNodeId || targetNodeId === src.nodeId) return
 
     // Determine best targetHandle: for keyframe video nodes use any-in; default any-in
-    onConnect({
+    const err = onConnect({
       source: src.nodeId,
       sourceHandle: src.handleId,
       target: targetNodeId,
       targetHandle: 'any-in',
     })
+    if (err) toast.error(err)
   }, [onConnect])
 
   const { kickPoll } = useCanvasPoller(canvasId)

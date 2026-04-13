@@ -4,6 +4,7 @@ import type { GenerateImageRequest, BatchResponse, TaskResponse } from '@aigc/ty
 import { checkPrompt } from '../services/prompt-filter.js'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 import { getImageQueue } from '../lib/queue.js'
+import { decryptProxyUrl } from '../lib/storage.js'
 import rateLimit from '@fastify/rate-limit'
 
 // Max pending/processing batches per user
@@ -43,6 +44,23 @@ function sanitizeParams(raw: Record<string, unknown>): Record<string, unknown> {
   return sanitized
 }
 
+const PROXY_URL_PREFIX = '/api/v1/assets/proxy?token='
+
+/**
+ * Resolve proxy URLs in params.image back to real URLs so AI workers can access them.
+ * Asset nodes store /api/v1/assets/proxy?token=... which is an internal-only address.
+ */
+function resolveProxyUrls(params: Record<string, unknown>): Record<string, unknown> {
+  const images = params.image
+  if (!Array.isArray(images) || images.length === 0) return params
+  const resolved = images.map((url) => {
+    if (typeof url !== 'string' || !url.startsWith(PROXY_URL_PREFIX)) return url
+    const token = url.slice(PROXY_URL_PREFIX.length)
+    return decryptProxyUrl(token) ?? url
+  })
+  return { ...params, image: resolved }
+}
+
 export async function generateRoutes(app: FastifyInstance): Promise<void> {
   // Per-user rate limit on generation: 10 requests per minute
   await app.register(rateLimit, {
@@ -78,7 +96,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
     const { idempotency_key, model, prompt, quantity = 1, params: rawParams = {}, workspace_id: workspaceId, canvas_id, canvas_node_id } = request.body
 
     // Sanitize params: whitelist keys, validate types
-    const params = sanitizeParams(rawParams)
+    const params = resolveProxyUrls(sanitizeParams(rawParams))
 
     // Strip image data from params stored in DB — base64 data URIs can be
     // hundreds of MB and make every batch read/write extremely slow.
