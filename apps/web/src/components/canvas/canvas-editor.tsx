@@ -124,6 +124,51 @@ function Flow({
   const token = useAuthStore((s) => s.accessToken)
   const [uploading, setUploading] = useState(false)
 
+  // Track drag-connect source so onConnectEnd can auto-connect to node body
+  const connectStartRef = useRef<{ nodeId: string; handleId: string | null } | null>(null)
+  const connectCompletedRef = useRef(false)
+
+  const handleConnectStart = useCallback((_: any, params: { nodeId: string | null; handleId: string | null }) => {
+    connectStartRef.current = params.nodeId ? { nodeId: params.nodeId, handleId: params.handleId } : null
+    connectCompletedRef.current = false
+  }, [])
+
+  const handleConnect = useCallback((connection: any) => {
+    connectCompletedRef.current = true
+    onConnect(connection)
+  }, [onConnect])
+
+  const handleConnectEnd = useCallback((event: MouseEvent | TouchEvent) => {
+    // If already connected via handle, skip
+    if (connectCompletedRef.current || !connectStartRef.current) return
+    const src = connectStartRef.current
+    connectStartRef.current = null
+
+    const clientX = 'touches' in event ? event.changedTouches[0].clientX : event.clientX
+    const clientY = 'touches' in event ? event.changedTouches[0].clientY : event.clientY
+
+    // Walk up DOM from cursor position to find a ReactFlow node element
+    let el = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+    let targetNodeId: string | null = null
+    while (el && el !== document.body) {
+      if (el.classList?.contains('react-flow__node') && el.dataset?.id) {
+        targetNodeId = el.dataset.id
+        break
+      }
+      el = el.parentElement
+    }
+
+    if (!targetNodeId || targetNodeId === src.nodeId) return
+
+    // Determine best targetHandle: for keyframe video nodes use any-in; default any-in
+    onConnect({
+      source: src.nodeId,
+      sourceHandle: src.handleId,
+      target: targetNodeId,
+      targetHandle: 'any-in',
+    })
+  }, [onConnect])
+
   const { kickPoll } = useCanvasPoller(canvasId)
 
   // Right-click context menu state
@@ -365,7 +410,9 @@ function Flow({
         edges={styledEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onConnect={handleConnect}
+        onConnectStart={handleConnectStart as any}
+        onConnectEnd={handleConnectEnd as any}
         nodeTypes={nodeTypes}
         onNodeClick={(_e, node) => {
           setSelectedEdgeId(null)

@@ -48,14 +48,20 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
-  // Count incoming multiref edges (any-in handle)
+  // Count incoming multiref edges (non-text, any-in handle)
   const multirefCount = useCanvasStructureStore(
-    useShallow((s) => s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in')).length)
+    useShallow((s) => {
+      const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
+      return incoming.filter((e) => {
+        const src = s.nodes.find((n) => n.id === e.source)
+        return src && src.type !== 'text_input'
+      }).length
+    })
   )
-  // Upstream text node labels connected via text-in
+  // Upstream text node labels
   const upstreamTextLabels = useCanvasStructureStore(
     useShallow((s) => {
-      const textEdges = s.edges.filter((e) => e.target === id && e.targetHandle === 'text-in')
+      const textEdges = s.edges.filter((e) => e.target === id)
       return textEdges
         .map((e) => s.nodes.find((n) => n.id === e.source))
         .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
@@ -252,6 +258,16 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
               </span>
             </div>
           )}
+          {upstreamTextLabels.length > 0 && (
+            <div
+              className="absolute flex items-center pointer-events-none"
+              style={{ top: 'calc(50% + 16px)', left: 0, transform: 'translate(-100%, -50%)' }}
+            >
+              <span className="text-[9px] font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                文×{upstreamTextLabels.length}
+              </span>
+            </div>
+          )}
           <Handle
             type="target"
             position={Position.Left}
@@ -281,25 +297,6 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
           </div>
         ))
       )}
-
-      {/* Text prompt injection handle */}
-      {upstreamTextLabels.length > 0 && (
-        <div
-          className="absolute flex items-center pointer-events-none"
-          style={{ top: '20%', left: 0, transform: 'translate(-100%, -50%)' }}
-        >
-          <span className="text-[9px] font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-            文×{upstreamTextLabels.length}
-          </span>
-        </div>
-      )}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="text-in"
-        style={{ top: '20%' }}
-        className="!w-2.5 !h-2.5 !bg-blue-200 !border !border-blue-400 hover:!bg-blue-400 transition-colors"
-      />
 
       {/* Output handle */}
       <Handle

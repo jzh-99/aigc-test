@@ -17,7 +17,7 @@ export class NodeRegistry {
       type: 'text_input',
       label: '文本输入',
       CanvasComponent: TextNode as any,
-      inputs: [{ id: 'text-in', type: 'text', position: 'left' }],
+      inputs: [{ id: 'any-in', type: 'any', position: 'left' }],
       outputs: [{ id: 'text-out', type: 'text', position: 'right' }],
       defaultConfig: { text: '' },
     })
@@ -27,8 +27,7 @@ export class NodeRegistry {
       label: 'AI 生图',
       CanvasComponent: ImageGenNode as any,
       inputs: [
-        { id: 'any-in', type: 'image', position: 'left', isList: true },
-        { id: 'text-in', type: 'text', position: 'left' },
+        { id: 'any-in', type: 'any', position: 'left', isList: true },
       ],
       outputs: [{ id: 'image-out', type: 'image', position: 'right' }],
       defaultConfig: { prompt: '', modelType: 'gemini', resolution: '2k', aspectRatio: '1:1', quantity: 1, watermark: false },
@@ -49,12 +48,10 @@ export class NodeRegistry {
       CanvasComponent: VideoGenNode as any,
       inputs: [
         // multiref mode: single handle, accepts multiple connections
-        { id: 'any-in', type: 'image', position: 'left', isList: true },
+        { id: 'any-in', type: 'any', position: 'left', isList: true },
         // keyframe mode handles
         { id: 'frame-start', type: 'image', position: 'left', label: '首帧' },
         { id: 'frame-end',   type: 'image', position: 'left', label: '尾帧' },
-        // text prompt injection
-        { id: 'text-in', type: 'text', position: 'left' },
       ],
       outputs: [{ id: 'video-out', type: 'video', position: 'right' }],
       defaultConfig: {
