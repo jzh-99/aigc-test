@@ -7,7 +7,7 @@ import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
-import { X, Play, Loader2, Sparkles, Zap, Target, ImageIcon, Film } from 'lucide-react'
+import { X, Play, Loader2, Sparkles, Zap, Target, ImageIcon, Film, Music, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import type { AppNode } from '@/lib/canvas/types'
@@ -42,19 +42,43 @@ const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
 // ── Video gen types ──────────────────────────────────────────────────────────
 const VIDEO_MODEL_OPTIONS = [
-  { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', supportsMultiref: true,  supportsKeyframe: true  },
-  { value: 'seedance-2.0',      label: 'Seedance 2.0',      supportsMultiref: true,  supportsKeyframe: true  },
-  { value: 'seedance-1.5-pro',  label: 'Seedance 1.5 Pro',  supportsMultiref: false, supportsKeyframe: true  },
-  { value: 'veo3.1-fast',       label: 'Veo 3.1 Fast',      supportsMultiref: false, supportsKeyframe: true  },
+  { value: 'seedance-2.0',      label: 'Seedance 2.0',      isSeedance: true,  isSeedance2: true,  supportsMultiref: true,  supportsKeyframe: true  },
+  { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', isSeedance: true,  isSeedance2: true,  supportsMultiref: true,  supportsKeyframe: true  },
+  { value: 'seedance-1.5-pro',  label: 'Seedance 1.5 Pro',  isSeedance: true,  isSeedance2: false, supportsMultiref: false, supportsKeyframe: true  },
+  { value: 'veo3.1-fast',       label: 'Veo 3.1 Fast',      isSeedance: false, isSeedance2: false, supportsMultiref: false, supportsKeyframe: true  },
 ] as const
 
-const VIDEO_ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'] as const
-const VIDEO_DURATIONS = [3, 5, 8, 10] as const
+const VIDEO_ASPECT_RATIOS_SEEDANCE = [
+  { value: 'adaptive', label: '自适应' },
+  { value: '16:9',     label: '16:9' },
+  { value: '9:16',     label: '9:16' },
+  { value: '1:1',      label: '1:1' },
+  { value: '4:3',      label: '4:3' },
+  { value: '3:4',      label: '3:4' },
+  { value: '21:9',     label: '21:9' },
+] as const
 
-// Credits per second for video models (mirrors backend VIDEO_CREDITS_MAP)
+const VIDEO_ASPECT_RATIOS_VEO = [
+  { value: '',    label: '自动' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+] as const
+
+const SEEDANCE_DURATION_OPTIONS = [
+  { value: -1,  label: '自动' },
+  { value: 4,   label: '4秒' },
+  { value: 5,   label: '5秒' },
+  { value: 6,   label: '6秒' },
+  { value: 8,   label: '8秒' },
+  { value: 10,  label: '10秒' },
+  { value: 12,  label: '12秒' },
+  { value: 15,  label: '15秒' },
+] as const
+
+// Credits per second for video models
 const VIDEO_CREDITS_PER_SEC: Record<string, number> = {
-  'seedance-2.0-fast': 3,
   'seedance-2.0':      5,
+  'seedance-2.0-fast': 3,
   'seedance-1.5-pro':  4,
   'veo3.1-fast':       10, // flat rate
 }
@@ -118,18 +142,25 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     return upstreamSelectedOutputs[sourceId]
   }, [upstreamNodes, upstreamSelectedOutputs])
 
-  // For image_gen and video_gen multiref: all any-in edges in order → 参1, 参2, 参3
-  const orderedImageRefs = useMemo(() =>
-    incomingEdges
-      .filter((e) => {
-        if (e.targetHandle && e.targetHandle !== 'any-in') return false
-        const n = upstreamNodes.find((u) => u.id === e.source)
-        return n && n.type !== 'text_input'
-      })
-      .map((e) => resolveSourceUrl(e.source))
-      .filter((u): u is string => !!u),
-    [incomingEdges, upstreamNodes, resolveSourceUrl]
-  )
+  // For image_gen and video_gen multiref: all any-in edges in order
+  const orderedImageRefs = useMemo(() => {
+    const result: { url: string; mimeType?: string }[] = []
+    for (const e of incomingEdges) {
+      if (e.targetHandle && e.targetHandle !== 'any-in') continue
+      const n = upstreamNodes.find((u) => u.id === e.source)
+      if (!n || n.type === 'text_input') continue
+      const url = resolveSourceUrl(e.source)
+      if (!url) continue
+      const mimeType = (n.data.config as any)?.mimeType as string | undefined
+      result.push({ url, mimeType })
+    }
+    return result
+  }, [incomingEdges, upstreamNodes, resolveSourceUrl])
+
+  // Categorize multiref by type
+  const multirefImages = useMemo(() => orderedImageRefs.filter(r => !r.mimeType || r.mimeType.startsWith('image')).map(r => r.url), [orderedImageRefs])
+  const multirefVideos = useMemo(() => orderedImageRefs.filter(r => r.mimeType != null && r.mimeType.startsWith('video')).map(r => r.url), [orderedImageRefs])
+  const multirefAudios = useMemo(() => orderedImageRefs.filter(r => r.mimeType != null && r.mimeType.startsWith('audio')).map(r => r.url), [orderedImageRefs])
 
   // For video_gen keyframe: named handles only
   const namedRefUrls = useMemo(() => {
@@ -261,7 +292,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           type: 'image_gen',
           config: { prompt: finalPrompt, model: modelCode, aspectRatio, quantity, watermark, resolution },
           workspaceId: workspaceId ?? undefined,
-          referenceImageUrls: orderedImageRefs.length > 0 ? orderedImageRefs : undefined,
+          referenceImageUrls: orderedImageRefs.length > 0 ? orderedImageRefs.map(r => r.url) : undefined,
         },
         token ?? undefined
       )
@@ -277,24 +308,29 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
       upstreamTexts, orderedImageRefs, setNodeProgress, setNodeError, onExecuted])
 
   // ── Video gen state ──────────────────────────────────────────────────────────
-  const videoModel: string = cfg.model ?? 'seedance-2.0-fast'
+  const videoModel: string = cfg.model ?? 'seedance-2.0'
   const videoMode: VideoMode = cfg.videoMode ?? 'multiref'
-  const videoAspect: string = cfg.aspectRatio ?? '16:9'
+  const videoAspect: string = cfg.aspectRatio ?? 'adaptive'
   const videoDuration: number = cfg.duration ?? 5
   const generateAudio: boolean = cfg.generateAudio ?? true
+  const cameraFixed: boolean = cfg.cameraFixed ?? false
   const videoWatermark: boolean = cfg.watermark ?? false
 
   const currentVideoModel = VIDEO_MODEL_OPTIONS.find((m) => m.value === videoModel) ?? VIDEO_MODEL_OPTIONS[0]
-  const videoCredits = videoModel === 'veo3.1-fast'
-    ? (VIDEO_CREDITS_PER_SEC[videoModel] ?? 10)
-    : (VIDEO_CREDITS_PER_SEC[videoModel] ?? 3) * videoDuration
+  const isSeedance = currentVideoModel.isSeedance
+  const isSeedance2 = currentVideoModel.isSeedance2
+  const videoCredits = isSeedance
+    ? (VIDEO_CREDITS_PER_SEC[videoModel] ?? 3) * (videoDuration === -1 ? 15 : videoDuration)
+    : (VIDEO_CREDITS_PER_SEC[videoModel] ?? 10)
 
   // When model changes, auto-switch mode if current mode not supported
   function handleVideoModelChange(val: string) {
     const m = VIDEO_MODEL_OPTIONS.find((o) => o.value === val)
     if (!m) return
     const newMode = videoMode === 'multiref' && !m.supportsMultiref ? 'keyframe' : videoMode
-    updateCfg({ model: val, videoMode: newMode })
+    // Reset aspect ratio when switching between seedance/non-seedance
+    const newAspect = m.isSeedance ? (videoAspect || 'adaptive') : ''
+    updateCfg({ model: val, videoMode: newMode, aspectRatio: newAspect })
   }
 
   // When mode changes, remove edges connected to handles that are now hidden
@@ -305,8 +341,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
       // switching to keyframe: remove multiref any-in edges
       removeEdgesByTarget(node.id, ['any-in'])
     } else {
-      // switching to multiref: remove keyframe handles
-      removeEdgesByTarget(node.id, ['frame-start', 'frame-end'])
+      // switching to multiref: remove keyframe handles (including text-in)
+      removeEdgesByTarget(node.id, ['frame-start', 'frame-end', 'text-in'])
     }
   }
 
@@ -324,11 +360,14 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           prompt: finalPrompt,
           model: videoModel,
           videoMode,
-          aspectRatio: videoAspect,
+          aspectRatio: videoAspect || undefined,
           duration: videoDuration,
           generateAudio,
+          cameraFixed,
           watermark: videoWatermark,
-          referenceImages: videoMode === 'multiref' ? orderedImageRefs : undefined,
+          referenceImages: videoMode === 'multiref' ? multirefImages : undefined,
+          referenceVideos: videoMode === 'multiref' ? multirefVideos : undefined,
+          referenceAudios: videoMode === 'multiref' ? multirefAudios : undefined,
           frameStart: videoMode === 'keyframe' ? namedRefUrls['frame-start'] : undefined,
           frameEnd:   videoMode === 'keyframe' ? namedRefUrls['frame-end']   : undefined,
         },
@@ -338,7 +377,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
       onExecuted()
     } catch (err: any) {
       const msg = err.message ?? '执行失败'
-      // 任务提交失败时后端已退款，给出明确提示
       const isSubmitFail = msg.includes('视频生成服务暂时不可用') || msg.includes('任务创建失败')
       toast.error(isSubmitFail ? `${msg}（积分已退回）` : msg)
       setNodeError(node.id, isSubmitFail ? '提交失败，积分已退回' : msg)
@@ -347,7 +385,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
       setExecuting(false)
     }
   }, [canvasId, node.id, promptDraft, videoModel, videoMode, videoAspect, videoDuration, generateAudio,
-      videoWatermark, workspaceId, token, upstreamTexts, orderedImageRefs, namedRefUrls, setNodeProgress, setNodeError, onExecuted])
+      cameraFixed, videoWatermark, workspaceId, token, upstreamTexts, multirefImages, multirefVideos, multirefAudios,
+      namedRefUrls, setNodeProgress, setNodeError, onExecuted])
 
   const hasImagePrompt = promptDraft.trim() || upstreamTexts.length > 0
   const hasVideoPrompt = promptDraft.trim() || upstreamTexts.length > 0
@@ -423,9 +462,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
               <div className="mt-1">
                 <label className="text-[10px] text-muted-foreground mb-1 block">参考图（按引脚顺序）</label>
                 <div className="flex gap-1 flex-wrap">
-                  {orderedImageRefs.map((url, i) => (
+                  {orderedImageRefs.map((ref, i) => (
                     <div key={i} className="relative">
-                      <img src={url} alt="" className="w-10 h-10 object-cover rounded border border-border" />
+                      <img src={ref.url} alt="" className="w-10 h-10 object-cover rounded border border-border" />
                       <span className="absolute -top-1 -left-1 text-[8px] bg-primary text-primary-foreground rounded px-0.5 font-bold">参{i+1}</span>
                     </div>
                   ))}
@@ -515,7 +554,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
                 disabled={!currentVideoModel.supportsMultiref}
                 className={cn('flex-1 py-1 transition-colors',
                   videoMode === 'multiref' ? 'bg-primary text-primary-foreground' : 'bg-muted/40 text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed'
-                )}>多模态参考</button>
+                )}>全能参考</button>
               <button
                 onClick={() => handleVideoModeChange('keyframe')}
                 className={cn('flex-1 py-1 transition-colors',
@@ -541,30 +580,33 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
               onBlur={flushPromptDraft}
             />
 
-            {/* Reference preview */}
+            {/* 全能参考 preview */}
             {videoMode === 'multiref' && orderedImageRefs.length > 0 && (
               <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">参考图（按连接顺序）</label>
+                <label className="text-[10px] text-muted-foreground mb-1 block">已连接素材</label>
                 <div className="flex gap-1 flex-wrap">
-                  {orderedImageRefs.map((url, i) => (
-                    <div key={i} className="relative w-14 h-14 rounded border border-border">
-                      <img src={url} alt="" className="w-full h-full object-cover rounded" />
-                      <span className="absolute -top-1 -left-1 text-[8px] bg-primary text-primary-foreground rounded px-0.5 font-bold">参{i+1}</span>
-                    </div>
-                  ))}
+                  {orderedImageRefs.map((ref, i) => {
+                    const isVid = ref.mimeType?.startsWith('video')
+                    const isAud = ref.mimeType?.startsWith('audio')
+                    return (
+                      <div key={i} className="relative w-12 h-12 rounded border border-border bg-muted/20 flex items-center justify-center overflow-hidden">
+                        {isAud ? (
+                          <Music className="w-5 h-5 text-muted-foreground" />
+                        ) : isVid ? (
+                          <Video className="w-5 h-5 text-muted-foreground" />
+                        ) : (
+                          <img src={ref.url} alt="" className="w-full h-full object-cover" />
+                        )}
+                        <span className="absolute -top-1 -left-1 text-[8px] bg-primary text-primary-foreground rounded px-0.5 font-bold">{i+1}</span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
             {videoMode === 'multiref' && orderedImageRefs.length === 0 && (
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">参考图（可选）</label>
-                <div className="flex gap-1">
-                  {[0,1,2].map((i) => (
-                    <div key={i} className="relative w-14 h-14 rounded border border-dashed border-muted-foreground/30 bg-muted/20 flex items-center justify-center text-[9px] text-muted-foreground">
-                      <span>参{i+1}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">
+                可连接图片、视频、音频节点
               </div>
             )}
 
@@ -576,7 +618,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
                     const url = namedRefUrls[k]
                     const label = k === 'frame-start' ? '首' : '尾'
                     return (
-                      <div key={k} className={cn('relative w-16 h-16 rounded border flex items-center justify-center text-[10px] text-muted-foreground font-medium',
+                      <div key={k} className={cn('relative w-14 h-14 rounded border flex items-center justify-center text-[10px] text-muted-foreground font-medium',
                         url ? 'border-border' : 'border-dashed border-muted-foreground/30 bg-muted/20')}>
                         {url
                           ? <><img src={url} alt="" className="w-full h-full object-cover rounded" />
@@ -586,76 +628,101 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
                       </div>
                     )
                   })}
-                  <span className="text-zinc-300 text-lg">→</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Col 2: Model */}
-          <div className="p-3 flex flex-col gap-1" style={{ width: 160 }}>
-            <label className="text-[11px] font-medium text-muted-foreground">模型</label>
-            <div className="flex flex-col gap-1">
-              {VIDEO_MODEL_OPTIONS.map((m) => {
-                const isActive = videoModel === m.value
-                const disabled = videoMode === 'multiref' && !m.supportsMultiref
-                return (
-                  <button key={m.value} onClick={() => !disabled && handleVideoModelChange(m.value)}
-                    disabled={disabled}
-                    className={cn('flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
-                      isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium'
-                        : disabled ? 'opacity-30 cursor-not-allowed bg-muted/20 border-transparent'
-                        : 'bg-muted/40 border-transparent hover:bg-muted text-foreground')}>
-                    <Film className="w-3 h-3 shrink-0" />
-                    <span className="flex-1 truncate text-[10px]">{m.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Col 3: Aspect + Duration */}
-          <div className="p-3 flex flex-col gap-3" style={{ width: 130 }}>
+          {/* Col 2: Model (dropdown) + params */}
+          <div className="p-3 flex flex-col gap-2" style={{ width: 200 }}>
+            {/* Model select */}
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">宽高比</label>
-              <div className="flex flex-wrap gap-1">
-                {VIDEO_ASPECT_RATIOS.map((r) => (
-                  <button key={r} onClick={() => updateCfg({ aspectRatio: r })}
-                    className={cn('px-1.5 py-0.5 rounded text-[11px] border transition-colors',
-                      videoAspect === r ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted')}>{r}</button>
-                ))}
+              <label className="text-[11px] font-medium text-muted-foreground">模型</label>
+              <div className="flex flex-col gap-1">
+                {VIDEO_MODEL_OPTIONS.filter(m => videoMode === 'multiref' ? m.supportsMultiref : m.supportsKeyframe).map((m) => {
+                  const isActive = videoModel === m.value
+                  return (
+                    <button key={m.value} onClick={() => handleVideoModelChange(m.value)}
+                      className={cn('flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
+                        isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground')}>
+                      <Film className="w-3 h-3 shrink-0" />
+                      <span className="flex-1 truncate text-[10px]">{m.label}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
-            {videoModel !== 'veo3.1-fast' && (
+
+            {/* Aspect ratio */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground">比例</label>
+              <select
+                value={videoAspect}
+                onChange={(e) => updateCfg({ aspectRatio: e.target.value })}
+                className="w-full h-7 px-2 text-[11px] bg-muted/60 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {(isSeedance ? VIDEO_ASPECT_RATIOS_SEEDANCE : VIDEO_ASPECT_RATIOS_VEO).map((ar) => (
+                  <option key={ar.value} value={ar.value}>{ar.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Duration (Seedance only) */}
+            {isSeedance && (
               <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">时长（秒）</label>
-                <div className="flex flex-wrap gap-1">
-                  {VIDEO_DURATIONS.map((d) => (
-                    <button key={d} onClick={() => updateCfg({ duration: d })}
-                      className={cn('px-2 py-0.5 rounded text-[11px] font-medium border transition-colors',
-                        videoDuration === d ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted')}>{d}s</button>
+                <label className="text-[11px] font-medium text-muted-foreground">时长</label>
+                <select
+                  value={String(videoDuration)}
+                  onChange={(e) => updateCfg({ duration: Number(e.target.value) })}
+                  className="w-full h-7 px-2 text-[11px] bg-muted/60 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {SEEDANCE_DURATION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={String(opt.value)}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Audio + Camera (Seedance only) */}
+            {isSeedance && (
+              <div className="grid grid-cols-2 gap-1">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">音频</label>
+                  <div className="flex gap-1">
+                    {[{ v: true, l: '有声' }, { v: false, l: '无声' }].map(({ v, l }) => (
+                      <button key={String(v)} onClick={() => updateCfg({ generateAudio: v })}
+                        className={cn('flex-1 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                          generateAudio === v ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted')}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">镜头</label>
+                  <div className="flex gap-1">
+                    {[{ v: false, l: '自由' }, { v: true, l: '固定' }].map(({ v, l }) => (
+                      <button key={String(v)} onClick={() => updateCfg({ cameraFixed: v })}
+                        className={cn('flex-1 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                          cameraFixed === v ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted')}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Watermark (Seedance only) */}
+            {isSeedance && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">水印</label>
+                <div className="flex gap-1">
+                  {[{ v: false, l: '无' }, { v: true, l: '有' }].map(({ v, l }) => (
+                    <button key={String(v)} onClick={() => updateCfg({ watermark: v })}
+                      className={cn('flex-1 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                        videoWatermark === v ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted')}>{l}</button>
                   ))}
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Col 4: Audio + Watermark + Execute */}
-          <div className="p-3 flex flex-col gap-3 justify-between" style={{ width: 110 }}>
-            <div className="space-y-2">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">生成音频</label>
-                <button onClick={() => updateCfg({ generateAudio: !generateAudio })}
-                  className={cn('w-full py-0.5 rounded text-[11px] font-medium border transition-colors',
-                    generateAudio ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted')}>{generateAudio ? '开' : '关'}</button>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">水印</label>
-                <button onClick={() => updateCfg({ watermark: !videoWatermark })}
-                  className={cn('w-full py-0.5 rounded text-[11px] font-medium border transition-colors',
-                    videoWatermark ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted')}>{videoWatermark ? '开' : '关'}</button>
-              </div>
-            </div>
             <button onClick={handleExecuteVideo} disabled={executing || !hasVideoPrompt}
               className="mt-auto w-full flex items-center justify-center gap-1 bg-primary text-primary-foreground py-2 rounded-lg text-[11px] font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition">
               {executing ? <><Loader2 className="w-3 h-3 animate-spin" />提交中</> : <><Play className="w-3 h-3" />执行 · {videoCredits}积分</>}
