@@ -92,7 +92,7 @@ export class NodeRegistry {
     const definition = this.getDefinition(type)
     if (!definition) throw new Error(`[NodeRegistry] 未知的节点类型: '${type}'，请先注册。`)
     return {
-      id: id || `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      id: id || `node_${crypto.randomUUID()}`,
       type: definition.type,
       position,
       data: {

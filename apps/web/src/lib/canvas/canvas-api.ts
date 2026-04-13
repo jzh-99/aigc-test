@@ -212,6 +212,23 @@ export async function fetchNodeOutputs(canvasId: string, nodeId: string, token?:
   }>
 }
 
+/**
+ * 批量拉取画布所有节点的历史输出（单次请求替代 N 次 fetchNodeOutputs）
+ */
+export async function fetchAllNodeOutputs(canvasId: string, token?: string) {
+  const res = await fetchWithBackoff(`/api/v1/canvases/${canvasId}/all-node-outputs`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    signal: AbortSignal.timeout(10000),
+  })
+  if (!res.ok) throw new Error('批量拉取节点输出失败')
+  return await res.json() as Record<string, Array<{
+    id: string
+    output_urls: string[]
+    is_selected: boolean
+    created_at: string
+  }>>
+}
+
 export async function fetchCanvasActiveTasks(canvasId: string, token?: string) {
   await waitForReadSlot(`active-tasks:${canvasId}`)
   const res = await fetchWithBackoff(`/api/v1/canvases/${canvasId}/active-tasks`, {

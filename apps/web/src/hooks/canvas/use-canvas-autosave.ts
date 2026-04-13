@@ -36,6 +36,7 @@ export function useCanvasAutosave(canvasId: string | null) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
   const isFirstRender = useRef(true)
   const isSaving = useRef(false)
+  const dirtyRef = useRef(false)
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
@@ -50,6 +51,7 @@ export function useCanvasAutosave(canvasId: string | null) {
     try {
       const ok = await doSave(canvasId, token)
       if (ok) {
+        dirtyRef.current = false
         setLastSaved(new Date())
       }
     } catch (e) {
@@ -66,15 +68,17 @@ export function useCanvasAutosave(canvasId: string | null) {
       isFirstRender.current = false
       return
     }
+    dirtyRef.current = true
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(save, DEBOUNCE_MS)
     return () => clearTimeout(timerRef.current)
   }, [nodes, edges, save])
 
-  // beforeunload: fire-and-forget with keepalive
+  // beforeunload: fire-and-forget with keepalive (only if dirty)
   useEffect(() => {
     if (!canvasId || !token) return
     const handler = () => {
+      if (!dirtyRef.current) return
       clearTimeout(timerRef.current)
       const { nodes: n, edges: e, localVersion } = useCanvasStructureStore.getState()
       fetch(`/api/v1/canvases/${canvasId}`, {
