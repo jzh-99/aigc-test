@@ -10,6 +10,7 @@ import {
 } from 'reactflow'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
 import { hasCycle } from '@/lib/canvas/dag'
+import { nodeRegistry } from '@/lib/canvas/registry'
 
 // Deep equality check for undo history — prevents recording no-op changes
 // and works with the throttle to batch rapid mutations (e.g. dragging)
