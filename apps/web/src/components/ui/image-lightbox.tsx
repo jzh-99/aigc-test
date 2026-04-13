@@ -12,32 +12,115 @@ interface ImageLightboxProps {
   footer?: React.ReactNode
 }
 
+interface Point {
+  x: number
+  y: number
+}
+
 const MIN_SCALE = 0.25
 const MAX_SCALE = 4
 const ZOOM_STEP = 0.25
+const ZERO_POINT: Point = { x: 0, y: 0 }
+
+function samePoint(a: Point, b: Point) {
+  return a.x === b.x && a.y === b.y
+}
 
 export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }: ImageLightboxProps) {
   const [scale, setScale] = useState(1)
+  const [translate, setTranslate] = useState<Point>(ZERO_POINT)
+  const [isDragging, setIsDragging] = useState(false)
+
   const containerRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const dragStartRef = useRef<Point | null>(null)
+  const pointerIdRef = useRef<number | null>(null)
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
+
+  const getBounds = useCallback((targetScale: number) => {
+    const container = containerRef.current
+    const img = imgRef.current
+    if (!container || !img) return { maxX: 0, maxY: 0 }
+
+    const containerRect = container.getBoundingClientRect()
+    const baseWidth = img.offsetWidth
+    const baseHeight = img.offsetHeight
+
+    if (!baseWidth || !baseHeight) return { maxX: 0, maxY: 0 }
+
+    const scaledWidth = baseWidth * targetScale
+    const scaledHeight = baseHeight * targetScale
+
+    return {
+      maxX: Math.max(0, (scaledWidth - containerRect.width) / 2),
+      maxY: Math.max(0, (scaledHeight - containerRect.height) / 2),
+    }
+  }, [])
+
+  const clampTranslate = useCallback((point: Point, targetScale = scale) => {
+    const { maxX, maxY } = getBounds(targetScale)
+    return {
+      x: Math.min(maxX, Math.max(-maxX, point.x)),
+      y: Math.min(maxY, Math.max(-maxY, point.y)),
+    }
+  }, [getBounds, scale])
+
+  const stopDragging = useCallback(() => {
+    setIsDragging(false)
+    dragStartRef.current = null
+    pointerIdRef.current = null
+  }, [])
 
   const zoom = useCallback((delta: number) => {
     setScale((s) => clampScale(Math.round((s + delta) * 100) / 100))
   }, [])
 
-  // Reset zoom when image changes
-  useEffect(() => { setScale(1) }, [url])
+  // Reset view when image changes
+  useEffect(() => {
+    setScale(1)
+    setTranslate(ZERO_POINT)
+    stopDragging()
+  }, [url, stopDragging])
+
+  // Keep translate state valid for current scale
+  useEffect(() => {
+    if (scale <= 1) {
+      setTranslate((prev) => (samePoint(prev, ZERO_POINT) ? prev : ZERO_POINT))
+      stopDragging()
+      return
+    }
+
+    setTranslate((prev) => {
+      const next = clampTranslate(prev, scale)
+      return samePoint(prev, next) ? prev : next
+    })
+  }, [scale, clampTranslate, stopDragging])
+
+  // Re-clamp translate on viewport changes
+  useEffect(() => {
+    const onResize = () => {
+      setTranslate((prev) => {
+        const next = scale <= 1 ? ZERO_POINT : clampTranslate(prev, scale)
+        return samePoint(prev, next) ? prev : next
+      })
+    }
+
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [scale, clampTranslate])
 
   // Wheel zoom
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP
       setScale((s) => clampScale(Math.round((s + delta) * 100) / 100))
     }
+
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
@@ -49,11 +132,56 @@ export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }
       else if (e.key === 'ArrowLeft') onPrev?.()
       else if (e.key === 'ArrowRight') onNext?.()
     }
+
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, onPrev, onNext])
 
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (scale <= 1) return
+    if (pointerIdRef.current !== null) return
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+
+    e.preventDefault()
+    pointerIdRef.current = e.pointerId
+    dragStartRef.current = {
+      x: e.clientX - translate.x,
+      y: e.clientY - translate.y,
+    }
+
+    setIsDragging(true)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }, [scale, translate])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return
+    if (pointerIdRef.current !== e.pointerId) return
+    if (!dragStartRef.current) return
+
+    e.preventDefault()
+    const next = {
+      x: e.clientX - dragStartRef.current.x,
+      y: e.clientY - dragStartRef.current.y,
+    }
+
+    setTranslate((prev) => {
+      const clamped = clampTranslate(next)
+      return samePoint(prev, clamped) ? prev : clamped
+    })
+  }, [isDragging, clampTranslate])
+
+  const handlePointerUpOrCancel = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId) return
+
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+
+    stopDragging()
+  }, [stopDragging])
+
   const pct = Math.round(scale * 100)
+  const cursor = scale <= 1 ? 'default' : (isDragging ? 'grabbing' : 'grab')
 
   return (
     <div
@@ -107,21 +235,34 @@ export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }
         <div
           ref={containerRef}
           className="flex-1 h-full overflow-hidden flex items-center justify-center"
-          style={{ cursor: 'default' }}
+          style={{ cursor, touchAction: scale > 1 ? 'none' : 'auto' }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUpOrCancel}
+          onPointerCancel={handlePointerUpOrCancel}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            ref={imgRef}
             src={url}
             alt={alt}
             style={{
-              transform: `scale(${scale})`,
-              transition: 'transform 0.15s ease',
+              transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+              transition: isDragging ? 'none' : 'transform 0.15s ease',
               maxWidth: '100%',
               maxHeight: '100%',
               objectFit: 'contain',
               display: 'block',
+              transformOrigin: 'center center',
+              userSelect: 'none',
             }}
             draggable={false}
+            onLoad={() => {
+              setTranslate((prev) => {
+                const next = scale <= 1 ? ZERO_POINT : clampTranslate(prev, scale)
+                return samePoint(prev, next) ? prev : next
+              })
+            }}
           />
         </div>
 
