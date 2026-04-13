@@ -4,6 +4,7 @@ import { memo, useState, useEffect, useRef } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
+import { useShallow } from 'zustand/react/shallow'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CanvasNodeData } from '@/lib/canvas/types'
@@ -14,6 +15,19 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const { isGenerating } = useNodeExecutionState(id)
   const isUpstream = useNodeHighlighted(id)
+
+  // Upstream text nodes connected via text-in
+  const incomingEdges = useCanvasStructureStore(
+    useShallow((s) => s.edges.filter((e) => e.target === id && e.targetHandle === 'text-in'))
+  )
+  const upstreamTextLabels = useCanvasStructureStore(
+    useShallow((s) =>
+      incomingEdges
+        .map((e) => s.nodes.find((n) => n.id === e.source))
+        .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
+        .map((n) => n.data.label ?? '文本')
+    )
+  )
 
   // Local state for textarea — debounce writes to store to avoid per-keystroke node array rebuilds
   const [localText, setLocalText] = useState(data.config?.text ?? '')
@@ -60,6 +74,15 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
       </div>
 
       <div className="p-2 flex-1">
+        {upstreamTextLabels.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-1.5">
+            {upstreamTextLabels.map((label, i) => (
+              <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
+                [{label}]+
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
           className="w-full h-20 p-2 text-xs bg-zinc-50 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-blue-400/50 placeholder:text-zinc-400 text-zinc-700"
           placeholder="输入提示词内容..."
@@ -69,7 +92,7 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
         />
       </div>
 
-      <Handle type="target" position={Position.Left} id="any-in"
+      <Handle type="target" position={Position.Left} id="text-in"
         className="!w-2 !h-2 !bg-zinc-300 !border !border-zinc-400 !-left-1 hover:!bg-blue-400 transition-colors" />
       <Handle type="source" position={Position.Right} id="text-out"
         className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all" />

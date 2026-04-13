@@ -82,8 +82,24 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   )
 
   const upstreamTexts = useMemo(
-    () => upstreamNodes.filter((n) => n.type === 'text_input').map((n) => (n.data.config as any)?.text ?? '').filter(Boolean),
-    [upstreamNodes]
+    () =>
+      incomingEdges
+        .filter((e) => e.targetHandle === 'text-in')
+        .map((e) => upstreamNodes.find((n) => n.id === e.source))
+        .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
+        .map((n) => (n.data.config as any)?.text ?? '')
+        .filter(Boolean),
+    [incomingEdges, upstreamNodes]
+  )
+
+  const upstreamTextNodeLabels = useMemo(
+    () =>
+      incomingEdges
+        .filter((e) => e.targetHandle === 'text-in')
+        .map((e) => upstreamNodes.find((n) => n.id === e.source))
+        .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
+        .map((n) => n.data.label ?? '文本'),
+    [incomingEdges, upstreamNodes]
   )
 
   // Only subscribe to selectedOutputId of upstream gen nodes — not full execution state
@@ -365,6 +381,15 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
       {isTextInput && (
         <div className="p-3">
           <label className="text-[11px] font-medium text-muted-foreground block mb-1">文本内容</label>
+          {upstreamTextNodeLabels.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              {upstreamTextNodeLabels.map((label, i) => (
+                <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
+                  [{label}]+
+                </span>
+              ))}
+            </div>
+          )}
           <textarea
             className="w-full h-20 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary"
             placeholder="输入提示词内容..."
@@ -381,6 +406,15 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           {/* Col 1: Prompt + named ref previews */}
           <div className="p-3 flex flex-col gap-1" style={{ width: 200 }}>
             <label className="text-[11px] font-medium text-muted-foreground">提示词</label>
+            {upstreamTextNodeLabels.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {upstreamTextNodeLabels.map((label, i) => (
+                  <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
+                    [{label}]+
+                  </span>
+                ))}
+              </div>
+            )}
             <textarea
               className="flex-1 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary min-h-[100px]"
               placeholder="描述你想生成的图片..."
@@ -493,6 +527,15 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
             </div>
 
             <label className="text-[11px] font-medium text-muted-foreground">提示词</label>
+            {upstreamTextNodeLabels.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {upstreamTextNodeLabels.map((label, i) => (
+                  <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
+                    [{label}]+
+                  </span>
+                ))}
+              </div>
+            )}
             <textarea
               className="flex-1 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary min-h-[80px]"
               placeholder="描述视频内容..."
