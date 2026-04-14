@@ -15,9 +15,13 @@ interface CursorSection<T> {
   lastFetchedAt: number | null
 }
 
+type AssetSubTab = 'image' | 'video'
+
 interface CanvasSidebarBucket {
   history: CursorSection<CanvasHistoryItem>
   assets: CursorSection<CanvasAssetItem>
+  videoAssets: CursorSection<CanvasAssetItem>
+  assetSubTab: AssetSubTab
 }
 
 interface CanvasSidebarDataState {
@@ -26,8 +30,11 @@ interface CanvasSidebarDataState {
   prefetch: (canvasId: string, token: string) => Promise<void>
   refreshHistory: (canvasId: string, token: string) => Promise<void>
   refreshAssets: (canvasId: string, token: string) => Promise<void>
+  refreshVideoAssets: (canvasId: string, token: string) => Promise<void>
   loadMoreHistory: (canvasId: string, token: string) => Promise<void>
   loadMoreAssets: (canvasId: string, token: string) => Promise<void>
+  loadMoreVideoAssets: (canvasId: string, token: string) => Promise<void>
+  setAssetSubTab: (canvasId: string, subTab: AssetSubTab) => void
   clearCanvasData: (canvasId: string) => void
   prependHistoryItem: (canvasId: string, item: CanvasHistoryItem) => void
   updateHistoryItemStatus: (canvasId: string, batchId: string, patch: Partial<CanvasHistoryItem>) => void
@@ -48,6 +55,8 @@ function makeBucket(): CanvasSidebarBucket {
   return {
     history: makeSection<CanvasHistoryItem>(),
     assets: makeSection<CanvasAssetItem>(),
+    videoAssets: makeSection<CanvasAssetItem>(),
+    assetSubTab: 'image',
   }
 }
 
@@ -175,7 +184,7 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
     })
 
     try {
-      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token))
+      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token, null, 'image'))
       set((state) => {
         const bucket = ensureBucket(state, canvasId)
         return {
@@ -209,6 +218,73 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
                 loading: false,
                 loaded: true,
                 error: err?.message ?? '加载资产失败',
+              },
+            },
+          },
+        }
+      })
+    }
+  },
+
+  refreshVideoAssets: async (canvasId, token) => {
+    if (!canvasId || !token) return
+    const current = ensureBucket(get(), canvasId)
+    if (current.videoAssets.loading) return
+
+    set((state) => {
+      const bucket = ensureBucket(state, canvasId)
+      return {
+        byCanvas: {
+          ...state.byCanvas,
+          [canvasId]: {
+            ...bucket,
+            videoAssets: {
+              ...bucket.videoAssets,
+              items: [],
+              nextCursor: null,
+              loading: true,
+              error: null,
+            },
+          },
+        },
+      }
+    })
+
+    try {
+      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token, null, 'video'))
+      set((state) => {
+        const bucket = ensureBucket(state, canvasId)
+        return {
+          byCanvas: {
+            ...state.byCanvas,
+            [canvasId]: {
+              ...bucket,
+              videoAssets: {
+                ...bucket.videoAssets,
+                items: data.items,
+                nextCursor: data.nextCursor,
+                loaded: true,
+                loading: false,
+                error: null,
+                lastFetchedAt: Date.now(),
+              },
+            },
+          },
+        }
+      })
+    } catch (err: any) {
+      set((state) => {
+        const bucket = ensureBucket(state, canvasId)
+        return {
+          byCanvas: {
+            ...state.byCanvas,
+            [canvasId]: {
+              ...bucket,
+              videoAssets: {
+                ...bucket.videoAssets,
+                loading: false,
+                loaded: true,
+                error: err?.message ?? '加载视频资产失败',
               },
             },
           },
@@ -304,7 +380,7 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
     })
 
     try {
-      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token, current.assets.nextCursor))
+      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token, current.assets.nextCursor, 'image'))
       set((state) => {
         const bucket = ensureBucket(state, canvasId)
         return {
@@ -343,6 +419,87 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
         }
       })
     }
+  },
+
+  loadMoreVideoAssets: async (canvasId, token) => {
+    if (!canvasId || !token) return
+    const current = ensureBucket(get(), canvasId)
+    if (current.videoAssets.loading || !current.videoAssets.nextCursor) return
+
+    set((state) => {
+      const bucket = ensureBucket(state, canvasId)
+      return {
+        byCanvas: {
+          ...state.byCanvas,
+          [canvasId]: {
+            ...bucket,
+            videoAssets: {
+              ...bucket.videoAssets,
+              loading: true,
+              error: null,
+            },
+          },
+        },
+      }
+    })
+
+    try {
+      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token, current.videoAssets.nextCursor, 'video'))
+      set((state) => {
+        const bucket = ensureBucket(state, canvasId)
+        return {
+          byCanvas: {
+            ...state.byCanvas,
+            [canvasId]: {
+              ...bucket,
+              videoAssets: {
+                ...bucket.videoAssets,
+                items: [...bucket.videoAssets.items, ...data.items],
+                nextCursor: data.nextCursor,
+                loaded: true,
+                loading: false,
+                error: null,
+                lastFetchedAt: Date.now(),
+              },
+            },
+          },
+        }
+      })
+    } catch (err: any) {
+      set((state) => {
+        const bucket = ensureBucket(state, canvasId)
+        return {
+          byCanvas: {
+            ...state.byCanvas,
+            [canvasId]: {
+              ...bucket,
+              videoAssets: {
+                ...bucket.videoAssets,
+                loading: false,
+                error: err?.message ?? '加载更多视频资产失败',
+              },
+            },
+          },
+        }
+      })
+    }
+  },
+
+  setAssetSubTab: (canvasId, subTab) => {
+    if (!canvasId) return
+    set((state) => {
+      const bucket = ensureBucket(state, canvasId)
+      if (bucket.assetSubTab === subTab) return state
+      return {
+        byCanvas: {
+          ...state.byCanvas,
+          [canvasId]: {
+            ...bucket,
+            assetSubTab: subTab,
+          },
+        },
+      }
+    })
   },
 
   clearCanvasData: (canvasId) => {

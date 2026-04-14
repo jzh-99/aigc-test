@@ -539,7 +539,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     let query = db
       .selectFrom('task_batches')
       .select(['id', 'canvas_node_id', 'model', 'prompt', 'quantity', 'completed_count',
-               'failed_count', 'status', 'actual_credits', 'created_at'])
+               'failed_count', 'status', 'actual_credits', 'created_at', 'module'])
       .where('canvas_id', '=', id)
       .where('is_deleted', '=', false)
       .orderBy('created_at', 'desc')

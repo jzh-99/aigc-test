@@ -2,16 +2,18 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { fetchCanvasActiveTasks, fetchNodeOutputs, fetchAllNodeOutputs } from '@/lib/canvas/canvas-api'
+import type { TaskBatchStatus } from '@/lib/canvas/types'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { toast } from 'sonner'
+import { mutate } from 'swr'
 
 const POLL_INTERVAL_ACTIVE = 2000   // while tasks are running
 const POLL_INTERVAL_IDLE   = 8000   // no active tasks but version may change
 const POLL_IDLE_STOP_AFTER = 5      // stop polling after N consecutive idle polls
 const OUTPUTS_LOAD_CONCURRENCY = 4
 const MAX_CONSECUTIVE_ERRORS = 10
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'partial_complete'])
+const TERMINAL_STATUSES = new Set<TaskBatchStatus>(['completed', 'failed', 'partial_complete'])
 
 async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
   if (!items.length) return
@@ -31,7 +33,7 @@ export function useCanvasPoller(canvasId: string | null) {
   const idleCountRef = useRef(0)
   const consecutiveErrorRef = useRef(0)
   const loadingAllRef = useRef(false)
-  const prevBatchStatusRef = useRef<Record<string, string>>({})
+  const prevBatchStatusRef = useRef<Record<string, TaskBatchStatus>>({})
   const historyRefreshTimerRef = useRef<ReturnType<typeof setTimeout>>()
   // Use refs for token/stores to avoid re-creating poll closure on every auth change
   const tokenRef = useRef<string | null>(null)
@@ -49,7 +51,7 @@ export function useCanvasPoller(canvasId: string | null) {
         if (!url) continue
         store.addNodeOutput(nodeId, { id: row.id, url, type: 'image' })
       }
-      const selected = outputs.find((o: any) => o.is_selected)
+      const selected = outputs.find((o) => o.is_selected)
       if (selected) store.selectNodeOutput(nodeId, selected.id)
     } catch (e) {
       console.warn('[Canvas Poller] 拉取节点历史失败:', e)
@@ -101,7 +103,7 @@ export function useCanvasPoller(canvasId: string | null) {
         for (const batch of data.batches) {
           store.updateNodeFromBatch(batch.canvas_node_id, batch)
         }
-        store.reconcileNodes(data.batches.map((b: any) => b.canvas_node_id))
+        store.reconcileNodes(data.batches.map((b) => b.canvas_node_id))
 
         // Detect batch terminal transitions → refresh history sidebar
         let anyBatchJustFinished = false
@@ -118,6 +120,9 @@ export function useCanvasPoller(canvasId: string | null) {
             const token = tokenRef.current
             if (token) useCanvasSidebarDataStore.getState().refreshHistory(canvasId, token)
           }, 500)
+
+          const activeTeamId = useAuthStore.getState().activeTeamId
+          if (activeTeamId) mutate(`/teams/${activeTeamId}`)
         }
 
         // Load outputs for nodes that just finished (skip if bulk load is in progress)

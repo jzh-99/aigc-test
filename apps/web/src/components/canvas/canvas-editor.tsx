@@ -69,6 +69,8 @@ function FloatingParamPanel({
 
   const [tx, ty, zoom] = transform
   const PANEL_W = 640
+  const PANEL_MARGIN = 8
+  const PANEL_MAX_H = Math.min(window.innerHeight - PANEL_MARGIN * 2, 560)
   const NODE_W = 280
 
   const sx = rect.left + node.position.x * zoom + tx
@@ -81,12 +83,12 @@ function FloatingParamPanel({
 
   const nodeScreenW = NODE_W * zoom
   let left = sx + nodeScreenW / 2 - PANEL_W / 2
-  left = Math.max(rect.left + 8, Math.min(left, window.innerWidth - PANEL_W - 8))
+  left = Math.max(rect.left + PANEL_MARGIN, Math.min(left, window.innerWidth - PANEL_W - PANEL_MARGIN))
 
-  const top = Math.min(rawTop, window.innerHeight - 200)
+  const top = Math.max(PANEL_MARGIN, Math.min(rawTop, window.innerHeight - PANEL_MARGIN - PANEL_MAX_H))
 
   return createPortal(
-    <div className="fixed z-50 drop-shadow-2xl" style={{ top, left, width: PANEL_W }}>
+    <div className="fixed z-50 drop-shadow-2xl" style={{ top, left, width: PANEL_W, maxHeight: PANEL_MAX_H, overflowY: 'auto' }}>
       <NodeParamPanel
         node={node}
         canvasId={canvasId}
@@ -443,24 +445,28 @@ function Flow({
           className="bg-white/90 backdrop-blur-md p-2 rounded-xl border border-zinc-200 shadow-md flex gap-2"
         >
           <button
+            data-testid="canvas-add-node-text"
             onClick={() => handleAddNode('text_input')}
             className="px-3 py-1.5 text-xs font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors"
           >
             + 纯文本
           </button>
           <button
+            data-testid="canvas-add-node-image"
             onClick={() => handleAddNode('image_gen')}
             className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow transition-colors"
           >
             + AI生图
           </button>
           <button
+            data-testid="canvas-add-node-asset"
             onClick={() => handleAddNode('asset')}
             className="px-3 py-1.5 text-xs font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors"
           >
             + 素材
           </button>
           <button
+            data-testid="canvas-add-node-video"
             onClick={() => handleAddNode('video_gen')}
             className="px-3 py-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white rounded-lg shadow transition-colors"
           >
