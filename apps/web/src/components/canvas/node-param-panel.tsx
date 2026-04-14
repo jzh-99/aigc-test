@@ -13,7 +13,6 @@ import { cn } from '@/lib/utils'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import type { AppNode } from '@/lib/canvas/types'
 import type { VideoMode } from './nodes/video-gen-node'
-import { getAllUpstreamNodeIds } from '@/lib/canvas/dag'
 
 // ── Image gen types ──────────────────────────────────────────────────────────
 type ModelType = 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
@@ -102,9 +101,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const incomingEdges = useCanvasStructureStore(
     useShallow((s) => s.edges.filter((e) => e.target === node.id))
   )
-  // All upstream node IDs (recursive) — sorted array so useShallow can do element-wise comparison
+  // Direct parent node IDs only — sorted array so useShallow can do element-wise comparison
   const allUpstreamNodeIds = useCanvasStructureStore(
-    useShallow((s) => Array.from(getAllUpstreamNodeIds(node.id, s.edges)).sort())
+    useShallow((s) => s.edges.filter((e) => e.target === node.id).map((e) => e.source).sort())
   )
   const upstreamNodes = useCanvasStructureStore(
     useShallow((s) => s.nodes.filter((n) => allUpstreamNodeIds.includes(n.id)))
