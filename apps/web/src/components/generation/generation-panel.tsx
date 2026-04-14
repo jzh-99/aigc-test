@@ -871,7 +871,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         ...(isSeedance ? {
           duration: videoDuration,
           generate_audio: videoGenerateAudio,
-          camera_fixed: videoCameraFixed,
+          ...(videoMode !== 'frames' ? { camera_fixed: videoCameraFixed } : {}),
           watermark: watermark,
         } : {
           enable_upsample: videoUpsample,
@@ -2242,9 +2242,9 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 </div>
               )}
 
-              {/* Row 3 (Seedance only): 音频 + 镜头 */}
+              {/* Row 3 (Seedance only): 首尾帧仅音频，其他模式音频+镜头 */}
               {isSeedance && (
-                <div className="grid grid-cols-2 gap-2">
+                videoMode === 'frames' ? (
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1 block">音频</Label>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -2266,28 +2266,52 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1 block">镜头</Label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {[{ value: false, label: '自由' }, { value: true, label: '固定' }].map((opt) => (
-                        <button
-                          key={String(opt.value)}
-                          onClick={() => setVideoCameraFixed(opt.value)}
-                          disabled={isVideoGenerating || disabled}
-                          className={cn(
-                            'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
-                            videoCameraFixed === opt.value
-                              ? 'border-primary bg-primary/5 text-primary'
-                              : 'border-border hover:border-primary/50',
-                            (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
-                          )}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">音频</Label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[{ value: true, label: '有声' }, { value: false, label: '无声' }].map((opt) => (
+                          <button
+                            key={String(opt.value)}
+                            onClick={() => setVideoGenerateAudio(opt.value)}
+                            disabled={isVideoGenerating || disabled}
+                            className={cn(
+                              'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
+                              videoGenerateAudio === opt.value
+                                ? 'border-primary bg-primary/5 text-primary'
+                                : 'border-border hover:border-primary/50',
+                              (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">镜头</Label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[{ value: false, label: '自由' }, { value: true, label: '固定' }].map((opt) => (
+                          <button
+                            key={String(opt.value)}
+                            onClick={() => setVideoCameraFixed(opt.value)}
+                            disabled={isVideoGenerating || disabled}
+                            className={cn(
+                              'py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all',
+                              videoCameraFixed === opt.value
+                                ? 'border-primary bg-primary/5 text-primary'
+                                : 'border-border hover:border-primary/50',
+                              (isVideoGenerating || disabled) && 'opacity-50 cursor-not-allowed'
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )
               )}
             </div>
           </div>
