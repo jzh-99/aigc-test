@@ -47,12 +47,8 @@ export class NodeRegistry {
       label: 'AI 视频',
       CanvasComponent: VideoGenNode as any,
       inputs: [
-        // 全能参考 mode: single handle, accepts multiple connections (images/videos/audios)
+        // single any-in handle for both multiref and keyframe modes
         { id: 'any-in', type: 'any', position: 'left', isList: true },
-        // keyframe mode handles
-        { id: 'frame-start', type: 'image', position: 'left', label: '首帧' },
-        { id: 'frame-end',   type: 'image', position: 'left', label: '尾帧' },
-        { id: 'text-in',     type: 'text',  position: 'left', label: '文本' },
       ],
       outputs: [{ id: 'video-out', type: 'video', position: 'right' }],
       defaultConfig: {

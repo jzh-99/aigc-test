@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
-import { X, Play, Loader2, Sparkles, Zap, Target, ImageIcon, Film, Music, Video } from 'lucide-react'
+import { X, Play, Loader2, Sparkles, Zap, Target, ImageIcon, Film, Music } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import type { AppNode } from '@/lib/canvas/types'
@@ -92,7 +92,6 @@ interface Props {
 
 export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
-  const removeEdgesByTarget = useCanvasStructureStore((s) => s.removeEdgesByTarget)
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
   const token = useAuthStore((s) => s.accessToken)
   const [executing, setExecuting] = useState(false)
@@ -162,15 +161,26 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const multirefVideos = useMemo(() => orderedImageRefs.filter(r => r.mimeType != null && r.mimeType.startsWith('video')).map(r => r.url), [orderedImageRefs])
   const multirefAudios = useMemo(() => orderedImageRefs.filter(r => r.mimeType != null && r.mimeType.startsWith('audio')).map(r => r.url), [orderedImageRefs])
 
-  // For video_gen keyframe: named handles only
-  const namedRefUrls = useMemo(() => {
-    const map: Record<string, string | undefined> = {}
-    for (const edge of incomingEdges) {
-      if (!edge.targetHandle || edge.targetHandle === 'any-in') continue
-      map[edge.targetHandle] = resolveSourceUrl(edge.source)
+  // For video_gen keyframe: take first 2 image assets from any-in edges (in order), texts are separate
+  const keyframeImages = useMemo(() => {
+    const result: { url: string; edgeId: string }[] = []
+    for (const e of incomingEdges) {
+      if (e.targetHandle && e.targetHandle !== 'any-in') continue
+      const n = upstreamNodes.find((u) => u.id === e.source)
+      if (!n || n.type === 'text_input') continue
+      const url = resolveSourceUrl(e.source)
+      if (!url) continue
+      result.push({ url, edgeId: e.id })
+      if (result.length >= 2) break
     }
-    return map
-  }, [incomingEdges, resolveSourceUrl])
+    return result
+  }, [incomingEdges, upstreamNodes, resolveSourceUrl])
+
+  const [keyframeSwapped, setKeyframeSwapped] = useState(false)
+  const displayedKeyframes = useMemo(() => {
+    if (keyframeSwapped && keyframeImages.length === 2) return [keyframeImages[1], keyframeImages[0]]
+    return keyframeImages
+  }, [keyframeImages, keyframeSwapped])
 
   const setNodeProgress = useCanvasExecutionStore((s) => s.setNodeProgress)
   const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
@@ -346,17 +356,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     updateCfg({ model: val, videoMode: newMode, aspectRatio: newAspect })
   }
 
-  // When mode changes, remove edges connected to handles that are now hidden
+  // When mode changes, just update config — both modes share any-in handle
   function handleVideoModeChange(newMode: VideoMode) {
     if (newMode === videoMode) return
     updateCfg({ videoMode: newMode })
-    if (newMode === 'keyframe') {
-      // switching to keyframe: remove multiref any-in edges
-      removeEdgesByTarget(node.id, ['any-in'])
-    } else {
-      // switching to multiref: remove keyframe handles (including text-in)
-      removeEdgesByTarget(node.id, ['frame-start', 'frame-end', 'text-in'])
-    }
+    setKeyframeSwapped(false)
   }
 
   const handleExecuteVideo = useCallback(async () => {
@@ -381,8 +385,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           referenceImages: videoMode === 'multiref' ? multirefImages : undefined,
           referenceVideos: videoMode === 'multiref' ? multirefVideos : undefined,
           referenceAudios: videoMode === 'multiref' ? multirefAudios : undefined,
-          frameStart: videoMode === 'keyframe' ? namedRefUrls['frame-start'] : undefined,
-          frameEnd:   videoMode === 'keyframe' ? namedRefUrls['frame-end']   : undefined,
+          frameStart: videoMode === 'keyframe' ? displayedKeyframes[0]?.url : undefined,
+          frameEnd:   videoMode === 'keyframe' ? displayedKeyframes[1]?.url : undefined,
         },
         token ?? undefined
       )
@@ -399,7 +403,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
     }
   }, [canvasId, node.id, promptDraft, videoModel, videoMode, videoAspect, videoDuration, generateAudio,
       cameraFixed, videoWatermark, workspaceId, token, upstreamTexts, multirefImages, multirefVideos, multirefAudios,
-      namedRefUrls, setNodeProgress, setNodeError, onExecuted])
+      displayedKeyframes, setNodeProgress, setNodeError, onExecuted])
 
   const hasImagePrompt = promptDraft.trim() || upstreamTexts.length > 0
   const hasVideoPrompt = promptDraft.trim() || upstreamTexts.length > 0
@@ -419,9 +423,17 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
         <div className="p-3 space-y-2">
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
             <ImageIcon className="w-3.5 h-3.5" />
-            <span>素材节点 · 只读</span>
+            <span>素材节点 · {cfg.mimeType?.startsWith('video') ? '视频' : cfg.mimeType?.startsWith('audio') ? '音频' : '图片'}</span>
           </div>
-          {cfg.url && <img src={cfg.url} alt={cfg.name} className="w-full rounded-lg object-contain max-h-48" />}
+          {cfg.url && cfg.mimeType?.startsWith('video') && (
+            <video src={cfg.url} controls className="w-full rounded-lg max-h-48" />
+          )}
+          {cfg.url && cfg.mimeType?.startsWith('audio') && (
+            <audio src={cfg.url} controls className="w-full" />
+          )}
+          {cfg.url && !cfg.mimeType?.startsWith('video') && !cfg.mimeType?.startsWith('audio') && (
+            <img src={cfg.url} alt={cfg.name} className="w-full rounded-lg object-contain max-h-48" />
+          )}
           {cfg.name && <p className="text-[10px] text-muted-foreground truncate">{cfg.name}</p>}
         </div>
       )}
@@ -593,54 +605,96 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
               onBlur={flushPromptDraft}
             />
 
-            {/* 全能参考 preview */}
-            {videoMode === 'multiref' && orderedImageRefs.length > 0 && (
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">已连接素材</label>
-                <div className="flex gap-1 flex-wrap">
-                  {orderedImageRefs.map((ref, i) => {
-                    const isVid = ref.mimeType?.startsWith('video')
-                    const isAud = ref.mimeType?.startsWith('audio')
-                    return (
-                      <div key={i} className="relative w-12 h-12 rounded border border-border bg-muted/20 flex items-center justify-center overflow-hidden">
-                        {isAud ? (
-                          <Music className="w-5 h-5 text-muted-foreground" />
-                        ) : isVid ? (
-                          <Video className="w-5 h-5 text-muted-foreground" />
-                        ) : (
-                          <img src={ref.url} alt="" className="w-full h-full object-cover" />
-                        )}
-                        <span className="absolute -top-1 -left-1 text-[8px] bg-primary text-primary-foreground rounded px-0.5 font-bold">{i+1}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-            {videoMode === 'multiref' && orderedImageRefs.length === 0 && (
-              <div className="text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">
-                可连接图片、视频、音频节点
+            {/* 全能参考 preview — categorized by type */}
+            {videoMode === 'multiref' && (
+              <div className="space-y-2">
+                {multirefImages.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3" />参考图 ({multirefImages.length})
+                    </label>
+                    <div className="flex gap-1 flex-wrap">
+                      {multirefImages.map((url, i) => (
+                        <div key={i} className="relative w-12 h-12 rounded border border-border overflow-hidden">
+                          <img src={url} alt="" className="w-full h-full object-cover" />
+                          <span className="absolute -top-1 -left-1 text-[8px] bg-blue-500 text-white rounded px-0.5 font-bold">{i+1}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {multirefVideos.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
+                      <Film className="w-3 h-3" />参考视频 ({multirefVideos.length})
+                    </label>
+                    <div className="flex gap-1 flex-wrap">
+                      {multirefVideos.map((url, i) => (
+                        <div key={i} className="relative w-12 h-12 rounded border border-border bg-zinc-900 flex items-center justify-center overflow-hidden">
+                          <video src={url} className="w-full h-full object-cover" muted preload="metadata" />
+                          <span className="absolute -top-1 -left-1 text-[8px] bg-violet-500 text-white rounded px-0.5 font-bold">{i+1}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {multirefAudios.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
+                      <Music className="w-3 h-3" />参考音频 ({multirefAudios.length})
+                    </label>
+                    <div className="flex flex-col gap-1">
+                      {multirefAudios.map((url, i) => (
+                        <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-muted/20">
+                          <Music className="w-3 h-3 text-muted-foreground shrink-0" />
+                          <audio src={url} controls className="h-6 w-full" style={{ minWidth: 0 }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {orderedImageRefs.length === 0 && (
+                  <div className="text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">
+                    可连接图片、视频、音频节点
+                  </div>
+                )}
               </div>
             )}
 
             {videoMode === 'keyframe' && (
               <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">首帧 → 尾帧</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] text-muted-foreground">
+                    {keyframeImages.length === 0 ? '文生视频' : keyframeImages.length === 1 ? '首帧生视频' : '首帧 → 尾帧'}
+                  </label>
+                  {keyframeImages.length === 2 && (
+                    <button
+                      onClick={() => setKeyframeSwapped((v) => !v)}
+                      className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground transition-colors"
+                      title="交换首尾帧"
+                    >
+                      ⇄ 交换
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
-                  {['frame-start','frame-end'].map((k) => {
-                    const url = namedRefUrls[k]
-                    const label = k === 'frame-start' ? '首' : '尾'
+                  {[0, 1].map((idx) => {
+                    const frame = displayedKeyframes[idx]
+                    const label = idx === 0 ? '首' : '尾'
                     return (
-                      <div key={k} className={cn('relative w-14 h-14 rounded border flex items-center justify-center text-[10px] text-muted-foreground font-medium',
-                        url ? 'border-border' : 'border-dashed border-muted-foreground/30 bg-muted/20')}>
-                        {url
-                          ? <><img src={url} alt="" className="w-full h-full object-cover rounded" />
+                      <div key={idx} className={cn('relative w-14 h-14 rounded border flex items-center justify-center text-[10px] text-muted-foreground font-medium',
+                        frame ? 'border-border' : 'border-dashed border-muted-foreground/30 bg-muted/20')}>
+                        {frame
+                          ? <><img src={frame.url} alt="" className="w-full h-full object-cover rounded" />
                               <span className="absolute -top-1 -left-1 text-[9px] bg-amber-500 text-white rounded px-1 font-bold">{label}</span></>
                           : <span>{label}帧</span>
                         }
                       </div>
                     )
                   })}
+                  {keyframeImages.length === 0 && (
+                    <span className="text-[10px] text-muted-foreground">连接图片节点</span>
+                  )}
                 </div>
               </div>
             )}
