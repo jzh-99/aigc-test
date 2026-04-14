@@ -3,11 +3,39 @@
  * 不依赖任何 UI State 或 Zustand，纯函数
  */
 
+import type {
+  ImageGenConfig,
+  TaskBatchStatus,
+} from '@/lib/canvas/types'
+
+export class CanvasApiError extends Error {
+  code?: string
+  status?: number
+
+  constructor(message: string, options?: { code?: string; status?: number }) {
+    super(message)
+    this.name = 'CanvasApiError'
+    this.code = options?.code
+    this.status = options?.status
+  }
+}
+
+function toCanvasApiError(fallbackMessage: string, status: number, payload: unknown): CanvasApiError {
+  const p = payload as { error?: { message?: string; code?: string } } | null | undefined
+  return new CanvasApiError(p?.error?.message || fallbackMessage, {
+    code: p?.error?.code,
+    status,
+  })
+}
+
 export interface ExecuteNodeParams {
   canvasId: string
   canvasNodeId: string
-  type: string
-  config: any
+  type: 'image_gen'
+  config: Partial<ImageGenConfig> & {
+    model?: string
+    modelCode?: string
+  }
   workspaceId?: string
   referenceImageUrls?: string[] // upstream image/asset node outputs (ordered: ref-1, ref-2, ref-3)
 }
@@ -43,9 +71,10 @@ export interface CanvasHistoryItem {
   quantity: number
   completed_count: number
   failed_count: number
-  status: string
+  status: TaskBatchStatus
   actual_credits: number | null
   created_at: string
+  module?: string
 }
 
 export interface CanvasAssetItem {
@@ -63,6 +92,31 @@ export interface CanvasAssetItem {
 interface CursorListResponse<T> {
   items: T[]
   nextCursor: string | null
+}
+
+export interface CanvasNodeOutputRow {
+  id: string
+  output_urls: string[]
+  is_selected: boolean
+  created_at: string
+}
+
+export interface CanvasActiveBatch {
+  id: string
+  canvas_node_id: string
+  status: Extract<TaskBatchStatus, 'pending' | 'processing'>
+  quantity: number
+  completed_count: number
+  failed_count: number
+  error?: {
+    message?: string
+    code?: string
+  } | null
+}
+
+export interface CanvasActiveTasksResponse {
+  version: number
+  batches: CanvasActiveBatch[]
 }
 
 const READ_MIN_INTERVAL_MS = 1200
@@ -103,7 +157,21 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
   const cfg = params.config
   const modelCode = cfg.modelCode || cfg.model || 'gemini-3.1-flash-image-preview-2k'
 
-  const payload: Record<string, any> = {
+  const payload: {
+    idempotency_key: string
+    canvas_id: string
+    canvas_node_id: string
+    workspace_id: string
+    quantity: number
+    model: string
+    prompt: string
+    params: {
+      aspect_ratio: string
+      resolution: string
+      watermark?: boolean
+      image?: string[]
+    }
+  } = {
     idempotency_key: `canvas_${params.canvasNodeId}_${Date.now()}`,
     canvas_id: params.canvasId,
     canvas_node_id: params.canvasNodeId,
@@ -133,8 +201,8 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
   })
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({}))
-    throw new Error(error.error?.message || '节点执行失败')
+    const payload = await res.json().catch(() => ({}))
+    throw toCanvasApiError('节点执行失败', res.status, payload)
   }
 
   return await res.json()
@@ -155,7 +223,7 @@ export async function uploadCanvasThumbnail(blob: Blob, token?: string): Promise
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.error?.message || '缩略图上传失败')
+    throw toCanvasApiError('缩略图上传失败', res.status, err)
   }
 
   const data = await res.json()
@@ -191,7 +259,7 @@ export async function uploadAssetFile(file: File, token?: string): Promise<strin
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.error?.message || '上传失败')
+    throw toCanvasApiError('上传失败', res.status, err)
   }
 
   const data = await res.json()
@@ -207,13 +275,11 @@ export async function fetchNodeOutputs(canvasId: string, nodeId: string, token?:
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     signal: AbortSignal.timeout(5000),
   })
-  if (!res.ok) throw new Error('拉取节点历史失败')
-  return await res.json() as Array<{
-    id: string
-    output_urls: string[]
-    is_selected: boolean
-    created_at: string
-  }>
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}))
+    throw toCanvasApiError('拉取节点历史失败', res.status, payload)
+  }
+  return await res.json() as CanvasNodeOutputRow[]
 }
 
 /**
@@ -224,13 +290,11 @@ export async function fetchAllNodeOutputs(canvasId: string, token?: string) {
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     signal: AbortSignal.timeout(10000),
   })
-  if (!res.ok) throw new Error('批量拉取节点输出失败')
-  return await res.json() as Record<string, Array<{
-    id: string
-    output_urls: string[]
-    is_selected: boolean
-    created_at: string
-  }>>
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}))
+    throw toCanvasApiError('批量拉取节点输出失败', res.status, payload)
+  }
+  return await res.json() as Record<string, CanvasNodeOutputRow[]>
 }
 
 export async function fetchCanvasActiveTasks(canvasId: string, token?: string) {
@@ -239,8 +303,11 @@ export async function fetchCanvasActiveTasks(canvasId: string, token?: string) {
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     signal: AbortSignal.timeout(5000),
   })
-  if (!res.ok) throw new Error('拉取节点进度失败')
-  return await res.json()
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}))
+    throw toCanvasApiError('拉取节点进度失败', res.status, payload)
+  }
+  return await res.json() as CanvasActiveTasksResponse
 }
 
 export async function fetchCanvasHistory(canvasId: string, token?: string, cursor?: string | null) {
@@ -253,7 +320,10 @@ export async function fetchCanvasHistory(canvasId: string, token?: string, curso
     signal: AbortSignal.timeout(8000),
   })
 
-  if (!res.ok) throw new Error('拉取任务记录失败')
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}))
+    throw toCanvasApiError('拉取任务记录失败', res.status, payload)
+  }
   return await res.json() as CursorListResponse<CanvasHistoryItem>
 }
 
@@ -273,7 +343,10 @@ export async function fetchCanvasAssets(
     signal: AbortSignal.timeout(8000),
   })
 
-  if (!res.ok) throw new Error('拉取资产库失败')
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}))
+    throw toCanvasApiError('拉取资产库失败', res.status, payload)
+  }
   return await res.json() as CursorListResponse<CanvasAssetItem>
 }
 
@@ -294,7 +367,7 @@ export async function selectNodeOutputForCanvas(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.error?.message || '设置定稿失败')
+    throw toCanvasApiError('设置定稿失败', res.status, err)
   }
 
   return await res.json() as { success: boolean; selected_output_id: string }
@@ -308,7 +381,7 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
   const isSeedance = params.model.startsWith('seedance-')
   const isSeedance2 = params.model === 'seedance-2.0' || params.model === 'seedance-2.0-fast'
 
-  const body: Record<string, any> = {
+  const body: Record<string, unknown> = {
     idempotency_key: params.idempotencyKey ?? `canvas_video_${params.canvasNodeId}_${Date.now()}`,
     prompt: params.prompt,
     workspace_id: params.workspaceId,
@@ -358,7 +431,7 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}))
-    throw new Error(error.error?.message || '视频生成任务提交失败')
+    throw toCanvasApiError('视频生成任务提交失败', res.status, error)
   }
 
   return await res.json()

@@ -1,4 +1,4 @@
-import type { CanvasNodeDefinition, CanvasNodeData, AppNode } from './types'
+import type { CanvasNodeDefinition, CanvasNodeData, AppNode, CanvasNodeType } from './types'
 import { TextNode } from '@/components/canvas/nodes/text-node'
 import { ImageGenNode } from '@/components/canvas/nodes/image-gen-node'
 import { AssetNode } from '@/components/canvas/nodes/asset-node'
@@ -71,7 +71,7 @@ export class NodeRegistry {
     return NodeRegistry.instance
   }
 
-  public register<TConfig>(definition: CanvasNodeDefinition<TConfig>) {
+  public register<TType extends CanvasNodeType>(definition: CanvasNodeDefinition<TType>) {
     if (this.nodes.has(definition.type)) {
       console.warn(`[NodeRegistry] 节点类型 '${definition.type}' 已被注册并覆盖。`)
     }

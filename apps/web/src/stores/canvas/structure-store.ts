@@ -8,16 +8,22 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
 } from 'reactflow'
-import type { AppNode, AppEdge } from '@/lib/canvas/types'
+import type { AppNode, AppEdge, CanvasNodeConfig, VideoMode } from '@/lib/canvas/types'
+import { isAssetConfig, isVideoGenConfig } from '@/lib/canvas/types'
 import { hasCycle } from '@/lib/canvas/dag'
 import { nodeRegistry } from '@/lib/canvas/registry'
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 // Deep equality check for undo history — prevents recording no-op changes
 // and works with the throttle to batch rapid mutations (e.g. dragging)
-function deepEqual(a: any, b: any): boolean {
+function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
   if (a == null || b == null) return a === b
   if (typeof a !== typeof b) return false
+
   if (Array.isArray(a)) {
     if (!Array.isArray(b) || a.length !== b.length) return false
     for (let i = 0; i < a.length; i++) {
@@ -25,7 +31,8 @@ function deepEqual(a: any, b: any): boolean {
     }
     return true
   }
-  if (typeof a === 'object') {
+
+  if (isRecord(a) && isRecord(b)) {
     const keysA = Object.keys(a)
     const keysB = Object.keys(b)
     if (keysA.length !== keysB.length) return false
@@ -34,6 +41,7 @@ function deepEqual(a: any, b: any): boolean {
     }
     return true
   }
+
   return false
 }
 
@@ -52,7 +60,7 @@ interface CanvasStructureState {
   onConnect: (connection: Connection) => string | null  // returns error message or null
 
   addNode: (type: string, position: { x: number; y: number }) => void
-  addNodeWithConfig: (type: string, position: { x: number; y: number }, config: any, id?: string) => void
+  addNodeWithConfig: (type: string, position: { x: number; y: number }, config: Record<string, unknown>, id?: string) => void
   removeNodes: (nodeIds: string[]) => void
   removeEdgesByTarget: (nodeId: string, handleIds: string[]) => void
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
@@ -93,10 +101,17 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
     const { nodes, edges } = get()
     if (connection.source === connection.target) return null
 
-    // Block video/audio assets from connecting to image_gen
     const sourceNode = nodes.find((n) => n.id === connection.source)
     const targetNode = nodes.find((n) => n.id === connection.target)
-    const sourceMime = (sourceNode?.data.config as any)?.mimeType as string | undefined
+
+    const getNodeMimeType = (node: AppNode | undefined): string | undefined => {
+      if (!node || node.type !== 'asset' || !isAssetConfig(node.data.config)) return undefined
+      return node.data.config.mimeType
+    }
+
+    const sourceMime = getNodeMimeType(sourceNode)
+
+    // Block video/audio assets from connecting to image_gen
     if (targetNode?.type === 'image_gen' && sourceMime && (sourceMime.startsWith('video') || sourceMime.startsWith('audio'))) {
       return '视频/音频素材不能连接到 AI 生图节点'
     }
@@ -105,7 +120,9 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
     if (connection.targetHandle === 'any-in' || !connection.targetHandle) {
       if (targetNode?.type === 'video_gen') {
         const mimeType = sourceMime
-        const videoMode = (targetNode.data.config as any)?.videoMode ?? 'multiref'
+        const videoMode: VideoMode = isVideoGenConfig(targetNode.data.config)
+          ? targetNode.data.config.videoMode
+          : 'multiref'
         const existingAnyIn = edges.filter((e) => e.target === connection.target && (!e.targetHandle || e.targetHandle === 'any-in'))
 
         if (videoMode === 'keyframe') {
@@ -123,17 +140,17 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
           // multiref: max 9 images, 3 videos, 3 audios
           const existingImages = existingAnyIn.filter((e) => {
             const src = nodes.find((n) => n.id === e.source)
-            const mt = (src?.data.config as any)?.mimeType as string | undefined
+            const mt = getNodeMimeType(src)
             return !mt || mt.startsWith('image')
           }).length
           const existingVideos = existingAnyIn.filter((e) => {
             const src = nodes.find((n) => n.id === e.source)
-            const mt = (src?.data.config as any)?.mimeType as string | undefined
+            const mt = getNodeMimeType(src)
             return mt?.startsWith('video')
           }).length
           const existingAudios = existingAnyIn.filter((e) => {
             const src = nodes.find((n) => n.id === e.source)
-            const mt = (src?.data.config as any)?.mimeType as string | undefined
+            const mt = getNodeMimeType(src)
             return mt?.startsWith('audio')
           }).length
 
@@ -165,7 +182,10 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
 
   addNodeWithConfig: (type, position, config, id) => {
     const newNode = nodeRegistry.createNodeInstance(type, position, id)
-    newNode.data.config = { ...newNode.data.config, ...config }
+    newNode.data.config = {
+      ...newNode.data.config,
+      ...config,
+    } as CanvasNodeConfig
     set((state) => ({ nodes: state.nodes.concat(newNode) }))
   },
 

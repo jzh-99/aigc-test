@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { X, Loader2, ChevronDown, ImageIcon } from 'lucide-react'
+import { X, Loader2, ChevronDown, ImageIcon, Film } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { BatchDetail } from '@/components/history/batch-detail'
 import { cn } from '@/lib/utils'
@@ -26,15 +26,19 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [tab, setTab] = useState<Tab>('history')
   const [detailBatchId, setDetailBatchId] = useState<string | null>(null)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; type: 'image' | 'video' } | null>(null)
 
   const byCanvas = useCanvasSidebarDataStore((s) => s.byCanvas)
   const refreshHistory = useCanvasSidebarDataStore((s) => s.refreshHistory)
   const refreshAssets = useCanvasSidebarDataStore((s) => s.refreshAssets)
+  const refreshVideoAssets = useCanvasSidebarDataStore((s) => s.refreshVideoAssets)
   const loadMoreHistory = useCanvasSidebarDataStore((s) => s.loadMoreHistory)
   const loadMoreAssets = useCanvasSidebarDataStore((s) => s.loadMoreAssets)
+  const loadMoreVideoAssets = useCanvasSidebarDataStore((s) => s.loadMoreVideoAssets)
+  const setAssetSubTab = useCanvasSidebarDataStore((s) => s.setAssetSubTab)
 
   const bucket = byCanvas[canvasId]
+  const assetSubTab = bucket?.assetSubTab ?? 'image'
 
   useEffect(() => {
     if (!token) return
@@ -42,10 +46,28 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
       refreshHistory(canvasId, token)
       return
     }
-    if (tab === 'assets' && !bucket?.assets.loaded && !bucket?.assets.loading) {
+    if (tab === 'assets' && assetSubTab === 'image' && !bucket?.assets.loaded && !bucket?.assets.loading) {
       refreshAssets(canvasId, token)
+      return
     }
-  }, [tab, token, canvasId, bucket?.history.loaded, bucket?.history.loading, bucket?.assets.loaded, bucket?.assets.loading, refreshHistory, refreshAssets])
+    if (tab === 'assets' && assetSubTab === 'video' && !bucket?.videoAssets.loaded && !bucket?.videoAssets.loading) {
+      refreshVideoAssets(canvasId, token)
+    }
+  }, [
+    tab,
+    token,
+    canvasId,
+    assetSubTab,
+    bucket?.history.loaded,
+    bucket?.history.loading,
+    bucket?.assets.loaded,
+    bucket?.assets.loading,
+    bucket?.videoAssets.loaded,
+    bucket?.videoAssets.loading,
+    refreshHistory,
+    refreshAssets,
+    refreshVideoAssets,
+  ])
 
   const historyData = useMemo(() => {
     const fallback = { items: [] as CanvasHistoryItem[], loading: true, loaded: false, nextCursor: null as string | null }
@@ -61,15 +83,17 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
 
   const assetsData = useMemo(() => {
     const fallback = { items: [] as CanvasAssetItem[], loading: true, loaded: false, nextCursor: null as string | null }
-    const section = bucket?.assets ?? fallback
+    const section = assetSubTab === 'video' ? (bucket?.videoAssets ?? fallback) : (bucket?.assets ?? fallback)
     return {
+      subTab: assetSubTab,
       items: section.items,
       loading: token ? section.loading : true,
       loaded: section.loaded,
       hasMore: !!section.nextCursor,
-      loadMore: () => token && loadMoreAssets(canvasId, token),
+      loadMore: () => token && (assetSubTab === 'video' ? loadMoreVideoAssets(canvasId, token) : loadMoreAssets(canvasId, token)),
     }
-  }, [bucket?.assets, token, loadMoreAssets, canvasId])
+  }, [bucket?.assets, bucket?.videoAssets, assetSubTab, token, loadMoreAssets, loadMoreVideoAssets, canvasId])
+
 
   return (
     <>
@@ -87,6 +111,7 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
           {(['history', 'assets'] as Tab[]).map((t) => (
             <button
               key={t}
+              data-testid={t === 'history' ? 'canvas-sidebar-tab-history' : 'canvas-sidebar-tab-assets'}
               onClick={() => setTab(t)}
               className={cn(
                 'flex-1 py-2 text-xs font-medium transition-colors',
@@ -104,7 +129,12 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
             <HistoryTab data={historyData} onOpenDetail={setDetailBatchId} />
           )}
           {tab === 'assets' && (
-            <AssetsTab data={assetsData} onOpenDetail={setDetailBatchId} onOpenLightbox={setLightboxUrl} />
+            <AssetsTab
+              data={assetsData}
+              onSubTabChange={(next) => setAssetSubTab(canvasId, next)}
+              onOpenDetail={setDetailBatchId}
+              onOpenLightbox={(url, type) => setLightbox({ url, type })}
+            />
           )}
         </div>
       </div>
@@ -119,24 +149,34 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
       />
 
       {/* Lightbox for asset preview */}
-      {lightboxUrl && (
+      {lightbox && (
         <div
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightbox(null)}
         >
           <button
             className="absolute top-4 right-4 text-white/70 hover:text-white p-1"
-            onClick={() => setLightboxUrl(null)}
+            onClick={() => setLightbox(null)}
           >
             <X size={24} />
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={lightboxUrl}
-            alt=""
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {lightbox.type === 'video' ? (
+            <video
+              src={lightbox.url}
+              controls
+              autoPlay
+              className="max-w-[90vw] max-h-[90vh] rounded shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={lightbox.url}
+              alt=""
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
         </div>
       )}
     </>
@@ -176,6 +216,7 @@ function HistoryTab({
         return (
           <button
             key={batch.id}
+            data-testid={`canvas-history-item-${batch.id}`}
             onClick={() => onOpenDetail(batch.id)}
             className="w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors"
           >
@@ -187,7 +228,7 @@ function HistoryTab({
             </div>
             <p className="text-xs text-zinc-700 line-clamp-2 mb-1.5">{batch.prompt || '(无提示词)'}</p>
             <div className="flex items-center gap-2 text-[10px] text-zinc-400">
-              <span>{batch.completed_count}/{batch.quantity} 张</span>
+              <span>{batch.completed_count}/{batch.quantity} {(batch.module === 'video' || /^(seedance-|veo)/i.test(batch.model || '')) ? '条' : '张'}</span>
               {batch.actual_credits != null && (
                 <>
                   <span>·</span>
@@ -222,75 +263,106 @@ function HistoryTab({
 
 function AssetsTab({
   data,
+  onSubTabChange,
   onOpenDetail,
   onOpenLightbox,
 }: {
   data: {
+    subTab: 'image' | 'video'
     items: CanvasAssetItem[]
     loading: boolean
     loaded: boolean
     hasMore: boolean
     loadMore: () => void
   }
+  onSubTabChange: (subTab: 'image' | 'video') => void
   onOpenDetail: (id: string) => void
-  onOpenLightbox: (url: string) => void
+  onOpenLightbox: (url: string, type: 'image' | 'video') => void
 }) {
-  const { items, loading, loaded, hasMore, loadMore } = data
-
-  if (loading && items.length === 0) {
-    return (
-      <div className="flex justify-center py-10">
-        <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
-      </div>
-    )
-  }
-  if (loaded && !loading && items.length === 0) {
-    return <div className="text-center py-10 text-xs text-zinc-400">暂无资产</div>
-  }
+  const { subTab, items, loading, loaded, hasMore, loadMore } = data
 
   return (
     <div className="p-3">
-      <div className="grid grid-cols-2 gap-2">
-        {items.map((asset) => {
-          const url = asset.storage_url || asset.original_url
-          return (
-            <button
-              key={asset.id}
-              onClick={() => url ? onOpenLightbox(url) : onOpenDetail(asset.batch_id)}
-              className="group relative rounded-lg overflow-hidden bg-zinc-100 aspect-square focus:outline-none"
-            >
-              {url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <ImageIcon className="w-5 h-5 text-zinc-300" />
-                </div>
-              )}
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5">
-                <p className="text-[9px] text-white line-clamp-2 text-left">{asset.prompt || '—'}</p>
-                <p className="text-[9px] text-white/60 mt-0.5 text-left">
-                  {new Date(asset.created_at).toLocaleString('zh-CN', {
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            </button>
-          )
-        })}
-      </div>
-      {hasMore && (
+      <div className="mb-3 flex rounded-lg border border-zinc-200 overflow-hidden">
         <button
-          onClick={loadMore}
-          disabled={loading}
-          className="w-full mt-3 py-2 text-xs text-zinc-500 hover:text-zinc-700 flex items-center justify-center gap-1 disabled:opacity-50"
+          data-testid="canvas-assets-subtab-image"
+          onClick={() => onSubTabChange('image')}
+          className={cn(
+            'flex-1 py-1.5 text-[11px] font-medium transition-colors',
+            subTab === 'image' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-600 hover:bg-zinc-50'
+          )}
         >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          加载更多
+          图片
         </button>
+        <button
+          data-testid="canvas-assets-subtab-video"
+          onClick={() => onSubTabChange('video')}
+          className={cn(
+            'flex-1 py-1.5 text-[11px] font-medium transition-colors',
+            subTab === 'video' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-600 hover:bg-zinc-50'
+          )}
+        >
+          视频
+        </button>
+      </div>
+
+      {loading && items.length === 0 ? (
+        <div className="flex justify-center py-10">
+          <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+        </div>
+      ) : loaded && !loading && items.length === 0 ? (
+        <div className="text-center py-10 text-xs text-zinc-400">{subTab === 'video' ? '暂无视频资产' : '暂无图片资产'}</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            {items.map((asset) => {
+              const url = asset.storage_url || asset.original_url
+              const isVideo = subTab === 'video' || asset.type?.startsWith('video')
+              return (
+                <button
+                  key={asset.id}
+                  data-testid={`canvas-asset-item-${asset.id}`}
+                  onClick={() => (url ? onOpenLightbox(url, isVideo ? 'video' : 'image') : onOpenDetail(asset.batch_id))}
+                  className="group relative rounded-lg overflow-hidden bg-zinc-100 aspect-square focus:outline-none"
+                >
+                  {url ? (
+                    isVideo ? (
+                      <video src={url} muted preload="metadata" playsInline className="w-full h-full object-cover" />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    )
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      {isVideo ? <Film className="w-5 h-5 text-zinc-300" /> : <ImageIcon className="w-5 h-5 text-zinc-300" />}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5">
+                    <p className="text-[9px] text-white line-clamp-2 text-left">{asset.prompt || '—'}</p>
+                    <p className="text-[9px] text-white/60 mt-0.5 text-left">
+                      {new Date(asset.created_at).toLocaleString('zh-CN', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loading}
+              className="w-full mt-3 py-2 text-xs text-zinc-500 hover:text-zinc-700 flex items-center justify-center gap-1 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              加载更多
+            </button>
+          )}
+        </>
       )}
     </div>
   )
