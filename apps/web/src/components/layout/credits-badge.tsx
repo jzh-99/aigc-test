@@ -37,17 +37,21 @@ export function CreditsBadge({ collapsed }: CreditsBadgeProps) {
   let label: string
 
   if (isOwnerOrAdmin) {
-    // Owner/admin sees team balance
-    displayValue = data?.credits?.balance ?? 0
-    label = '积分余额'
+    // Owner/admin sees team available credits (balance - frozen)
+    const balance = data?.credits?.balance ?? 0
+    const frozen = data?.credits?.frozen_credits ?? 0
+    displayValue = Math.max(0, balance - frozen)
+    label = '可用积分'
   } else {
     // Editor sees personal remaining quota: credit_quota - credit_used, min 0
     const me = data?.members?.find((m) => m.user_id === user?.id)
     if (me && me.credit_quota !== null && me.credit_quota !== undefined) {
       displayValue = Math.max(0, me.credit_quota - (me.credit_used ?? 0))
     } else {
-      // No quota set — show team balance as fallback
-      displayValue = data?.credits?.balance ?? 0
+      // No quota set — show team available credits as fallback
+      const balance = data?.credits?.balance ?? 0
+      const frozen = data?.credits?.frozen_credits ?? 0
+      displayValue = Math.max(0, balance - frozen)
     }
     label = '可用积分'
   }
