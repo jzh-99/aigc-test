@@ -77,7 +77,7 @@ export default function CanvasGalleryPage() {
           <h1 className="text-3xl font-bold">我的画布</h1>
           <p className="text-muted-foreground mt-1">创建和管理你的 AI 创意画布</p>
         </div>
-        <Button onClick={createNewCanvas} disabled={creating} size="lg" className="gap-2">
+        <Button onClick={createNewCanvas} disabled={creating} size="lg" className="gap-2" data-testid="canvas-create-button">
           {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
           新建画布
         </Button>
@@ -98,6 +98,7 @@ export default function CanvasGalleryPage() {
           ) : (
             canvases.map((canvas) => (
               <Link
+                data-testid={`canvas-card-${canvas.id}`}
                 key={canvas.id}
                 href={`/canvas/editor/${canvas.id}`}
                 className="group border rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-card"

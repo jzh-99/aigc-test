@@ -132,6 +132,7 @@ export default function CanvasEditorPage() {
           <CanvasNameEditor name={canvasName} canvasId={id} token={token} />
         </div>
         <button
+          data-testid="canvas-toggle-history"
           onClick={() => setHistoryOpen((v) => !v)}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted"
         >
