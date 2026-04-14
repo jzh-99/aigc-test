@@ -42,15 +42,19 @@ export function StatsCards() {
   let creditValue: number
 
   if (isOwnerOrAdmin) {
-    creditLabel = '积分余额'
-    creditValue = teamData?.credits?.balance ?? 0
+    const balance = teamData?.credits?.balance ?? 0
+    const frozen = teamData?.credits?.frozen_credits ?? 0
+    creditLabel = '可用积分'
+    creditValue = Math.max(0, balance - frozen)
   } else {
     // Editor: show personal remaining = credit_quota - credit_used, min 0
     const me = teamData?.members?.find((m) => m.user_id === user?.id)
     if (me && me.credit_quota !== null && me.credit_quota !== undefined) {
       creditValue = Math.max(0, me.credit_quota - (me.credit_used ?? 0))
     } else {
-      creditValue = teamData?.credits?.balance ?? 0
+      const balance = teamData?.credits?.balance ?? 0
+      const frozen = teamData?.credits?.frozen_credits ?? 0
+      creditValue = Math.max(0, balance - frozen)
     }
     creditLabel = '可用积分'
   }
