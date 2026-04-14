@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { apiGet } from '@/lib/api-client'
 import { ApiError } from '@/lib/api-client'
 import { AlertTriangle, FolderX } from 'lucide-react'
-import useSWR from 'swr'
+import useSWR, { mutate } from 'swr'
 import type { BatchResponse } from '@aigc/types'
 
 interface TeamMember {
@@ -52,6 +52,8 @@ export default function ImagePage() {
   const activeTeam = useAuthStore((s) => s.activeTeam)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
+  const activeTeamIdRef = useRef(activeTeamId)
+  useEffect(() => { activeTeamIdRef.current = activeTeamId }, [activeTeamId])
   const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
 
   useEffect(() => {
@@ -90,6 +92,8 @@ export default function ImagePage() {
         stopPolling(batchId)
         // Short delay so the API has time to populate thumbnail_urls
         setTimeout(() => { batchListRef.current?.refresh() }, 800)
+        // Refresh credit balance after task completes (credits confirmed/refunded)
+        if (activeTeamIdRef.current) mutate(`/teams/${activeTeamIdRef.current}`)
       }
     } catch (err) {
       // 429: rate limited — skip this cycle, retry on next interval
@@ -136,7 +140,9 @@ export default function ImagePage() {
     setActiveBatchCount((c) => c + 1)
     const intervalMs = ((batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation') ? VIDEO_POLL_INTERVAL_MS : POLL_INTERVAL_MS
     startPolling(batch.id, intervalMs)
-  }, [startPolling])
+    // Refresh credit balance immediately after submission (credits are frozen)
+    if (activeTeamId) mutate(`/teams/${activeTeamId}`)
+  }, [startPolling, activeTeamId])
 
   const teamRole = activeTeam()?.role
   const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
