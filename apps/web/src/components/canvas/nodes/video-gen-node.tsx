@@ -39,32 +39,41 @@ function useElapsedTimer(startedAt: number | null): string {
   return `${elapsed}s`
 }
 
-const KEYFRAME_HANDLES = [
-  { id: 'frame-start', label: '首', top: '30%' },
-  { id: 'frame-end',   label: '尾', top: '55%' },
-  { id: 'text-in',     label: '文', top: '80%' },
-]
-
 export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: string; data: CanvasNodeData<VideoGenConfig> }) {
   const execState = useNodeExecutionState(id)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
-  // Count incoming multiref edges (non-text, any-in handle)
+  // Count incoming multiref edges (non-text, any-in handle only)
   const multirefCount = useCanvasStructureStore(
     useShallow((s) => {
       const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
-      return incoming.length
+      return incoming.filter((e) => {
+        const src = s.nodes.find((n) => n.id === e.source)
+        return src?.type !== 'text_input'
+      }).length
     })
   )
-  // Upstream text node labels
+  // Upstream text node labels (any-in edges from text nodes)
   const upstreamTextLabels = useCanvasStructureStore(
     useShallow((s) => {
-      const textEdges = s.edges.filter((e) => e.target === id)
-      return textEdges
+      const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
+      return incoming
         .map((e) => s.nodes.find((n) => n.id === e.source))
         .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
         .map((n) => n.data.label ?? '文本')
+    })
+  )
+  // Count image assets connected in keyframe mode
+  const keyframeImageCount = useCanvasStructureStore(
+    useShallow((s) => {
+      if ((data.config?.videoMode ?? 'multiref') !== 'keyframe') return 0
+      const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
+      return incoming.filter((e) => {
+        const src = s.nodes.find((n) => n.id === e.source)
+        const mt = (src?.data.config as any)?.mimeType as string | undefined
+        return src?.type !== 'text_input' && (!mt || mt.startsWith('image'))
+      }).length
     })
   )
   const token = useAuthStore((s) => s.accessToken)
@@ -244,58 +253,63 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         </div>
       )}
 
-      {/* Input handles */}
-      {videoMode === 'multiref' ? (
-        <>
-          {multirefCount > 0 && (
-            <div
-              className="absolute flex items-center pointer-events-none"
-              style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
-            >
-              <span className="text-[9px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-                全能×{multirefCount}
-              </span>
-            </div>
-          )}
-          {upstreamTextLabels.length > 0 && (
-            <div
-              className="absolute flex items-center pointer-events-none"
-              style={{ top: 'calc(50% + 16px)', left: 0, transform: 'translate(-100%, -50%)' }}
-            >
-              <span className="text-[9px] font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-                文×{upstreamTextLabels.length}
-              </span>
-            </div>
-          )}
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="any-in"
-            style={{ top: '50%' }}
-            className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
-          />
-        </>
-      ) : (
-        KEYFRAME_HANDLES.map((h) => (
-          <div key={h.id}>
-            <div
-              className="absolute flex items-center pointer-events-none"
-              style={{ top: h.top, left: 0, transform: 'translate(-100%, -50%)' }}
-            >
-              <span className="text-[9px] font-medium text-zinc-400 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-                {h.label}
-              </span>
-            </div>
-            <Handle
-              type="target"
-              position={Position.Left}
-              id={h.id}
-              style={{ top: h.top }}
-              className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
-            />
-          </div>
-        ))
-      )}
+      {/* Input handles — single any-in for both modes */}
+      <>
+        {videoMode === 'multiref' ? (
+          <>
+            {multirefCount > 0 && (
+              <div
+                className="absolute flex items-center pointer-events-none"
+                style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
+              >
+                <span className="text-[9px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                  全能×{multirefCount}
+                </span>
+              </div>
+            )}
+            {upstreamTextLabels.length > 0 && (
+              <div
+                className="absolute flex items-center pointer-events-none"
+                style={{ top: 'calc(50% + 16px)', left: 0, transform: 'translate(-100%, -50%)' }}
+              >
+                <span className="text-[9px] font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                  文×{upstreamTextLabels.length}
+                </span>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {keyframeImageCount > 0 && (
+              <div
+                className="absolute flex items-center pointer-events-none"
+                style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
+              >
+                <span className="text-[9px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                  图×{keyframeImageCount}
+                </span>
+              </div>
+            )}
+            {upstreamTextLabels.length > 0 && (
+              <div
+                className="absolute flex items-center pointer-events-none"
+                style={{ top: 'calc(50% + 16px)', left: 0, transform: 'translate(-100%, -50%)' }}
+              >
+                <span className="text-[9px] font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                  文×{upstreamTextLabels.length}
+                </span>
+              </div>
+            )}
+          </>
+        )}
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="any-in"
+          style={{ top: '50%' }}
+          className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
+        />
+      </>
 
       {/* Output handle */}
       <Handle

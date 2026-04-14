@@ -74,7 +74,9 @@ function FloatingParamPanel({
   const sx = rect.left + node.position.x * zoom + tx
   const sy = rect.top + node.position.y * zoom + ty
 
-  const nodeScreenH = (NODE_CANVAS_H[node.type ?? ''] ?? 200) * zoom
+  // Prefer actual DOM node height for accurate positioning
+  const domNode = wrapperRef.current?.querySelector(`[data-id="${node.id}"]`) as HTMLElement | null
+  const nodeScreenH = domNode ? domNode.getBoundingClientRect().height : (NODE_CANVAS_H[node.type ?? ''] ?? 200) * zoom
   const rawTop = sy + nodeScreenH + 8
 
   const nodeScreenW = NODE_W * zoom
@@ -288,7 +290,7 @@ function Flow({
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files).filter(
-      (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
+      (f) => f.type.startsWith('image/') || f.type.startsWith('video/') || f.type.startsWith('audio/')
     )
     if (!files.length) return
     if (!token) { toast.error('请先登录'); return }
@@ -393,7 +395,7 @@ function Flow({
               <span className="text-2xl">✦</span>
             </div>
             <p className="text-sm font-medium text-zinc-500">右键画布或点击顶部按钮添加节点</p>
-            <p className="text-xs text-zinc-400">拖拽图片到画布可快速创建素材节点</p>
+            <p className="text-xs text-zinc-400">拖拽图片/视频/音频到画布可快速创建素材节点</p>
           </div>
         </div>
       )}
@@ -451,6 +453,12 @@ function Flow({
             className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow transition-colors"
           >
             + AI生图
+          </button>
+          <button
+            onClick={() => handleAddNode('asset')}
+            className="px-3 py-1.5 text-xs font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors"
+          >
+            + 素材
           </button>
           <button
             onClick={() => handleAddNode('video_gen')}

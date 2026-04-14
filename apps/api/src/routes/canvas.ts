@@ -658,8 +658,8 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     if (!data) return reply.badRequest('No file provided')
 
     const mimeType: string = data.mimetype ?? ''
-    if (!mimeType.startsWith('image/') && !mimeType.startsWith('video/')) {
-      return reply.badRequest('Only image and video files are supported')
+    if (!mimeType.startsWith('image/') && !mimeType.startsWith('video/') && !mimeType.startsWith('audio/')) {
+      return reply.badRequest('Only image, video, and audio files are supported')
     }
 
     const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? 'bin'

@@ -93,37 +93,58 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
     const { nodes, edges } = get()
     if (connection.source === connection.target) return null
 
+    // Block video/audio assets from connecting to image_gen
+    const sourceNode = nodes.find((n) => n.id === connection.source)
+    const targetNode = nodes.find((n) => n.id === connection.target)
+    const sourceMime = (sourceNode?.data.config as any)?.mimeType as string | undefined
+    if (targetNode?.type === 'image_gen' && sourceMime && (sourceMime.startsWith('video') || sourceMime.startsWith('audio'))) {
+      return '视频/音频素材不能连接到 AI 生图节点'
+    }
+
     // Enforce connection limits for video_gen any-in handle
     if (connection.targetHandle === 'any-in' || !connection.targetHandle) {
-      const targetNode = nodes.find((n) => n.id === connection.target)
       if (targetNode?.type === 'video_gen') {
-        const sourceNode = nodes.find((n) => n.id === connection.source)
-        const mimeType = (sourceNode?.data.config as any)?.mimeType as string | undefined
+        const mimeType = sourceMime
+        const videoMode = (targetNode.data.config as any)?.videoMode ?? 'multiref'
         const existingAnyIn = edges.filter((e) => e.target === connection.target && (!e.targetHandle || e.targetHandle === 'any-in'))
 
-        const existingImages = existingAnyIn.filter((e) => {
-          const src = nodes.find((n) => n.id === e.source)
-          const mt = (src?.data.config as any)?.mimeType as string | undefined
-          return !mt || mt.startsWith('image')
-        }).length
-        const existingVideos = existingAnyIn.filter((e) => {
-          const src = nodes.find((n) => n.id === e.source)
-          const mt = (src?.data.config as any)?.mimeType as string | undefined
-          return mt?.startsWith('video')
-        }).length
-        const existingAudios = existingAnyIn.filter((e) => {
-          const src = nodes.find((n) => n.id === e.source)
-          const mt = (src?.data.config as any)?.mimeType as string | undefined
-          return mt?.startsWith('audio')
-        }).length
+        if (videoMode === 'keyframe') {
+          // keyframe: max 2 images, unlimited text
+          if (sourceNode?.type !== 'text_input') {
+            const existingImages = existingAnyIn.filter((e) => {
+              const src = nodes.find((n) => n.id === e.source)
+              return src?.type !== 'text_input'
+            }).length
+            if (existingImages >= 2) return '首尾帧最多连接 2 张图片'
+            // only images allowed in keyframe mode
+            if (mimeType && !mimeType.startsWith('image')) return '首尾帧模式只接受图片素材'
+          }
+        } else {
+          // multiref: max 9 images, 3 videos, 3 audios
+          const existingImages = existingAnyIn.filter((e) => {
+            const src = nodes.find((n) => n.id === e.source)
+            const mt = (src?.data.config as any)?.mimeType as string | undefined
+            return !mt || mt.startsWith('image')
+          }).length
+          const existingVideos = existingAnyIn.filter((e) => {
+            const src = nodes.find((n) => n.id === e.source)
+            const mt = (src?.data.config as any)?.mimeType as string | undefined
+            return mt?.startsWith('video')
+          }).length
+          const existingAudios = existingAnyIn.filter((e) => {
+            const src = nodes.find((n) => n.id === e.source)
+            const mt = (src?.data.config as any)?.mimeType as string | undefined
+            return mt?.startsWith('audio')
+          }).length
 
-        const isVideo = mimeType?.startsWith('video')
-        const isAudio = mimeType?.startsWith('audio')
-        const isImage = !isVideo && !isAudio
+          const isVideo = mimeType?.startsWith('video')
+          const isAudio = mimeType?.startsWith('audio')
+          const isImage = !isVideo && !isAudio
 
-        if (isImage && existingImages >= 9) return '参考图最多 9 张'
-        if (isVideo && existingVideos >= 3) return '参考视频最多 3 个'
-        if (isAudio && existingAudios >= 3) return '参考音频最多 3 个'
+          if (isImage && existingImages >= 9) return '参考图最多 9 张'
+          if (isVideo && existingVideos >= 3) return '参考视频最多 3 个'
+          if (isAudio && existingAudios >= 3) return '参考音频最多 3 个'
+        }
       }
     }
 
