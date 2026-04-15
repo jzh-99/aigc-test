@@ -11,6 +11,7 @@ import { CreditsBadge } from './credits-badge'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { useLayoutStore } from '@/stores/layout-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useTeamFeatures } from '@/hooks/use-team-features'
 import {
   LayoutDashboard,
   Images,
@@ -51,8 +52,11 @@ const bottomNavItems: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname()
   const { sidebarCollapsed, toggleSidebar } = useLayoutStore()
+  const { showCanvasTab } = useTeamFeatures()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
+
+  const visibleBaseItems = baseNavItems.filter((item) => item.href !== '/canvas' || showCanvasTab)
 
   const visibleRoleItems = roleNavItems.filter((item) => {
     if (item.requireUserRole && user?.role !== item.requireUserRole) return false
@@ -129,7 +133,7 @@ export function Sidebar() {
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
         <nav className="flex flex-col gap-1 px-2">
-          {baseNavItems.map(renderNavItem)}
+          {visibleBaseItems.map(renderNavItem)}
 
           {visibleRoleItems.length > 0 && (
             <>

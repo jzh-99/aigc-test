@@ -12,6 +12,19 @@ const CANVAS_UPLOAD_DIR = '/tmp/canvas-uploads'
 const CANVAS_UPLOAD_MAX_AGE_MS = 10 * 60 * 1000 // 10 min — enough for external storage to fetch
 const SAFE_CANVAS_ID = /^[\w-]+\.(jpg|jpeg|png|webp|gif|mp4|mov|webm)$/
 
+async function assertCanvasEnabledForWorkspace(db: ReturnType<typeof getDb>, workspaceId: string) {
+  const workspace = await db
+    .selectFrom('workspaces')
+    .innerJoin('teams', 'teams.id', 'workspaces.team_id')
+    .select('teams.team_type')
+    .where('workspaces.id', '=', workspaceId)
+    .executeTakeFirst()
+
+  if (!workspace || workspace.team_type !== 'avatar_enabled') {
+    throw new Error('CANVAS_DISABLED')
+  }
+}
+
 function hasS3UploadConfig(): boolean {
   return Boolean(
     process.env.STORAGE_ENDPOINT
@@ -94,11 +107,14 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     const userId = request.user.id
     const filterWsId = (request.query as any).workspace_id as string | undefined
 
-    // Get all workspace IDs the user belongs to
+    // Get all workspace IDs the user belongs to and that have canvas enabled
     const memberships = await db
       .selectFrom('workspace_members')
-      .select('workspace_id')
-      .where('user_id', '=', userId)
+      .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
+      .innerJoin('teams', 'teams.id', 'workspaces.team_id')
+      .select('workspace_members.workspace_id')
+      .where('workspace_members.user_id', '=', userId)
+      .where('teams.team_type', '=', 'avatar_enabled')
       .execute()
 
     const wsIds = memberships.map((m: any) => m.workspace_id)
@@ -179,6 +195,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该工作空间' } })
     }
 
+    try {
+      await assertCanvasEnabledForWorkspace(db, wsId)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
+
     const canvas = await db
       .insertInto('canvases')
       .values({
@@ -212,6 +234,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .where('user_id', '=', request.user.id)
       .executeTakeFirst()
     if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
+
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
 
     return reply.send(canvas)
   })
@@ -247,6 +275,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .where('user_id', '=', request.user.id)
       .executeTakeFirst()
     if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权修改该画布' } })
+
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
 
     // Optimistic lock
     let query = db.updateTable('canvases')
@@ -290,6 +324,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权删除该画布' } })
     }
 
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
+
     await db.deleteFrom('canvases').where('id', '=', request.params.id).execute()
     return reply.status(204).send()
   })
@@ -320,6 +360,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .where('user_id', '=', request.user.id)
       .executeTakeFirst()
     if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
+
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
 
     // Get dirty version from Redis
     const redis = (app as any).redis
@@ -362,6 +408,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .where('user_id', '=', request.user.id)
       .executeTakeFirst()
     if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
+
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
 
     const outputs = await db
       .selectFrom('canvas_node_outputs')
@@ -408,6 +460,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .where('user_id', '=', request.user.id)
       .executeTakeFirst()
     if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
+
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
 
     const outputs = await db
       .selectFrom('canvas_node_outputs')
@@ -471,6 +529,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .executeTakeFirst()
     if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权修改该画布' } })
 
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
+
     const target = await db
       .selectFrom('canvas_node_outputs')
       .select('id')
@@ -529,6 +593,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .where('workspace_id', '=', canvas.workspace_id)
       .where('user_id', '=', request.user.id).executeTakeFirst()
     if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
+
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
 
     let decodedCursor: { created_at: string; id: string } | null = null
     if (cursor) {
@@ -593,6 +663,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .where('user_id', '=', request.user.id).executeTakeFirst()
     if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
 
+    try {
+      await assertCanvasEnabledForWorkspace(db, canvas.workspace_id)
+    } catch {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
+
     let decodedCursor: { created_at: string; id: string } | null = null
     if (cursor) {
       try { decodedCursor = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8')) }
@@ -654,6 +730,23 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
+    const db = getDb()
+    const userId = request.user.id
+
+    const memberships = await db
+      .selectFrom('workspace_members')
+      .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
+      .innerJoin('teams', 'teams.id', 'workspaces.team_id')
+      .select('workspace_members.workspace_id')
+      .where('workspace_members.user_id', '=', userId)
+      .where('teams.team_type', '=', 'avatar_enabled')
+      .limit(1)
+      .execute()
+
+    if (memberships.length === 0) {
+      return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
+    }
+
     const data = await (request as any).file({ limits: { fileSize: 50 * 1024 * 1024 } })
     if (!data) return reply.badRequest('No file provided')
 

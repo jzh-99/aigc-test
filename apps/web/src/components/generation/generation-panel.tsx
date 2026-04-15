@@ -320,6 +320,17 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     }
   }, [videoModel]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Ensure current tab is allowed by team feature flags
+  useEffect(() => {
+    if (mode === 'avatar' && !showAvatarTab) {
+      setMode('image')
+      return
+    }
+    if (mode === 'action_imitation' && !showActionImitationTab) {
+      setMode('image')
+    }
+  }, [mode, showAvatarTab, showActionImitationTab])
+
   // Process dropped / selected image files
   const handleImageFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
