@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, memo } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useShallow } from 'zustand/react/shallow'
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Film } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Pause, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
@@ -79,6 +79,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const token = useAuthStore((s) => s.accessToken)
   const [confirming, setConfirming] = useState(false)
   const [playing, setPlaying] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
   const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
@@ -89,6 +90,9 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const currentUrl = selectedOutput?.url
   const currentIndex = outputs.findIndex((o) => o.id === selectedOutputId)
   const elapsed = useElapsedTimer(isGenerating ? startedAt : null)
+
+  // Reset play state when switching outputs
+  useEffect(() => { setPlaying(false) }, [selectedOutputId])
 
   function handlePrev(e: React.MouseEvent) {
     e.stopPropagation()
@@ -128,7 +132,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         '[transform:translateZ(0)] [backface-visibility:hidden]',
         '[contain:layout_style] [will-change:transform]',
       )}
-      style={{ width: 220 }}
+      style={{ width: 280 }}
     >
       {/* Delete */}
       <button
@@ -168,30 +172,26 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         {currentUrl ? (
           isVideo ? (
             <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
-              {playing ? (
-                <video
-                  src={currentUrl}
-                  className="w-full h-full object-contain"
-                  autoPlay
-                  controls
-                  onEnded={() => setPlaying(false)}
-                />
-              ) : (
-                <>
-                  <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
-                    <Film className="w-8 h-8 text-zinc-600" />
-                  </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setPlaying(true) }}
-                    className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
-                      <Play className="w-4 h-4 text-zinc-800 ml-0.5" />
-                    </div>
-                  </button>
-                </>
-              )}
+              <video
+                ref={videoRef}
+                src={currentUrl}
+                className="w-full h-full object-contain"
+                preload="metadata"
+                onEnded={() => setPlaying(false)}
+              />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (playing) { videoRef.current?.pause(); setPlaying(false) }
+                  else { videoRef.current?.play(); setPlaying(true) }
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
+                  {playing ? <Pause className="w-4 h-4 text-zinc-800" /> : <Play className="w-4 h-4 text-zinc-800 ml-0.5" />}
+                </div>
+              </button>
             </div>
           ) : (
             <img src={currentUrl} alt="output" className="w-full h-auto rounded-lg block" loading="lazy" />
@@ -231,7 +231,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
       )}
 
       {/* History pager */}
-      {outputs.length > 1 && (
+      {outputs.length >= 1 && (
         <div className="border-t border-zinc-100 px-3 py-1 flex items-center justify-between bg-zinc-50 rounded-b-xl">
           <button onClick={handlePrev} disabled={currentIndex <= 0} className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded">
             <ChevronLeft className="w-3.5 h-3.5" />

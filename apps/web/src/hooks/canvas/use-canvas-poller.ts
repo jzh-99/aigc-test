@@ -49,7 +49,8 @@ export function useCanvasPoller(canvasId: string | null) {
       for (const row of outputs) {
         const url = row.output_urls?.[0]
         if (!url) continue
-        store.addNodeOutput(nodeId, { id: row.id, url, type: 'image' })
+        const type = /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
+        store.addNodeOutput(nodeId, { id: row.id, url, type })
       }
       const selected = outputs.find((o) => o.is_selected)
       if (selected) store.selectNodeOutput(nodeId, selected.id)
@@ -70,7 +71,8 @@ export function useCanvasPoller(canvasId: string | null) {
         for (const row of outputs) {
           const url = row.output_urls?.[0]
           if (!url) continue
-          store.addNodeOutput(nodeId, { id: row.id, url, type: 'image' })
+          const type = /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
+          store.addNodeOutput(nodeId, { id: row.id, url, type })
         }
         const selected = outputs.find((o) => o.is_selected)
         if (selected) store.selectNodeOutput(nodeId, selected.id)
