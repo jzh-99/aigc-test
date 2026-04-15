@@ -33,23 +33,6 @@ const NODE_CANVAS_H: Record<string, number> = {
   video_gen: 220,
 }
 
-/** Subscribe to ReactFlow transform throttled to one update per animation frame */
-function useThrottledTransform() {
-  const rawTransform = useStore((s) => s.transform)
-  const [throttled, setThrottled] = useState(rawTransform)
-  const rafRef = useRef(0)
-
-  useEffect(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      setThrottled(rawTransform)
-    })
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [rawTransform])
-
-  return throttled
-}
-
 function FloatingParamPanel({
   node,
   canvasId,
@@ -63,32 +46,31 @@ function FloatingParamPanel({
   onClose: () => void
   onExecuted: () => void
 }) {
-  const transform = useThrottledTransform()
+  const [tx, ty, zoom] = useStore((s) => s.transform)
+  const PANEL_W = 640
+  const PANEL_MAX_H = 560
+  const NODE_W = 280
+  const GAP = 8
+
   const rect = wrapperRef.current?.getBoundingClientRect()
   if (!rect) return null
 
-  const [tx, ty, zoom] = transform
-  const PANEL_W = 640
-  const PANEL_MARGIN = 8
-  const PANEL_MAX_H = Math.min(window.innerHeight - PANEL_MARGIN * 2, 560)
-  const NODE_W = 280
+  const domNode = wrapperRef.current?.querySelector(`[data-id="${node.id}"]`) as HTMLElement | null
+  const nodeScreenH = domNode
+    ? domNode.getBoundingClientRect().height
+    : (NODE_CANVAS_H[node.type ?? ''] ?? 200) * zoom
 
   const sx = rect.left + node.position.x * zoom + tx
   const sy = rect.top + node.position.y * zoom + ty
 
-  // Prefer actual DOM node height for accurate positioning
-  const domNode = wrapperRef.current?.querySelector(`[data-id="${node.id}"]`) as HTMLElement | null
-  const nodeScreenH = domNode ? domNode.getBoundingClientRect().height : (NODE_CANVAS_H[node.type ?? ''] ?? 200) * zoom
-  const rawTop = sy + nodeScreenH + 8
-
-  const nodeScreenW = NODE_W * zoom
-  let left = sx + nodeScreenW / 2 - PANEL_W / 2
-  left = Math.max(rect.left + PANEL_MARGIN, Math.min(left, window.innerWidth - PANEL_W - PANEL_MARGIN))
-
-  const top = Math.max(PANEL_MARGIN, Math.min(rawTop, window.innerHeight - PANEL_MARGIN - PANEL_MAX_H))
+  const top = sy + nodeScreenH + GAP
+  const left = sx + (NODE_W * zoom) / 2 - PANEL_W / 2
 
   return createPortal(
-    <div className="fixed z-50 drop-shadow-2xl" style={{ top, left, width: PANEL_W, maxHeight: PANEL_MAX_H, overflowY: 'auto' }}>
+    <div
+      className="fixed z-50 drop-shadow-2xl"
+      style={{ top, left, width: PANEL_W, maxHeight: PANEL_MAX_H, overflowY: 'auto' }}
+    >
       <NodeParamPanel
         node={node}
         canvasId={canvasId}

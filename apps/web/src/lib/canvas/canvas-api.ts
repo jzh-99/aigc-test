@@ -382,7 +382,7 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
   const isSeedance2 = params.model === 'seedance-2.0' || params.model === 'seedance-2.0-fast'
 
   const body: Record<string, unknown> = {
-    idempotency_key: params.idempotencyKey ?? `canvas_video_${params.canvasNodeId}_${Date.now()}`,
+    idempotency_key: params.idempotencyKey ?? `cv_${(params.canvasNodeId ?? '').slice(-8)}_${Date.now()}`,
     prompt: params.prompt,
     workspace_id: params.workspaceId,
     model: params.model,
