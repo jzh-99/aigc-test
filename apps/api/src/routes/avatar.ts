@@ -137,6 +137,16 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
       teamId = workspace.team_id
     }
 
+    const team = await db
+      .selectFrom('teams')
+      .select('team_type')
+      .where('id', '=', teamId)
+      .executeTakeFirst()
+
+    if (!team || team.team_type !== 'standard') {
+      return reply.status(403).send({ success: false, error: { code: 'AVATAR_DISABLED', message: '当前团队未开通数字人能力' } })
+    }
+
     // Check concurrent avatar tasks — API only supports 1 concurrent
     const activeTasks = await db
       .selectFrom('tasks')
