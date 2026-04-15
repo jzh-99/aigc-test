@@ -417,10 +417,17 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
     const outputs = await db
       .selectFrom('canvas_node_outputs')
-      .selectAll()
-      .where('canvas_id', '=', id)
-      .where('node_id', '=', nodeId)
-      .orderBy('created_at', 'desc')
+      .leftJoin('assets', 'assets.batch_id', 'canvas_node_outputs.batch_id')
+      .select([
+        'canvas_node_outputs.id',
+        'canvas_node_outputs.output_urls',
+        'canvas_node_outputs.is_selected',
+        'canvas_node_outputs.created_at',
+        'assets.type as asset_type',
+      ])
+      .where('canvas_node_outputs.canvas_id', '=', id)
+      .where('canvas_node_outputs.node_id', '=', nodeId)
+      .orderBy('canvas_node_outputs.created_at', 'desc')
       .execute()
 
     // Sign each output_urls array
@@ -469,9 +476,17 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
     const outputs = await db
       .selectFrom('canvas_node_outputs')
-      .selectAll()
-      .where('canvas_id', '=', id)
-      .orderBy('created_at', 'desc')
+      .leftJoin('assets', 'assets.batch_id', 'canvas_node_outputs.batch_id')
+      .select([
+        'canvas_node_outputs.id',
+        'canvas_node_outputs.node_id',
+        'canvas_node_outputs.output_urls',
+        'canvas_node_outputs.is_selected',
+        'canvas_node_outputs.created_at',
+        'assets.type as asset_type',
+      ])
+      .where('canvas_node_outputs.canvas_id', '=', id)
+      .orderBy('canvas_node_outputs.created_at', 'desc')
       .execute()
 
     // Group by node_id and sign URLs
