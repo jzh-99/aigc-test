@@ -99,6 +99,7 @@ export interface CanvasNodeOutputRow {
   output_urls: string[]
   is_selected: boolean
   created_at: string
+  asset_type?: 'image' | 'video' | 'audio' | null
 }
 
 export interface CanvasActiveBatch {

@@ -22,7 +22,7 @@ import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { toast } from 'sonner'
 import { NodeParamPanel } from './node-param-panel'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
-import { getAllUpstreamNodeIds } from '@/lib/canvas/dag'
+import { getUpstreamNodeIds } from '@/lib/canvas/dag'
 
 const nodeTypes = nodeRegistry.getReactFlowTypesMapping()
 
@@ -317,9 +317,9 @@ function Flow({
     [nodes, selectedNodeId]
   )
 
-  // Compute upstream node IDs for lineage highlighting
-  const upstreamIds = useMemo(
-    () => selectedNodeId ? getAllUpstreamNodeIds(selectedNodeId, edges) : new Set<string>(),
+  // Compute direct upstream node IDs for lineage highlighting (one layer only)
+  const directUpstreamIds = useMemo(
+    () => selectedNodeId ? new Set(getUpstreamNodeIds(selectedNodeId, edges)) : new Set<string>(),
     [selectedNodeId, edges]
   )
 
@@ -328,7 +328,7 @@ function Flow({
   // consider a diffing approach that only spreads changed edges.
   const styledEdges = useMemo<AppEdge[]>(() => edges.map((edge) => {
     const isUpstream = selectedNodeId
-      ? (edge.target === selectedNodeId || (upstreamIds.has(edge.source) && upstreamIds.has(edge.target)))
+      ? edge.target === selectedNodeId
       : false
     const isActive = generatingNodeIds.has(edge.target)
     const isSelected = edge.id === selectedEdgeId
@@ -337,13 +337,13 @@ function Flow({
     if (isActive) return { ...edge, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }
     if (isUpstream) return { ...edge, animated: false, style: { stroke: '#a78bfa', strokeWidth: 2 } }
     return { ...edge, animated: false, style: { stroke: '#d4d4d8', strokeWidth: 1.5 } }
-  }), [edges, selectedNodeId, selectedEdgeId, upstreamIds, generatingNodeIds])
+  }), [edges, selectedNodeId, selectedEdgeId, generatingNodeIds])
 
-  // Push upstream highlight set into execution store so nodes read it directly
+  // Push direct upstream highlight set into execution store so nodes read it directly
   // (avoids recreating all node data objects on selection change)
   useEffect(() => {
-    setHighlightedNodes(upstreamIds)
-  }, [upstreamIds, setHighlightedNodes])
+    setHighlightedNodes(directUpstreamIds)
+  }, [directUpstreamIds, setHighlightedNodes])
 
   // nodes passed to ReactFlow are stable — no data mutation needed
   const saveLabel = saving

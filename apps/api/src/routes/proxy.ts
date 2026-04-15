@@ -3,12 +3,24 @@ import { decryptProxyUrl } from '../lib/storage.js'
 
 // Only proxy URLs from allowed storage hosts to prevent SSRF
 function isAllowedUrl(url: string): boolean {
-  const storageUrl = process.env.EXTERNAL_STORAGE_URL ?? ''
-  if (!storageUrl) return false
+  const allowedHosts: Array<{ hostname: string; port: string }> = []
+
+  for (const envVar of ['EXTERNAL_STORAGE_URL', 'EXTERNAL_STORAGE_BASE']) {
+    const raw = process.env[envVar] ?? ''
+    if (!raw) continue
+    try {
+      const parsed = new URL(raw)
+      allowedHosts.push({ hostname: parsed.hostname, port: parsed.port })
+    } catch {}
+  }
+
+  if (allowedHosts.length === 0) return false
+
   try {
-    const allowed = new URL(storageUrl)
     const target = new URL(url)
-    return target.hostname === allowed.hostname && target.port === allowed.port
+    return allowedHosts.some(
+      (h) => target.hostname === h.hostname && target.port === h.port
+    )
   } catch {
     return false
   }

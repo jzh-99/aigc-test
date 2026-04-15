@@ -33,6 +33,8 @@ interface VideoTaskRow {
   externalTaskId: string
   processingStartedAt: string | null
   provider: string
+  canvasId: string | null
+  canvasNodeId: string | null
 }
 
 async function checkVeoTask(externalTaskId: string): Promise<{
@@ -155,6 +157,27 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
 
   await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
 
+  // Write canvas_node_outputs if this task belongs to a canvas node
+  if (task.canvasId && task.canvasNodeId) {
+    const canvasId = task.canvasId
+    const nodeId = task.canvasNodeId
+    await db.updateTable('canvas_node_outputs')
+      .set({ is_selected: false })
+      .where('canvas_id', '=', canvasId)
+      .where('node_id', '=', nodeId)
+      .execute()
+    await db.insertInto('canvas_node_outputs')
+      .values({
+        canvas_id: canvasId,
+        node_id: nodeId,
+        batch_id: batchId,
+        output_urls: sql`ARRAY[${videoUrl}]::text[]`,
+        is_selected: true,
+      })
+      .execute()
+    await getPubRedis().incr(`canvas:dirty:${canvasId}`)
+  }
+
   // Enqueue transfer job — same as image pipeline
   const assetRow = await db
     .selectFrom('assets')
@@ -232,6 +255,8 @@ async function pollVideoTasks(): Promise<void> {
       'task_batches.user_id as userId',
       'task_batches.credit_account_id as creditAccountId',
       'task_batches.provider as provider',
+      'task_batches.canvas_id as canvasId',
+      'task_batches.canvas_node_id as canvasNodeId',
     ])
     .where('tasks.status', '=', 'processing')
     .where('task_batches.module', '=', 'video')
