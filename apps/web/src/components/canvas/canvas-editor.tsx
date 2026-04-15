@@ -328,9 +328,9 @@ function Flow({
   // consider a diffing approach that only spreads changed edges.
   const styledEdges = useMemo<AppEdge[]>(() => edges.map((edge) => {
     const isUpstream = selectedNodeId
-      ? (edge.target === selectedNodeId || upstreamIds.has(edge.source))
+      ? (edge.target === selectedNodeId || (upstreamIds.has(edge.source) && upstreamIds.has(edge.target)))
       : false
-    const isActive = generatingNodeIds.has(edge.target) || generatingNodeIds.has(edge.source)
+    const isActive = generatingNodeIds.has(edge.target)
     const isSelected = edge.id === selectedEdgeId
 
     if (isSelected) return { ...edge, animated: false, style: { stroke: '#ef4444', strokeWidth: 2 } }
