@@ -8,8 +8,8 @@ export function useTeamFeatures() {
   return {
     isCompanyA,
     showVideoTab: !isCompanyA,
-    showAvatarTab: teamType === 'standard',
-    showActionImitationTab: teamType === 'standard',
+    showAvatarTab: teamType === 'standard' || teamType === 'avatar_enabled',
+    showActionImitationTab: teamType === 'standard' || teamType === 'avatar_enabled',
     showCanvasTab: teamType === 'avatar_enabled',
   }
 }

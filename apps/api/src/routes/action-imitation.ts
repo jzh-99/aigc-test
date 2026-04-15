@@ -131,7 +131,7 @@ export async function actionImitationRoutes(app: FastifyInstance): Promise<void>
       .where('id', '=', teamId)
       .executeTakeFirst()
 
-    if (!team || team.team_type !== 'standard') {
+    if (!team || (team.team_type !== 'standard' && team.team_type !== 'avatar_enabled')) {
       return reply.status(403).send({ success: false, error: { code: 'ACTION_IMITATION_DISABLED', message: '当前团队未开通动作模仿能力' } })
     }
 

@@ -119,7 +119,7 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
               <SelectContent>
                 <SelectItem value="standard">标准版</SelectItem>
                 <SelectItem value="company_a">省台版</SelectItem>
-                <SelectItem value="avatar_enabled">专业版（含数字人）</SelectItem>
+                <SelectItem value="avatar_enabled">专业版</SelectItem>
               </SelectContent>
             </Select>
           </div>
