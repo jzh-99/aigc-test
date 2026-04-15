@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useAuthStore } from '@/stores/auth-store'
 
-const DEBOUNCE_MS = 180000 // 3 minutes
+const DEBOUNCE_MS = 3000 // 3 seconds
 
 async function doSave(canvasId: string, token: string) {
   // Always read latest state from store — avoids stale closure version bug
@@ -36,6 +36,7 @@ export function useCanvasAutosave(canvasId: string | null) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
   const isFirstRender = useRef(true)
   const isSaving = useRef(false)
+  const pendingSaveRef = useRef(false)
   const dirtyRef = useRef(false)
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
@@ -45,7 +46,13 @@ export function useCanvasAutosave(canvasId: string | null) {
   const edges = useCanvasStructureStore((s) => s.edges)
 
   const save = useCallback(async () => {
-    if (!canvasId || !token || isSaving.current) return
+    if (!canvasId || !token) return
+
+    if (isSaving.current) {
+      pendingSaveRef.current = true
+      return
+    }
+
     isSaving.current = true
     setSaving(true)
     try {
@@ -59,6 +66,10 @@ export function useCanvasAutosave(canvasId: string | null) {
     } finally {
       isSaving.current = false
       setSaving(false)
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false
+        void save()
+      }
     }
   }, [canvasId, token])
 

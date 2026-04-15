@@ -54,6 +54,7 @@ interface CanvasStructureState {
 
   initCanvas: (canvasId: string, nodes: AppNode[], edges: AppEdge[], version: number, workspaceId?: string) => void
   setLocalVersion: (version: number) => void
+  flushHistory: () => void
 
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
@@ -66,6 +67,9 @@ interface CanvasStructureState {
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
 }
 
+let historyCommitTimer: ReturnType<typeof setTimeout> | undefined
+let pendingHistoryCommit: (() => void) | null = null
+
 export const useCanvasStructureStore = create<CanvasStructureState>()(
   temporal(
     (set, get) => ({
@@ -76,6 +80,8 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
   localVersion: 1,
 
   initCanvas: (canvasId, nodes, edges, version, workspaceId) => {
+    clearTimeout(historyCommitTimer)
+    pendingHistoryCommit = null
     set({ canvasId, nodes, edges, localVersion: version, workspaceId: workspaceId ?? null })
     // Clear undo history so users can't undo past the loaded state
     useCanvasStructureStore.temporal.getState().clear()
@@ -83,6 +89,14 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
 
   setLocalVersion: (version) => {
     set({ localVersion: version })
+  },
+
+  flushHistory: () => {
+    if (!pendingHistoryCommit) return
+    clearTimeout(historyCommitTimer)
+    const commit = pendingHistoryCommit
+    pendingHistoryCommit = null
+    commit()
   },
 
   onNodesChange: (changes) => {
@@ -233,11 +247,16 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
       limit: 50,
       // Throttle history snapshots so rapid changes (dragging, etc.) merge into one entry
       handleSet: (handleSetCb) => {
-        let timer: ReturnType<typeof setTimeout> | undefined
         return (state: Parameters<typeof handleSetCb>[0]) => {
-          clearTimeout(timer)
-          timer = setTimeout(() => {
+          clearTimeout(historyCommitTimer)
+          pendingHistoryCommit = () => {
+            pendingHistoryCommit = null
             handleSetCb(state)
+          }
+          historyCommitTimer = setTimeout(() => {
+            const commit = pendingHistoryCommit
+            pendingHistoryCommit = null
+            commit?.()
           }, 500)
         }
       },
