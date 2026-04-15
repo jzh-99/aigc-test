@@ -98,6 +98,7 @@ function Flow({
   const onNodesChange = useCanvasStructureStore((s) => s.onNodesChange)
   const onEdgesChange = useCanvasStructureStore((s) => s.onEdgesChange)
   const onConnect = useCanvasStructureStore((s) => s.onConnect)
+  const flushHistory = useCanvasStructureStore((s) => s.flushHistory)
   const addNode = useCanvasStructureStore((s) => s.addNode)
   const addNodeWithConfig = useCanvasStructureStore((s) => s.addNodeWithConfig)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
@@ -192,13 +193,17 @@ function Flow({
       // Undo: Ctrl+Z
       if (isMod && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
+        flushHistory()
         useCanvasStructureStore.temporal.getState().undo()
+        void onSave()
         return
       }
       // Redo: Ctrl+Shift+Z or Ctrl+Y
       if ((isMod && e.key === 'z' && e.shiftKey) || (isMod && e.key === 'y')) {
         e.preventDefault()
+        flushHistory()
         useCanvasStructureStore.temporal.getState().redo()
+        void onSave()
         return
       }
 
@@ -240,7 +245,7 @@ function Flow({
         trackingMouseRef.current = false
       }
     }
-  }, [selectedNodeId, nodes, addNodeWithConfig, project, trackMouse])
+  }, [selectedNodeId, nodes, addNodeWithConfig, project, trackMouse, flushHistory, onSave])
 
   const handleAddNode = useCallback((type: string) => {
     const rect = wrapperRef.current?.getBoundingClientRect()
@@ -457,14 +462,22 @@ function Flow({
         </Panel>
         <Panel position="top-right" className="flex gap-1.5">
           <button
-            onClick={() => useCanvasStructureStore.temporal.getState().undo()}
+            onClick={() => {
+              flushHistory()
+              useCanvasStructureStore.temporal.getState().undo()
+              void onSave()
+            }}
             className="px-2 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors"
             title="撤销 (Ctrl+Z)"
           >
             ↩
           </button>
           <button
-            onClick={() => useCanvasStructureStore.temporal.getState().redo()}
+            onClick={() => {
+              flushHistory()
+              useCanvasStructureStore.temporal.getState().redo()
+              void onSave()
+            }}
             className="px-2 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors"
             title="重做 (Ctrl+Shift+Z)"
           >

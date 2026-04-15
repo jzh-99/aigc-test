@@ -133,7 +133,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .orderBy('updated_at', 'desc')
       .execute()
 
-    // Attach up to 4 recent output URLs per canvas for preview grid
+    // Attach up to 2 recent image output URLs per canvas for preview grid
     const canvasIds = canvases.map((c) => c.id)
     let previewMap: Record<string, string[]> = {}
     if (canvasIds.length > 0) {
@@ -147,10 +147,13 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       for (const row of rows) {
         const cid = row.canvas_id as string
         if (!previewMap[cid]) previewMap[cid] = []
-        if (previewMap[cid].length < 4) {
-          const url = (row.output_urls as string[] | null)?.[0]
-          if (url) previewMap[cid].push(url)
-        }
+        if (previewMap[cid].length >= 2) continue
+
+        const url = (row.output_urls as string[] | null)?.[0]
+        if (!url) continue
+        if (/\.(mp4|mov|webm)(\?|$)/i.test(url)) continue
+
+        previewMap[cid].push(url)
       }
 
       // Sign all collected URLs

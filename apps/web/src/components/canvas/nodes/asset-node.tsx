@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeHighlighted } from '@/stores/canvas/execution-store'
@@ -18,6 +18,11 @@ export interface AssetNodeConfig {
   mimeType?: string
 }
 
+function nodeWidthFromRatio(w: number, h: number): number {
+  const ratio = w / h
+  return Math.min(360, Math.max(160, Math.round(200 * ratio)))
+}
+
 export const AssetNode = memo(function AssetNode({ id, data }: { id: string; data: CanvasNodeData<AssetNodeConfig> }) {
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
@@ -30,14 +35,23 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [playing, setPlaying] = useState(false)
+  const [videoSize, setVideoSize] = useState<{ w: number; h: number } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
+
+  useEffect(() => {
+    if (!isVideo) {
+      setVideoSize(null)
+      setPlaying(false)
+    }
+  }, [isVideo, cfg.url])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     if (!token) { toast.error('请先登录'); return }
     setUploading(true)
+    setVideoSize(null)
     try {
       const url = await uploadAssetFile(file, token)
       updateNodeData(id, {
@@ -69,7 +83,8 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
   }
 
   const TypeIcon = isVideo ? FileVideo : isAudio ? Music : ImageIcon
-
+  const displayRatio = isVideo && videoSize ? `${videoSize.w} / ${videoSize.h}` : '16 / 9'
+  const nodeWidth = isVideo && videoSize ? nodeWidthFromRatio(videoSize.w, videoSize.h) : 160
   return (
     <div
       className={cn(
@@ -78,7 +93,7 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
         isUpstream && 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
       )}
-      style={{ width: 160 }}
+      style={{ width: nodeWidth }}
     >
       {/* Delete */}
       <button
@@ -124,19 +139,30 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
               />
             </div>
           ) : isVideo ? (
-            <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
+            <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: displayRatio }}>
               <video
                 ref={videoRef}
                 src={cfg.url}
                 className="w-full h-full object-contain"
                 muted
                 preload="metadata"
+                onLoadedMetadata={(e) => {
+                  const video = e.currentTarget
+                  if (video.videoWidth > 0 && video.videoHeight > 0) {
+                    setVideoSize({ w: video.videoWidth, h: video.videoHeight })
+                  }
+                }}
                 onEnded={() => setPlaying(false)}
               />
               <button
                 onClick={togglePlay}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
+                className={cn(
+                  'absolute inset-0 flex items-center justify-center transition-colors',
+                  playing
+                    ? 'bg-transparent opacity-0 hover:opacity-100 hover:bg-black/20'
+                    : 'bg-black/30 hover:bg-black/40'
+                )}
               >
                 <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
                   {playing ? <Pause className="w-4 h-4 text-zinc-800" /> : <Play className="w-4 h-4 text-zinc-800 ml-0.5" />}

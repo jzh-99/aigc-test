@@ -106,7 +106,7 @@ export default function CanvasGalleryPage() {
                 <div className="aspect-video bg-muted overflow-hidden">
                   {canvas.preview_urls && canvas.preview_urls.length > 0 ? (
                     <div className="grid grid-cols-2 w-full h-full">
-                      {Array.from({ length: 4 }).map((_, i) => {
+                      {Array.from({ length: 2 }).map((_, i) => {
                         const url = canvas.preview_urls![i]
                         return url ? (
                           <img

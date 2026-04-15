@@ -39,6 +39,22 @@ function useElapsedTimer(startedAt: number | null): string {
   return `${elapsed}s`
 }
 
+function aspectRatioToNumber(aspectRatio: string | undefined): number | null {
+  if (!aspectRatio || aspectRatio === 'adaptive') return null
+  const [wRaw, hRaw] = aspectRatio.split(':')
+  const w = Number(wRaw)
+  const h = Number(hRaw)
+  if (!Number.isFinite(w) || !Number.isFinite(h) || h <= 0) return null
+  return w / h
+}
+
+function toCssAspectRatio(aspectRatio: string | undefined): string {
+  const ratio = aspectRatioToNumber(aspectRatio)
+  if (!ratio) return '16 / 9'
+  const [wRaw, hRaw] = (aspectRatio as string).split(':')
+  return `${wRaw} / ${hRaw}`
+}
+
 export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: string; data: CanvasNodeData<VideoGenConfig> }) {
   const execState = useNodeExecutionState(id)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
@@ -79,6 +95,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const token = useAuthStore((s) => s.accessToken)
   const [confirming, setConfirming] = useState(false)
   const [playing, setPlaying] = useState(false)
+  const [videoSize, setVideoSize] = useState<{ w: number; h: number } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
@@ -92,7 +109,10 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const elapsed = useElapsedTimer(isGenerating ? startedAt : null)
 
   // Reset play state when switching outputs
-  useEffect(() => { setPlaying(false) }, [selectedOutputId])
+  useEffect(() => {
+    setPlaying(false)
+    setVideoSize(null)
+  }, [selectedOutputId])
 
   function handlePrev(e: React.MouseEvent) {
     e.stopPropagation()
@@ -118,6 +138,13 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   }
 
   const isVideo = currentUrl && (currentUrl.includes('.mp4') || currentUrl.includes('.mov') || currentUrl.includes('.webm') || selectedOutput?.type === 'video')
+  const ratioFromVideo = videoSize && videoSize.h > 0 ? (videoSize.w / videoSize.h) : null
+  const ratioFromConfig = aspectRatioToNumber(data.config?.aspectRatio)
+  const effectiveRatio = ratioFromVideo ?? ratioFromConfig ?? (16 / 9)
+  const nodeWidth = Math.min(400, Math.max(180, Math.round(220 * effectiveRatio)))
+  const displayAspect = ratioFromVideo
+    ? `${videoSize!.w} / ${videoSize!.h}`
+    : toCssAspectRatio(data.config?.aspectRatio)
 
   return (
     <div
@@ -132,7 +159,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         '[transform:translateZ(0)] [backface-visibility:hidden]',
         '[contain:layout_style] [will-change:transform]',
       )}
-      style={{ width: 280 }}
+      style={{ width: nodeWidth }}
     >
       {/* Delete */}
       <button
@@ -168,15 +195,21 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
       </div>
 
       {/* Preview */}
-      <div className="p-2 bg-white relative">
+      <div className="p-1 bg-white relative">
         {currentUrl ? (
           isVideo ? (
-            <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
+            <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: displayAspect }}>
               <video
                 ref={videoRef}
                 src={currentUrl}
                 className="w-full h-full object-contain"
                 preload="metadata"
+                onLoadedMetadata={(e) => {
+                  const video = e.currentTarget
+                  if (video.videoWidth > 0 && video.videoHeight > 0) {
+                    setVideoSize({ w: video.videoWidth, h: video.videoHeight })
+                  }
+                }}
                 onEnded={() => setPlaying(false)}
               />
               <button
@@ -186,7 +219,12 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
                   else { videoRef.current?.play(); setPlaying(true) }
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
+                className={cn(
+                  'absolute inset-0 flex items-center justify-center transition-colors',
+                  playing
+                    ? 'bg-transparent opacity-0 hover:opacity-100 hover:bg-black/20'
+                    : 'bg-black/30 hover:bg-black/40'
+                )}
               >
                 <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
                   {playing ? <Pause className="w-4 h-4 text-zinc-800" /> : <Play className="w-4 h-4 text-zinc-800 ml-0.5" />}
