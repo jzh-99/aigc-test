@@ -28,6 +28,12 @@ export interface PlanItem {
   selected: boolean
 }
 
+export interface StoryboardItem {
+  id: string        // e.g. "shot_1"
+  label: string     // e.g. "镜头1"
+  content: string   // editable prompt text for this shot's text_input node
+}
+
 export interface AgentStep {
   stepIndex: number
   totalSteps: number
@@ -51,6 +57,7 @@ export type AgentInstruction =
   | { type: 'ask_upload'; assetTypes: AssetTypeHint[] }
   | { type: 'annotate_assets'; assets: UploadedFile[]; options: AnnotationOptions }
   | { type: 'confirm_plan'; items: PlanItem[] }
+  | { type: 'confirm_storyboard'; items: StoryboardItem[] }
   | { type: 'apply_workflow'; workflow: AgentWorkflow }
   | { type: 'guide_step'; step: AgentStep }
   | { type: 'done' }
@@ -132,6 +139,15 @@ function fillInstructionDefaults(raw: any): AgentInstruction | null {
           label: item.label ?? '',
           description: item.description ?? '',
           selected: item.selected ?? true,
+        })),
+      }
+    case 'confirm_storyboard':
+      return {
+        type: 'confirm_storyboard',
+        items: (raw.items ?? []).map((item: any) => ({
+          id: item.id ?? crypto.randomUUID(),
+          label: item.label ?? '',
+          content: item.content ?? '',
         })),
       }
     case 'apply_workflow':
