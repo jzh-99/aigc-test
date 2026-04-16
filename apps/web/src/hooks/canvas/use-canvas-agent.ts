@@ -410,11 +410,21 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
       setPhase('waiting_llm')
       setImplicitNodeId(null)
 
-      // Build history from previous done messages (text only, no instruction JSON)
+      // Build history — keep last 10 done messages, summarize large instruction responses
       const history = messages
         .filter((m) => m.status === 'done')
-        .slice(-20)
-        .map((m) => ({ role: m.role, content: m.content }))
+        .slice(-10)
+        .map((m) => {
+          if (m.role === 'assistant' && m.instruction?.type === 'apply_workflow') {
+            // The workflow nodes are already visible in canvas_context — no need to repeat the full JSON
+            const stepCount = m.instruction.workflow.steps.length
+            const nodeCount = m.instruction.workflow.newNodes.length
+            return { role: m.role, content: `[已搭建工作流：${nodeCount} 个节点，${stepCount} 个步骤]` }
+          }
+          // Truncate very long messages to avoid context overflow
+          const content = m.content.length > 800 ? m.content.slice(0, 800) + '…' : m.content
+          return { role: m.role, content }
+        })
 
       const content = buildUserContent(rawText, implicitNodeId ?? undefined)
       const canvasContext = buildCanvasContext()
