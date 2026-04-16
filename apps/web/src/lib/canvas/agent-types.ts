@@ -69,7 +69,6 @@ export type AgentPhase =
   | 'waiting_llm'
   | 'waiting_user'
   | 'running'
-  | 'done'
 
 export interface StepParams {
   modelType?: ImageModelType

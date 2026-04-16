@@ -313,7 +313,7 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
             // Find the last guide_step message index
             const lastGuideIdx = messages.reduce((last, m, i) =>
               m.instruction?.type === 'guide_step' ? i : last, -1)
-            return idx === lastGuideIdx && phase !== 'done'
+            return idx === lastGuideIdx && activeWorkflow !== null
           })()
           return (
             <MessageBubble
