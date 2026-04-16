@@ -184,6 +184,10 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
   useEffect(() => {
     if (!onNodeSelectedRef) return
     onNodeSelectedRef.current = (nodeId: string): boolean => {
+      // If the textarea is no longer the active element, the user has moved on — clear the flag.
+      if (inputFocusedRef.current && document.activeElement !== inputRef.current) {
+        inputFocusedRef.current = false
+      }
       if (!inputFocusedRef.current) return false
       const node = useCanvasStructureStore.getState().nodes.find((n) => n.id === nodeId)
       if (!node) return false
