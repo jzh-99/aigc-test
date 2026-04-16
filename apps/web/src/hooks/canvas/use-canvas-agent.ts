@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { isAssetConfig, isImageGenConfig, isVideoGenConfig } from '@/lib/canvas/types'
+import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig } from '@/lib/canvas/types'
 import { callCanvasAgent } from '@/lib/canvas/agent-api'
 import {
   parseAgentResponse,
@@ -25,6 +25,8 @@ import {
 import {
   executeCanvasNode,
   executeVideoNode,
+  executeScriptWriterNode,
+  executeStoryboardSplitterNode,
   CanvasApiError,
 } from '@/lib/canvas/canvas-api'
 import {
@@ -275,6 +277,47 @@ async function executeNode(
         },
         token ?? undefined,
       )
+    } else if (node.type === 'script_writer' && isScriptWriterConfig(node.data.config)) {
+      const cfg = node.data.config
+      const result = await executeScriptWriterNode(
+        { description: cfg.description, style: cfg.style, duration: cfg.duration },
+        token ?? undefined,
+      )
+      execStore.addNodeOutput(nodeId, {
+        id: crypto.randomUUID(),
+        url: '',
+        type: 'text',
+        paramsSnapshot: { script: result.script, characters: result.characters, scenes: result.scenes },
+      })
+      execStore.setNodeStatus(nodeId, 'completed', { progress: 100 })
+    } else if (node.type === 'storyboard_splitter' && isStoryboardSplitterConfig(node.data.config)) {
+      const cfg = node.data.config
+      const upstreamEdges = edges.filter((e) => e.target === nodeId)
+      const scriptParts: string[] = []
+      for (const edge of upstreamEdges) {
+        const srcNode = nodes.find((n) => n.id === edge.source)
+        if (!srcNode) continue
+        if (srcNode.type === 'script_writer') {
+          const out = execStore.nodes[srcNode.id]?.outputs[0]
+          const script = (out?.paramsSnapshot as { script?: string } | undefined)?.script
+          if (script) scriptParts.push(script)
+        } else if (srcNode.type === 'text_input') {
+          const txt = (srcNode.data.config as any).text
+          if (txt) scriptParts.push(txt)
+        }
+      }
+      const script = scriptParts.join('\n')
+      const result = await executeStoryboardSplitterNode(
+        { script, shotCount: cfg.shotCount },
+        token ?? undefined,
+      )
+      execStore.addNodeOutput(nodeId, {
+        id: crypto.randomUUID(),
+        url: '',
+        type: 'text',
+        paramsSnapshot: { shots: result.shots },
+      })
+      execStore.setNodeStatus(nodeId, 'completed', { progress: 100 })
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : '执行失败'

@@ -71,6 +71,10 @@ interface CanvasStructureState {
 
 let historyCommitTimer: ReturnType<typeof setTimeout> | undefined
 let pendingHistoryCommit: (() => void) | null = null
+// When true, the next handleSet call bypasses throttle and commits immediately.
+// Set before discrete operations (add/remove/connect/update) to ensure each
+// gets its own undo snapshot instead of being merged into a drag throttle window.
+let immediateNext = false
 
 export const useCanvasStructureStore = create<CanvasStructureState>()(
   temporal(
@@ -187,16 +191,19 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
       return null
     }
 
+    immediateNext = true
     set({ edges: simulatedEdges })
     return null
   },
 
   addNode: (type, position) => {
+    immediateNext = true
     const newNode = nodeRegistry.createNodeInstance(type, position)
     set((state) => ({ nodes: state.nodes.concat(newNode) }))
   },
 
   addNodeWithConfig: (type, position, config, id) => {
+    immediateNext = true
     const newNode = nodeRegistry.createNodeInstance(type, position, id)
     newNode.data.config = {
       ...newNode.data.config,
@@ -206,6 +213,7 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
   },
 
   removeNodes: (nodeIds) => {
+    immediateNext = true
     set((state) => ({
       nodes: state.nodes.filter((n) => !nodeIds.includes(n.id)),
       edges: state.edges.filter(
@@ -215,6 +223,7 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
   },
 
   removeEdgesByTarget: (nodeId, handleIds) => {
+    immediateNext = true
     set((state) => ({
       edges: state.edges.filter(
         (e) => !(e.target === nodeId && e.targetHandle && handleIds.includes(e.targetHandle))
@@ -223,6 +232,7 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
   },
 
   updateNodeData: (nodeId, partialData) => {
+    immediateNext = true
     set((state) => {
       if (!partialData || Object.keys(partialData).length === 0) return {}
 
@@ -244,13 +254,11 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
   applyAgentWorkflow: (workflow) => {
     // Always append — never wipe existing nodes regardless of LLM strategy field.
     // The LLM sometimes sends "create" even when the canvas has content.
+    immediateNext = true
     set((s) => ({
       nodes: [...s.nodes, ...workflow.newNodes],
       edges: [...s.edges, ...workflow.newEdges],
     }))
-    // Flush the throttled history timer immediately so this lands as a
-    // discrete undo snapshot before any subsequent interaction resets it.
-    useCanvasStructureStore.getState().flushHistory()
   },
 }),
     {
@@ -259,9 +267,23 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
         edges: state.edges,
       }),
       limit: 50,
-      // Throttle history snapshots so rapid changes (dragging, etc.) merge into one entry
+      // Throttle history snapshots so rapid changes (dragging, etc.) merge into one entry.
+      // Discrete operations (add/remove/connect/update) set immediateNext=true to bypass
+      // throttle and get their own snapshot — preventing undo from skipping steps.
       handleSet: (handleSetCb) => {
         return (state: Parameters<typeof handleSetCb>[0]) => {
+          if (immediateNext) {
+            immediateNext = false
+            // Flush any pending drag snapshot first so it lands before this discrete op
+            if (pendingHistoryCommit) {
+              clearTimeout(historyCommitTimer)
+              const prev = pendingHistoryCommit
+              pendingHistoryCommit = null
+              prev()
+            }
+            handleSetCb(state)
+            return
+          }
           clearTimeout(historyCommitTimer)
           pendingHistoryCommit = () => {
             pendingHistoryCommit = null

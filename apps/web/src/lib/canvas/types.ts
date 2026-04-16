@@ -10,7 +10,7 @@ export type HandleRole =
   | 'frame-start' | 'frame-end'           // keyframe: first/last frame
   | 'text-in' | 'image-out' | 'video-out' // generic I/O
 
-export type CanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'asset'
+export type CanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'asset' | 'script_writer' | 'storyboard_splitter'
 export type VideoMode = 'multiref' | 'keyframe'
 
 export type ImageModelType =
@@ -52,11 +52,23 @@ export interface AssetConfig {
   mimeType?: string
 }
 
+export interface ScriptWriterConfig {
+  description: string
+  style: string
+  duration: number
+}
+
+export interface StoryboardSplitterConfig {
+  shotCount: number
+}
+
 export interface CanvasNodeConfigMap {
   text_input: TextInputConfig
   image_gen: ImageGenConfig
   video_gen: VideoGenConfig
   asset: AssetConfig
+  script_writer: ScriptWriterConfig
+  storyboard_splitter: StoryboardSplitterConfig
 }
 
 export type CanvasNodeConfig = CanvasNodeConfigMap[CanvasNodeType]
@@ -87,6 +99,7 @@ export type AppEdge = ReactFlowEdge
 
 export function isCanvasNodeType(type: string): type is CanvasNodeType {
   return type === 'text_input' || type === 'image_gen' || type === 'video_gen' || type === 'asset'
+    || type === 'script_writer' || type === 'storyboard_splitter'
 }
 
 export function isTextInputConfig(config: unknown): config is TextInputConfig {
@@ -105,6 +118,15 @@ export function isVideoGenConfig(config: unknown): config is VideoGenConfig {
 
 export function isAssetConfig(config: unknown): config is AssetConfig {
   return typeof (config as AssetConfig | undefined)?.url === 'string'
+}
+
+export function isScriptWriterConfig(config: unknown): config is ScriptWriterConfig {
+  const c = config as Partial<ScriptWriterConfig> | null | undefined
+  return typeof c?.description === 'string' && typeof c?.style === 'string'
+}
+
+export function isStoryboardSplitterConfig(config: unknown): config is StoryboardSplitterConfig {
+  return typeof (config as StoryboardSplitterConfig | undefined)?.shotCount === 'number'
 }
 
 // ---------------------------------------------------------

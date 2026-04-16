@@ -15,12 +15,16 @@ import type {
   ImageGenConfig,
   TextInputConfig,
   VideoGenConfig,
+  ScriptWriterConfig,
+  StoryboardSplitterConfig,
 } from '@/lib/canvas/types'
 import {
   isAssetConfig,
   isImageGenConfig,
   isTextInputConfig,
   isVideoGenConfig,
+  isScriptWriterConfig,
+  isStoryboardSplitterConfig,
 } from '@/lib/canvas/types'
 import { AssetPanel } from './panels/asset-panel'
 import { ImageGenPanel } from './panels/image-gen-panel'
@@ -35,6 +39,8 @@ import { TextInputPanel } from './panels/text-input-panel'
 import { useNodeConfigDraft } from './panels/use-node-config-draft'
 import { useNodeTopology } from './panels/use-node-topology'
 import { VideoGenPanel } from './panels/video-gen-panel'
+import { ScriptWriterPanel } from './panels/script-writer-panel'
+import { StoryboardSplitterPanel } from './panels/storyboard-splitter-panel'
 
 interface Props {
   node: AppNode
@@ -65,6 +71,8 @@ const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
 
 const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '' }
 const DEFAULT_ASSET_CONFIG: AssetConfig = { url: '', name: '', mimeType: 'image/jpeg' }
+const DEFAULT_SCRIPT_WRITER_CONFIG: ScriptWriterConfig = { description: '', style: '现代都市', duration: 60 }
+const DEFAULT_STORYBOARD_SPLITTER_CONFIG: StoryboardSplitterConfig = { shotCount: 0 }
 
 export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
@@ -77,6 +85,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const isTextInput = node.type === 'text_input'
   const isAsset = node.type === 'asset'
   const isVideoGen = node.type === 'video_gen'
+  const isScriptWriter = node.type === 'script_writer'
+  const isStoryboardSplitter = node.type === 'storyboard_splitter'
 
   const imageCfg = isImageGen && isImageGenConfig(node.data.config)
     ? node.data.config
@@ -90,6 +100,12 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
   const assetCfg = isAsset && isAssetConfig(node.data.config)
     ? node.data.config
     : DEFAULT_ASSET_CONFIG
+  const scriptWriterCfg = isScriptWriter && isScriptWriterConfig(node.data.config)
+    ? node.data.config
+    : DEFAULT_SCRIPT_WRITER_CONFIG
+  const storyboardSplitterCfg = isStoryboardSplitter && isStoryboardSplitterConfig(node.data.config)
+    ? node.data.config
+    : DEFAULT_STORYBOARD_SPLITTER_CONFIG
 
   const {
     upstreamTexts,
@@ -403,6 +419,24 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           onVideoModeChange={handleVideoModeChange}
           onUpdateCfg={updateCfg}
           onExecute={handleExecuteVideo}
+        />
+      )}
+
+      {isScriptWriter && (
+        <ScriptWriterPanel
+          nodeId={node.id}
+          canvasId={canvasId}
+          config={scriptWriterCfg}
+          onExecuted={onExecuted}
+        />
+      )}
+
+      {isStoryboardSplitter && (
+        <StoryboardSplitterPanel
+          nodeId={node.id}
+          canvasId={canvasId}
+          config={storyboardSplitterCfg}
+          onExecuted={onExecuted}
         />
       )}
     </div>
