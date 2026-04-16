@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, History } from 'lucide-react'
+import { Loader2, History, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useLayoutStore } from '@/stores/layout-store'
 import { CanvasEditor } from '@/components/canvas/canvas-editor'
 import { CanvasHistorySidebar } from '@/components/canvas/canvas-history-sidebar'
+import { CanvasAgentPanel } from '@/components/canvas/canvas-agent-panel'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
+
+type SidePanel = 'agent' | 'history' | null
 
 function CanvasNameEditor({
   name,
@@ -70,6 +73,8 @@ function CanvasNameEditor({
   )
 }
 
+// kickPoll is passed down from CanvasEditor via a ref callback
+// We use a ref so CanvasAgentPanel can call it without re-renders
 export default function CanvasEditorPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -78,7 +83,9 @@ export default function CanvasEditorPage() {
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed)
   const [canvasName, setCanvasName] = useState('未命名画布')
   const [loading, setLoading] = useState(true)
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [sidePanel, setSidePanel] = useState<SidePanel>('agent')
+  const kickPollRef = useRef<(() => void) | null>(null)
+  const onNodeSelectedRef = useRef<((nodeId: string) => boolean) | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -114,6 +121,9 @@ export default function CanvasEditorPage() {
     )
   }
 
+  const togglePanel = (panel: SidePanel) =>
+    setSidePanel((prev) => (prev === panel ? null : panel))
+
   return (
     <div
       className="fixed flex flex-col overflow-hidden bg-background z-10"
@@ -131,25 +141,53 @@ export default function CanvasEditorPage() {
           <div className="h-3.5 w-px bg-border mx-1" />
           <CanvasNameEditor name={canvasName} canvasId={id} token={token} />
         </div>
-        <button
-          data-testid="canvas-toggle-history"
-          onClick={() => setHistoryOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted"
-        >
-          <History className="w-3.5 h-3.5" />
-          记录
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => togglePanel('agent')}
+            className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
+              sidePanel === 'agent'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            助手
+          </button>
+          <button
+            data-testid="canvas-toggle-history"
+            onClick={() => togglePanel('history')}
+            className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
+              sidePanel === 'history'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            }`}
+          >
+            <History className="w-3.5 h-3.5" />
+            记录
+          </button>
+        </div>
       </header>
 
-      {/* Canvas + optional history sidebar */}
+      {/* Canvas + optional side panel */}
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 relative overflow-hidden">
-          <CanvasEditor canvasId={id} />
+          <CanvasEditor
+            canvasId={id}
+            onKickPollReady={(fn) => { kickPollRef.current = fn }}
+            onNodeSelected={(nodeId) => onNodeSelectedRef.current?.(nodeId) ?? false}
+          />
         </div>
-        {historyOpen && (
+        <CanvasAgentPanel
+            canvasId={id}
+            kickPoll={() => kickPollRef.current?.()}
+            onClose={() => setSidePanel(null)}
+            onNodeSelectedRef={onNodeSelectedRef}
+            hidden={sidePanel !== 'agent'}
+          />
+        {sidePanel === 'history' && (
           <CanvasHistorySidebar
             canvasId={id}
-            onClose={() => setHistoryOpen(false)}
+            onClose={() => setSidePanel(null)}
           />
         )}
       </div>

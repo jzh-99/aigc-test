@@ -9,6 +9,7 @@ import {
   applyNodeChanges,
 } from 'reactflow'
 import type { AppNode, AppEdge, CanvasNodeConfig, VideoMode } from '@/lib/canvas/types'
+import type { AgentWorkflow } from '@/lib/canvas/agent-types'
 import { isAssetConfig, isVideoGenConfig } from '@/lib/canvas/types'
 import { hasCycle } from '@/lib/canvas/dag'
 import { nodeRegistry } from '@/lib/canvas/registry'
@@ -65,6 +66,7 @@ interface CanvasStructureState {
   removeNodes: (nodeIds: string[]) => void
   removeEdgesByTarget: (nodeId: string, handleIds: string[]) => void
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
+  applyAgentWorkflow: (workflow: AgentWorkflow) => void
 }
 
 let historyCommitTimer: ReturnType<typeof setTimeout> | undefined
@@ -237,6 +239,18 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
       nextNodes[index] = updatedNode
       return { nodes: nextNodes }
     })
+  },
+
+  applyAgentWorkflow: (workflow) => {
+    // Always append — never wipe existing nodes regardless of LLM strategy field.
+    // The LLM sometimes sends "create" even when the canvas has content.
+    set((s) => ({
+      nodes: [...s.nodes, ...workflow.newNodes],
+      edges: [...s.edges, ...workflow.newEdges],
+    }))
+    // Flush the throttled history timer immediately so this lands as a
+    // discrete undo snapshot before any subsequent interaction resets it.
+    useCanvasStructureStore.getState().flushHistory()
   },
 }),
     {
