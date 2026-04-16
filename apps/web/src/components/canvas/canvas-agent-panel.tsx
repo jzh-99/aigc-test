@@ -17,6 +17,7 @@ interface Props {
   kickPoll: () => void
   onClose: () => void
   onNodeSelectedRef?: MutableRefObject<((nodeId: string) => boolean) | null>
+  onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
   hidden?: boolean
 }
 
@@ -156,7 +157,7 @@ function MessageBubble({
 
 // ── Main panel ───────────────────────────────────────────────────────────────
 
-export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRef, hidden }: Props) {
+export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRef, onStoryboardExpandedRef, hidden }: Props) {
   const {
     phase,
     messages,
@@ -195,6 +196,15 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
     }
     return () => { onNodeSelectedRef.current = null }
   }, [onNodeSelectedRef, showNodePicker])
+
+  // Expose sendMessage so StoryboardSplitterPanel can trigger agent continuation
+  useEffect(() => {
+    if (!onStoryboardExpandedRef) return
+    onStoryboardExpandedRef.current = (shotNodeIds: string[]) => {
+      sendMessage(`分镜已展开到画布，共 ${shotNodeIds.length} 个分镜节点（nodeId: ${shotNodeIds.join(', ')}），请继续搭建后续工作流`)
+    }
+    return () => { onStoryboardExpandedRef.current = null }
+  }, [onStoryboardExpandedRef, sendMessage])
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {

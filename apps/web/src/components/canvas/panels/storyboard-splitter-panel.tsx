@@ -21,9 +21,10 @@ interface Props {
   canvasId: string
   config: StoryboardSplitterConfig
   onExecuted: () => void
+  onExpanded?: (shotNodeIds: string[]) => void
 }
 
-export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted }: Props) {
+export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, onExpanded }: Props) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const setNodeStatus = useCanvasExecutionStore((s) => s.setNodeStatus)
   const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
@@ -138,7 +139,8 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted }
 
     setExpanded(true)
     toast.success(`已展开 ${shots.length} 个分镜节点`)
-  }, [nodeId, shotsToShow])
+    onExpanded?.(newNodes.map((n) => n.id))
+  }, [nodeId, shotsToShow, onExpanded])
 
   return (
     <div className="p-3 space-y-3">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type MutableRefObject } from 'react'
 import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { mutate } from 'swr'
@@ -47,6 +47,7 @@ interface Props {
   canvasId: string
   onClose: () => void
   onExecuted: () => void
+  onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
 }
 
 const DEFAULT_IMAGE_CONFIG: ImageGenConfig = {
@@ -74,7 +75,7 @@ const DEFAULT_ASSET_CONFIG: AssetConfig = { url: '', name: '', mimeType: 'image/
 const DEFAULT_SCRIPT_WRITER_CONFIG: ScriptWriterConfig = { description: '', style: '现代都市', duration: 60 }
 const DEFAULT_STORYBOARD_SPLITTER_CONFIG: StoryboardSplitterConfig = { shotCount: 0 }
 
-export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
+export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboardExpandedRef }: Props) {
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
   const token = useAuthStore((s) => s.accessToken)
   const setNodeStatus = useCanvasExecutionStore((s) => s.setNodeStatus)
@@ -437,6 +438,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted }: Props) {
           canvasId={canvasId}
           config={storyboardSplitterCfg}
           onExecuted={onExecuted}
+          onExpanded={(shotNodeIds) => onStoryboardExpandedRef?.current?.(shotNodeIds)}
         />
       )}
     </div>

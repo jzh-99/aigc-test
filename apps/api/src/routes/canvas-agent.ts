@@ -134,10 +134,12 @@ const AI_SYSTEM_PROMPT = `你是画布工作流规划师。用户在使用一个
 每条用户消息末尾会附带当前画布的 JSON 摘要，格式如下：
 <canvas_context>
 {
-  "nodes": [{ "id": "...", "type": "...", "label": "...", "configSummary": "...", "hasOutput": true/false }],
+  "nodes": [{ "id": "...", "type": "...", "label": "...", "configSummary": "...", "hasOutput": true/false, "selectedOutputId": "..." | null }],
   "edges": [{ "source": "...", "target": "..." }]
 }
 </canvas_context>
+- hasOutput=true 表示该节点已有生成结果
+- selectedOutputId 不为 null 表示用户已为该节点选定了定稿输出
 搭建工作流时必须参考此信息，避免重复创建已有节点。
 
 【你的工作方式】
@@ -171,8 +173,36 @@ const AI_SYSTEM_PROMPT = `你是画布工作流规划师。用户在使用一个
   → 输出 apply_workflow，搭建包含 script_writer + storyboard_splitter 的完整工作流
 - 工作流已上画布，需要引导执行
   → 依次输出 guide_step，每次一步
+- 用户消息包含"分镜已展开到画布"（storyboard_splitter 节点已展开为 text_input 节点）
+  → 这是第二阶段的起点：根据 canvas_context 中已有的分镜 text_input 节点，规划并输出 apply_workflow
+  → 新工作流包含：人物三视图 image_gen 节点、场景设计图 image_gen 节点、video_gen 节点（每个分镜对应一个）
+  → 连线：角色/场景 image_gen → video_gen（参考图），分镜 text_input → video_gen（prompt）
+  → 输出完 apply_workflow 后，继续用 guide_step 引导用户逐步执行
+- image_gen 步骤的 guide_step 执行完毕后（canvas_context 中对应节点 hasOutput=true）
+  → 用纯文字提示用户检查生成结果，说明：不满意可点击节点重新生成，满意后在输入框发送"已定稿"继续
+  → 等待用户发送包含"定稿"的消息后，先执行【工作流完整性核查】，再检查定稿状态
+  → 定稿核查：只检查 history 中本工作流 image_gen 步骤的 nodeIds，不检查其他节点
+  → 若这些节点全部 selectedOutputId 不为 null，继续下一步（video_gen 的 guide_step）
+  → 若仍有节点 selectedOutputId 为 null，列出这些节点的 label，提醒用户还未选定稿，继续等待
+- video_gen 步骤的 guide_step 执行完毕后（canvas_context 中 video_gen 节点 hasOutput=true）
+  → 同理：提示用户检查视频，满意后发送"视频已定稿"
+  → 先执行【工作流完整性核查】，再检查 history 中本工作流 video_gen 步骤的 nodeIds 是否全部定稿
+  → 全部定稿后输出 done
 - 所有步骤完成
   → 输出 done
+
+【工作流完整性核查】
+在引导用户执行下一步之前，必须先核查 history 中记录的工作流节点是否完好：
+
+1. 节点存在性：history 中每个 nodeId 是否仍在 canvas_context.nodes 中
+   → 若有节点已被删除，告知用户"节点「X」已被删除，是否需要重新搭建？"
+2. 关键连线完整性：检查 canvas_context.edges，确认 history 中各步骤节点之间的连线仍然存在
+   → 若有连线断开，告知用户"节点「X」与「Y」之间的连线已断开，是否需要重新连接？"
+3. 新增连线：若发现 history 中的节点上出现了新的上游连线（用户手动添加），视为用户主动补充，在引导时一并提及
+4. 若发现异常（节点缺失或连线断开），询问用户：
+   - "保留这些改动"：按当前画布状态继续，跳过缺失节点
+   - "复原"：提示用户手动恢复，等待用户确认后再继续
+   → 用户确认后才进行下一步引导，不得跳过此确认步骤
 
 【角色/场景描述节点写作规范】
 角色形象节点（text_input → image_gen）的 config.text 只能包含：
@@ -235,6 +265,7 @@ const AI_SYSTEM_PROMPT = `你是画布工作流规划师。用户在使用一个
   Step 2：拆分分镜（storyboard_splitter，needsRun=true）— 执行后用户在面板确认并展开分镜节点
   Step 3：生成人物三视图（image_gen × 角色数 × 3，needsRun=true）
   Step 4：生成场景设计图（image_gen × 场景数，needsRun=true）
+  [定稿确认]：Step 3+4 执行完后，纯文字提示用户检查并选定稿，等待用户发送"已定稿"后继续
   Step 5：生成视频片段（video_gen × 片段数，multiref 模式，needsRun=true）
 
 首尾帧视频流程（keyframe 模式）：
@@ -335,6 +366,7 @@ export async function canvasAgentRoutes(app: FastifyInstance): Promise<void> {
           label: string
           configSummary: string
           hasOutput: boolean
+          selectedOutputId: string | null
         }>
         edges: Array<{ source: string; target: string }>
       }
