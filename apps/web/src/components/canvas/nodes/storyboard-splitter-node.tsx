@@ -72,6 +72,8 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
 
       <Handle type="target" position={Position.Left} id="any-in"
         className="!w-2 !h-2 !bg-zinc-300 !border !border-zinc-400 !-left-1 hover:!bg-violet-400 transition-colors" />
+      <Handle type="source" position={Position.Right} id="text-out"
+        className="!w-2 !h-2 !bg-zinc-300 !border !border-zinc-400 !-right-1 hover:!bg-violet-400 transition-colors" />
     </div>
   )
 })
