@@ -144,23 +144,22 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
 
   onNodesChange: (changes) => {
     const { nodes, edges } = get()
-    const next = applyNodeChanges(changes, nodes) as AppNode[]
-    set({ nodes: next })
-    // Only record position changes (dragging) — skip select/dimensions (UI-only)
+    // Record snapshot of state BEFORE the drag starts (throttled)
     const hasDrag = changes.some((c) => c.type === 'position')
     if (hasDrag) {
-      pushSnapshot(get, set, { nodes: next, edges }, false)
+      pushSnapshot(get, set, { nodes, edges }, false)
     }
+    set({ nodes: applyNodeChanges(changes, nodes) as AppNode[] })
   },
 
   onEdgesChange: (changes) => {
     const { nodes, edges } = get()
-    const next = applyEdgeChanges(changes, edges) as AppEdge[]
-    set({ edges: next })
     const hasRemove = changes.some((c) => c.type === 'remove')
     if (hasRemove) {
-      pushSnapshot(get, set, { nodes, edges: next }, true)
+      pushSnapshot(get, set, { nodes, edges }, true)
     }
+    const next = applyEdgeChanges(changes, edges) as AppEdge[]
+    set({ edges: next })
   },
 
   onConnect: (connection) => {
@@ -232,43 +231,43 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
       return null
     }
 
+    pushSnapshot(get, set, { nodes, edges }, true)
     set({ edges: simulatedEdges })
-    pushSnapshot(get, set, { nodes, edges: simulatedEdges }, true)
     return null
   },
 
   addNode: (type, position) => {
     const { nodes, edges } = get()
     const newNode = nodeRegistry.createNodeInstance(type, position)
-    const next = nodes.concat(newNode)
-    set({ nodes: next })
-    pushSnapshot(get, set, { nodes: next, edges }, true)
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({ nodes: nodes.concat(newNode) })
   },
 
   addNodeWithConfig: (type, position, config, id) => {
     const { nodes, edges } = get()
     const newNode = nodeRegistry.createNodeInstance(type, position, id)
     newNode.data.config = { ...newNode.data.config, ...config } as CanvasNodeConfig
-    const next = nodes.concat(newNode)
-    set({ nodes: next })
-    pushSnapshot(get, set, { nodes: next, edges }, true)
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({ nodes: nodes.concat(newNode) })
   },
 
   removeNodes: (nodeIds) => {
     const { nodes, edges } = get()
-    const nextNodes = nodes.filter((n) => !nodeIds.includes(n.id))
-    const nextEdges = edges.filter((e) => !nodeIds.includes(e.source) && !nodeIds.includes(e.target))
-    set({ nodes: nextNodes, edges: nextEdges })
-    pushSnapshot(get, set, { nodes: nextNodes, edges: nextEdges }, true)
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({
+      nodes: nodes.filter((n) => !nodeIds.includes(n.id)),
+      edges: edges.filter((e) => !nodeIds.includes(e.source) && !nodeIds.includes(e.target)),
+    })
   },
 
   removeEdgesByTarget: (nodeId, handleIds) => {
     const { nodes, edges } = get()
-    const next = edges.filter(
-      (e) => !(e.target === nodeId && e.targetHandle && handleIds.includes(e.targetHandle))
-    )
-    set({ edges: next })
-    pushSnapshot(get, set, { nodes, edges: next }, true)
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({
+      edges: edges.filter(
+        (e) => !(e.target === nodeId && e.targetHandle && handleIds.includes(e.targetHandle))
+      ),
+    })
   },
 
   updateNodeData: (nodeId, partialData) => {
@@ -280,15 +279,16 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
     const updatedNode: AppNode = { ...target, data: { ...target.data, ...partialData } }
     const next = nodes.slice()
     next[index] = updatedNode
+    pushSnapshot(get, set, { nodes, edges }, true)
     set({ nodes: next })
-    pushSnapshot(get, set, { nodes: next, edges }, true)
   },
 
   applyAgentWorkflow: (workflow) => {
     const { nodes, edges } = get()
-    const nextNodes = [...nodes, ...workflow.newNodes]
-    const nextEdges = [...edges, ...workflow.newEdges]
-    set({ nodes: nextNodes, edges: nextEdges })
-    pushSnapshot(get, set, { nodes: nextNodes, edges: nextEdges }, true)
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({
+      nodes: [...nodes, ...workflow.newNodes],
+      edges: [...edges, ...workflow.newEdges],
+    })
   },
 }))
