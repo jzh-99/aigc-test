@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
@@ -17,6 +17,11 @@ import {
   type StepParams,
   type CanvasNodeSummary,
 } from '@/lib/canvas/agent-types'
+import {
+  loadCanvasAgentSession,
+  saveCanvasAgentSession,
+  clearCanvasAgentSession,
+} from './use-canvas-agent-history'
 import {
   executeCanvasNode,
   executeVideoNode,
@@ -285,14 +290,23 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
   const token = useAuthStore((s) => s.accessToken)
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
 
+  // Restore session from localStorage on mount
+  const savedSession = typeof window !== 'undefined' ? loadCanvasAgentSession(canvasId) : null
+
   const [phase, setPhase] = useState<AgentPhase>('idle')
-  const [messages, setMessages] = useState<AgentMessage[]>([])
-  const [activeWorkflow, setActiveWorkflow] = useState<AgentWorkflow | null>(null)
-  const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  const [messages, setMessages] = useState<AgentMessage[]>(savedSession?.messages ?? [])
+  const [activeWorkflow, setActiveWorkflow] = useState<AgentWorkflow | null>(savedSession?.activeWorkflow ?? null)
+  const [currentStepIndex, setCurrentStepIndex] = useState(savedSession?.currentStepIndex ?? 0)
   const [stepParams, setStepParams] = useState<Record<number, StepParams>>({})
   const [implicitNodeId, setImplicitNodeId] = useState<string | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
+
+  // Persist session whenever messages or workflow state changes
+  useEffect(() => {
+    if (messages.length === 0 && !activeWorkflow) return
+    saveCanvasAgentSession(canvasId, { messages, activeWorkflow, currentStepIndex })
+  }, [canvasId, messages, activeWorkflow, currentStepIndex])
 
   const appendChunk = useCallback((msgId: string, chunk: string) => {
     setMessages((prev) =>
@@ -341,7 +355,7 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
       // Build history from previous done messages (text only, no instruction JSON)
       const history = messages
         .filter((m) => m.status === 'done')
-        .slice(-10)
+        .slice(-20)
         .map((m) => ({ role: m.role, content: m.content }))
 
       const content = buildUserContent(rawText, implicitNodeId ?? undefined)
@@ -482,8 +496,9 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
     setCurrentStepIndex(0)
     setStepParams({})
     setImplicitNodeId(null)
+    clearCanvasAgentSession(canvasId)
     useCanvasExecutionStore.getState().setHighlightedNodes(new Set())
-  }, [])
+  }, [canvasId])
 
   return {
     phase,
