@@ -86,10 +86,14 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
   localVersion: 1,
 
   initCanvas: (canvasId, nodes, edges, version, workspaceId) => {
+    // Cancel any pending throttled history commit from the previous canvas
     clearTimeout(historyCommitTimer)
     pendingHistoryCommit = null
+    immediateNext = false
+    // Clear history BEFORE set() so the load itself is never recorded
+    useCanvasStructureStore.temporal.getState().clear()
     set({ canvasId, nodes, edges, localVersion: version, workspaceId: workspaceId ?? null })
-    // Clear undo history so users can't undo past the loaded state
+    // Clear again in case set() triggered handleSet and snuck a snapshot in
     useCanvasStructureStore.temporal.getState().clear()
   },
 
