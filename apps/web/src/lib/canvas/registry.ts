@@ -3,6 +3,8 @@ import { TextNode } from '@/components/canvas/nodes/text-node'
 import { ImageGenNode } from '@/components/canvas/nodes/image-gen-node'
 import { AssetNode } from '@/components/canvas/nodes/asset-node'
 import { VideoGenNode } from '@/components/canvas/nodes/video-gen-node'
+import { ScriptWriterNode } from '@/components/canvas/nodes/script-writer-node'
+import { StoryboardSplitterNode } from '@/components/canvas/nodes/storyboard-splitter-node'
 
 export class NodeRegistry {
   private static instance: NodeRegistry
@@ -61,6 +63,24 @@ export class NodeRegistry {
         cameraFixed: false,
         watermark: false,
       },
+    })
+
+    this.register({
+      type: 'script_writer',
+      label: '剧本生成',
+      CanvasComponent: ScriptWriterNode as any,
+      inputs: [],
+      outputs: [{ id: 'text-out', type: 'text', position: 'right' }],
+      defaultConfig: { description: '', style: '现代都市', duration: 60 },
+    })
+
+    this.register({
+      type: 'storyboard_splitter',
+      label: '分镜拆分',
+      CanvasComponent: StoryboardSplitterNode as any,
+      inputs: [{ id: 'any-in', type: 'any', position: 'left' }],
+      outputs: [],
+      defaultConfig: { shotCount: 0 },
     })
   }
 

@@ -437,3 +437,50 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
 
   return await res.json()
 }
+
+// ── Script writer ─────────────────────────────────────────────────────────────
+
+export async function executeScriptWriterNode(params: {
+  description: string
+  style: string
+  duration: number
+}, token?: string): Promise<{ script: string; characters: string[]; scenes: string[] }> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch('/api/v1/canvas-agent/script-write', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw toCanvasApiError('剧本生成失败', res.status, error)
+  }
+
+  return await res.json()
+}
+
+// ── Storyboard splitter ───────────────────────────────────────────────────────
+
+export async function executeStoryboardSplitterNode(params: {
+  script: string
+  shotCount: number
+}, token?: string): Promise<{ shots: Array<{ id: string; label: string; content: string }> }> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch('/api/v1/canvas-agent/storyboard-split', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw toCanvasApiError('分镜拆分失败', res.status, error)
+  }
+
+  return await res.json()
+}

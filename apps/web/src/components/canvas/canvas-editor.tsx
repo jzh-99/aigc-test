@@ -204,6 +204,7 @@ function Flow({
         e.preventDefault()
         flushHistory()
         useCanvasStructureStore.temporal.getState().undo()
+        setHighlightedNodes(new Set())
         void onSave()
         return
       }
@@ -212,6 +213,7 @@ function Flow({
         e.preventDefault()
         flushHistory()
         useCanvasStructureStore.temporal.getState().redo()
+        setHighlightedNodes(new Set())
         void onSave()
         return
       }
@@ -475,6 +477,7 @@ function Flow({
             onClick={() => {
               flushHistory()
               useCanvasStructureStore.temporal.getState().undo()
+              setHighlightedNodes(new Set())
               void onSave()
             }}
             className="px-2 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors"
@@ -486,6 +489,7 @@ function Flow({
             onClick={() => {
               flushHistory()
               useCanvasStructureStore.temporal.getState().redo()
+              setHighlightedNodes(new Set())
               void onSave()
             }}
             className="px-2 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors"
