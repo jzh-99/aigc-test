@@ -487,7 +487,7 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
         useCanvasExecutionStore.getState().setHighlightedNodes(new Set(workflow.steps[0].nodeIds))
         setPhase('waiting_user')
       } else {
-        setPhase('done')
+        setPhase('idle')
       }
     },
     [],
@@ -544,7 +544,7 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
     (stepIndex: number, workflow: AgentWorkflow) => {
       const next = stepIndex + 1
       if (next >= workflow.steps.length) {
-        setPhase('done')
+        setPhase('idle')
         useCanvasExecutionStore.getState().setHighlightedNodes(new Set())
         setActiveWorkflow(null)
       } else {
