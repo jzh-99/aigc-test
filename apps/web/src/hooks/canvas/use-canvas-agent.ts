@@ -57,6 +57,7 @@ function buildCanvasContext() {
       label: n.data.label,
       configSummary: summarizeConfig(n.type ?? '', n.data.config),
       hasOutput: (execState[n.id]?.outputs.length ?? 0) > 0,
+      selectedOutputId: execState[n.id]?.selectedOutputId ?? null,
     })),
     edges: edges.map((e) => ({ source: e.source, target: e.target })),
   }
@@ -416,10 +417,12 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
         .slice(-10)
         .map((m) => {
           if (m.role === 'assistant' && m.instruction?.type === 'apply_workflow') {
-            // The workflow nodes are already visible in canvas_context — no need to repeat the full JSON
-            const stepCount = m.instruction.workflow.steps.length
-            const nodeCount = m.instruction.workflow.newNodes.length
-            return { role: m.role, content: `[已搭建工作流：${nodeCount} 个节点，${stepCount} 个步骤]` }
+            // Summarize workflow with step labels and nodeIds so LLM can track its own nodes
+            const steps = m.instruction.workflow.steps
+            const stepLines = steps.map((s) =>
+              `  - Step ${s.stepIndex + 1} ${s.label} (${s.nodeType}): ${s.nodeIds.join(', ')}`
+            ).join('\n')
+            return { role: m.role, content: `[已搭建工作流：\n${stepLines}]` }
           }
           // Truncate very long messages to avoid context overflow
           const content = m.content.length > 800 ? m.content.slice(0, 800) + '…' : m.content

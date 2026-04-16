@@ -86,6 +86,7 @@ export default function CanvasEditorPage() {
   const [sidePanel, setSidePanel] = useState<SidePanel>('agent')
   const kickPollRef = useRef<(() => void) | null>(null)
   const onNodeSelectedRef = useRef<((nodeId: string) => boolean) | null>(null)
+  const onStoryboardExpandedRef = useRef<((shotNodeIds: string[]) => void) | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -175,6 +176,7 @@ export default function CanvasEditorPage() {
             canvasId={id}
             onKickPollReady={(fn) => { kickPollRef.current = fn }}
             onNodeSelected={(nodeId) => onNodeSelectedRef.current?.(nodeId) ?? false}
+            onStoryboardExpandedRef={onStoryboardExpandedRef}
           />
         </div>
         <CanvasAgentPanel
@@ -182,6 +184,7 @@ export default function CanvasEditorPage() {
             kickPoll={() => kickPollRef.current?.()}
             onClose={() => setSidePanel(null)}
             onNodeSelectedRef={onNodeSelectedRef}
+            onStoryboardExpandedRef={onStoryboardExpandedRef}
             hidden={sidePanel !== 'agent'}
           />
         {sidePanel === 'history' && (

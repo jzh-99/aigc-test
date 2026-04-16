@@ -93,6 +93,7 @@ export interface CanvasNodeSummary {
   label: string
   configSummary: string
   hasOutput: boolean
+  selectedOutputId: string | null
 }
 
 // ── Instruction parser ───────────────────────────────────────────────────────
