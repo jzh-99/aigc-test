@@ -178,29 +178,24 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isWaiting = phase === 'waiting_llm' || phase === 'running'
-  const inputFocusedRef = useRef(false)
 
-  // When textarea is focused and user clicks a canvas node, auto-insert @[label|id]
+  // When the user has typed @ and the node picker is open, clicking a canvas node inserts @[label|id]
   useEffect(() => {
     if (!onNodeSelectedRef) return
     onNodeSelectedRef.current = (nodeId: string): boolean => {
-      // If the textarea is no longer the active element, the user has moved on — clear the flag.
-      if (inputFocusedRef.current && document.activeElement !== inputRef.current) {
-        inputFocusedRef.current = false
-      }
-      if (!inputFocusedRef.current) return false
+      if (!showNodePicker) return false
       const node = useCanvasStructureStore.getState().nodes.find((n) => n.id === nodeId)
       if (!node) return false
       setInput((prev) => {
-        const cleaned = prev.replace(/@\w*$/, '')
-        return cleaned + `@[${node.data.label}|${nodeId}]`
+        const lastAt = prev.lastIndexOf('@')
+        return lastAt !== -1 ? prev.slice(0, lastAt) + `@[${node.data.label}|${nodeId}]` : prev
       })
       setShowNodePicker(false)
       setTimeout(() => inputRef.current?.focus(), 0)
       return true
     }
     return () => { onNodeSelectedRef.current = null }
-  }, [onNodeSelectedRef])
+  }, [onNodeSelectedRef, showNodePicker])
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -405,16 +400,6 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
             className="flex-1 resize-none bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50 transition-colors placeholder:text-muted-foreground/60 max-h-24 overflow-y-auto"
             style={{ minHeight: '2.25rem' }}
             disabled={isWaiting && phase !== 'running'}
-            onFocus={() => { inputFocusedRef.current = true }}
-            onBlur={(e) => {
-              // Clear the flag only when focus moves to an element OUTSIDE the panel.
-              // Canvas clicks have relatedTarget=null, so the flag stays true (desired).
-              // Clicks on other panel elements keep focus inside, so flag stays true too.
-              const panel = e.currentTarget.closest('[data-agent-panel]')
-              if (!e.relatedTarget || !panel?.contains(e.relatedTarget as Node)) {
-                inputFocusedRef.current = false
-              }
-            }}
           />
           <button
             onClick={handleSend}
