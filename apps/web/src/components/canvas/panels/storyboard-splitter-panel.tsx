@@ -123,7 +123,7 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted }
       id: `edge_${nodeId}_${n.id}`,
       source: nodeId,
       target: n.id,
-      sourceHandle: null,
+      sourceHandle: 'text-out',
       targetHandle: 'any-in',
     }))
 

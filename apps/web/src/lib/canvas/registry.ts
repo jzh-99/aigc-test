@@ -79,7 +79,7 @@ export class NodeRegistry {
       label: '分镜拆分',
       CanvasComponent: StoryboardSplitterNode as any,
       inputs: [{ id: 'any-in', type: 'any', position: 'left' }],
-      outputs: [],
+      outputs: [{ id: 'text-out', type: 'text', position: 'right' }],
       defaultConfig: { shotCount: 0 },
     })
   }
