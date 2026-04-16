@@ -31,6 +31,8 @@ const NODE_CANVAS_H: Record<string, number> = {
   text_input: 130,
   asset: 200,
   video_gen: 220,
+  script_writer: 100,
+  storyboard_splitter: 100,
 }
 
 function FloatingParamPanel({
@@ -47,9 +49,9 @@ function FloatingParamPanel({
   onExecuted: () => void
 }) {
   const [tx, ty, zoom] = useStore((s) => s.transform)
-  const PANEL_W = 640
+  const PANEL_W = ['script_writer', 'storyboard_splitter'].includes(node.type ?? '') ? 320 : 640
   const PANEL_MAX_H = 560
-  const NODE_W = 280
+  const NODE_W = node.type === 'script_writer' || node.type === 'storyboard_splitter' ? 240 : 280
   const GAP = 8
 
   const rect = wrapperRef.current?.getBoundingClientRect()
@@ -63,8 +65,10 @@ function FloatingParamPanel({
   const sx = rect.left + node.position.x * zoom + tx
   const sy = rect.top + node.position.y * zoom + ty
 
-  const top = sy + nodeScreenH + GAP
-  const left = sx + (NODE_W * zoom) / 2 - PANEL_W / 2
+  const rawTop = sy + nodeScreenH + GAP
+  const rawLeft = sx + (NODE_W * zoom) / 2 - PANEL_W / 2
+  const top = Math.min(rawTop, window.innerHeight - 200)
+  const left = Math.max(8, Math.min(rawLeft, window.innerWidth - PANEL_W - 8))
 
   return createPortal(
     <div
