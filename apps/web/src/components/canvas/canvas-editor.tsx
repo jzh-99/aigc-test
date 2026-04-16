@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
 import ReactFlow, {
   Controls,
@@ -41,12 +41,14 @@ function FloatingParamPanel({
   wrapperRef,
   onClose,
   onExecuted,
+  onStoryboardExpandedRef,
 }: {
   node: AppNode
   canvasId: string
   wrapperRef: React.RefObject<HTMLDivElement>
   onClose: () => void
   onExecuted: () => void
+  onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
 }) {
   const [tx, ty, zoom] = useStore((s) => s.transform)
   const PANEL_W = ['script_writer', 'storyboard_splitter'].includes(node.type ?? '') ? 320 : 640
@@ -80,6 +82,7 @@ function FloatingParamPanel({
         canvasId={canvasId}
         onClose={onClose}
         onExecuted={onExecuted}
+        onStoryboardExpandedRef={onStoryboardExpandedRef}
       />
     </div>,
     document.body
@@ -93,6 +96,7 @@ function Flow({
   lastSaved,
   onKickPollReady,
   onNodeSelected,
+  onStoryboardExpandedRef,
 }: {
   canvasId: string
   onSave: () => void
@@ -100,6 +104,7 @@ function Flow({
   lastSaved: Date | null
   onKickPollReady?: (fn: () => void) => void
   onNodeSelected?: (nodeId: string) => boolean
+  onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
 }) {
   const nodes = useCanvasStructureStore((s) => s.nodes)
   const edges = useCanvasStructureStore((s) => s.edges)
@@ -519,6 +524,7 @@ function Flow({
           wrapperRef={wrapperRef}
           onClose={() => setSelectedNodeId(null)}
           onExecuted={kickPoll}
+          onStoryboardExpandedRef={onStoryboardExpandedRef}
         />
       )}
 
@@ -560,7 +566,7 @@ function Flow({
   )
 }
 
-export function CanvasEditor({ canvasId, onKickPollReady, onNodeSelected }: { canvasId: string; onKickPollReady?: (fn: () => void) => void; onNodeSelected?: (nodeId: string) => boolean }) {
+export function CanvasEditor({ canvasId, onKickPollReady, onNodeSelected, onStoryboardExpandedRef }: { canvasId: string; onKickPollReady?: (fn: () => void) => void; onNodeSelected?: (nodeId: string) => boolean; onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null> }) {
   const token = useAuthStore((s) => s.accessToken)
   const prefetchSidebar = useCanvasSidebarDataStore((s) => s.prefetch)
 
@@ -573,7 +579,7 @@ export function CanvasEditor({ canvasId, onKickPollReady, onNodeSelected }: { ca
 
   return (
     <ReactFlowProvider>
-      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} onKickPollReady={onKickPollReady} onNodeSelected={onNodeSelected} />
+      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} onKickPollReady={onKickPollReady} onNodeSelected={onNodeSelected} onStoryboardExpandedRef={onStoryboardExpandedRef} />
     </ReactFlowProvider>
   )
 }
