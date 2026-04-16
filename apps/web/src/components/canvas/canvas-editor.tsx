@@ -87,11 +87,15 @@ function Flow({
   onSave,
   saving,
   lastSaved,
+  onKickPollReady,
+  onNodeSelected,
 }: {
   canvasId: string
   onSave: () => void
   saving: boolean
   lastSaved: Date | null
+  onKickPollReady?: (fn: () => void) => void
+  onNodeSelected?: (nodeId: string) => boolean
 }) {
   const nodes = useCanvasStructureStore((s) => s.nodes)
   const edges = useCanvasStructureStore((s) => s.edges)
@@ -159,6 +163,11 @@ function Flow({
   }, [onConnect])
 
   const { kickPoll } = useCanvasPoller(canvasId)
+
+  useEffect(() => {
+    onKickPollReady?.(kickPoll)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kickPoll])
 
   // Right-click context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
@@ -408,6 +417,7 @@ function Flow({
         onConnectEnd={handleConnectEnd as any}
         nodeTypes={nodeTypes}
         onNodeClick={(_e, node) => {
+          if (onNodeSelected?.(node.id)) return  // consumed by agent — skip selection
           setSelectedEdgeId(null)
           setSelectedNodeId((prev) => (prev === node.id ? null : node.id))
         }}
@@ -542,7 +552,7 @@ function Flow({
   )
 }
 
-export function CanvasEditor({ canvasId }: { canvasId: string }) {
+export function CanvasEditor({ canvasId, onKickPollReady, onNodeSelected }: { canvasId: string; onKickPollReady?: (fn: () => void) => void; onNodeSelected?: (nodeId: string) => boolean }) {
   const token = useAuthStore((s) => s.accessToken)
   const prefetchSidebar = useCanvasSidebarDataStore((s) => s.prefetch)
 
@@ -555,7 +565,7 @@ export function CanvasEditor({ canvasId }: { canvasId: string }) {
 
   return (
     <ReactFlowProvider>
-      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} />
+      <Flow canvasId={canvasId} onSave={save} saving={saving} lastSaved={lastSaved} onKickPollReady={onKickPollReady} onNodeSelected={onNodeSelected} />
     </ReactFlowProvider>
   )
 }
