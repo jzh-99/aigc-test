@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { temporal } from 'zundo'
 import {
   Connection,
   EdgeChange,
@@ -13,38 +12,12 @@ import type { AgentWorkflow } from '@/lib/canvas/agent-types'
 import { isAssetConfig, isVideoGenConfig } from '@/lib/canvas/types'
 import { hasCycle } from '@/lib/canvas/dag'
 import { nodeRegistry } from '@/lib/canvas/registry'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-// Deep equality check for undo history — prevents recording no-op changes
-// and works with the throttle to batch rapid mutations (e.g. dragging)
-function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (a == null || b == null) return a === b
-  if (typeof a !== typeof b) return false
-
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b) || a.length !== b.length) return false
-    for (let i = 0; i < a.length; i++) {
-      if (!deepEqual(a[i], b[i])) return false
-    }
-    return true
-  }
-
-  if (isRecord(a) && isRecord(b)) {
-    const keysA = Object.keys(a)
-    const keysB = Object.keys(b)
-    if (keysA.length !== keysB.length) return false
-    for (const key of keysA) {
-      if (!deepEqual(a[key], b[key])) return false
-    }
-    return true
-  }
-
-  return false
-}
+import {
+  type UndoSnapshot,
+  loadUndoHistory,
+  saveUndoHistory,
+  MAX_UNDO,
+} from '@/lib/canvas/canvas-undo-history'
 
 interface CanvasStructureState {
   canvasId: string | null
@@ -52,14 +25,18 @@ interface CanvasStructureState {
   nodes: AppNode[]
   edges: AppEdge[]
   localVersion: number
+  _past: UndoSnapshot[]
+  _future: UndoSnapshot[]
 
   initCanvas: (canvasId: string, nodes: AppNode[], edges: AppEdge[], version: number, workspaceId?: string) => void
   setLocalVersion: (version: number) => void
   flushHistory: () => void
+  undo: () => void
+  redo: () => void
 
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
-  onConnect: (connection: Connection) => string | null  // returns error message or null
+  onConnect: (connection: Connection) => string | null
 
   addNode: (type: string, position: { x: number; y: number }) => void
   addNodeWithConfig: (type: string, position: { x: number; y: number }, config: Record<string, unknown>, id?: string) => void
@@ -69,32 +46,66 @@ interface CanvasStructureState {
   applyAgentWorkflow: (workflow: AgentWorkflow) => void
 }
 
-let historyCommitTimer: ReturnType<typeof setTimeout> | undefined
-let pendingHistoryCommit: (() => void) | null = null
-// When true, the next handleSet call bypasses throttle and commits immediately.
-// Set before discrete operations (add/remove/connect/update) to ensure each
-// gets its own undo snapshot instead of being merged into a drag throttle window.
-let immediateNext = false
+// Throttle state for drag operations
+let dragTimer: ReturnType<typeof setTimeout> | undefined
+let pendingSnapshot: UndoSnapshot | null = null
 
-export const useCanvasStructureStore = create<CanvasStructureState>()(
-  temporal(
-    (set, get) => ({
+function commitSnapshot(canvasId: string, snapshot: UndoSnapshot, past: UndoSnapshot[]): UndoSnapshot[] {
+  const next = [...past, snapshot].slice(-MAX_UNDO)
+  saveUndoHistory(canvasId, { past: next, future: [] })
+  return next
+}
+
+// Push a snapshot into history.
+// immediate=true: flush any pending drag snapshot first, then push immediately.
+// immediate=false: throttle 500ms to merge rapid drag changes into one entry.
+function pushSnapshot(
+  getState: () => CanvasStructureState,
+  setState: (fn: (s: CanvasStructureState) => Partial<CanvasStructureState>) => void,
+  snapshot: UndoSnapshot,
+  immediate: boolean,
+) {
+  if (immediate) {
+    clearTimeout(dragTimer)
+    const { canvasId, _past } = getState()
+    if (!canvasId) return
+    // Flush pending drag snapshot first so it lands before this discrete op
+    let base = _past
+    if (pendingSnapshot) {
+      base = commitSnapshot(canvasId, pendingSnapshot, _past)
+      pendingSnapshot = null
+    }
+    const next = commitSnapshot(canvasId, snapshot, base)
+    setState(() => ({ _past: next, _future: [] }))
+    return
+  }
+
+  // Throttled path for drag
+  clearTimeout(dragTimer)
+  pendingSnapshot = snapshot
+  dragTimer = setTimeout(() => {
+    const { canvasId, _past } = getState()
+    if (!canvasId || !pendingSnapshot) return
+    const next = commitSnapshot(canvasId, pendingSnapshot, _past)
+    pendingSnapshot = null
+    setState(() => ({ _past: next, _future: [] }))
+  }, 500)
+}
+
+export const useCanvasStructureStore = create<CanvasStructureState>((set, get) => ({
   canvasId: null,
   workspaceId: null,
   nodes: [],
   edges: [],
   localVersion: 1,
+  _past: [],
+  _future: [],
 
   initCanvas: (canvasId, nodes, edges, version, workspaceId) => {
-    // Cancel any pending throttled history commit from the previous canvas
-    clearTimeout(historyCommitTimer)
-    pendingHistoryCommit = null
-    immediateNext = false
-    // Clear history BEFORE set() so the load itself is never recorded
-    useCanvasStructureStore.temporal.getState().clear()
-    set({ canvasId, nodes, edges, localVersion: version, workspaceId: workspaceId ?? null })
-    // Clear again in case set() triggered handleSet and snuck a snapshot in
-    useCanvasStructureStore.temporal.getState().clear()
+    clearTimeout(dragTimer)
+    pendingSnapshot = null
+    const { past, future } = loadUndoHistory(canvasId)
+    set({ canvasId, nodes, edges, localVersion: version, workspaceId: workspaceId ?? null, _past: past, _future: future })
   },
 
   setLocalVersion: (version) => {
@@ -102,23 +113,54 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
   },
 
   flushHistory: () => {
-    if (!pendingHistoryCommit) return
-    clearTimeout(historyCommitTimer)
-    const commit = pendingHistoryCommit
-    pendingHistoryCommit = null
-    commit()
+    if (!pendingSnapshot) return
+    clearTimeout(dragTimer)
+    const { canvasId, _past } = get()
+    if (!canvasId) return
+    const next = commitSnapshot(canvasId, pendingSnapshot, _past)
+    pendingSnapshot = null
+    set({ _past: next, _future: [] })
+  },
+
+  undo: () => {
+    const { canvasId, nodes, edges, _past, _future } = get()
+    if (!canvasId || _past.length === 0) return
+    const prev = _past[_past.length - 1]
+    const newPast = _past.slice(0, -1)
+    const newFuture = [{ nodes, edges }, ..._future]
+    saveUndoHistory(canvasId, { past: newPast, future: newFuture })
+    set({ nodes: prev.nodes, edges: prev.edges, _past: newPast, _future: newFuture })
+  },
+
+  redo: () => {
+    const { canvasId, nodes, edges, _past, _future } = get()
+    if (!canvasId || _future.length === 0) return
+    const next = _future[0]
+    const newFuture = _future.slice(1)
+    const newPast = [..._past, { nodes, edges }].slice(-MAX_UNDO)
+    saveUndoHistory(canvasId, { past: newPast, future: newFuture })
+    set({ nodes: next.nodes, edges: next.edges, _past: newPast, _future: newFuture })
   },
 
   onNodesChange: (changes) => {
-    set((state) => ({
-      nodes: applyNodeChanges(changes, state.nodes) as AppNode[],
-    }))
+    const { nodes, edges } = get()
+    const next = applyNodeChanges(changes, nodes) as AppNode[]
+    set({ nodes: next })
+    // Only record position changes (dragging) — skip select/dimensions (UI-only)
+    const hasDrag = changes.some((c) => c.type === 'position')
+    if (hasDrag) {
+      pushSnapshot(get, set, { nodes: next, edges }, false)
+    }
   },
 
   onEdgesChange: (changes) => {
-    set((state) => ({
-      edges: applyEdgeChanges(changes, state.edges) as AppEdge[],
-    }))
+    const { nodes, edges } = get()
+    const next = applyEdgeChanges(changes, edges) as AppEdge[]
+    set({ edges: next })
+    const hasRemove = changes.some((c) => c.type === 'remove')
+    if (hasRemove) {
+      pushSnapshot(get, set, { nodes, edges: next }, true)
+    }
   },
 
   onConnect: (connection) => {
@@ -135,12 +177,10 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
 
     const sourceMime = getNodeMimeType(sourceNode)
 
-    // Block video/audio assets from connecting to image_gen
     if (targetNode?.type === 'image_gen' && sourceMime && (sourceMime.startsWith('video') || sourceMime.startsWith('audio'))) {
       return '视频/音频素材不能连接到 AI 生图节点'
     }
 
-    // Enforce connection limits for video_gen any-in handle
     if (connection.targetHandle === 'any-in' || !connection.targetHandle) {
       if (targetNode?.type === 'video_gen') {
         const mimeType = sourceMime
@@ -150,18 +190,15 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
         const existingAnyIn = edges.filter((e) => e.target === connection.target && (!e.targetHandle || e.targetHandle === 'any-in'))
 
         if (videoMode === 'keyframe') {
-          // keyframe: max 2 images, unlimited text
           if (sourceNode?.type !== 'text_input') {
             const existingImages = existingAnyIn.filter((e) => {
               const src = nodes.find((n) => n.id === e.source)
               return src?.type !== 'text_input'
             }).length
             if (existingImages >= 2) return '首尾帧最多连接 2 张图片'
-            // only images allowed in keyframe mode
             if (mimeType && !mimeType.startsWith('image')) return '首尾帧模式只接受图片素材'
           }
         } else {
-          // multiref: max 9 images, 3 videos, 3 audios
           const existingImages = existingAnyIn.filter((e) => {
             const src = nodes.find((n) => n.id === e.source)
             const mt = getNodeMimeType(src)
@@ -195,114 +232,63 @@ export const useCanvasStructureStore = create<CanvasStructureState>()(
       return null
     }
 
-    immediateNext = true
     set({ edges: simulatedEdges })
+    pushSnapshot(get, set, { nodes, edges: simulatedEdges }, true)
     return null
   },
 
   addNode: (type, position) => {
-    immediateNext = true
+    const { nodes, edges } = get()
     const newNode = nodeRegistry.createNodeInstance(type, position)
-    set((state) => ({ nodes: state.nodes.concat(newNode) }))
+    const next = nodes.concat(newNode)
+    set({ nodes: next })
+    pushSnapshot(get, set, { nodes: next, edges }, true)
   },
 
   addNodeWithConfig: (type, position, config, id) => {
-    immediateNext = true
+    const { nodes, edges } = get()
     const newNode = nodeRegistry.createNodeInstance(type, position, id)
-    newNode.data.config = {
-      ...newNode.data.config,
-      ...config,
-    } as CanvasNodeConfig
-    set((state) => ({ nodes: state.nodes.concat(newNode) }))
+    newNode.data.config = { ...newNode.data.config, ...config } as CanvasNodeConfig
+    const next = nodes.concat(newNode)
+    set({ nodes: next })
+    pushSnapshot(get, set, { nodes: next, edges }, true)
   },
 
   removeNodes: (nodeIds) => {
-    immediateNext = true
-    set((state) => ({
-      nodes: state.nodes.filter((n) => !nodeIds.includes(n.id)),
-      edges: state.edges.filter(
-        (e) => !nodeIds.includes(e.source) && !nodeIds.includes(e.target)
-      ),
-    }))
+    const { nodes, edges } = get()
+    const nextNodes = nodes.filter((n) => !nodeIds.includes(n.id))
+    const nextEdges = edges.filter((e) => !nodeIds.includes(e.source) && !nodeIds.includes(e.target))
+    set({ nodes: nextNodes, edges: nextEdges })
+    pushSnapshot(get, set, { nodes: nextNodes, edges: nextEdges }, true)
   },
 
   removeEdgesByTarget: (nodeId, handleIds) => {
-    immediateNext = true
-    set((state) => ({
-      edges: state.edges.filter(
-        (e) => !(e.target === nodeId && e.targetHandle && handleIds.includes(e.targetHandle))
-      ),
-    }))
+    const { nodes, edges } = get()
+    const next = edges.filter(
+      (e) => !(e.target === nodeId && e.targetHandle && handleIds.includes(e.targetHandle))
+    )
+    set({ edges: next })
+    pushSnapshot(get, set, { nodes, edges: next }, true)
   },
 
   updateNodeData: (nodeId, partialData) => {
-    immediateNext = true
-    set((state) => {
-      if (!partialData || Object.keys(partialData).length === 0) return {}
-
-      const index = state.nodes.findIndex((node) => node.id === nodeId)
-      if (index === -1) return {}
-
-      const target = state.nodes[index]
-      const updatedNode: AppNode = {
-        ...target,
-        data: { ...target.data, ...partialData },
-      }
-
-      const nextNodes = state.nodes.slice()
-      nextNodes[index] = updatedNode
-      return { nodes: nextNodes }
-    })
+    if (!partialData || Object.keys(partialData).length === 0) return
+    const { nodes, edges } = get()
+    const index = nodes.findIndex((node) => node.id === nodeId)
+    if (index === -1) return
+    const target = nodes[index]
+    const updatedNode: AppNode = { ...target, data: { ...target.data, ...partialData } }
+    const next = nodes.slice()
+    next[index] = updatedNode
+    set({ nodes: next })
+    pushSnapshot(get, set, { nodes: next, edges }, true)
   },
 
   applyAgentWorkflow: (workflow) => {
-    // Always append — never wipe existing nodes regardless of LLM strategy field.
-    // The LLM sometimes sends "create" even when the canvas has content.
-    immediateNext = true
-    set((s) => ({
-      nodes: [...s.nodes, ...workflow.newNodes],
-      edges: [...s.edges, ...workflow.newEdges],
-    }))
+    const { nodes, edges } = get()
+    const nextNodes = [...nodes, ...workflow.newNodes]
+    const nextEdges = [...edges, ...workflow.newEdges]
+    set({ nodes: nextNodes, edges: nextEdges })
+    pushSnapshot(get, set, { nodes: nextNodes, edges: nextEdges }, true)
   },
-}),
-    {
-      partialize: (state) => ({
-        nodes: state.nodes,
-        edges: state.edges,
-      }),
-      limit: 50,
-      // Throttle history snapshots so rapid changes (dragging, etc.) merge into one entry.
-      // Discrete operations (add/remove/connect/update) set immediateNext=true to bypass
-      // throttle and get their own snapshot — preventing undo from skipping steps.
-      handleSet: (handleSetCb) => {
-        return (state: Parameters<typeof handleSetCb>[0]) => {
-          if (immediateNext) {
-            immediateNext = false
-            // Flush any pending drag snapshot first so it lands before this discrete op
-            if (pendingHistoryCommit) {
-              clearTimeout(historyCommitTimer)
-              const prev = pendingHistoryCommit
-              pendingHistoryCommit = null
-              prev()
-            }
-            handleSetCb(state)
-            return
-          }
-          clearTimeout(historyCommitTimer)
-          pendingHistoryCommit = () => {
-            pendingHistoryCommit = null
-            handleSetCb(state)
-          }
-          historyCommitTimer = setTimeout(() => {
-            const commit = pendingHistoryCommit
-            pendingHistoryCommit = null
-            commit?.()
-          }, 500)
-        }
-      },
-      // Skip recording if nothing actually changed
-      equality: (pastState, currentState) =>
-        deepEqual(pastState, currentState),
-    },
-  )
-)
+}))
