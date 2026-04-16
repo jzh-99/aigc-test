@@ -8,6 +8,7 @@ import type { AgentMessage, AgentInstruction } from '@/lib/canvas/agent-types'
 import { AskUploadCard } from './agent-instructions/ask-upload-card'
 import { AnnotateAssetsCard } from './agent-instructions/annotate-assets-card'
 import { ConfirmPlanCard } from './agent-instructions/confirm-plan-card'
+import { ConfirmStoryboardCard } from './agent-instructions/confirm-storyboard-card'
 import { GuideStepCard } from './agent-instructions/guide-step-card'
 import { DoneCard } from './agent-instructions/done-card'
 
@@ -58,6 +59,15 @@ function InstructionWidget({
         items={instruction.items}
         onConfirm={(selected) => onAction('plan_confirmed', selected)}
         onModify={() => onAction('plan_modify')}
+      />
+    )
+  }
+  if (instruction.type === 'confirm_storyboard') {
+    return (
+      <ConfirmStoryboardCard
+        items={instruction.items}
+        onConfirm={(confirmed) => onAction('storyboard_confirmed', confirmed)}
+        onModify={() => onAction('storyboard_modify')}
       />
     )
   }
@@ -261,6 +271,12 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
       } else if (type === 'plan_confirmed') {
         sendMessage('方案已确认，请搭建工作流')
       } else if (type === 'plan_modify') {
+        inputRef.current?.focus()
+      } else if (type === 'storyboard_confirmed') {
+        const items = payload as import('@/lib/canvas/agent-types').StoryboardItem[]
+        const lines = items.map((item) => `【${item.label}】\n${item.content}`).join('\n\n')
+        sendMessage(`分镜文案已确认：\n\n${lines}\n\n请根据以上分镜文案搭建工作流，将每条分镜文案写入对应的 text_input 节点。`)
+      } else if (type === 'storyboard_modify') {
         inputRef.current?.focus()
       }
     },
