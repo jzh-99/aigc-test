@@ -103,6 +103,21 @@ function buildUserContent(
       }
     } else if (node.type === 'text_input') {
       parts.push({ type: 'text', text: `[文本节点「${label}」：${(node.data.config as any).text ?? ''}]` })
+    } else if (node.type === 'script_writer') {
+      const script = (execNodes[nodeId]?.outputs[0]?.paramsSnapshot as { script?: string } | undefined)?.script
+      if (script) {
+        parts.push({ type: 'text', text: `[剧本节点「${label}」：${script.slice(0, 200)}${script.length > 200 ? '…' : ''}]` })
+      } else {
+        parts.push({ type: 'text', text: `[剧本节点「${label}」：尚未生成]` })
+      }
+    } else if (node.type === 'video_gen') {
+      const execState = execNodes[nodeId]
+      const output = execState?.outputs.find((o) => o.id === execState.selectedOutputId)
+      if (output?.url) {
+        parts.push({ type: 'image_url', image_url: { url: output.url } })
+        parts.push({ type: 'text', text: `[视频节点「${label}」]` })
+        hasMedia = true
+      }
     }
   }
 

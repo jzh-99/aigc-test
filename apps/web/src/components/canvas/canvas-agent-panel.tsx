@@ -174,7 +174,6 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
 
   const [input, setInput] = useState('')
   const [showNodePicker, setShowNodePicker] = useState(false)
-  const [atQuery, setAtQuery] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isWaiting = phase === 'waiting_llm' || phase === 'running'
@@ -230,27 +229,13 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
   const handleInputChange = (value: string) => {
     setInput(value)
     const lastAt = value.lastIndexOf('@')
+    // @ at end of input activates canvas-click-to-mention mode
     if (lastAt !== -1 && lastAt === value.length - 1) {
       setShowNodePicker(true)
-      setAtQuery('')
-    } else if (lastAt !== -1 && showNodePicker) {
-      setAtQuery(value.slice(lastAt + 1))
-    } else {
+    } else if (lastAt === -1 || value.slice(lastAt).includes(' ')) {
       setShowNodePicker(false)
     }
   }
-
-  const insertNodeRef = (node: { id: string; data: { label: string } }) => {
-    const lastAt = input.lastIndexOf('@')
-    const newInput = input.slice(0, lastAt) + `@[${node.data.label}|${node.id}]`
-    setInput(newInput)
-    setShowNodePicker(false)
-    inputRef.current?.focus()
-  }
-
-  const filteredNodes = nodes.filter((n) =>
-    n.data.label.toLowerCase().includes(atQuery.toLowerCase()),
-  )
 
   // Handle instruction widget actions
   const handleInstructionAction = useCallback(
@@ -368,20 +353,10 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
           </div>
         )}
 
-        {/* Node picker popover */}
-        {showNodePicker && filteredNodes.length > 0 && (
-          <div className="absolute bottom-16 left-3 right-3 bg-popover border border-border rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto">
-            {filteredNodes.map((node) => (
-              <button
-                key={node.id}
-                onClick={() => insertNodeRef(node)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
-              >
-                <span>{nodeTypeIcon(node.type)}</span>
-                <span className="truncate">{node.data.label}</span>
-                <span className="text-xs text-muted-foreground ml-auto shrink-0">{node.type}</span>
-              </button>
-            ))}
+        {/* @ mode hint */}
+        {showNodePicker && (
+          <div className="absolute bottom-16 left-3 right-3 bg-popover border border-border rounded-lg shadow-lg z-10 px-3 py-2 text-xs text-muted-foreground">
+            点击画布上的节点来引用它
           </div>
         )}
 
