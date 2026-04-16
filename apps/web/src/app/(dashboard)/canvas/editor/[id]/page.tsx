@@ -90,8 +90,10 @@ export default function CanvasEditorPage() {
 
   useEffect(() => {
     if (!id) return
+    const controller = new AbortController()
     fetch(`/api/v1/canvases/${id}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: controller.signal,
     })
       .then(async (res) => {
         if (!res.ok) throw new Error('Not found')
@@ -102,11 +104,13 @@ export default function CanvasEditorPage() {
         const sd = canvas.structure_data ?? { nodes: [], edges: [] }
         initCanvas(id, sd.nodes as AppNode[], sd.edges as AppEdge[], canvas.version ?? 1, canvas.workspace_id)
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err.name === 'AbortError') return
         toast.error('画布加载失败')
         router.push('/canvas')
       })
       .finally(() => setLoading(false))
+    return () => controller.abort()
   }, [id, token, initCanvas, router])
 
   const sidebarW = sidebarCollapsed ? '4rem' : '15rem'

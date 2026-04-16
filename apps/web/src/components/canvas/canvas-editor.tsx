@@ -6,6 +6,7 @@ import ReactFlow, {
   Controls,
   Panel,
   ReactFlowProvider,
+  SelectionMode,
   useReactFlow,
   useStore,
 } from 'reactflow'
@@ -121,6 +122,7 @@ function Flow({
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
   const token = useAuthStore((s) => s.accessToken)
   const [uploading, setUploading] = useState(false)
 
@@ -212,7 +214,7 @@ function Flow({
       if (isMod && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         flushHistory()
-        useCanvasStructureStore.temporal.getState().undo()
+        useCanvasStructureStore.getState().undo()
         setHighlightedNodes(new Set())
         void onSave()
         return
@@ -221,7 +223,7 @@ function Flow({
       if ((isMod && e.key === 'z' && e.shiftKey) || (isMod && e.key === 'y')) {
         e.preventDefault()
         flushHistory()
-        useCanvasStructureStore.temporal.getState().redo()
+        useCanvasStructureStore.getState().redo()
         setHighlightedNodes(new Set())
         void onSave()
         return
@@ -285,6 +287,10 @@ function Flow({
         if (selectedEdgeId) {
           onEdgesChange([{ type: 'remove', id: selectedEdgeId }])
           setSelectedEdgeId(null)
+        } else if (selectedNodeIds.length > 1) {
+          removeNodes(selectedNodeIds)
+          setSelectedNodeIds([])
+          setSelectedNodeId(null)
         } else if (selectedNodeId) {
           removeNodes([selectedNodeId])
           setSelectedNodeId(null)
@@ -293,7 +299,7 @@ function Flow({
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, selectedEdgeId, removeNodes, onEdgesChange])
+  }, [selectedNodeId, selectedNodeIds, selectedEdgeId, removeNodes, onEdgesChange])
 
   // Drop file onto canvas → create asset node
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
@@ -418,6 +424,15 @@ function Flow({
         </div>
       )}
 
+      {/* Multi-select hint */}
+      {selectedNodeIds.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="bg-zinc-800/90 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg">
+            已选中 {selectedNodeIds.length} 个节点 · 按 Delete 批量删除
+          </div>
+        </div>
+      )}
+
       <ReactFlow
         nodes={nodes}
         edges={styledEdges}
@@ -436,14 +451,22 @@ function Flow({
           setSelectedNodeId(null)
           setSelectedEdgeId((prev) => (prev === edge.id ? null : edge.id))
         }}
-        onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setContextMenu(null) }}
+        onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setSelectedNodeIds([]); setContextMenu(null) }}
         onPaneContextMenu={handlePaneContextMenu as any}
+        onSelectionChange={({ nodes: sel }) => {
+          if (sel.length > 1) setSelectedNodeIds(sel.map((n) => n.id))
+          else setSelectedNodeIds([])
+        }}
         fitView
         minZoom={0.1}
         maxZoom={4}
         proOptions={{ hideAttribution: true }}
         style={{ background: '#fafafa' }}
         deleteKeyCode={null}
+        selectionOnDrag
+        panOnDrag={[1, 2]}
+        selectionMode={SelectionMode.Partial}
+        multiSelectionKeyCode="Shift"
       >
         <Controls
           className="!bg-white !border-zinc-200 [&>button]:!bg-white [&>button]:!border-zinc-200 [&>button]:!text-zinc-500 [&>button:hover]:!bg-zinc-100 [&>button:hover]:!text-zinc-800"
@@ -485,7 +508,7 @@ function Flow({
           <button
             onClick={() => {
               flushHistory()
-              useCanvasStructureStore.temporal.getState().undo()
+              useCanvasStructureStore.getState().undo()
               setHighlightedNodes(new Set())
               void onSave()
             }}
@@ -497,7 +520,7 @@ function Flow({
           <button
             onClick={() => {
               flushHistory()
-              useCanvasStructureStore.temporal.getState().redo()
+              useCanvasStructureStore.getState().redo()
               setHighlightedNodes(new Set())
               void onSave()
             }}
