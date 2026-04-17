@@ -463,9 +463,10 @@ function Flow({
         proOptions={{ hideAttribution: true }}
         style={{ background: '#fafafa' }}
         deleteKeyCode={null}
-        selectionOnDrag
-        panOnDrag={[1, 2]}
+        panOnDrag
         panOnScroll
+        selectionOnDrag={false}
+        selectionKeyCode="Control"
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode="Shift"
       >
