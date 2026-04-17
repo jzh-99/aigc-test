@@ -384,6 +384,8 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     const _batchTask = await db.transaction().execute(async (trx: any) => {
       const paramsForDb: Record<string, unknown> = {
         aspect_ratio: aspect_ratio ?? null,
+        resolution: resolution ?? null,
+        enable_upsample: enable_upsample ?? false,
       }
 
       if (model === 'veo3.1-components') {

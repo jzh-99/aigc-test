@@ -26,9 +26,31 @@ interface VideoParams {
   videoModel: string
   videoAspectRatio: string
   videoUpsample: boolean
+  videoResolution?: string
   videoDuration?: number
   videoGenerateAudio?: boolean
   videoCameraFixed?: boolean
+}
+
+interface UserDefaults {
+  modelType: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
+  resolution: '1k' | '2k' | '3k' | '4k'
+  quantity: number
+  aspectRatio: string
+  watermark: boolean
+}
+
+interface VideoDefaults {
+  videoModel: string
+  videoAspectRatio: string
+  videoUpsample: boolean
+  videoDuration: number
+  videoGenerateAudio: boolean
+  videoCameraFixed: boolean
+}
+
+interface AvatarDefaults {
+  avatarResolution: '720p' | '1080p'
 }
 
 interface GenerationState {
@@ -49,6 +71,11 @@ interface GenerationState {
   // Pending module — set by applyBatch so the panel can switch to the right tab
   pendingModule: string | null
 
+  // User-saved defaults
+  userDefaults: UserDefaults | null
+  videoDefaults: VideoDefaults | null
+  avatarDefaults: AvatarDefaults | null
+
   // Image generation actions
   setPrompt: (prompt: string) => void
   setModelType: (modelType: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0') => void
@@ -61,6 +88,9 @@ interface GenerationState {
   setWatermark: (v: boolean) => void
   setIsGenerating: (v: boolean) => void
   setActiveBatchId: (id: string | null) => void
+  saveAsDefaults: () => void
+  saveVideoDefaults: (d: VideoDefaults) => void
+  saveAvatarDefaults: (d: AvatarDefaults) => void
 
   // Video generation actions
   setVideoParams: (params: VideoParams | null) => void
@@ -83,6 +113,9 @@ const defaults = {
   activeBatchId: null,
   videoParams: null as VideoParams | null,
   pendingModule: null as string | null,
+  userDefaults: null as UserDefaults | null,
+  videoDefaults: null as VideoDefaults | null,
+  avatarDefaults: null as AvatarDefaults | null,
 }
 
 export const useGenerationStore = create<GenerationState>()(
@@ -102,6 +135,17 @@ export const useGenerationStore = create<GenerationState>()(
   setWatermark: (watermark) => set({ watermark }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   setActiveBatchId: (activeBatchId) => set({ activeBatchId }),
+  saveAsDefaults: () => set((s) => ({
+    userDefaults: {
+      modelType: s.modelType,
+      resolution: s.resolution,
+      quantity: s.quantity,
+      aspectRatio: s.aspectRatio,
+      watermark: s.watermark,
+    },
+  })),
+  saveVideoDefaults: (d) => set({ videoDefaults: d }),
+  saveAvatarDefaults: (d) => set({ avatarDefaults: d }),
   setVideoParams: (videoParams) => set({ videoParams }),
   applyBatch: (batch) => {
     const module = (batch as any).module as string
@@ -119,6 +163,10 @@ export const useGenerationStore = create<GenerationState>()(
           videoModel: batch.model,
           videoAspectRatio: (params?.aspect_ratio as string) || '',
           videoUpsample: (params?.enable_upsample as boolean) || false,
+          videoResolution: (params?.resolution as string) || undefined,
+          videoDuration: (params?.duration as number) ?? undefined,
+          videoGenerateAudio: (params?.generate_audio as boolean) ?? undefined,
+          videoCameraFixed: (params?.camera_fixed as boolean) ?? undefined,
         },
       })
     } else if (isAvatar || isActionImitation) {
@@ -139,11 +187,30 @@ export const useGenerationStore = create<GenerationState>()(
     }
   },
   clearPendingModule: () => set({ pendingModule: null }),
-  reset: () => set(defaults),
+  reset: () => set((s) => ({
+    ...defaults,
+    userDefaults: s.userDefaults,
+    ...(s.userDefaults ? {
+      modelType: s.userDefaults.modelType,
+      resolution: s.userDefaults.resolution,
+      quantity: s.userDefaults.quantity,
+      aspectRatio: s.userDefaults.aspectRatio,
+      watermark: s.userDefaults.watermark,
+    } : {}),
+  })),
     }),
     {
       name: 'aigc-generation-prefs',
-      partialize: (state) => ({ watermark: state.watermark }),
+      partialize: (state) => ({
+        watermark: state.watermark,
+        modelType: state.modelType,
+        resolution: state.resolution,
+        aspectRatio: state.aspectRatio,
+        quantity: state.quantity,
+        userDefaults: state.userDefaults,
+        videoDefaults: state.videoDefaults,
+        avatarDefaults: state.avatarDefaults,
+      }),
     }
   )
 )

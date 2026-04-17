@@ -199,12 +199,12 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const [videoMode, setVideoMode] = useState<'frames' | 'components' | 'multimodal'>('frames')
   const [isVideoUploading, setIsVideoUploading] = useState(false)   // 素材上传中（上传完才调 generateVideo）
   const [videoPrompt, setVideoPrompt] = useState('')
-  const [videoModel, setVideoModel] = useState('seedance-2.0')
-  const [videoAspectRatio, setVideoAspectRatio] = useState('')
-  const [videoUpsample, setVideoUpsample] = useState(false)
-  const [videoDuration, setVideoDuration] = useState<number>(5)
-  const [videoGenerateAudio, setVideoGenerateAudio] = useState(true)
-  const [videoCameraFixed, setVideoCameraFixed] = useState(false)
+  const [videoModel, setVideoModel] = useState(() => videoDefaults?.videoModel ?? 'seedance-2.0')
+  const [videoAspectRatio, setVideoAspectRatio] = useState(() => videoDefaults?.videoAspectRatio ?? '')
+  const [videoUpsample, setVideoUpsample] = useState(() => videoDefaults?.videoUpsample ?? false)
+  const [videoDuration, setVideoDuration] = useState<number>(() => videoDefaults?.videoDuration ?? 5)
+  const [videoGenerateAudio, setVideoGenerateAudio] = useState(() => videoDefaults?.videoGenerateAudio ?? true)
+  const [videoCameraFixed, setVideoCameraFixed] = useState(() => videoDefaults?.videoCameraFixed ?? false)
   const [firstFrame, setFirstFrame] = useState<FrameImage | null>(null)
   const [lastFrame, setLastFrame] = useState<FrameImage | null>(null)
   const [framePreviewIndex, setFramePreviewIndex] = useState<0 | 1 | null>(null)
@@ -241,7 +241,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const [avatarImage, setAvatarImage] = useState<FrameImage | null>(null)
   const [avatarAudio, setAvatarAudio] = useState<{ id: string; name: string; dataUrl: string; duration: number } | null>(null)
   const [avatarPrompt, setAvatarPrompt] = useState('')
-  const [avatarResolution, setAvatarResolution] = useState<'720p' | '1080p'>('720p')
+  const [avatarResolution, setAvatarResolution] = useState<'720p' | '1080p'>(() => avatarDefaults?.avatarResolution ?? '720p')
   const [isAvatarGenerating, setIsAvatarGenerating] = useState(false)
   const avatarImageRef = useRef<HTMLInputElement>(null)
   const avatarAudioRef = useRef<HTMLInputElement>(null)
@@ -273,7 +273,12 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     watermark,
     setWatermark,
     isGenerating,
-    videoParams
+    videoParams,
+    saveAsDefaults,
+    saveVideoDefaults,
+    saveAvatarDefaults,
+    videoDefaults,
+    avatarDefaults,
   } = useGenerationStore()
 
   const clearReferenceImages = useGenerationStore((s) => s.clearReferenceImages)
@@ -289,6 +294,9 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         setVideoModel(videoParams.videoModel)
         setVideoAspectRatio(videoParams.videoAspectRatio)
         setVideoUpsample(videoParams.videoUpsample)
+        if (videoParams.videoDuration !== undefined) setVideoDuration(videoParams.videoDuration)
+        if (videoParams.videoGenerateAudio !== undefined) setVideoGenerateAudio(videoParams.videoGenerateAudio)
+        if (videoParams.videoCameraFixed !== undefined) setVideoCameraFixed(videoParams.videoCameraFixed)
       }
       setMode('video')
     } else if (pendingModule === 'avatar') {
@@ -1972,7 +1980,14 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
       {mode === 'image' && (
         <>
-          {/* 生成配置 - 紧凑间距 */}          <div className="rounded-xl border bg-card p-3">
+          {/* 生成配置 - 紧凑间距 */}          <div className="rounded-xl border bg-card p-3 relative">
+            <button
+              className="absolute top-2 right-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+              disabled={disabled}
+              onClick={() => { saveAsDefaults(); toast.success('已保存为默认参数') }}
+            >
+              设为默认
+            </button>
             <div className="space-y-3">
               {/* 模型选择 */}
               <div>
@@ -2146,7 +2161,17 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       {mode === 'video' && (
         <>
           {/* 视频生成配置 */}
-          <div className="rounded-xl border bg-card p-3">
+          <div className="rounded-xl border bg-card p-3 relative">
+            <button
+              className="absolute top-2 right-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+              disabled={isVideoGenerating || disabled}
+              onClick={() => {
+                saveVideoDefaults({ videoModel, videoAspectRatio, videoUpsample, videoDuration, videoGenerateAudio, videoCameraFixed })
+                toast.success('已保存为默认参数')
+              }}
+            >
+              设为默认
+            </button>
             <div className="space-y-3">
               {/* 模型 + 分辨率 */}
               <div className="grid grid-cols-2 gap-2">
@@ -2359,7 +2384,17 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       {mode === 'avatar' && (
         <>
           {/* 数字人配置 */}
-          <div className="rounded-xl border bg-card p-3">
+          <div className="rounded-xl border bg-card p-3 relative">
+            <button
+              className="absolute top-2 right-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+              disabled={isAvatarGenerating}
+              onClick={() => {
+                saveAvatarDefaults({ avatarResolution })
+                toast.success('已保存为默认参数')
+              }}
+            >
+              设为默认
+            </button>
             <div className="space-y-3">
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">分辨率</Label>
