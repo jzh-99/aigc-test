@@ -13,6 +13,7 @@ import { getAdapter } from './adapters/factory.js'
 import { completePipeline } from './pipelines/complete.js'
 import { failPipeline } from './pipelines/fail.js'
 import { runTimeoutGuardian } from './jobs/timeout-guardian.js'
+import { runPurgeOldRecords } from './jobs/purge-old-records.js'
 import { transferWorker } from './workers/transfer.js'
 import { getRedis, closeRedis } from './lib/redis.js'
 import { startVideoPoller } from './pollers/video-poller.js'
@@ -89,6 +90,17 @@ const guardianTimer = setInterval(() => {
 
 logger.info('Timeout guardian scheduled (every 5 minutes)')
 
+// ─── Purge Old Records ────────────────────────────────────────────────────────
+
+const PURGE_INTERVAL = 24 * 60 * 60 * 1000 // once a day
+// Delay first run by 5 minutes
+setTimeout(() => {
+  runPurgeOldRecords().catch((err) => logger.error({ err }, 'Purge old records error'))
+}, 5 * 60 * 1000)
+const purgeTimer = setInterval(() => {
+  runPurgeOldRecords().catch((err) => logger.error({ err }, 'Purge old records error'))
+}, PURGE_INTERVAL)
+
 // ─── Video Poller ─────────────────────────────────────────────────────────────
 
 const videoPollerTimer = startVideoPoller()
@@ -106,6 +118,7 @@ const actionImitationPollerTimer = startActionImitationPoller()
 const shutdown = async () => {
   logger.info('Shutting down workers...')
   clearInterval(guardianTimer)
+  clearInterval(purgeTimer)
   clearInterval(videoPollerTimer)
   clearInterval(avatarPollerTimer)
   clearInterval(actionImitationPollerTimer)
