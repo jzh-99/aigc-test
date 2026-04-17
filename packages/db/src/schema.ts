@@ -16,6 +16,7 @@ export interface UsersTable {
   status: 'active' | 'suspended' | 'deleted'
   plan_tier: 'free' | 'basic' | 'pro' | 'enterprise'
   password_change_required: Generated<boolean>
+  generation_defaults: ColumnType<Record<string, unknown>, string | undefined, string>
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>
 }
@@ -317,6 +318,16 @@ export interface CanvasNodeOutputsTable {
   created_at: Generated<Timestamp>
 }
 
+// ─── AI Assistant Errors ──────────────────────────────────────────────────────
+
+export interface AiAssistantErrorsTable {
+  id: Generated<string>
+  user_id: string
+  http_status: number | null
+  error_detail: string | null
+  created_at: Generated<Timestamp>
+}
+
 // ─── Database Interface ───────────────────────────────────────────────────────
 
 export interface Database {
@@ -344,4 +355,5 @@ export interface Database {
   prompt_filter_rules: PromptFilterRulesTable
   canvases: CanvasesTable
   canvas_node_outputs: CanvasNodeOutputsTable
+  ai_assistant_errors: AiAssistantErrorsTable
 }

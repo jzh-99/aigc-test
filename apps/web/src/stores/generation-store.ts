@@ -91,6 +91,7 @@ interface GenerationState {
   saveAsDefaults: () => void
   saveVideoDefaults: (d: VideoDefaults) => void
   saveAvatarDefaults: (d: AvatarDefaults) => void
+  applyServerDefaults: (d: { userDefaults?: UserDefaults | null; videoDefaults?: VideoDefaults | null; avatarDefaults?: AvatarDefaults | null }) => void
 
   // Video generation actions
   setVideoParams: (params: VideoParams | null) => void
@@ -146,6 +147,18 @@ export const useGenerationStore = create<GenerationState>()(
   })),
   saveVideoDefaults: (d) => set({ videoDefaults: d }),
   saveAvatarDefaults: (d) => set({ avatarDefaults: d }),
+  applyServerDefaults: ({ userDefaults, videoDefaults, avatarDefaults }) => set((s) => ({
+    ...(userDefaults ? {
+      userDefaults,
+      modelType: userDefaults.modelType,
+      resolution: userDefaults.resolution,
+      quantity: userDefaults.quantity,
+      aspectRatio: userDefaults.aspectRatio,
+      watermark: userDefaults.watermark,
+    } : {}),
+    videoDefaults: videoDefaults ?? s.videoDefaults,
+    avatarDefaults: avatarDefaults ?? s.avatarDefaults,
+  })),
   setVideoParams: (videoParams) => set({ videoParams }),
   applyBatch: (batch) => {
     const module = (batch as any).module as string
@@ -207,9 +220,6 @@ export const useGenerationStore = create<GenerationState>()(
         resolution: state.resolution,
         aspectRatio: state.aspectRatio,
         quantity: state.quantity,
-        userDefaults: state.userDefaults,
-        videoDefaults: state.videoDefaults,
-        avatarDefaults: state.avatarDefaults,
       }),
     }
   )
