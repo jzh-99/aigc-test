@@ -465,6 +465,7 @@ function Flow({
         deleteKeyCode={null}
         selectionOnDrag
         panOnDrag={[1, 2]}
+        panOnScroll
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode="Shift"
       >
