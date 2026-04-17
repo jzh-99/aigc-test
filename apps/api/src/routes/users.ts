@@ -109,4 +109,30 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     return { success: true }
   })
+
+  // GET /users/me/generation-defaults
+  app.get('/users/me/generation-defaults', async (request) => {
+    const db = getDb()
+    const user = await db
+      .selectFrom('users')
+      .select('generation_defaults')
+      .where('id', '=', request.user.id)
+      .executeTakeFirstOrThrow()
+    return user.generation_defaults ?? {}
+  })
+
+  // PATCH /users/me/generation-defaults
+  app.patch<{ Body: Record<string, unknown> }>('/users/me/generation-defaults', {
+    schema: {
+      body: { type: 'object', additionalProperties: true },
+    },
+  }, async (request) => {
+    const db = getDb()
+    await db
+      .updateTable('users')
+      .set({ generation_defaults: JSON.stringify(request.body) })
+      .where('id', '=', request.user.id)
+      .execute()
+    return request.body
+  })
 }

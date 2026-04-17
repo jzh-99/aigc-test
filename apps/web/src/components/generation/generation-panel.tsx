@@ -16,6 +16,7 @@ import { useGenerate } from '@/hooks/use-generate'
 import { useVideoGenerate } from '@/hooks/use-video-generate'
 import { useTeamFeatures } from '@/hooks/use-team-features'
 import { useAuthStore } from '@/stores/auth-store'
+import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search, Film, X, UserSquare2, Music, Clapperboard, Play } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
@@ -210,7 +211,37 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     saveAvatarDefaults,
     videoDefaults,
     avatarDefaults,
+    userDefaults,
+    applyServerDefaults,
   } = useGenerationStore()
+
+  const { load: loadDefaults, save: saveDefaults } = useGenerationDefaults()
+
+  // Load server-side defaults once on mount
+  useEffect(() => {
+    loadDefaults().then((d) => {
+      applyServerDefaults({
+        userDefaults: d.image ? {
+          modelType: (d.image.modelType as any) ?? 'gemini',
+          resolution: (d.image.resolution as any) ?? '2k',
+          aspectRatio: d.image.aspectRatio ?? '1:1',
+          quantity: d.image.quantity ?? 1,
+          watermark: d.image.watermark ?? false,
+        } : null,
+        videoDefaults: d.video ? {
+          videoModel: d.video.videoModel ?? 'seedance-2.0',
+          videoAspectRatio: d.video.videoAspectRatio ?? '',
+          videoUpsample: d.video.videoUpsample ?? false,
+          videoDuration: d.video.videoDuration ?? 5,
+          videoGenerateAudio: d.video.videoGenerateAudio ?? true,
+          videoCameraFixed: d.video.videoCameraFixed ?? false,
+        } : null,
+        avatarDefaults: d.avatar ? {
+          avatarResolution: (d.avatar.avatarResolution as any) ?? '720p',
+        } : null,
+      })
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearReferenceImages = useGenerationStore((s) => s.clearReferenceImages)
   const pendingModule = useGenerationStore((s) => s.pendingModule)
@@ -1984,7 +2015,15 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <button
               className="absolute top-2 right-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
               disabled={disabled}
-              onClick={() => { saveAsDefaults(); toast.success('已保存为默认参数') }}
+              onClick={() => {
+                saveAsDefaults()
+                saveDefaults({
+                  image: { modelType, resolution, aspectRatio, quantity, watermark },
+                  video: videoDefaults ?? undefined,
+                  avatar: avatarDefaults ?? undefined,
+                })
+                toast.success('已保存为默认参数')
+              }}
             >
               设为默认
             </button>
@@ -2166,7 +2205,13 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               className="absolute top-2 right-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
               disabled={isVideoGenerating || disabled}
               onClick={() => {
-                saveVideoDefaults({ videoModel, videoAspectRatio, videoUpsample, videoDuration, videoGenerateAudio, videoCameraFixed })
+                const d = { videoModel, videoAspectRatio, videoUpsample, videoDuration, videoGenerateAudio, videoCameraFixed }
+                saveVideoDefaults(d)
+                saveDefaults({
+                  image: userDefaults ?? undefined,
+                  video: d,
+                  avatar: avatarDefaults ?? undefined,
+                })
                 toast.success('已保存为默认参数')
               }}
             >
@@ -2390,6 +2435,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               disabled={isAvatarGenerating}
               onClick={() => {
                 saveAvatarDefaults({ avatarResolution })
+                saveDefaults({
+                  image: userDefaults ?? undefined,
+                  video: videoDefaults ?? undefined,
+                  avatar: { avatarResolution },
+                })
                 toast.success('已保存为默认参数')
               }}
             >
