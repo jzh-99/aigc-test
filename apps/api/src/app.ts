@@ -24,6 +24,7 @@ import { avatarRoutes } from './routes/avatar.js'
 import { actionImitationRoutes } from './routes/action-imitation.js'
 import { canvasRoutes } from './routes/canvas.js'
 import { canvasAgentRoutes } from './routes/canvas-agent.js'
+import { companyARoutes } from './routes/company-a.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -108,6 +109,7 @@ export async function buildApp() {
       await v1.register(actionImitationRoutes)
       await v1.register(canvasRoutes)
       await v1.register(canvasAgentRoutes)
+      await v1.register(companyARoutes)
     },
     { prefix: '/api/v1' },
   )

@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
-import { Loader2, Search, ImageIcon, Check } from 'lucide-react'
+import { Loader2, Search, ImageIcon, Check, Plus } from 'lucide-react'
 import { apiGet } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
+
+const PAGE_SIZE = 30
 
 interface Poster {
   name: string
@@ -33,6 +35,14 @@ interface CompanyAImagePickerProps {
   onSelectPoster: (url: string, name: string) => void
 }
 
+interface PosterMeta {
+  url: string
+  name: string
+  programName: string
+  width?: number
+  height?: number
+}
+
 export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: CompanyAImagePickerProps) {
   const [programName, setProgramName] = useState('')
   const [contentCode, setContentCode] = useState('')
@@ -40,13 +50,38 @@ export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: Comp
   const [results, setResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
+  const [posterMeta, setPosterMeta] = useState<Record<string, { width: number; height: number }>>({})
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
-  // Flat list of all poster URLs for lightbox navigation
-  const allPosters: { url: string; name: string; programName: string }[] = results.flatMap((r) =>
-    r.posters.map((p) => ({ url: p.url, name: p.name, programName: r.programname }))
+  const allPosters: PosterMeta[] = results.flatMap((r) =>
+    r.posters.map((p) => ({
+      url: p.url,
+      name: p.name,
+      programName: r.programname,
+      ...posterMeta[p.url],
+    }))
   )
 
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const visiblePosters = allPosters.slice(0, visibleCount)
+  const totalPosters = allPosters.length
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((n) => Math.min(n + PAGE_SIZE, totalPosters))
+        }
+      },
+      { threshold: 0.1 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [totalPosters])
 
   const canSearch = programName.trim().length > 0 || contentCode.trim().length > 0
 
@@ -56,6 +91,9 @@ export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: Comp
 
     setIsSearching(true)
     setHasSearched(false)
+    setResults([])
+    setPosterMeta({})
+    setVisibleCount(PAGE_SIZE)
     try {
       const params = new URLSearchParams()
       if (programName.trim()) params.set('programname', programName.trim())
@@ -82,7 +120,15 @@ export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: Comp
 
   function handleSelectPoster(url: string, name: string) {
     onSelectPoster(url, name)
+    setLightboxIndex(null)
     onOpenChange(false)
+  }
+
+  function handleImageLoad(url: string, e: React.SyntheticEvent<HTMLImageElement>) {
+    const img = e.currentTarget
+    if (img.naturalWidth) {
+      setPosterMeta((prev) => ({ ...prev, [url]: { width: img.naturalWidth, height: img.naturalHeight } }))
+    }
   }
 
   return (
@@ -149,40 +195,68 @@ export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: Comp
               </div>
             )}
 
-            {hasSearched && allPosters.length === 0 && (
+            {hasSearched && !isSearching && allPosters.length === 0 && (
               <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm">
                 <ImageIcon className="h-10 w-10 mb-2 opacity-20" />
                 <p>未找到相关图片</p>
               </div>
             )}
 
-            {allPosters.length > 0 && (
+            {!isSearching && allPosters.length > 0 && (
               <div>
-                <p className="text-xs text-muted-foreground mb-3">共 {allPosters.length} 张图片</p>
+                <p className="text-xs text-muted-foreground mb-3">共 {totalPosters} 张图片</p>
                 <div className="grid grid-cols-3 gap-2">
-                  {allPosters.map((poster, idx) => (
-                    <div
-                      key={idx}
-                      className="group relative aspect-square rounded-lg overflow-hidden border bg-muted cursor-pointer"
-                      onClick={() => setLightboxIndex(idx)}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={poster.url}
-                        alt={poster.name}
-                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
-                    </div>
-                  ))}
+                  {visiblePosters.map((poster, idx) => {
+                    const meta = posterMeta[poster.url]
+                    return (
+                      <div
+                        key={idx}
+                        className="group relative rounded-lg overflow-hidden border bg-muted cursor-pointer"
+                        style={{ aspectRatio: meta ? `${meta.width}/${meta.height}` : '1/1' }}
+                        onClick={() => setLightboxIndex(idx)}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={poster.url}
+                          alt={poster.name}
+                          className="w-full h-full object-contain transition-transform group-hover:scale-105"
+                          onLoad={(e) => handleImageLoad(poster.url, e)}
+                        />
+
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors" />
+
+                        {/* Pixel info on hover */}
+                        {meta && (
+                          <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-black/60 text-white text-[10px] leading-tight opacity-0 group-hover:opacity-100 transition-opacity">
+                            {meta.width} × {meta.height}
+                          </div>
+                        )}
+
+                        {/* Quick-select button */}
+                        <button
+                          className="absolute top-1.5 right-1.5 flex items-center gap-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                          onClick={(e) => { e.stopPropagation(); handleSelectPoster(poster.url, poster.name) }}
+                        >
+                          <Plus className="h-3 w-3" />
+                          选用
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
+                {visibleCount < totalPosters && (
+                  <div ref={sentinelRef} className="h-8 flex items-center justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
               </div>
             )}
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Lightbox */}
+      {/* Lightbox — rendered outside Sheet so z-index works */}
       {lightboxIndex !== null && allPosters[lightboxIndex] && (
         <ImageLightbox
           url={allPosters[lightboxIndex].url}
@@ -195,9 +269,14 @@ export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: Comp
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{allPosters[lightboxIndex].programName}</p>
                 <p className="text-xs opacity-60 mt-0.5 truncate">{allPosters[lightboxIndex].name}</p>
-                {allPosters.length > 1 && (
-                  <p className="text-xs opacity-40 mt-0.5">{lightboxIndex + 1} / {allPosters.length}</p>
-                )}
+                <p className="text-xs opacity-40 mt-0.5 tabular-nums">
+                  {lightboxIndex + 1} / {allPosters.length}
+                  {posterMeta[allPosters[lightboxIndex].url] && (
+                    <span className="ml-2">
+                      {posterMeta[allPosters[lightboxIndex].url].width} × {posterMeta[allPosters[lightboxIndex].url].height} px
+                    </span>
+                  )}
+                </p>
               </div>
               <Button
                 size="sm"
