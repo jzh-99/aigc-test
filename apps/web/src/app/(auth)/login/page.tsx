@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,9 +17,9 @@ import Link from 'next/link'
 function KickedMessage() {
   const searchParams = useSearchParams()
   const isKicked = searchParams.get('reason') === 'kicked'
-  
+
   if (!isKicked) return null
-  
+
   return (
     <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3.5 text-sm">
       <p className="font-semibold text-yellow-600 dark:text-yellow-500 mb-1">账号已登出</p>
@@ -28,6 +28,34 @@ function KickedMessage() {
       </p>
     </div>
   )
+}
+
+function SsoHandler() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const setAuth = useAuthStore((s) => s.setAuth)
+  const resetGeneration = useGenerationStore((s) => s.reset)
+
+  useEffect(() => {
+    const token = searchParams.get('token')
+    if (!token) return
+
+    const redirect = searchParams.get('redirect') ?? '/'
+    // Only allow internal paths to prevent open redirect
+    const safePath = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
+
+    apiPost<AuthResponse>('/auth/sso', { token })
+      .then((res) => {
+        resetGeneration()
+        setAuth(res.user, res.access_token)
+        router.replace(safePath)
+      })
+      .catch(() => {
+        toast.error('单点登录失败，请手动登录', { duration: 6000 })
+      })
+  }, [])
+
+  return null
 }
 
 export default function LoginPage() {
@@ -103,6 +131,7 @@ export default function LoginPage() {
 
           <Suspense fallback={null}>
             <KickedMessage />
+            <SsoHandler />
           </Suspense>
 
           {suspended && (
