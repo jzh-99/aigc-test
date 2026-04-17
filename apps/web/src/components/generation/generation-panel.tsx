@@ -188,6 +188,34 @@ interface GenerationPanelProps {
 }
 
 export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image' }: GenerationPanelProps) {
+  const {
+    prompt,
+    setPrompt,
+    modelType,
+    setModelType,
+    resolution,
+    setResolution,
+    quantity,
+    setQuantity,
+    aspectRatio,
+    setAspectRatio,
+    referenceImages,
+    addReferenceImage,
+    watermark,
+    setWatermark,
+    isGenerating,
+    videoParams,
+    saveAsDefaults,
+    saveVideoDefaults,
+    saveAvatarDefaults,
+    videoDefaults,
+    avatarDefaults,
+  } = useGenerationStore()
+
+  const clearReferenceImages = useGenerationStore((s) => s.clearReferenceImages)
+  const pendingModule = useGenerationStore((s) => s.pendingModule)
+  const clearPendingModule = useGenerationStore((s) => s.clearPendingModule)
+
   const [mode, setMode] = useState<'image' | 'video' | 'avatar' | 'action_imitation'>(initialMode)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
@@ -256,34 +284,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   const { isCompanyA, showVideoTab, showAvatarTab, showActionImitationTab } = useTeamFeatures()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
-
-  const {
-    prompt,
-    setPrompt,
-    modelType,
-    setModelType,
-    resolution,
-    setResolution,
-    quantity,
-    setQuantity,
-    aspectRatio,
-    setAspectRatio,
-    referenceImages,
-    addReferenceImage,
-    watermark,
-    setWatermark,
-    isGenerating,
-    videoParams,
-    saveAsDefaults,
-    saveVideoDefaults,
-    saveAvatarDefaults,
-    videoDefaults,
-    avatarDefaults,
-  } = useGenerationStore()
-
-  const clearReferenceImages = useGenerationStore((s) => s.clearReferenceImages)
-  const pendingModule = useGenerationStore((s) => s.pendingModule)
-  const clearPendingModule = useGenerationStore((s) => s.clearPendingModule)
 
   // Switch to the right tab when applyBatch is called (from history / assets)
   useEffect(() => {
