@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, KeyRound, Zap, Stethoscope } from 'lucide-react'
+import { Search, KeyRound, Zap, Stethoscope, Copy } from 'lucide-react'
 import { AdminPasswordDialog } from './admin-password-dialog'
 import { UserDiagnosisSheet } from './user-diagnosis-sheet'
 import { apiPatch, ApiError } from '@/lib/api-client'
@@ -93,6 +93,7 @@ export function UserTable() {
                 <tr className="border-b text-muted-foreground">
                   <th className="text-left py-3 px-4 font-medium">用户名</th>
                   <th className="text-left py-3 px-4 font-medium">账户</th>
+                  <th className="text-left py-3 px-4 font-medium">User ID</th>
                   <th className="text-left py-3 px-4 font-medium">角色</th>
                   <th className="text-left py-3 px-4 font-medium">状态</th>
                   <th className="text-left py-3 px-4 font-medium">所属团队</th>
@@ -108,6 +109,19 @@ export function UserTable() {
                   <tr key={user.id} className="border-b last:border-0">
                     <td className="py-3 px-4 font-medium">{user.username}</td>
                     <td className="py-3 px-4 text-muted-foreground">{user.account}</td>
+                    <td className="py-3 px-4">
+                      <button
+                        className="flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                        title={user.id}
+                        onClick={() => {
+                          navigator.clipboard.writeText(user.id)
+                          toast.success('已复制 User ID')
+                        }}
+                      >
+                        <span>{user.id.slice(0, 8)}…</span>
+                        <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    </td>
                     <td className="py-3 px-4">
                       <Badge variant={user.role === 'admin' ? 'default' : 'outline'}>
                         {user.role === 'admin' ? '管理员' : '成员'}
@@ -175,7 +189,7 @@ export function UserTable() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="py-8 text-center text-muted-foreground text-sm">
+                    <td colSpan={11} className="py-8 text-center text-muted-foreground text-sm">
                       {search ? '没有找到匹配的用户' : '暂无用户'}
                     </td>
                   </tr>
