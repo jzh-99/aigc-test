@@ -116,14 +116,14 @@ export default function CanvasEditorPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-background">
+      <div className="h-full flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-background">
+    <div className="flex flex-col h-full overflow-hidden bg-background -m-4 md:-m-6">
       {/* Canvas sub-header */}
       <header className="h-10 border-b flex items-center justify-between px-4 shrink-0 bg-background">
         <div className="flex items-center gap-2">
