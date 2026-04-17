@@ -220,6 +220,17 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   // Load server-side defaults once on mount
   useEffect(() => {
     loadDefaults().then((d) => {
+      if (d.video) {
+        if (d.video.videoModel) setVideoModel(d.video.videoModel)
+        if (d.video.videoAspectRatio !== undefined) setVideoAspectRatio(d.video.videoAspectRatio)
+        if (d.video.videoUpsample !== undefined) setVideoUpsample(d.video.videoUpsample)
+        if (d.video.videoDuration !== undefined) setVideoDuration(d.video.videoDuration)
+        if (d.video.videoGenerateAudio !== undefined) setVideoGenerateAudio(d.video.videoGenerateAudio)
+        if (d.video.videoCameraFixed !== undefined) setVideoCameraFixed(d.video.videoCameraFixed)
+      }
+      if (d.avatar?.avatarResolution) {
+        setAvatarResolution(d.avatar.avatarResolution as '720p' | '1080p')
+      }
       applyServerDefaults({
         userDefaults: d.image ? {
           modelType: (d.image.modelType as any) ?? 'gemini',
