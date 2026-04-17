@@ -5,7 +5,7 @@ import { decryptProxyUrl } from '../lib/storage.js'
 function isAllowedUrl(url: string): boolean {
   const allowedHosts: Array<{ hostname: string; port: string }> = []
 
-  for (const envVar of ['EXTERNAL_STORAGE_URL', 'EXTERNAL_STORAGE_BASE']) {
+  for (const envVar of ['EXTERNAL_STORAGE_URL', 'EXTERNAL_STORAGE_BASE', 'COMPANY_A_IMAGE_BASE']) {
     const raw = process.env[envVar] ?? ''
     if (!raw) continue
     try {

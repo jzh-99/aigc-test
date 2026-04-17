@@ -185,7 +185,7 @@ export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black/90"
+      className="fixed inset-0 z-[200] flex flex-col bg-black/90"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       {/* Toolbar */}
