@@ -559,7 +559,7 @@ export function AiAssistant() {
             )}
             {messages.map((msg) => (
               <div key={msg.id} className={cn(
-                'mb-3 flex min-w-0',
+                'mb-3 flex min-w-0 w-full overflow-hidden',
                 msg.role === 'user' ? 'justify-end pl-8' : 'justify-start pr-8'
               )}>
                 <div className={cn(
@@ -576,7 +576,7 @@ export function AiAssistant() {
                     : msg.role === 'assistant'
                     ? (
                       <>
-                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-8 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-8 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
                         {msg.content && (
                           <button
                             onClick={() => handleCopy(msg.content, msg.id)}
