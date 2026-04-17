@@ -8,16 +8,17 @@ import { AiAssistant } from '@/components/ai-assistant/ai-assistant'
 interface AppShellProps {
   children: React.ReactNode
   title?: string
+  mainClassName?: string
 }
 
-export function AppShell({ children, title }: AppShellProps) {
+export function AppShell({ children, title, mainClassName }: AppShellProps) {
   return (
     <TooltipProvider>
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Topbar title={title} />
-          <main className="flex-1 overflow-y-auto bg-[hsl(var(--surface-warm))] p-4 md:p-6">
+          <main className={mainClassName ?? 'flex-1 overflow-y-auto bg-[hsl(var(--surface-warm))] p-4 md:p-6'}>
             {children}
           </main>
           <div className="shrink-0 border-t px-4 py-1.5 text-center text-[11px] text-muted-foreground/60 bg-[hsl(var(--surface-warm))]">

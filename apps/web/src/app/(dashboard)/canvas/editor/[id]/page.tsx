@@ -6,7 +6,6 @@ import { Loader2, History, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
-import { useLayoutStore } from '@/stores/layout-store'
 import { CanvasEditor } from '@/components/canvas/canvas-editor'
 import { CanvasHistorySidebar } from '@/components/canvas/canvas-history-sidebar'
 import { CanvasAgentPanel } from '@/components/canvas/canvas-agent-panel'
@@ -80,7 +79,6 @@ export default function CanvasEditorPage() {
   const router = useRouter()
   const token = useAuthStore((s) => s.accessToken)
   const initCanvas = useCanvasStructureStore((s) => s.initCanvas)
-  const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed)
   const [canvasName, setCanvasName] = useState('未命名画布')
   const [loading, setLoading] = useState(true)
   const [sidePanel, setSidePanel] = useState<SidePanel>('agent')
@@ -113,27 +111,19 @@ export default function CanvasEditorPage() {
     return () => controller.abort()
   }, [id, token, initCanvas, router])
 
-  const sidebarW = sidebarCollapsed ? '4rem' : '15rem'
+  const togglePanel = (panel: SidePanel) =>
+    setSidePanel((prev) => (prev === panel ? null : panel))
 
   if (loading) {
     return (
-      <div
-        className="fixed flex items-center justify-center bg-background z-10"
-        style={{ top: '3.5rem', left: sidebarW, right: 0, bottom: 0 }}
-      >
+      <div className="flex-1 flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
-  const togglePanel = (panel: SidePanel) =>
-    setSidePanel((prev) => (prev === panel ? null : panel))
-
   return (
-    <div
-      className="fixed flex flex-col overflow-hidden bg-background z-10"
-      style={{ top: '3.5rem', left: sidebarW, right: 0, bottom: 0 }}
-    >
+    <div className="flex flex-col flex-1 overflow-hidden bg-background">
       {/* Canvas sub-header */}
       <header className="h-10 border-b flex items-center justify-between px-4 shrink-0 bg-background">
         <div className="flex items-center gap-2">

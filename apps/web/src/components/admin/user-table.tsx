@@ -7,8 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, KeyRound, Zap } from 'lucide-react'
+import { Search, KeyRound, Zap, Stethoscope } from 'lucide-react'
 import { AdminPasswordDialog } from './admin-password-dialog'
+import { UserDiagnosisSheet } from './user-diagnosis-sheet'
 import { apiPatch, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
 
@@ -31,6 +32,7 @@ export function UserTable() {
   const { data, error } = useSWR<{ data: User[] }>('/admin/users')
   const [search, setSearch] = useState('')
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null)
+  const [diagnosisUser, setDiagnosisUser] = useState<{ id: string; username: string } | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const filtered = data?.data.filter(u =>
@@ -141,6 +143,15 @@ export function UserTable() {
                           size="sm"
                           variant="ghost"
                           className="h-7 px-2 text-xs"
+                          onClick={() => setDiagnosisUser({ id: user.id, username: user.username })}
+                          title="用户诊断"
+                        >
+                          <Stethoscope className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
                           onClick={() => setPasswordUserId(user.id)}
                           title="修改密码"
                         >
@@ -179,6 +190,13 @@ export function UserTable() {
         userId={passwordUserId}
         open={!!passwordUserId}
         onOpenChange={(open) => { if (!open) setPasswordUserId(null) }}
+      />
+
+      <UserDiagnosisSheet
+        userId={diagnosisUser?.id ?? null}
+        username={diagnosisUser?.username ?? ''}
+        open={!!diagnosisUser}
+        onOpenChange={(open) => { if (!open) setDiagnosisUser(null) }}
       />
     </>
   )
