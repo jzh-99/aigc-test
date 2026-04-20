@@ -5,12 +5,14 @@ import { useAuthStore } from '@/stores/auth-store'
 import { TeamTable } from '@/components/admin/team-table'
 import { CreateTeamForm } from '@/components/admin/create-team-form'
 import { UserTable } from '@/components/admin/user-table'
+import { ErrorDashboard } from '@/components/admin/error-dashboard'
 import { cn } from '@/lib/utils'
 
 const tabs = [
   { key: 'teams', label: '团队列表' },
   { key: 'create', label: '创建团队' },
   { key: 'users', label: '用户列表' },
+  { key: 'errors', label: '错误诊断' },
 ] as const
 
 type TabKey = typeof tabs[number]['key']
@@ -50,6 +52,7 @@ export default function AdminPage() {
       {activeTab === 'teams' && <TeamTable />}
       {activeTab === 'create' && <CreateTeamForm onCreated={() => setActiveTab('teams')} />}
       {activeTab === 'users' && <UserTable />}
+      {activeTab === 'errors' && <ErrorDashboard />}
     </div>
   )
 }
