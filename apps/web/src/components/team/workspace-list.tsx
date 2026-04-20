@@ -43,8 +43,15 @@ function daysLeft(deletedAt: string): number {
   return Math.max(0, 7 - Math.floor(diff / (24 * 60 * 60 * 1000)))
 }
 
+interface TeamWorkspace {
+  id: string
+  name: string
+  description: string | null
+  created_at: string
+  member_count: number
+}
+
 export function WorkspaceList({ teamId }: { teamId: string }) {
-  const user = useAuthStore((s) => s.user)
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [managingWs, setManagingWs] = useState<string | null>(null)
@@ -54,9 +61,9 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
   // Get team data (includes members)
   const { data: teamData } = useSWR<TeamData>(`/teams/${teamId}`)
 
-  // Get workspaces from user's team
-  const workspaces =
-    user?.teams.find((t) => t.id === teamId)?.workspaces ?? []
+  // Get all workspaces in team (owner management view — not filtered by membership)
+  const { data: wsData, mutate: mutateWorkspaces } = useSWR<{ data: TeamWorkspace[] }>(`/teams/${teamId}/workspaces`)
+  const workspaces = wsData?.data ?? []
 
   // Workspace members (when managing)
   const { data: wsMembers, mutate: mutateWsMembers } = useSWR<{
@@ -75,7 +82,8 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
       toast.success('工作区已创建')
       setCreateOpen(false)
       setNewName('')
-      // Refresh user profile to get new workspace
+      mutateWorkspaces()
+      // Also refresh user profile so sidebar stays in sync
       const profile = await apiGet<UserProfile>('/users/me')
       useAuthStore.getState().updateUser(profile)
     } catch (err) {
@@ -88,6 +96,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
     try {
       await apiDelete(`/teams/${teamId}/workspaces/${ws.id}`)
       toast.success(`工作区"${ws.name}"已删除`)
+      mutateWorkspaces()
       const profile = await apiGet<UserProfile>('/users/me')
       useAuthStore.getState().updateUser(profile)
     } catch (err) {
@@ -101,6 +110,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
       await apiPost(`/teams/${teamId}/trash/${ws.id}/restore`, {})
       toast.success(`工作区"${ws.name}"已恢复`)
       mutateTrash()
+      mutateWorkspaces()
       const profile = await apiGet<UserProfile>('/users/me')
       useAuthStore.getState().updateUser(profile)
     } catch (err) {
@@ -172,7 +182,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
                   <div>
                     <p className="font-medium">{ws.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      角色: {ws.role}
+                      {ws.member_count} 名成员
                     </p>
                   </div>
                 </div>
