@@ -383,6 +383,36 @@ function Flow({
     ? `已保存 ${lastSaved.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
     : '保存'
 
+  const handleSelectionChange = useCallback(({ nodes: sel }: { nodes: Array<{ id: string }> }) => {
+    if (sel.length > 1) {
+      const next = sel.map((n) => n.id)
+      setSelectedNodeIds((prev) => {
+        if (prev.length === next.length && prev.every((id, i) => id === next[i])) return prev
+        return next
+      })
+      return
+    }
+    setSelectedNodeIds((prev) => (prev.length === 0 ? prev : []))
+  }, [])
+
+  const handleNodeClick = useCallback((_e: unknown, node: AppNode) => {
+    if (onNodeSelected?.(node.id)) return // consumed by agent — skip selection
+    setSelectedEdgeId(null)
+    setSelectedNodeId((prev) => (prev === node.id ? null : node.id))
+  }, [onNodeSelected])
+
+  const handleEdgeClick = useCallback((_e: unknown, edge: AppEdge) => {
+    setSelectedNodeId(null)
+    setSelectedEdgeId((prev) => (prev === edge.id ? null : edge.id))
+  }, [])
+
+  const handlePaneClick = useCallback(() => {
+    setSelectedNodeId(null)
+    setSelectedEdgeId(null)
+    setSelectedNodeIds((prev) => (prev.length === 0 ? prev : []))
+    setContextMenu((prev) => (prev ? null : prev))
+  }, [])
+
   return (
     <div
       className="w-full h-full relative"
@@ -442,21 +472,11 @@ function Flow({
         onConnectStart={handleConnectStart as any}
         onConnectEnd={handleConnectEnd as any}
         nodeTypes={nodeTypes}
-        onNodeClick={(_e, node) => {
-          if (onNodeSelected?.(node.id)) return  // consumed by agent — skip selection
-          setSelectedEdgeId(null)
-          setSelectedNodeId((prev) => (prev === node.id ? null : node.id))
-        }}
-        onEdgeClick={(_e, edge) => {
-          setSelectedNodeId(null)
-          setSelectedEdgeId((prev) => (prev === edge.id ? null : edge.id))
-        }}
-        onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setSelectedNodeIds([]); setContextMenu(null) }}
+        onNodeClick={handleNodeClick as any}
+        onEdgeClick={handleEdgeClick as any}
+        onPaneClick={handlePaneClick}
         onPaneContextMenu={handlePaneContextMenu as any}
-        onSelectionChange={({ nodes: sel }) => {
-          if (sel.length > 1) setSelectedNodeIds(sel.map((n) => n.id))
-          else setSelectedNodeIds([])
-        }}
+        onSelectionChange={handleSelectionChange as any}
         fitView
         minZoom={0.1}
         maxZoom={4}
