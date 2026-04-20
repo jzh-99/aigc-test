@@ -25,7 +25,7 @@ export const ERROR_CODE_MAP: Record<string, string> = {
   // 服务器错误
   INTERNAL_ERROR: '服务器内部错误，请稍后重试',
   SERVICE_UNAVAILABLE: '服务暂时不可用，请稍后重试',
-  TIMEOUT: '请求超时，请稍后重试',
+  TIMEOUT: '生成超时，请稍后重新发起请求',
 
   // 验证错误
   INVALID_INPUT: '输入数据格式不正确',
@@ -47,8 +47,8 @@ export const ERROR_CODE_MAP: Record<string, string> = {
 const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
   // 网络相关
   { pattern: /network error|fetch failed|failed to fetch/i, message: '网络连接失败，请检查网络后重试' },
-  { pattern: /timeout|timed out/i, message: '请求超时，请稍后重试' },
-  { pattern: /aborted|abort/i, message: '请求已取消或超时' },
+  { pattern: /timeout|timed out/i, message: '生成超时，请稍后重新发起请求' },
+  { pattern: /aborted|abort/i, message: '生成超时，请稍后重新发起请求' },
 
   // 认证相关
   { pattern: /unauthorized|not authorized/i, message: '未授权，请先登录' },
@@ -157,8 +157,9 @@ export function getErrorMessage(code: string, fallback?: string): string {
   return ERROR_CODE_MAP[code]
 }
 
-// 视频生成 API 特定错误信息映射（精确匹配优先）
+// 视频生成 API 特定错误信息映射（精确匹配优先，在通用关键词匹配之前执行）
 const VIDEO_API_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
+  // 版权 / 敏感内容（Nano Banana 原文）
   {
     pattern: /output video may be related to copyright/i,
     message: '生成失败：视频内容可能涉及版权限制，请修改提示词后重试',
@@ -166,6 +167,39 @@ const VIDEO_API_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
   {
     pattern: /output video may contain sensitive/i,
     message: '生成失败：视频内容可能包含敏感信息，请修改提示词后重试',
+  },
+  // 超时（worker 内部写入）
+  {
+    pattern: /video generation timed out/i,
+    message: '生成超时，请稍后重新发起请求',
+  },
+  // Volcengine 输入图片敏感
+  {
+    pattern: /InputImageSensitiveContentDetected\.PolicyViolation/,
+    message: '参考图片违反平台安全规范，请更换素材后重试',
+  },
+  {
+    pattern: /InputImageSensitiveContentDetected/,
+    message: '参考图片包含敏感内容，请更换素材后重试',
+  },
+  // Volcengine 输入视频敏感
+  {
+    pattern: /InputVideoSensitiveContentDetected\.PolicyViolation/,
+    message: '参考视频违反平台安全规范，请更换素材后重试',
+  },
+  {
+    pattern: /InputVideoSensitiveContentDetected/,
+    message: '参考视频包含敏感内容，请更换素材后重试',
+  },
+  // Gemini 安全拦截（API 422）
+  {
+    pattern: /gemini could not generate.*prompt or image safety/i,
+    message: '提示词或参考图片不符合安全规范，请修改后重试',
+  },
+  // 上游服务内存不足（NewAPI 网关）
+  {
+    pattern: /system.?memory.?overload/i,
+    message: '上游服务繁忙，请稍后重试',
   },
 ]
 
@@ -187,6 +221,24 @@ export function translateTaskError(errorMessage: string | null | undefined): str
     return errorMessage
   }
 
+  // 特殊处理 Volcengine API 错误格式: "Volcengine API 400: {...}"
+  const volcengineMatch = errorMessage.match(/^Volcengine API \d+:\s*(.+)/)
+  if (volcengineMatch) {
+    try {
+      const parsed = JSON.parse(volcengineMatch[1])
+      const code: string = parsed.error?.code ?? ''
+      const msg: string = parsed.error?.message ?? ''
+      // 先用 VIDEO_API_ERROR_MAP 匹配 code 或 message
+      for (const { pattern, message } of VIDEO_API_ERROR_MAP) {
+        if (pattern.test(code) || pattern.test(msg)) return message
+      }
+      // 再走通用关键词
+      if (msg) return translateError(msg)
+    } catch {
+      // 非 JSON，走后续通用匹配
+    }
+  }
+
   // 特殊处理 API 错误格式: "API 422: {...}"
   const apiErrorMatch = errorMessage.match(/^API (\d+):\s*(.+)/)
   if (apiErrorMatch) {
@@ -195,11 +247,17 @@ export function translateTaskError(errorMessage: string | null | undefined): str
     // 尝试解析 JSON 错误信息
     try {
       const parsed = JSON.parse(body)
-      if (parsed.error?.message) {
-        const translated = translateError(parsed.error.message)
-        if (translated !== parsed.error.message) {
-          return translated
-        }
+      const errMsg: string = parsed.error?.message ?? ''
+      const errCode: string = parsed.error?.code ?? ''
+      // 先走 VIDEO_API_ERROR_MAP 精确匹配
+      for (const { pattern, message } of VIDEO_API_ERROR_MAP) {
+        if (pattern.test(errCode) || pattern.test(errMsg)) return message
+      }
+      if (errMsg) {
+        const translated = translateError(errMsg)
+        if (translated !== errMsg) return translated
+        // 如果已是中文直接返回
+        if (/[\u4e00-\u9fa5]/.test(errMsg)) return errMsg
       }
     } catch {
       // 不是 JSON，继续处理
