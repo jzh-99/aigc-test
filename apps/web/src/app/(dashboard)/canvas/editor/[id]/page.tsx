@@ -6,7 +6,6 @@ import { Loader2, History, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
-import { useLayoutStore } from '@/stores/layout-store'
 import { CanvasEditor } from '@/components/canvas/canvas-editor'
 import { CanvasHistorySidebar } from '@/components/canvas/canvas-history-sidebar'
 import { CanvasAgentPanel } from '@/components/canvas/canvas-agent-panel'
@@ -79,8 +78,9 @@ export default function CanvasEditorPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const token = useAuthStore((s) => s.accessToken)
+  const user = useAuthStore((s) => s.user)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const initCanvas = useCanvasStructureStore((s) => s.initCanvas)
-  const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed)
   const [canvasName, setCanvasName] = useState('未命名画布')
   const [loading, setLoading] = useState(true)
   const [sidePanel, setSidePanel] = useState<SidePanel>('agent')
@@ -89,14 +89,26 @@ export default function CanvasEditorPage() {
   const onStoryboardExpandedRef = useRef<((shotNodeIds: string[]) => void) | null>(null)
 
   useEffect(() => {
-    if (!id) return
+    if (!isInitialized) return
+    if (!user || !token) {
+      router.replace('/login')
+    }
+  }, [isInitialized, user, token, router])
+
+  useEffect(() => {
+    if (!id || !token) return
+
     const controller = new AbortController()
     fetch(`/api/v1/canvases/${id}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal,
     })
       .then(async (res) => {
-        if (!res.ok) throw new Error('Not found')
+        if (!res.ok) {
+          const error = new Error('Canvas load failed') as Error & { status?: number }
+          error.status = res.status
+          throw error
+        }
         return res.json()
       })
       .then((canvas) => {
@@ -104,36 +116,37 @@ export default function CanvasEditorPage() {
         const sd = canvas.structure_data ?? { nodes: [], edges: [] }
         initCanvas(id, sd.nodes as AppNode[], sd.edges as AppEdge[], canvas.version ?? 1, canvas.workspace_id)
       })
-      .catch((err) => {
+      .catch((err: Error & { status?: number; name?: string }) => {
         if (err.name === 'AbortError') return
-        toast.error('画布加载失败')
+        if (err.status === 401) {
+          router.replace('/login')
+          return
+        }
+        if (err.status === 403) {
+          toast.error('无权限访问该画布')
+        } else {
+          toast.error('画布加载失败')
+        }
         router.push('/canvas')
       })
       .finally(() => setLoading(false))
+
     return () => controller.abort()
   }, [id, token, initCanvas, router])
 
   const togglePanel = (panel: SidePanel) =>
     setSidePanel((prev) => (prev === panel ? null : panel))
 
-  const sidebarW = sidebarCollapsed ? '4rem' : '15rem'
-
   if (loading) {
     return (
-      <div
-        className="fixed flex items-center justify-center bg-background z-10"
-        style={{ top: '3.5rem', left: sidebarW, right: 0, bottom: 0 }}
-      >
+      <div className="h-full flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div
-      className="fixed flex flex-col overflow-hidden bg-background z-10"
-      style={{ top: '3.5rem', left: sidebarW, right: 0, bottom: 0 }}
-    >
+    <div className="flex flex-col h-full overflow-hidden bg-background -m-4 md:-m-6">
       {/* Canvas sub-header */}
       <header className="h-10 border-b flex items-center justify-between px-4 shrink-0 bg-background">
         <div className="flex items-center gap-2">
