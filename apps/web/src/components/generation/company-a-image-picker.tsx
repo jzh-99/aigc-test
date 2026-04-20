@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -53,7 +53,6 @@ export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: Comp
   const [posterMeta, setPosterMeta] = useState<Record<string, { width: number; height: number }>>({})
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
-  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const allPosters: PosterMeta[] = results.flatMap((r) =>
     r.posters.map((p) => ({
@@ -67,9 +66,9 @@ export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: Comp
   const visiblePosters = allPosters.slice(0, visibleCount)
   const totalPosters = allPosters.length
 
-  // Infinite scroll via IntersectionObserver
-  useEffect(() => {
-    const el = sentinelRef.current
+  // Callback ref: fires immediately when sentinel mounts, avoiding the race
+  // between useEffect and ref assignment that breaks scroll after Sheet reopen.
+  const sentinelRef = useCallback((el: HTMLDivElement | null) => {
     if (!el) return
     const observer = new IntersectionObserver(
       (entries) => {
@@ -80,7 +79,6 @@ export function CompanyAImagePicker({ open, onOpenChange, onSelectPoster }: Comp
       { threshold: 0.1 }
     )
     observer.observe(el)
-    return () => observer.disconnect()
   }, [totalPosters])
 
   const canSearch = programName.trim().length > 0 || contentCode.trim().length > 0
