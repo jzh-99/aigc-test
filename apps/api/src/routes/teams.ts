@@ -862,6 +862,31 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     return { success: true, updated: user_ids.length }
   })
 
+  // GET /teams/:id/workspaces — all workspaces in team (for team owner management view)
+  app.get<{ Params: { id: string } }>('/teams/:id/workspaces', {
+    preHandler: teamRoleGuard('owner'),
+    config: { rateLimit: false },
+  }, async (request) => {
+    const db = getDb()
+    const workspaces = await db
+      .selectFrom('workspaces')
+      .select(['id', 'name', 'description', 'created_at'])
+      .where('team_id', '=', request.params.id)
+      .where('is_deleted', '=', false)
+      .orderBy('created_at', 'asc')
+      .execute()
+
+    const memberCounts = await db
+      .selectFrom('workspace_members')
+      .select(['workspace_id', db.fn.count('id').as('count')])
+      .where('workspace_id', 'in', workspaces.map(w => w.id))
+      .groupBy('workspace_id')
+      .execute()
+
+    const countMap = Object.fromEntries(memberCounts.map(r => [r.workspace_id, Number(r.count)]))
+    return { data: workspaces.map(w => ({ ...w, member_count: countMap[w.id] ?? 0 })) }
+  })
+
   // GET /teams/:id/batches — all team generation records
   app.get<{ Params: { id: string }; Querystring: { cursor?: string; limit?: string } }>('/teams/:id/batches', {
     preHandler: teamRoleGuard('owner'),
