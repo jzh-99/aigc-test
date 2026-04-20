@@ -297,6 +297,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
           <div className="space-y-4">
             <div>
               <p className="text-sm font-medium mb-2">当前成员</p>
+              <div className="max-h-48 overflow-y-auto">
               {wsMembers?.data?.map((m) => (
                 <div
                   key={m.user_id}
@@ -321,9 +322,11 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
             <div>
               <p className="text-sm font-medium mb-2">添加团队成员</p>
+              <div className="max-h-48 overflow-y-auto">
               {teamData?.members
                 ?.filter(
                   (m) =>
@@ -349,6 +352,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
                     </Button>
                   </div>
                 ))}
+              </div>
             </div>
           </div>
         </DialogContent>
