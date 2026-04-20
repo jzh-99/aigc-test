@@ -83,62 +83,68 @@ export default function CanvasGalleryPage() {
         </Button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {canvases.length === 0 ? (
-            <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
-              <PlusCircle className="w-12 h-12 mx-auto opacity-30 mb-4" />
-              <p className="text-lg font-medium">还没有画布</p>
-              <p className="text-sm text-muted-foreground mt-1">点击上方"新建画布"开始创建</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {loading ? (
+          Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="border rounded-lg overflow-hidden bg-card animate-pulse">
+              <div className="aspect-video bg-muted" />
+              <div className="p-3 border-t space-y-2">
+                <div className="h-4 bg-muted rounded w-3/4" />
+                <div className="h-3 bg-muted rounded w-1/3" />
+              </div>
             </div>
-          ) : (
-            canvases.map((canvas) => (
-              <Link
-                data-testid={`canvas-card-${canvas.id}`}
-                key={canvas.id}
-                href={`/canvas/editor/${canvas.id}`}
-                className="group border rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-card"
-              >
-                <div className="aspect-video bg-muted overflow-hidden">
-                  {canvas.preview_urls && canvas.preview_urls.length > 0 ? (
-                    <div className="grid grid-cols-2 w-full h-full">
-                      {Array.from({ length: 2 }).map((_, i) => {
-                        const url = canvas.preview_urls![i]
-                        return url ? (
-                          <img
-                            key={i}
-                            src={url}
-                            alt=""
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
-                        ) : (
-                          <div key={i} className="w-full h-full bg-muted-foreground/5" />
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <PlusCircle className="w-8 h-8 opacity-20" />
-                    </div>
-                  )}
-                </div>
-                <div className="p-3 border-t">
-                  <h3 className="font-medium truncate group-hover:text-primary transition-colors">{canvas.name}</h3>
-                  {canvas.created_at && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(canvas.created_at).toLocaleDateString('zh-CN')}
-                    </p>
-                  )}
-                </div>
-              </Link>
-            ))
-          )}
-        </div>
-      )}
+          ))
+        ) : canvases.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
+            <PlusCircle className="w-12 h-12 mx-auto opacity-30 mb-4" />
+            <p className="text-lg font-medium">还没有画布</p>
+            <p className="text-sm text-muted-foreground mt-1">点击上方"新建画布"开始创建</p>
+          </div>
+        ) : (
+          canvases.map((canvas) => (
+            <Link
+              data-testid={`canvas-card-${canvas.id}`}
+              key={canvas.id}
+              href={`/canvas/editor/${canvas.id}`}
+              className="group border rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-card"
+            >
+              <div className="aspect-video bg-muted overflow-hidden">
+                {canvas.preview_urls && canvas.preview_urls.length > 0 ? (
+                  <div className="grid grid-cols-2 w-full h-full">
+                    {Array.from({ length: 2 }).map((_, i) => {
+                      const url = canvas.preview_urls![i]
+                      return url ? (
+                        <img
+                          key={i}
+                          src={url}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div key={i} className="w-full h-full bg-muted-foreground/5" />
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <PlusCircle className="w-8 h-8 opacity-20" />
+                  </div>
+                )}
+              </div>
+              <div className="p-3 border-t">
+                <h3 className="font-medium truncate group-hover:text-primary transition-colors">{canvas.name}</h3>
+                {canvas.created_at && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {new Date(canvas.created_at).toLocaleDateString('zh-CN')}
+                  </p>
+                )}
+              </div>
+            </Link>
+          ))
+        )}
+      </div>
     </div>
   )
 }

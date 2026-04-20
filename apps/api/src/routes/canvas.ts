@@ -133,14 +133,19 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .orderBy('updated_at', 'desc')
       .execute()
 
-    // Attach up to 2 recent image output URLs per canvas for preview grid
-    const canvasIds = canvases.map((c) => c.id)
-    let previewMap: Record<string, string[]> = {}
-    if (canvasIds.length > 0) {
+    // For canvases with a thumbnail_url, use it directly.
+    // Only query canvas_node_outputs for canvases that have no thumbnail yet.
+    const canvasesWithThumb = canvases.filter((c) => c.thumbnail_url)
+    const canvasesNeedPreview = canvases.filter((c) => !c.thumbnail_url)
+
+    const previewMap: Record<string, string[]> = {}
+
+    if (canvasesNeedPreview.length > 0) {
+      const needIds = canvasesNeedPreview.map((c) => c.id)
       const rows = await db
         .selectFrom('canvas_node_outputs')
         .select(['canvas_id', 'output_urls'])
-        .where('canvas_id', 'in', canvasIds)
+        .where('canvas_id', 'in', needIds)
         .orderBy('created_at', 'desc')
         .execute()
 
@@ -155,12 +160,19 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
         previewMap[cid].push(url)
       }
-
-      // Sign all collected URLs
-      for (const cid of Object.keys(previewMap)) {
-        previewMap[cid] = await signAssetUrls(previewMap[cid])
-      }
     }
+
+    // Sign all URLs in parallel
+    await Promise.all([
+      ...canvasesWithThumb.map((c) =>
+        signAssetUrls([c.thumbnail_url!]).then((signed) => { previewMap[c.id] = signed })
+      ),
+      ...Object.keys(previewMap)
+        .filter((cid) => !canvasesWithThumb.find((c) => c.id === cid))
+        .map((cid) =>
+          signAssetUrls(previewMap[cid]).then((signed) => { previewMap[cid] = signed })
+        ),
+    ])
 
     return reply.send(canvases.map((c) => ({ ...c, preview_urls: previewMap[c.id] ?? [] })))
   })

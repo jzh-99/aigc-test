@@ -137,14 +137,6 @@ export default function CanvasEditorPage() {
   const togglePanel = (panel: SidePanel) =>
     setSidePanel((prev) => (prev === panel ? null : panel))
 
-  if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background -m-4 md:-m-6">
       {/* Canvas sub-header */}
@@ -195,6 +187,11 @@ export default function CanvasEditorPage() {
             onNodeSelected={(nodeId) => onNodeSelectedRef.current?.(nodeId) ?? false}
             onStoryboardExpandedRef={onStoryboardExpandedRef}
           />
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-none">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
         </div>
         <CanvasAgentPanel
             canvasId={id}
