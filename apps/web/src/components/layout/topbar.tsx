@@ -37,7 +37,7 @@ export function Topbar({ title }: TopbarProps) {
   }
 
   return (
-    <header className="flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6">
+    <header className="relative z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6">
       {/* Mobile menu button */}
       <Button
         variant="ghost"
