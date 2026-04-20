@@ -101,8 +101,11 @@ export function UserDiagnosisSheet({ userId, username, open, onOpenChange }: Pro
                       <p className="text-xs text-muted-foreground truncate" title={t.prompt}>
                         提示词：{t.prompt || '—'}
                       </p>
-                      <div className="rounded bg-destructive/10 px-2 py-1.5 text-xs text-destructive font-mono break-all">
-                        {t.error_message || '（无错误信息）'}
+                      <div className="space-y-0.5">
+                        <p className="text-xs text-muted-foreground">API 原始错误：</p>
+                        <div className="rounded bg-destructive/10 px-2 py-1.5 text-xs text-destructive font-mono break-all">
+                          {t.error_message || '（无错误信息）'}
+                        </div>
                       </div>
                       {t.retry_count > 0 && (
                         <p className="text-xs text-muted-foreground">重试次数：{t.retry_count}</p>

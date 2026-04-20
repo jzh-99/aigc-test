@@ -83,6 +83,8 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /could not generate|generation failed/i, message: '生成失败，请尝试修改提示词后重试' },
   { pattern: /prompt (blocked|rejected|filtered)/i, message: '提示词包含敏感内容，请修改后重试' },
   { pattern: /content (policy|filter)/i, message: '内容不符合规范，请修改后重试' },
+  { pattern: /copyright/i, message: '生成内容可能涉及版权限制，请修改提示词后重试' },
+  { pattern: /sensitive (information|content)|contains sensitive/i, message: '生成内容可能包含敏感信息，请修改提示词后重试' },
 
   // 数据验证
   { pattern: /invalid (input|format|data)/i, message: '输入数据格式不正确' },
@@ -155,11 +157,30 @@ export function getErrorMessage(code: string, fallback?: string): string {
   return ERROR_CODE_MAP[code]
 }
 
+// 视频生成 API 特定错误信息映射（精确匹配优先）
+const VIDEO_API_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
+  {
+    pattern: /output video may be related to copyright/i,
+    message: '生成失败：视频内容可能涉及版权限制，请修改提示词后重试',
+  },
+  {
+    pattern: /output video may contain sensitive/i,
+    message: '生成失败：视频内容可能包含敏感信息，请修改提示词后重试',
+  },
+]
+
 /**
  * 翻译任务错误信息（用于显示在卡片上）
  */
 export function translateTaskError(errorMessage: string | null | undefined): string {
   if (!errorMessage) return '未知错误'
+
+  // 精确匹配视频 API 特定错误（在中文检测之前，因为这些是英文原始消息）
+  for (const { pattern, message } of VIDEO_API_ERROR_MAP) {
+    if (pattern.test(errorMessage)) {
+      return message
+    }
+  }
 
   // 如果已经是中文
   if (/[\u4e00-\u9fa5]/.test(errorMessage)) {
