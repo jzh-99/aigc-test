@@ -13,21 +13,22 @@ import { encryptProxyUrl } from '../lib/storage.js'
 // ── Temp upload config ────────────────────────────────────────────────────────
 const UPLOAD_DIR = '/tmp/video-uploads'
 const MAX_FILE_AGE_MS = 60 * 60 * 1000 // 60 minutes
-const MAX_IMAGE_SIZE = 20 * 1024 * 1024  // 20 MB
-const MAX_VIDEO_SIZE = 500 * 1024 * 1024 // 500 MB
-const MAX_AUDIO_SIZE = 50 * 1024 * 1024  // 50 MB
+const MAX_IMAGE_SIZE = 30 * 1024 * 1024  // 30 MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024  // 50 MB
+const MAX_AUDIO_SIZE = 15 * 1024 * 1024  // 15 MB
 
-const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp']
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff', 'gif']
 const VIDEO_EXTS = ['mp4', 'mov', 'webm']
-const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac']
+const AUDIO_EXTS = ['mp3', 'wav']
 const ALL_EXTS = [...IMAGE_EXTS, ...VIDEO_EXTS, ...AUDIO_EXTS]
 
 const MIME_MAP: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  bmp: 'image/bmp', tiff: 'image/tiff', gif: 'image/gif',
   mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
-  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac',
+  mp3: 'audio/mpeg', wav: 'audio/wav',
 }
-const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|mp4|mov|webm|mp3|wav|m4a|aac)$/
+const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|bmp|tiff|gif|mp4|mov|webm|mp3|wav)$/
 
 // Map frontend model codes → actual Volcengine model IDs
 const VOLCENGINE_MODEL_ID: Record<string, string> = {
@@ -49,7 +50,7 @@ interface VideoGenerateBody {
   reference_audios?: string[]  // 参考音频（multimodal Tab，Seedance 2.0 专用）
   aspect_ratio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive'
   enable_upsample?: boolean
-  resolution?: '720p' | '1080p'
+  resolution?: '480p' | '720p' | '1080p'
   duration?: number
   generate_audio?: boolean
   camera_fixed?: boolean
@@ -159,7 +160,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           reference_audios: { type: 'array', items: { type: 'string' }, maxItems: 3 },
           aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'] },
           enable_upsample: { type: 'boolean' },
-          resolution: { type: 'string', enum: ['720p', '1080p'] },
+          resolution: { type: 'string', enum: ['480p', '720p', '1080p'] },
           duration: { type: 'integer', minimum: -1, maximum: 15 },
           generate_audio: { type: 'boolean' },
           camera_fixed: { type: 'boolean' },
@@ -239,6 +240,47 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
         success: false,
         error: { code: 'INVALID_PARAMS', message: 'reference_videos / reference_audios 仅支持 Seedance 2.0 系列模型' },
       })
+    }
+
+    // Per-model resolution validation
+    if (isSeedance && resolution) {
+      const isReferenceImageScene = reference_images && reference_images.length > 0
+      if (model === 'seedance-2.0-fast' && resolution === '1080p') {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: 'seedance-2.0-fast 不支持 1080p 分辨率' },
+        })
+      }
+      if (isReferenceImageScene && resolution === '1080p') {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: '参考图生视频场景不支持 1080p 分辨率' },
+        })
+      }
+    }
+
+    // Per-model duration validation
+    if (isSeedance && duration !== undefined && duration !== -1) {
+      const isSeedance15or20 = model === 'seedance-1.5-pro' || isSeedance2
+      const minDuration = isSeedance15or20 ? 4 : 2
+      const maxDuration = isSeedance2 ? 15 : 12
+      if (duration < minDuration || duration > maxDuration) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: `${model} 视频时长范围为 ${minDuration}~${maxDuration} 秒（或 -1 自动）` },
+        })
+      }
+    }
+
+    // Audio-only is not allowed; must have at least one image or video
+    if (reference_audios && reference_audios.length > 0) {
+      const hasMedia = (reference_images && reference_images.length > 0) || (reference_videos && reference_videos.length > 0)
+      if (!hasMedia) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: '不可单独输入音频，应至少包含 1 个参考视频或图片' },
+        })
+      }
     }
 
     // Calculate credits: seedance uses per-second pricing, others use flat rate
@@ -481,13 +523,16 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       const volcengineBody: Record<string, unknown> = {
         model: VOLCENGINE_MODEL_ID[model] ?? model,
         content: [{ type: 'text', text: prompt }],
-        duration: videoDuration === -1 ? undefined : videoDuration,
+        duration: videoDuration,
         generate_audio: generate_audio ?? true,
         watermark: watermark ?? false,
       }
 
-      // camera_fixed 默认 false（不传也可，但显式传递保持一致）
-      if (camera_fixed !== undefined) volcengineBody.camera_fixed = camera_fixed
+      if (resolution) volcengineBody.resolution = resolution
+
+      // camera_fixed not supported in reference image scenes or seedance 2.0 series
+      const isReferenceImageScene = reference_images && reference_images.length > 0
+      if (camera_fixed !== undefined && !isReferenceImageScene && !isSeedance2) volcengineBody.camera_fixed = camera_fixed
 
       // 首尾帧图片（frames Tab）：images 字段，role=first_frame/last_frame
       if (images && images.length > 0) {
