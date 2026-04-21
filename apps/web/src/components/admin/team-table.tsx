@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { TopupDialog } from './topup-dialog'
 import { AdminPasswordDialog } from './admin-password-dialog'
 import { TrashDrawer } from './trash-drawer'
@@ -43,6 +44,7 @@ interface Team {
   lifetime_used: number
   member_count: number
   workspace_count: number
+  allow_member_topup: boolean
 }
 
 interface TeamMember {
@@ -129,6 +131,21 @@ export function TeamTable() {
     }
   }
 
+  async function handleToggleMemberTopup(team: Team, val: boolean) {
+    mutate(
+      (prev) => prev
+        ? { data: prev.data.map(t => t.id === team.id ? { ...t, allow_member_topup: val } : t) }
+        : prev,
+      false
+    )
+    try {
+      await apiPatch(`/admin/teams/${team.id}`, { allow_member_topup: val })
+    } catch (err) {
+      mutate()
+      toast.error(err instanceof ApiError ? err.message : '操作失败')
+    }
+  }
+
   if (!data && !error) {
     return (
       <Card>
@@ -200,6 +217,13 @@ export function TeamTable() {
                   <Coins className="h-3.5 w-3.5 mr-1" />
                   调整积分
                 </Button>
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-xs text-muted-foreground">成员充值</span>
+                  <Switch
+                    checked={team.allow_member_topup ?? false}
+                    onCheckedChange={(val) => handleToggleMemberTopup(team, val)}
+                  />
+                </div>
                 <Button
                   size="icon"
                   variant="ghost"

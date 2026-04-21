@@ -5,15 +5,21 @@ import { MemberList } from '@/components/team/member-list'
 import { WorkspaceList } from '@/components/team/workspace-list'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-
-const tabs = [
-  { key: 'members', label: '成员管理' },
-  { key: 'workspaces', label: '工作区管理' },
-] as const
+import { TeamCreditsSettings } from '@/components/team/team-credits-settings'
 
 export default function TeamPage() {
-  const [activeTab, setActiveTab] = useState<'members' | 'workspaces'>('members')
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
+  const activeTeam = useAuthStore((s) => s.activeTeam())
+  const isOwner = activeTeam?.role === 'owner'
+
+  type TabKey = 'members' | 'workspaces' | 'credits'
+  const [activeTab, setActiveTab] = useState<TabKey>('members')
+
+  const tabs = [
+    { key: 'members' as TabKey, label: '成员管理' },
+    { key: 'workspaces' as TabKey, label: '工作区管理' },
+    ...(isOwner ? [{ key: 'credits' as TabKey, label: '积分设置' }] : []),
+  ]
 
   if (!activeTeamId) {
     return <div className="p-6 text-muted-foreground">请先选择一个团队</div>
@@ -26,7 +32,6 @@ export default function TeamPage() {
         <p className="text-muted-foreground">管理团队成员、配额和工作区</p>
       </div>
 
-      {/* Tab navigation */}
       <div className="flex gap-1 border-b">
         {tabs.map((tab) => (
           <button
@@ -46,6 +51,7 @@ export default function TeamPage() {
 
       {activeTab === 'members' && <MemberList teamId={activeTeamId} />}
       {activeTab === 'workspaces' && <WorkspaceList teamId={activeTeamId} />}
+      {activeTab === 'credits' && isOwner && <TeamCreditsSettings teamId={activeTeamId} />}
     </div>
   )
 }

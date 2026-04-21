@@ -22,7 +22,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           .on('credit_accounts.owner_type', '=', 'team')
       )
       .select([
-        'teams.id', 'teams.name', 'teams.owner_id', 'teams.plan_tier', 'teams.team_type', 'teams.created_at',
+        'teams.id', 'teams.name', 'teams.owner_id', 'teams.plan_tier', 'teams.team_type', 'teams.created_at', 'teams.allow_member_topup',
         'credit_accounts.balance', 'credit_accounts.frozen_credits',
         'credit_accounts.total_earned', 'credit_accounts.total_spent',
       ])
@@ -549,13 +549,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     })
   })
 
-  // PATCH /admin/teams/:id — update team settings (team_type, etc.)
-  app.patch<{ Params: { id: string }; Body: { team_type?: 'standard' | 'company_a' | 'avatar_enabled' } }>('/admin/teams/:id', {
+  // PATCH /admin/teams/:id — update team settings (team_type, allow_member_topup)
+  app.patch<{ Params: { id: string }; Body: { team_type?: 'standard' | 'company_a' | 'avatar_enabled'; allow_member_topup?: boolean } }>('/admin/teams/:id', {
     schema: {
       body: {
         type: 'object',
         properties: {
           team_type: { type: 'string', enum: ['standard', 'company_a', 'avatar_enabled'] },
+          allow_member_topup: { type: 'boolean' },
         },
         additionalProperties: false,
       },
@@ -563,13 +564,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   }, async (request, reply) => {
     const db = getDb()
     const { id } = request.params
-    const { team_type } = request.body
+    const { team_type, allow_member_topup } = request.body
 
     const team = await db.selectFrom('teams').select('id').where('id', '=', id).executeTakeFirst()
     if (!team) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '团队不存在' } })
 
-    if (team_type) {
-      await db.updateTable('teams').set({ team_type }).where('id', '=', id).execute()
+    const updates: Record<string, unknown> = {}
+    if (team_type !== undefined) updates.team_type = team_type
+    if (allow_member_topup !== undefined) updates.allow_member_topup = allow_member_topup
+
+    if (Object.keys(updates).length > 0) {
+      await db.updateTable('teams').set(updates as any).where('id', '=', id).execute()
     }
 
     return reply.send({ success: true })

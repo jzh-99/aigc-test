@@ -1,6 +1,6 @@
 'use client'
 
-import { Menu, Settings, LogOut } from 'lucide-react'
+import { Menu, Settings, LogOut, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import {
@@ -78,6 +78,12 @@ export function Topbar({ title }: TopbarProps) {
               <Link href="/settings">
                 <Settings className="mr-2 h-4 w-4" />
                 个人设置
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/credits">
+                <Coins className="mr-2 h-4 w-4" />
+                积分管理
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
