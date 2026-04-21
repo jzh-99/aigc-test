@@ -89,7 +89,7 @@ function MessageBubble({
   onConfirmStep,
   onNodeSelectedRef,
 }: {
-  message: AgentMessage
+  message: Extract<AgentMessage, { role: 'user' | 'assistant' }>
   canvasId: string
   isActiveStep: boolean  // true only for the current guide_step card
   isRunning: boolean
@@ -151,6 +151,41 @@ function MessageBubble({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Result bubble ────────────────────────────────────────────────────────────
+
+function ResultBubble({ message }: { message: Extract<AgentMessage, { role: 'result' }> }) {
+  return (
+    <div className="flex flex-col gap-1.5 items-start">
+      <div className="text-xs text-muted-foreground px-1">{message.nodeLabel}</div>
+      <div className={`grid gap-1.5 max-w-[95%] ${message.outputs.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        {message.outputs.map((o, i) =>
+          o.type === 'image' ? (
+            <img
+              key={i}
+              src={o.url}
+              alt=""
+              className="rounded-lg object-cover w-full cursor-pointer hover:opacity-90 transition-opacity"
+              style={{ aspectRatio: '1/1' }}
+              onClick={() => window.open(o.url, '_blank')}
+            />
+          ) : (
+            <video
+              key={i}
+              src={o.url}
+              className="rounded-lg w-full"
+              style={{ aspectRatio: '16/9' }}
+              controls
+              muted
+              loop
+              playsInline
+            />
+          )
+        )}
+      </div>
     </div>
   )
 }
@@ -316,13 +351,16 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         {messages.map((msg, idx) => {
+          if (msg.role === 'result') {
+            return <ResultBubble key={msg.id} message={msg} />
+          }
           // A guide_step card is "active" only if it's the latest guide_step message
           // and the workflow is still in progress
           const isActiveStep = (() => {
             if (msg.instruction?.type !== 'guide_step') return false
             // Find the last guide_step message index
             const lastGuideIdx = messages.reduce((last, m, i) =>
-              m.instruction?.type === 'guide_step' ? i : last, -1)
+              m.role !== 'result' && m.instruction?.type === 'guide_step' ? i : last, -1)
             return idx === lastGuideIdx && activeWorkflow !== null
           })()
           return (
@@ -338,7 +376,10 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
             />
           )
         })}
-        {isWaiting && messages[messages.length - 1]?.status !== 'streaming' && (
+        {isWaiting && (() => {
+          const last = messages[messages.length - 1]
+          return last?.role !== 'result' && last?.status !== 'streaming'
+        })() && (
           <div className="flex items-start gap-2">
             <div className="bg-muted rounded-2xl rounded-bl-sm px-3 py-2 text-sm text-muted-foreground">
               <span className="animate-pulse">思考中...</span>

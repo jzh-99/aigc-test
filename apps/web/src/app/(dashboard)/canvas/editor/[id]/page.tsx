@@ -143,10 +143,10 @@ export default function CanvasEditorPage() {
       <header className="h-10 border-b flex items-center justify-between px-4 shrink-0 bg-background">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => router.push('/canvas')}
+            onClick={() => router.push('/canvas/gallery')}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            ← 返回大厅
+            ← 全部画布
           </button>
           <div className="h-3.5 w-px bg-border mx-1" />
           <CanvasNameEditor name={canvasName} canvasId={id} token={token} />

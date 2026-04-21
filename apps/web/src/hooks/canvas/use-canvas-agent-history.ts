@@ -31,7 +31,7 @@ export function saveCanvasAgentSession(canvasId: string, session: CanvasAgentSes
       ...session,
       // Only keep done messages, drop streaming/error states
       messages: session.messages
-        .filter((m) => m.status === 'done')
+        .filter((m): m is Extract<typeof m, { role: 'user' | 'assistant' }> => m.role !== 'result' && m.status === 'done')
         .slice(-MAX_PERSISTED),
     }
     localStorage.setItem(storageKey(canvasId), JSON.stringify(toSave))
