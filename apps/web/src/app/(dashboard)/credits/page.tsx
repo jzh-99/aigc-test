@@ -8,20 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Coins } from 'lucide-react'
 import { TopupModal } from '@/components/credits/topup-modal'
 import { LedgerCard } from '@/components/credits/ledger-card'
+import type { LedgerRow } from '@/components/credits/ledger-card'
 import type { CreditBalance } from '@aigc/types'
-
-const TYPE_LABELS: Record<string, string> = {
-  topup: '充值', subscription: '订阅', freeze: '冻结',
-  confirm: '消费', refund: '退款', bonus: '赠送', expire: '过期',
-}
-
-interface LedgerRow {
-  id: string
-  amount: number
-  type: string
-  description: string | null
-  created_at: string
-}
 
 interface LedgerResponse { data: LedgerRow[]; total: number }
 
