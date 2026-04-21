@@ -41,9 +41,26 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
 
       const [rows, countRow] = await Promise.all([
         db.selectFrom('credits_ledger')
-          .select(['id', 'amount', 'type', 'description', 'created_at', 'task_id'])
-          .where('credit_account_id', '=', creditAccountId)
-          .orderBy('created_at', 'desc')
+          .leftJoin('task_batches', 'task_batches.id', 'credits_ledger.batch_id')
+          .leftJoin('users', 'users.id', 'credits_ledger.user_id')
+          .select([
+            'credits_ledger.id',
+            'credits_ledger.amount',
+            'credits_ledger.type',
+            'credits_ledger.description',
+            'credits_ledger.created_at',
+            'credits_ledger.task_id',
+            'credits_ledger.batch_id',
+            'credits_ledger.user_id',
+            'task_batches.module',
+            'task_batches.model',
+            'task_batches.provider',
+            'task_batches.prompt',
+            'task_batches.canvas_id',
+            'users.username',
+          ])
+          .where('credits_ledger.credit_account_id', '=', creditAccountId)
+          .orderBy('credits_ledger.created_at', 'desc')
           .limit(limit).offset(offset)
           .execute(),
         db.selectFrom('credits_ledger')

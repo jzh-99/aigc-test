@@ -11,6 +11,11 @@ const TYPE_LABELS: Record<string, string> = {
   confirm: '消费', refund: '退款', bonus: '赠送', expire: '过期',
 }
 
+const MODULE_LABELS: Record<string, string> = {
+  image: '图片生成', video: '视频生成', tts: '语音合成',
+  lipsync: '口型同步', agent: '智能体', avatar: '数字人', action_imitation: '动作模仿',
+}
+
 const TYPE_SIGN: Record<string, string> = {
   topup: '+', subscription: '+', bonus: '+', refund: '+',
   freeze: '', confirm: '-', expire: '-',
@@ -22,12 +27,21 @@ const TYPE_COLOR: Record<string, string> = {
   freeze: 'text-yellow-600', confirm: 'text-red-500', expire: 'text-muted-foreground',
 }
 
-interface LedgerRow {
+export interface LedgerRow {
   id: string
   amount: number
   type: string
   description: string | null
   created_at: string
+  task_id?: string | null
+  batch_id?: string | null
+  user_id?: string | null
+  username?: string | null
+  module?: string | null
+  model?: string | null
+  provider?: string | null
+  prompt?: string | null
+  canvas_id?: string | null
 }
 
 interface Props {
@@ -79,26 +93,7 @@ export function LedgerCard({
           <>
             <div className="divide-y">
               {ledgerData.data.map((row) => (
-                <div key={row.id} className="flex items-center justify-between px-6 py-3">
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                        {TYPE_LABELS[row.type] ?? row.type}
-                      </Badge>
-                      {row.description && (
-                        <span className="text-sm text-muted-foreground truncate max-w-[200px]">
-                          {row.description}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(row.created_at).toLocaleString('zh-CN')}
-                    </span>
-                  </div>
-                  <span className={cn('text-sm font-medium tabular-nums', TYPE_COLOR[row.type])}>
-                    {TYPE_SIGN[row.type]}{Math.abs(row.amount).toLocaleString()}
-                  </span>
-                </div>
+                <LedgerRowItem key={row.id} row={row} showUser={ledgerAccount === 'team'} />
               ))}
             </div>
             {totalPages > 1 && (
@@ -122,5 +117,47 @@ export function LedgerCard({
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function LedgerRowItem({ row, showUser }: { row: LedgerRow; showUser: boolean }) {
+  const hasTask = row.module || row.model
+  const isCanvas = !!row.canvas_id
+
+  return (
+    <div className="flex items-start justify-between px-6 py-3 gap-4">
+      <div className="flex flex-col gap-1 min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+            {TYPE_LABELS[row.type] ?? row.type}
+          </Badge>
+          {hasTask && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+              {isCanvas ? '画布·' : ''}{MODULE_LABELS[row.module ?? ''] ?? row.module}
+            </Badge>
+          )}
+          {row.model && (
+            <span className="text-xs text-muted-foreground font-mono shrink-0">{row.model}</span>
+          )}
+          {showUser && row.username && (
+            <span className="text-xs text-muted-foreground shrink-0">by {row.username}</span>
+          )}
+        </div>
+        {row.prompt && (
+          <p className="text-sm text-foreground truncate max-w-[400px]" title={row.prompt}>
+            {row.prompt}
+          </p>
+        )}
+        {!row.prompt && row.description && (
+          <p className="text-sm text-muted-foreground truncate max-w-[400px]">{row.description}</p>
+        )}
+        <span className="text-xs text-muted-foreground">
+          {new Date(row.created_at).toLocaleString('zh-CN')}
+        </span>
+      </div>
+      <span className={cn('text-sm font-medium tabular-nums shrink-0', TYPE_COLOR[row.type])}>
+        {TYPE_SIGN[row.type]}{Math.abs(row.amount).toLocaleString()}
+      </span>
+    </div>
   )
 }

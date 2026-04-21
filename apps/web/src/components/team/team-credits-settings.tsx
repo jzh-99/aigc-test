@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { apiPatch, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { LedgerCard } from '@/components/credits/ledger-card'
+import type { LedgerRow } from '@/components/credits/ledger-card'
 
 interface TeamInfo {
   allow_member_topup: boolean
@@ -20,7 +21,7 @@ export function TeamCreditsSettings({ teamId }: { teamId: string }) {
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
 
-  const { data: ledgerData, isLoading: ledgerLoading } = useSWR<{ data: any[]; total: number }>(
+  const { data: ledgerData, isLoading: ledgerLoading } = useSWR<{ data: LedgerRow[]; total: number }>(
     `/payment/ledger?account=team&team_id=${teamId}&page=${page}&limit=${LIMIT}`
   )
 
