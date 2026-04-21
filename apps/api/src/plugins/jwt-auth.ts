@@ -16,6 +16,7 @@ const PUBLIC_ROUTES = [
   '/api/v1/action-imitation/uploads/',
   '/api/v1/videos/uploads/',
   '/api/v1/canvases/uploads/',
+  '/api/v1/payment/notify',
 ]
 
 export interface AuthUser {
@@ -27,6 +28,9 @@ export interface AuthUser {
 declare module 'fastify' {
   interface FastifyRequest {
     user: AuthUser
+  }
+  interface FastifyInstance {
+    redis: import('ioredis').default
   }
 }
 

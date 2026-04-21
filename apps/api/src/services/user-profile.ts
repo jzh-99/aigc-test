@@ -10,7 +10,7 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
   const teamRows = await db
     .selectFrom('team_members')
     .innerJoin('teams', 'teams.id', 'team_members.team_id')
-    .select(['teams.id as team_id', 'teams.name as team_name', 'teams.owner_id', 'teams.team_type', 'team_members.role'])
+    .select(['teams.id as team_id', 'teams.name as team_name', 'teams.owner_id', 'teams.team_type', 'teams.allow_member_topup', 'team_members.role'])
     .where('team_members.user_id', '=', userId)
     .where('teams.is_deleted', '=', false)
     .execute()
@@ -59,6 +59,7 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
     name: t.team_name,
     role: t.role,
     team_type: (t as any).team_type ?? 'standard',
+    allow_member_topup: (t as any).allow_member_topup ?? false,
     owner: ownerMap.get(t.owner_id) ?? null,
     workspaces: wsByTeam.get(t.team_id) ?? [],
   }))

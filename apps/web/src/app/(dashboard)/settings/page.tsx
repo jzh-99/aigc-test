@@ -30,6 +30,27 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
 
+  const isOwnerOrAdmin =
+    activeTeam?.role === 'owner' || activeTeam?.role === 'admin' || user?.role === 'admin'
+  const [allowMemberTopup, setAllowMemberTopup] = useState(
+    activeTeam?.allow_member_topup ?? false
+  )
+  const [topupToggleLoading, setTopupToggleLoading] = useState(false)
+
+  async function handleTopupToggle(val: boolean) {
+    if (!activeTeam) return
+    setTopupToggleLoading(true)
+    try {
+      await apiPatch(`/teams/${activeTeam.id}/allow-member-topup`, { allow: val })
+      setAllowMemberTopup(val)
+      toast.success(val ? '已开放成员充值' : '已关闭成员充值')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '操作失败')
+    } finally {
+      setTopupToggleLoading(false)
+    }
+  }
+
   const showPasswordWarning = user?.password_change_required || searchParams.get('change_password') === 'true'
 
   // Auto-focus password change section when required
@@ -248,6 +269,32 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Owner: member topup permission toggle */}
+      {isOwnerOrAdmin && activeTeam && (
+        <Card>
+          <CardHeader>
+            <CardTitle>积分充值权限</CardTitle>
+            <CardDescription>控制团队成员是否可以自行充值个人积分</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="member-topup-switch">允许成员充值</Label>
+                <p className="text-xs text-muted-foreground">
+                  开启后，editor 成员可充值个人积分账户（独立于团队积分池）
+                </p>
+              </div>
+              <Switch
+                id="member-topup-switch"
+                checked={allowMemberTopup}
+                onCheckedChange={handleTopupToggle}
+                disabled={topupToggleLoading}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Password change card - show at bottom if not required */}
       {!showPasswordWarning && (
