@@ -50,35 +50,33 @@ export function TeamCreditsSettings({ teamId }: { teamId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Team balance + topup */}
+      {/* Integrated credits panel */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">团队积分余额</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle>团队积分设置</CardTitle>
+          <CardDescription>统一管理团队余额、充值入口和成员充值权限</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-end justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Coins className="h-5 w-5 text-accent-orange" />
-              <span className="text-2xl font-bold">{available.toLocaleString()}</span>
+        <CardContent className="space-y-4">
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">可用积分</p>
+              <div className="flex items-center gap-2">
+                <Coins className="h-5 w-5 text-accent-orange" />
+                <span className="text-2xl font-bold">{available.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>总积分 {balance.toLocaleString()}</span>
+                <span>冻结 {frozen.toLocaleString()}</span>
+              </div>
             </div>
-            {frozen > 0 && (
-              <p className="text-xs text-muted-foreground mt-1">冻结中: {frozen.toLocaleString()}</p>
-            )}
+            <Button onClick={() => setTopupOpen(true)}>充值团队积分</Button>
           </div>
-          <Button onClick={() => setTopupOpen(true)}>充值团队积分</Button>
-        </CardContent>
-      </Card>
 
-      {/* Member topup permission */}
-      <Card>
-        <CardHeader>
-          <CardTitle>成员充值权限</CardTitle>
-          <CardDescription>控制团队成员是否可以自行充值个人积分</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
+          <div className="h-px bg-border" />
+
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="member-topup-switch">允许成员充值</Label>
+              <Label htmlFor="member-topup-switch">成员充值权限</Label>
               <p className="text-xs text-muted-foreground">
                 开启后，editor 成员可充值个人积分账户（独立于团队积分池）
               </p>

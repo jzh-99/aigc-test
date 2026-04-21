@@ -21,6 +21,16 @@ const TYPE_SIGN: Record<string, string> = {
   freeze: '', confirm: '-', expire: '-',
 }
 
+const DESCRIPTION_LABELS: Record<string, string> = {
+  'image generation confirmed': '图片生成成功',
+  'video generation confirmed': '视频生成成功',
+  'tts generation confirmed': '语音合成成功',
+  'lipsync generation confirmed': '口型同步成功',
+  'agent generation confirmed': '任务成功',
+  'avatar generation confirmed': '数字人生成成功',
+  'action imitation generation confirmed': '动作模仿成功',
+}
+
 const TYPE_COLOR: Record<string, string> = {
   topup: 'text-green-600', subscription: 'text-green-600',
   bonus: 'text-green-600', refund: 'text-green-600',
@@ -120,44 +130,49 @@ export function LedgerCard({
   )
 }
 
+function mapLedgerDescription(description: string | null): string {
+  if (!description) return ''
+  const normalized = description.trim().toLowerCase()
+  return DESCRIPTION_LABELS[normalized] ?? description
+}
+
 function LedgerRowItem({ row, showUser }: { row: LedgerRow; showUser: boolean }) {
   const hasTask = row.module || row.model
   const isCanvas = !!row.canvas_id
+  const description = mapLedgerDescription(row.description)
 
   return (
-    <div className="flex items-start justify-between px-6 py-3 gap-4">
-      <div className="flex flex-col gap-1 min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-            {TYPE_LABELS[row.type] ?? row.type}
-          </Badge>
-          {hasTask && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-              {isCanvas ? '画布·' : ''}{MODULE_LABELS[row.module ?? ''] ?? row.module}
+    <div className="px-6 py-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+              {TYPE_LABELS[row.type] ?? row.type}
             </Badge>
+            {hasTask && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                {isCanvas ? '画布·' : ''}{MODULE_LABELS[row.module ?? ''] ?? row.module}
+              </Badge>
+            )}
+            {showUser && row.username && (
+              <span className="text-xs text-muted-foreground shrink-0">by {row.username}</span>
+            )}
+          </div>
+
+          {description && (
+            <p className="text-sm text-foreground/80 truncate max-w-[520px]">{description}</p>
           )}
-          {row.model && (
-            <span className="text-xs text-muted-foreground font-mono shrink-0">{row.model}</span>
-          )}
-          {showUser && row.username && (
-            <span className="text-xs text-muted-foreground shrink-0">by {row.username}</span>
-          )}
+
+          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+            {row.model && <span className="font-mono">{row.model}</span>}
+            <span>{new Date(row.created_at).toLocaleString('zh-CN')}</span>
+          </div>
         </div>
-        {row.prompt && (
-          <p className="text-sm text-foreground truncate max-w-[400px]" title={row.prompt}>
-            {row.prompt}
-          </p>
-        )}
-        {!row.prompt && row.description && (
-          <p className="text-sm text-muted-foreground truncate max-w-[400px]">{row.description}</p>
-        )}
-        <span className="text-xs text-muted-foreground">
-          {new Date(row.created_at).toLocaleString('zh-CN')}
+
+        <span className={cn('text-sm font-medium tabular-nums shrink-0 mt-0.5', TYPE_COLOR[row.type])}>
+          {TYPE_SIGN[row.type]}{Math.abs(row.amount).toLocaleString()}
         </span>
       </div>
-      <span className={cn('text-sm font-medium tabular-nums shrink-0', TYPE_COLOR[row.type])}>
-        {TYPE_SIGN[row.type]}{Math.abs(row.amount).toLocaleString()}
-      </span>
     </div>
   )
 }

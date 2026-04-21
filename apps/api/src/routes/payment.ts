@@ -60,12 +60,14 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
             'users.username',
           ])
           .where('credits_ledger.credit_account_id', '=', creditAccountId)
+          .where('credits_ledger.type', '!=', 'freeze')
           .orderBy('credits_ledger.created_at', 'desc')
           .limit(limit).offset(offset)
           .execute(),
         db.selectFrom('credits_ledger')
           .select(db.fn.countAll<number>().as('count'))
           .where('credit_account_id', '=', creditAccountId)
+          .where('type', '!=', 'freeze')
           .executeTakeFirst(),
       ])
 
