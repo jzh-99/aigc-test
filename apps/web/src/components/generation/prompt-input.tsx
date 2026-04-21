@@ -8,7 +8,7 @@ import { useGenerate } from '@/hooks/use-generate'
 import { Sparkles, Loader2, Coins } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
-import { ApiError } from '@/lib/api-client'
+import { getRequestErrorMessage, reportClientSubmissionError, ApiError } from '@/lib/api-client'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 
 interface PromptInputProps {
@@ -28,11 +28,24 @@ export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
         onBatchCreated(batch)
       }
     } catch (err) {
-      if (err instanceof ApiError) {
-        toast.error(err.message)
-      } else {
-        toast.error('生成请求失败，请稍后重试')
+      if (!(err && typeof err === 'object' && (err as { __clientErrorReported?: boolean }).__clientErrorReported)) {
+        const rawMessage = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
+        const normalized = rawMessage.toLowerCase()
+        const errorCode =
+          err instanceof DOMException && err.name === 'AbortError'
+            ? 'TIMEOUT'
+            : /failed to fetch|fetch failed|networkerror|network request failed|load failed/.test(normalized)
+              ? 'NETWORK_ERROR'
+              : err instanceof SyntaxError
+                ? 'PARSE_ERROR'
+                : 'CLIENT_ERROR'
+        void reportClientSubmissionError({
+          error_code: errorCode,
+          detail: rawMessage.slice(0, 500) || undefined,
+          http_status: err instanceof ApiError ? err.status : null,
+        })
       }
+      toast.error(getRequestErrorMessage(err, '生成请求失败，请稍后重试'))
     }
   }
 

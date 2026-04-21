@@ -4,7 +4,7 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, Bot, TrendingUp, RefreshCw } from 'lucide-react'
+import { AlertCircle, Bot, TrendingUp, RefreshCw, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface FailedTask {
@@ -34,6 +34,20 @@ interface AiError {
   account: string
 }
 
+interface SubmissionError {
+  id: string
+  source: 'generate_api' | 'client'
+  error_code: string
+  http_status: number | null
+  detail: string | null
+  model: string | null
+  canvas_id: string | null
+  created_at: string
+  user_id: string
+  username: string
+  account: string
+}
+
 interface TopError {
   message: string
   count: number
@@ -43,6 +57,7 @@ interface TopError {
 interface ErrorDashboardData {
   failed_tasks: FailedTask[]
   ai_errors: AiError[]
+  submission_errors: SubmissionError[]
   top_errors: TopError[]
   since: string
 }
@@ -53,7 +68,7 @@ const SINCE_OPTIONS = [
   { label: '近 30 天', value: 30 * 24 * 60 * 60 * 1000 },
 ]
 
-type ViewTab = 'summary' | 'tasks' | 'ai'
+type ViewTab = 'summary' | 'tasks' | 'submit' | 'ai'
 
 export function ErrorDashboard() {
   const [since, setSince] = useState(SINCE_OPTIONS[1].value)
@@ -90,10 +105,14 @@ export function ErrorDashboard() {
 
       {/* Stats */}
       {data && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div className="rounded-lg border p-3 space-y-1">
             <p className="text-xs text-muted-foreground">失败任务</p>
             <p className="text-2xl font-semibold text-destructive">{data.failed_tasks.length}</p>
+          </div>
+          <div className="rounded-lg border p-3 space-y-1">
+            <p className="text-xs text-muted-foreground">提交失败</p>
+            <p className="text-2xl font-semibold text-amber-600">{data.submission_errors.length}</p>
           </div>
           <div className="rounded-lg border p-3 space-y-1">
             <p className="text-xs text-muted-foreground">AI 助手错误</p>
@@ -111,6 +130,7 @@ export function ErrorDashboard() {
         {([
           { key: 'summary' as ViewTab, label: '错误汇总', Icon: TrendingUp },
           { key: 'tasks' as ViewTab, label: '失败任务', Icon: AlertCircle },
+          { key: 'submit' as ViewTab, label: '提交失败', Icon: AlertTriangle },
           { key: 'ai' as ViewTab, label: 'AI 助手错误', Icon: Bot },
         ]).map(({ key, label, Icon }) => (
           <button
@@ -127,6 +147,11 @@ export function ErrorDashboard() {
             {data && key === 'tasks' && data.failed_tasks.length > 0 && (
               <Badge variant="destructive" className="text-xs px-1 py-0 h-4">
                 {data.failed_tasks.length}
+              </Badge>
+            )}
+            {data && key === 'submit' && data.submission_errors.length > 0 && (
+              <Badge variant="secondary" className="text-xs px-1 py-0 h-4">
+                {data.submission_errors.length}
               </Badge>
             )}
             {data && key === 'ai' && data.ai_errors.length > 0 && (
@@ -209,6 +234,37 @@ export function ErrorDashboard() {
                 {t.retry_count > 0 && (
                   <p className="text-xs text-muted-foreground">重试次数：{t.retry_count}</p>
                 )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Submission errors list */}
+      {data && view === 'submit' && (
+        <div className="space-y-2">
+          {data.submission_errors.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">该时间段内无提交失败记录</p>
+          ) : (
+            data.submission_errors.map((e) => (
+              <div key={e.id} className="rounded-md border p-3 text-sm space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant={e.source === 'client' ? 'secondary' : 'outline'} className="text-xs">
+                    {e.source === 'client' ? '客户端' : 'API前置'}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs font-mono">{e.error_code}</Badge>
+                  <Badge variant="outline" className="text-xs">HTTP {e.http_status ?? '—'}</Badge>
+                  {e.model && <Badge variant="outline" className="text-xs">{e.model}</Badge>}
+                  <span className="text-xs text-muted-foreground">
+                    {e.username}（{e.account}）
+                  </span>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {new Date(e.created_at).toLocaleString('zh-CN')}
+                  </span>
+                </div>
+                <div className="rounded bg-amber-500/10 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400 font-mono break-all">
+                  {e.detail || '（无详情）'}
+                </div>
               </div>
             ))
           )}

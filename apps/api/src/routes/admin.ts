@@ -1194,12 +1194,45 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .limit(limit)
         .execute()
 
-      // Error frequency summary: group failed tasks by error_message pattern
+      // Recent submission errors across all users
+      const submissionErrors = await db
+        .selectFrom('submission_errors')
+        .innerJoin('users', 'users.id', 'submission_errors.user_id')
+        .select([
+          'submission_errors.id',
+          'submission_errors.source',
+          'submission_errors.error_code',
+          'submission_errors.http_status',
+          'submission_errors.detail',
+          'submission_errors.model',
+          'submission_errors.canvas_id',
+          'submission_errors.created_at',
+          'users.id as user_id',
+          'users.username',
+          'users.account',
+        ])
+        .where('submission_errors.created_at', '>=', since as any)
+        .orderBy('submission_errors.created_at', 'desc')
+        .limit(limit)
+        .execute()
+
+      // Error frequency summary: group failed tasks + submission errors
       const errorGroups = new Map<string, { count: number; last_seen: string; example: string }>()
       for (const t of failedTasks) {
         const key = (t.error_message ?? '（无错误信息）').slice(0, 120)
         const existing = errorGroups.get(key)
         const ts = t.submitted_at instanceof Date ? t.submitted_at.toISOString() : String(t.submitted_at)
+        if (!existing) {
+          errorGroups.set(key, { count: 1, last_seen: ts, example: key })
+        } else {
+          existing.count++
+          if (ts > existing.last_seen) existing.last_seen = ts
+        }
+      }
+      for (const s of submissionErrors) {
+        const key = `[提交:${s.source}] ${s.error_code}${s.http_status ? ` (HTTP ${s.http_status})` : ''}`
+        const existing = errorGroups.get(key)
+        const ts = s.created_at instanceof Date ? s.created_at.toISOString() : String(s.created_at)
         if (!existing) {
           errorGroups.set(key, { count: 1, last_seen: ts, example: key })
         } else {
@@ -1220,6 +1253,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           completed_at: t.completed_at instanceof Date ? t.completed_at.toISOString() : (t.completed_at ? String(t.completed_at) : null),
         })),
         ai_errors: aiErrors.map(e => ({
+          ...e,
+          created_at: e.created_at instanceof Date ? e.created_at.toISOString() : String(e.created_at),
+        })),
+        submission_errors: submissionErrors.map(e => ({
           ...e,
           created_at: e.created_at instanceof Date ? e.created_at.toISOString() : String(e.created_at),
         })),
@@ -1283,6 +1320,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .limit(limit)
         .execute()
 
+      // Submission errors (last 7 days)
+      const submissionErrors = await db
+        .selectFrom('submission_errors')
+        .select(['id', 'source', 'error_code', 'http_status', 'detail', 'model', 'canvas_id', 'created_at'])
+        .where('user_id', '=', userId)
+        .where('created_at', '>=', since7d as any)
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .execute()
+
       return {
         user,
         failed_tasks: failedTasks.map(t => ({
@@ -1292,6 +1339,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           completed_at: t.completed_at instanceof Date ? t.completed_at.toISOString() : (t.completed_at ? String(t.completed_at) : null),
         })),
         ai_assistant_errors: aiErrors.map(e => ({
+          ...e,
+          created_at: e.created_at instanceof Date ? e.created_at.toISOString() : String(e.created_at),
+        })),
+        submission_errors: submissionErrors.map(e => ({
           ...e,
           created_at: e.created_at instanceof Date ? e.created_at.toISOString() : String(e.created_at),
         })),

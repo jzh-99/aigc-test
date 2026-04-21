@@ -5,7 +5,7 @@ import useSWR from 'swr'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, Bot, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, Bot, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 interface FailedTask {
   task_id: string
@@ -30,10 +30,22 @@ interface AiError {
   created_at: string
 }
 
+interface SubmissionError {
+  id: string
+  source: 'generate_api' | 'client'
+  error_code: string
+  http_status: number | null
+  detail: string | null
+  model: string | null
+  canvas_id: string | null
+  created_at: string
+}
+
 interface DiagnosisData {
   user: { id: string; username: string; account: string; status: string }
   failed_tasks: FailedTask[]
   ai_assistant_errors: AiError[]
+  submission_errors: SubmissionError[]
 }
 
 interface Props {
@@ -110,6 +122,43 @@ export function UserDiagnosisSheet({ userId, username, open, onOpenChange }: Pro
                       {t.retry_count > 0 && (
                         <p className="text-xs text-muted-foreground">重试次数：{t.retry_count}</p>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Submission Errors */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <h3 className="text-sm font-medium">提交失败（近 7 天）</h3>
+                <Badge variant="secondary" className="text-xs">{data.submission_errors.length}</Badge>
+              </div>
+
+              {data.submission_errors.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  无提交失败记录
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {data.submission_errors.map((e) => (
+                    <div key={e.id} className="rounded-md border p-3 text-sm space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant={e.source === 'client' ? 'secondary' : 'outline'} className="text-xs">
+                          {e.source === 'client' ? '客户端' : 'API前置'}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs font-mono">{e.error_code}</Badge>
+                        <Badge variant="outline" className="text-xs">HTTP {e.http_status ?? '—'}</Badge>
+                        {e.model && <Badge variant="outline" className="text-xs">{e.model}</Badge>}
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {new Date(e.created_at).toLocaleString('zh-CN')}
+                        </span>
+                      </div>
+                      <div className="rounded bg-amber-500/10 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400 font-mono break-all">
+                        {e.detail || '（无详情）'}
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
-import { apiPost, ApiError } from '@/lib/api-client'
+import { apiPost, ApiError, reportClientSubmissionError } from '@/lib/api-client'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { BatchResponse, GenerateImageRequest } from '@aigc/types'
@@ -39,12 +39,14 @@ export function useGenerate() {
   const generate = useCallback(async (): Promise<BatchResponse | null> => {
     if (!prompt.trim()) return null
 
+    let resolvedModel: string | undefined
     setIsGenerating(true)
     try {
       const modelMap = MODEL_CODE_MAP[modelType] as Record<string, string> | undefined
       if (!modelMap) throw new Error(`Unknown model type: ${modelType}`)
       const model = modelMap[resolution]
       if (!model) throw new Error(`Unknown resolution for ${modelType}: ${resolution}`)
+      resolvedModel = model
 
       const params: Record<string, unknown> = { aspect_ratio: aspectRatio, resolution, watermark }
 
@@ -65,10 +67,27 @@ export function useGenerate() {
       setActiveBatchId(batch.id)
       return batch
     } catch (err) {
-      if (err instanceof ApiError) {
-        throw err
+      const rawMessage = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
+      const normalized = rawMessage.toLowerCase()
+      const errorCode =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'TIMEOUT'
+          : /failed to fetch|fetch failed|networkerror|network request failed|load failed/.test(normalized)
+            ? 'NETWORK_ERROR'
+            : err instanceof SyntaxError
+              ? 'PARSE_ERROR'
+              : 'CLIENT_ERROR'
+
+      void reportClientSubmissionError({
+        error_code: errorCode,
+        detail: rawMessage.slice(0, 500) || undefined,
+        http_status: err instanceof ApiError ? err.status : null,
+        model: resolvedModel,
+      })
+      if (err && typeof err === 'object') {
+        ;(err as { __clientErrorReported?: boolean }).__clientErrorReported = true
       }
-      throw new Error('生成请求失败')
+      throw err
     } finally {
       setIsGenerating(false)
     }
