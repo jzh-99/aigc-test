@@ -3,7 +3,8 @@
 import { useAuthStore } from '@/stores/auth-store'
 import { MemberList } from '@/components/team/member-list'
 import { WorkspaceList } from '@/components/team/workspace-list'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { TeamCreditsSettings } from '@/components/team/team-credits-settings'
 
@@ -11,9 +12,15 @@ export default function TeamPage() {
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const isOwner = activeTeam?.role === 'owner'
+  const searchParams = useSearchParams()
 
   type TabKey = 'members' | 'workspaces' | 'credits'
   const [activeTab, setActiveTab] = useState<TabKey>('members')
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab === 'credits' && isOwner) setActiveTab('credits')
+  }, [searchParams, isOwner])
 
   const tabs = [
     { key: 'members' as TabKey, label: '成员管理' },
