@@ -78,14 +78,22 @@ export interface StepParams {
   duration?: number
 }
 
-export interface AgentMessage {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  instruction?: AgentInstruction
-  implicitNodeId?: string  // 隐式引用的节点 id（选中节点自动关联）
-  status: 'streaming' | 'done' | 'error'
-}
+export type AgentMessage =
+  | {
+      id: string
+      role: 'user' | 'assistant'
+      content: string
+      instruction?: AgentInstruction
+      implicitNodeId?: string  // 隐式引用的节点 id（选中节点自动关联）
+      status: 'streaming' | 'done' | 'error'
+    }
+  | {
+      id: string
+      role: 'result'
+      nodeId: string
+      nodeLabel: string
+      outputs: Array<{ url: string; type: 'image' | 'video' }>
+    }
 
 export interface CanvasNodeSummary {
   id: string

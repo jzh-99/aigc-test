@@ -369,7 +369,7 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
 
   const appendChunk = useCallback((msgId: string, chunk: string) => {
     setMessages((prev) =>
-      prev.map((m) => (m.id === msgId ? { ...m, content: m.content + chunk } : m)),
+      prev.map((m) => (m.id === msgId && m.role !== 'result' ? { ...m, content: m.content + chunk } : m)),
     )
   }, [])
 
@@ -413,7 +413,7 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
 
       // Build history — keep last 10 done messages, summarize large instruction responses
       const history = messages
-        .filter((m) => m.status === 'done')
+        .filter((m): m is Extract<typeof m, { role: 'user' | 'assistant' }> => m.role !== 'result' && m.status === 'done')
         .slice(-10)
         .map((m) => {
           if (m.role === 'assistant' && m.instruction?.type === 'apply_workflow') {
@@ -524,6 +524,20 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
           await executeNode(nodeId, canvasId, workspaceId, params, token)
           const activeTeamId = useAuthStore.getState().activeTeamId
           if (activeTeamId) mutate(`/teams/${activeTeamId}`)
+          // Inject result message into conversation
+          const execState = useCanvasExecutionStore.getState().nodes[nodeId]
+          const node = useCanvasStructureStore.getState().nodes.find((n) => n.id === nodeId)
+          if (execState && node) {
+            const outputs = execState.outputs
+              .filter((o) => o.url && (o.type === 'image' || o.type === 'video'))
+              .map((o) => ({ url: o.url!, type: o.type as 'image' | 'video' }))
+            if (outputs.length > 0) {
+              setMessages((prev) => [
+                ...prev,
+                { id: crypto.randomUUID(), role: 'result' as const, nodeId, nodeLabel: node.data.label, outputs },
+              ])
+            }
+          }
         } catch {
           failed++
         }
