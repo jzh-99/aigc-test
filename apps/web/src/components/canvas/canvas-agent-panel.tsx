@@ -19,6 +19,7 @@ interface Props {
   onNodeSelectedRef?: MutableRefObject<((nodeId: string) => boolean) | null>
   onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
   hidden?: boolean
+  fullWidth?: boolean  // chat mode: panel takes full width
 }
 
 // ── Instruction renderer ─────────────────────────────────────────────────────
@@ -192,7 +193,7 @@ function ResultBubble({ message }: { message: Extract<AgentMessage, { role: 'res
 
 // ── Main panel ───────────────────────────────────────────────────────────────
 
-export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRef, onStoryboardExpandedRef, hidden }: Props) {
+export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRef, onStoryboardExpandedRef, hidden, fullWidth }: Props) {
   const {
     phase,
     messages,
@@ -328,7 +329,7 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
   }
 
   return (
-    <div data-agent-panel className={`flex flex-col h-full w-[360px] border-l border-border bg-background shrink-0${hidden ? ' hidden' : ''}`}>
+    <div data-agent-panel className={`flex flex-col h-full border-l border-border bg-background shrink-0${fullWidth ? ' w-full border-l-0' : ' w-[360px]'}${hidden ? ' hidden' : ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b shrink-0">
         <div className="flex items-center gap-2">

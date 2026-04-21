@@ -2,15 +2,19 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, History, Sparkles } from 'lucide-react'
+import { Loader2, History, Sparkles, LayoutGrid, ListOrdered, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { CanvasEditor } from '@/components/canvas/canvas-editor'
 import { CanvasHistorySidebar } from '@/components/canvas/canvas-history-sidebar'
 import { CanvasAgentPanel } from '@/components/canvas/canvas-agent-panel'
+import { StepsModeLayout } from '@/components/canvas/steps/steps-mode-layout'
+import { StepsModeContent } from '@/components/canvas/steps/steps-mode-content'
+import { useStepsState } from '@/hooks/canvas/use-steps-state'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
 
+type ViewMode = 'chat' | 'steps' | 'canvas'
 type SidePanel = 'agent' | 'history' | null
 
 function CanvasNameEditor({
@@ -72,8 +76,6 @@ function CanvasNameEditor({
   )
 }
 
-// kickPoll is passed down from CanvasEditor via a ref callback
-// We use a ref so CanvasAgentPanel can call it without re-renders
 export default function CanvasEditorPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -83,21 +85,21 @@ export default function CanvasEditorPage() {
   const initCanvas = useCanvasStructureStore((s) => s.initCanvas)
   const [canvasName, setCanvasName] = useState('未命名画布')
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<ViewMode>('chat')
   const [sidePanel, setSidePanel] = useState<SidePanel>('agent')
   const kickPollRef = useRef<(() => void) | null>(null)
   const onNodeSelectedRef = useRef<((nodeId: string) => boolean) | null>(null)
   const onStoryboardExpandedRef = useRef<((shotNodeIds: string[]) => void) | null>(null)
 
+  const stepsState = useStepsState()
+
   useEffect(() => {
     if (!isInitialized) return
-    if (!user || !token) {
-      router.replace('/login')
-    }
+    if (!user || !token) router.replace('/login')
   }, [isInitialized, user, token, router])
 
   useEffect(() => {
     if (!id || !token) return
-
     const controller = new AbortController()
     fetch(`/api/v1/canvases/${id}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -118,28 +120,26 @@ export default function CanvasEditorPage() {
       })
       .catch((err: Error & { status?: number; name?: string }) => {
         if (err.name === 'AbortError') return
-        if (err.status === 401) {
-          router.replace('/login')
-          return
-        }
-        if (err.status === 403) {
-          toast.error('无权限访问该画布')
-        } else {
-          toast.error('画布加载失败')
-        }
+        if (err.status === 401) { router.replace('/login'); return }
+        toast.error(err.status === 403 ? '无权限访问该画布' : '画布加载失败')
         router.push('/canvas')
       })
       .finally(() => setLoading(false))
-
     return () => controller.abort()
   }, [id, token, initCanvas, router])
 
   const togglePanel = (panel: SidePanel) =>
     setSidePanel((prev) => (prev === panel ? null : panel))
 
+  const VIEW_TABS: { id: ViewMode; icon: React.ReactNode; label: string }[] = [
+    { id: 'chat',   icon: <MessageSquare className="w-3.5 h-3.5" />, label: '对话' },
+    { id: 'steps',  icon: <ListOrdered className="w-3.5 h-3.5" />,   label: '步骤' },
+    { id: 'canvas', icon: <LayoutGrid className="w-3.5 h-3.5" />,    label: '画布' },
+  ]
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background -m-4 md:-m-6">
-      {/* Canvas sub-header */}
+      {/* Sub-header */}
       <header className="h-10 border-b flex items-center justify-between px-4 shrink-0 bg-background">
         <div className="flex items-center gap-2">
           <button
@@ -151,61 +151,126 @@ export default function CanvasEditorPage() {
           <div className="h-3.5 w-px bg-border mx-1" />
           <CanvasNameEditor name={canvasName} canvasId={id} token={token} />
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => togglePanel('agent')}
-            className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
-              sidePanel === 'agent'
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            助手
-          </button>
-          <button
-            data-testid="canvas-toggle-history"
-            onClick={() => togglePanel('history')}
-            className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
-              sidePanel === 'history'
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-            }`}
-          >
-            <History className="w-3.5 h-3.5" />
-            记录
-          </button>
+
+        {/* View mode tabs */}
+        <div className="flex items-center gap-0.5 bg-muted rounded-lg p-0.5">
+          {VIEW_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setViewMode(tab.id)
+                if (tab.id === 'canvas') setSidePanel(null)
+                if (tab.id === 'chat') setSidePanel('agent')
+              }}
+              className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md transition-colors ${
+                viewMode === tab.id
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
         </div>
+
+        {/* Right controls — only in canvas mode */}
+        {viewMode === 'canvas' && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => togglePanel('agent')}
+              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
+                sidePanel === 'agent'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              助手
+            </button>
+            <button
+              data-testid="canvas-toggle-history"
+              onClick={() => togglePanel('history')}
+              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
+                sidePanel === 'history'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              记录
+            </button>
+          </div>
+        )}
+        {viewMode !== 'canvas' && <div className="w-24" />}
       </header>
 
-      {/* Canvas + optional side panel */}
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 relative overflow-hidden">
-          <CanvasEditor
-            canvasId={id}
-            onKickPollReady={(fn) => { kickPollRef.current = fn }}
-            onNodeSelected={(nodeId) => onNodeSelectedRef.current?.(nodeId) ?? false}
-            onStoryboardExpandedRef={onStoryboardExpandedRef}
-          />
-          {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-none">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      {/* Body */}
+      <div className="flex-1 flex overflow-hidden relative">
+
+        {/* Chat mode: full-width agent panel */}
+        {viewMode === 'chat' && (
+          <div className="flex-1 flex overflow-hidden">
+            {/* Canvas hidden but mounted to keep state */}
+            <div className="hidden">
+              <CanvasEditor
+                canvasId={id}
+                onKickPollReady={(fn) => { kickPollRef.current = fn }}
+                onNodeSelected={(nodeId) => onNodeSelectedRef.current?.(nodeId) ?? false}
+                onStoryboardExpandedRef={onStoryboardExpandedRef}
+              />
             </div>
-          )}
-        </div>
-        <CanvasAgentPanel
-            canvasId={id}
-            kickPoll={() => kickPollRef.current?.()}
-            onClose={() => setSidePanel(null)}
-            onNodeSelectedRef={onNodeSelectedRef}
-            onStoryboardExpandedRef={onStoryboardExpandedRef}
-            hidden={sidePanel !== 'agent'}
-          />
-        {sidePanel === 'history' && (
-          <CanvasHistorySidebar
-            canvasId={id}
-            onClose={() => setSidePanel(null)}
-          />
+            <CanvasAgentPanel
+              canvasId={id}
+              kickPoll={() => kickPollRef.current?.()}
+              onClose={() => {}}
+              onNodeSelectedRef={onNodeSelectedRef}
+              onStoryboardExpandedRef={onStoryboardExpandedRef}
+              fullWidth
+            />
+          </div>
+        )}
+
+        {/* Steps mode */}
+        {viewMode === 'steps' && (
+          <StepsModeLayout canvasId={id} stepsState={stepsState}>
+            <StepsModeContent
+              canvasId={id}
+              activeStep={stepsState.activeStep}
+              stepsState={stepsState}
+            />
+          </StepsModeLayout>
+        )}
+
+        {/* Canvas mode */}
+        {viewMode === 'canvas' && (
+          <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 relative overflow-hidden">
+              <CanvasEditor
+                canvasId={id}
+                onKickPollReady={(fn) => { kickPollRef.current = fn }}
+                onNodeSelected={(nodeId) => onNodeSelectedRef.current?.(nodeId) ?? false}
+                onStoryboardExpandedRef={onStoryboardExpandedRef}
+              />
+            </div>
+            <CanvasAgentPanel
+              canvasId={id}
+              kickPoll={() => kickPollRef.current?.()}
+              onClose={() => setSidePanel(null)}
+              onNodeSelectedRef={onNodeSelectedRef}
+              onStoryboardExpandedRef={onStoryboardExpandedRef}
+              hidden={sidePanel !== 'agent'}
+            />
+            {sidePanel === 'history' && (
+              <CanvasHistorySidebar canvasId={id} onClose={() => setSidePanel(null)} />
+            )}
+          </div>
+        )}
+
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-none z-10">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
         )}
       </div>
     </div>
