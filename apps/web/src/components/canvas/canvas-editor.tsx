@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import { createPortal } from 'react-dom'
 import ReactFlow, {
   Controls,
+  MiniMap,
   Panel,
   ReactFlowProvider,
   SelectionMode,
@@ -197,7 +198,7 @@ function Flow({
     setContextMenu(null)
   }, [contextMenu, addNode])
 
-  // Ctrl+C / Ctrl+V copy-paste + Ctrl+Z / Ctrl+Shift+Z undo/redo
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const copiedNodeRef = useRef<AppNode | null>(null)
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const trackingMouseRef = useRef(false)
@@ -493,6 +494,18 @@ function Flow({
         <Controls
           className="!bg-white !border-zinc-200 [&>button]:!bg-white [&>button]:!border-zinc-200 [&>button]:!text-zinc-500 [&>button:hover]:!bg-zinc-100 [&>button:hover]:!text-zinc-800"
         />
+        <MiniMap
+          nodeColor={(node) => {
+            if (node.type === 'image_gen') return '#3b82f6'
+            if (node.type === 'video_gen') return '#7c3aed'
+            if (node.type === 'text_input') return '#6b7280'
+            if (node.type === 'asset') return '#10b981'
+            return '#d4d4d8'
+          }}
+          maskColor="rgba(250,250,250,0.7)"
+          className="!bg-white/90 !border-zinc-200 !rounded-xl"
+          style={{ width: 140, height: 90 }}
+        />
         <Panel
           position="top-left"
           className="bg-white/90 backdrop-blur-md p-2 rounded-xl border border-zinc-200 shadow-md flex gap-2"
@@ -559,7 +572,36 @@ function Flow({
             {saving && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />}
             {saveLabel}
           </button>
+          <button
+            onClick={() => setShowShortcuts((v) => !v)}
+            className={`px-2 py-1.5 text-xs font-medium rounded-lg border shadow-sm transition-colors ${showShortcuts ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-white hover:bg-zinc-50 text-zinc-500 border-zinc-200'}`}
+            title="快捷键"
+          >
+            ?
+          </button>
         </Panel>
+
+        {showShortcuts && (
+          <Panel position="top-right" className="mt-10">
+            <div className="bg-zinc-900/95 text-white text-xs rounded-xl shadow-2xl p-4 w-56 space-y-2.5">
+              <div className="font-semibold text-zinc-300 mb-1">快捷键</div>
+              {[
+                ['Ctrl+Z', '撤销'],
+                ['Ctrl+Shift+Z', '重做'],
+                ['Ctrl+C', '复制节点'],
+                ['Ctrl+V', '粘贴节点'],
+                ['Delete / ⌫', '删除节点/连线'],
+                ['右键画布', '添加节点菜单'],
+                ['Shift+拖拽', '多选节点'],
+              ].map(([key, desc]) => (
+                <div key={key} className="flex items-center justify-between gap-3">
+                  <kbd className="bg-zinc-700 text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-mono whitespace-nowrap">{key}</kbd>
+                  <span className="text-zinc-400 text-right">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
       </ReactFlow>
 
       {selectedNode && (
