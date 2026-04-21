@@ -71,6 +71,7 @@ export interface TeamsTable {
   owner_id: string
   plan_tier: 'free' | 'basic' | 'pro' | 'enterprise'
   team_type: Generated<'standard' | 'company_a' | 'avatar_enabled'>
+  allow_member_topup: Generated<boolean>
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
   created_at: Generated<Timestamp>
@@ -233,18 +234,18 @@ export interface WebhookLogsTable {
 
 export interface PaymentOrdersTable {
   id: Generated<string>
+  life_order_id: string
   user_id: string
-  order_no: string
-  provider: string
-  provider_order_id: string | null
-  type: 'topup' | 'subscription'
+  team_id: string | null
+  credit_account_id: string | null
   amount_fen: number
-  credits: number | null
-  plan_id: string | null
+  credits_to_grant: number
   status: Generated<'pending' | 'paid' | 'failed' | 'refunded'>
-  paid_at: Timestamp | null
+  order_type: Generated<'topup' | 'subscription'>
+  platform_code: string
+  callback_payload: ColumnType<unknown, string | undefined, string | undefined> | null
   created_at: Generated<Timestamp>
-  updated_at: Generated<Timestamp>
+  paid_at: Timestamp | null
 }
 
 // ─── Providers ────────────────────────────────────────────────────────────────

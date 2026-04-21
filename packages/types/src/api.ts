@@ -98,6 +98,31 @@ export interface UserTeam {
   team_type: 'standard' | 'company_a' | 'avatar_enabled'
   owner: { email: string | null; username: string } | null
   workspaces: UserWorkspace[]
+  allow_member_topup: boolean
+}
+
+export interface TopupPackage {
+  id: string
+  name: string
+  amount_fen: number   // 分
+  credits: number
+  tag?: string         // e.g. "推荐"
+}
+
+export interface CreateOrderRequest {
+  team_id?: string     // null = personal topup
+  package_id: string
+}
+
+export interface CreateOrderResponse {
+  order_id: string
+  life_order_id: string
+  pay_url: string
+}
+
+export interface CreditBalance {
+  team_balance: number
+  personal_balance: number
 }
 
 export interface UserWorkspace {
