@@ -41,7 +41,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb()
     const team = await db
       .selectFrom('teams')
-      .select(['id', 'name', 'owner_id', 'plan_tier', 'created_at'])
+      .select(['id', 'name', 'owner_id', 'plan_tier', 'created_at', 'allow_member_topup'])
       .where('id', '=', request.params.id)
       .executeTakeFirstOrThrow()
 
@@ -913,5 +913,24 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
       data,
       cursor: hasMore ? String(data[data.length - 1].created_at) : null,
     }
+  })
+
+  // PATCH /teams/:id/allow-member-topup — owner toggles member topup permission
+  app.patch<{ Params: { id: string }; Body: { allow: boolean } }>('/teams/:id/allow-member-topup', {
+    preHandler: teamRoleGuard('owner'),
+    schema: {
+      body: {
+        type: 'object',
+        required: ['allow'],
+        properties: { allow: { type: 'boolean' } },
+      },
+    },
+  }, async (request) => {
+    const db = getDb()
+    await db.updateTable('teams')
+      .set({ allow_member_topup: request.body.allow })
+      .where('id', '=', request.params.id)
+      .execute()
+    return { success: true }
   })
 }

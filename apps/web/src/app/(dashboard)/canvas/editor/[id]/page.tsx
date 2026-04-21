@@ -85,7 +85,7 @@ export default function CanvasEditorPage() {
   const initCanvas = useCanvasStructureStore((s) => s.initCanvas)
   const [canvasName, setCanvasName] = useState('未命名画布')
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<ViewMode>('chat')
+  const [viewMode, setViewMode] = useState<ViewMode>('canvas')
   const [sidePanel, setSidePanel] = useState<SidePanel>('agent')
   const kickPollRef = useRef<(() => void) | null>(null)
   const onNodeSelectedRef = useRef<((nodeId: string) => boolean) | null>(null)

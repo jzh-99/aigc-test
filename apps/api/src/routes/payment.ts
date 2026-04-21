@@ -10,6 +10,52 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
   // GET /payment/packages
   app.get('/payment/packages', async () => ({ data: TOPUP_PACKAGES }))
 
+  // GET /payment/ledger?account=personal|team&team_id=xxx&page=1&limit=20
+  app.get<{ Querystring: { account?: string; team_id?: string; page?: string; limit?: string } }>(
+    '/payment/ledger',
+    async (request, reply) => {
+      const db = getDb()
+      const userId = request.user.id
+      const { account = 'personal', team_id, page = '1', limit: limitStr = '20' } = request.query
+      const limit = Math.min(Number(limitStr) || 20, 100)
+      const offset = (Math.max(Number(page) || 1, 1) - 1) * limit
+
+      let creditAccountId: string | undefined
+
+      if (account === 'team' && team_id) {
+        const membership = await db.selectFrom('team_members').select('role')
+          .where('team_id', '=', team_id).where('user_id', '=', userId).executeTakeFirst()
+        if (!membership || !['owner', 'admin'].includes(membership.role)) {
+          return reply.forbidden('仅团队 owner/admin 可查看团队流水')
+        }
+        const acc = await db.selectFrom('credit_accounts').select('id')
+          .where('owner_type', '=', 'team').where('team_id', '=', team_id).executeTakeFirst()
+        creditAccountId = acc?.id
+      } else {
+        const acc = await db.selectFrom('credit_accounts').select('id')
+          .where('owner_type', '=', 'user').where('user_id', '=', userId).executeTakeFirst()
+        creditAccountId = acc?.id
+      }
+
+      if (!creditAccountId) return { data: [], total: 0 }
+
+      const [rows, countRow] = await Promise.all([
+        db.selectFrom('credits_ledger')
+          .select(['id', 'amount', 'type', 'description', 'created_at', 'task_id'])
+          .where('credit_account_id', '=', creditAccountId)
+          .orderBy('created_at', 'desc')
+          .limit(limit).offset(offset)
+          .execute(),
+        db.selectFrom('credits_ledger')
+          .select(db.fn.countAll<number>().as('count'))
+          .where('credit_account_id', '=', creditAccountId)
+          .executeTakeFirst(),
+      ])
+
+      return { data: rows, total: Number(countRow?.count ?? 0) }
+    }
+  )
+
   // GET /payment/balance?team_id=xxx
   app.get<{ Querystring: { team_id?: string } }>('/payment/balance', async (request) => {
     const db = getDb()
@@ -184,37 +230,6 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         })
         .execute()
     })
-
-    return { success: true }
-  })
-
-  // PATCH /teams/:id/allow-member-topup — owner toggles member topup permission
-  app.patch<{ Params: { id: string }; Body: { allow: boolean } }>('/teams/:id/allow-member-topup', {
-    schema: {
-      body: {
-        type: 'object',
-        required: ['allow'],
-        properties: { allow: { type: 'boolean' } },
-      },
-    },
-  }, async (request, reply) => {
-    const db = getDb()
-    const userId = request.user.id
-    const teamId = request.params.id
-
-    const membership = await db
-      .selectFrom('team_members').select('role')
-      .where('team_id', '=', teamId).where('user_id', '=', userId)
-      .executeTakeFirst()
-
-    if (!membership || !['owner', 'admin'].includes(membership.role)) {
-      return reply.forbidden('仅团队 owner/admin 可修改此设置')
-    }
-
-    await db.updateTable('teams')
-      .set({ allow_member_topup: request.body.allow, updated_at: sql`NOW()` })
-      .where('id', '=', teamId)
-      .execute()
 
     return { success: true }
   })
