@@ -1,7 +1,7 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback, KeyboardEvent, MutableRefObject } from 'react'
-import { X, Send, Sparkles, AtSign } from 'lucide-react'
+import { useRef, useEffect, useState, useCallback, KeyboardEvent, MutableRefObject, ClipboardEvent } from 'react'
+import { X, Send, Sparkles, AtSign, LayoutGrid, RefreshCw, Download, ArrowRight } from 'lucide-react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasAgent } from '@/hooks/canvas/use-canvas-agent'
 import type { AgentMessage, AgentInstruction } from '@/lib/canvas/agent-types'
@@ -20,6 +20,7 @@ interface Props {
   onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
   hidden?: boolean
   fullWidth?: boolean  // chat mode: panel takes full width
+  onViewCanvas?: () => void  // chat mode: switch to canvas view
 }
 
 // ── Instruction renderer ─────────────────────────────────────────────────────
@@ -158,7 +159,16 @@ function MessageBubble({
 
 // ── Result bubble ────────────────────────────────────────────────────────────
 
-function ResultBubble({ message }: { message: Extract<AgentMessage, { role: 'result' }> }) {
+function ResultBubble({
+  message,
+  onRegenerate,
+  onUseThis,
+}: {
+  message: Extract<AgentMessage, { role: 'result' }>
+  onRegenerate?: () => void
+  onUseThis?: (urls: string[]) => void
+}) {
+  const urls = message.outputs.map((o) => o.url)
   return (
     <div className="flex flex-col gap-1.5 items-start">
       <div className="text-xs text-muted-foreground px-1">{message.nodeLabel}</div>
@@ -187,13 +197,46 @@ function ResultBubble({ message }: { message: Extract<AgentMessage, { role: 'res
           )
         )}
       </div>
+      {/* Action bar */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {onRegenerate && (
+          <button
+            onClick={onRegenerate}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded-full px-2.5 py-1 hover:bg-muted transition-colors"
+          >
+            <RefreshCw className="w-3 h-3" />
+            再生成
+          </button>
+        )}
+        {onUseThis && (
+          <button
+            onClick={() => onUseThis(urls)}
+            className="flex items-center gap-1 text-xs text-primary border border-primary/30 rounded-full px-2.5 py-1 hover:bg-primary/10 transition-colors"
+          >
+            <ArrowRight className="w-3 h-3" />
+            继续用这个
+          </button>
+        )}
+        {urls.length > 0 && (
+          <a
+            href={urls[0]}
+            download
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded-full px-2.5 py-1 hover:bg-muted transition-colors"
+          >
+            <Download className="w-3 h-3" />
+            保存
+          </a>
+        )}
+      </div>
     </div>
   )
 }
 
 // ── Main panel ───────────────────────────────────────────────────────────────
 
-export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRef, onStoryboardExpandedRef, hidden, fullWidth }: Props) {
+export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRef, onStoryboardExpandedRef, hidden, fullWidth, onViewCanvas }: Props) {
   const {
     phase,
     messages,
@@ -211,9 +254,31 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
 
   const [input, setInput] = useState('')
   const [showNodePicker, setShowNodePicker] = useState(false)
+  const [pastedImages, setPastedImages] = useState<Array<{ dataUrl: string; name: string }>>([])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isWaiting = phase === 'waiting_llm' || phase === 'running'
+
+  const handlePaste = useCallback((e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items)
+    const imageItems = items.filter((item) => item.type.startsWith('image/'))
+    if (imageItems.length === 0) return
+    e.preventDefault()
+    imageItems.forEach((item) => {
+      const file = item.getAsFile()
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const dataUrl = ev.target?.result as string
+        setPastedImages((prev) => [...prev, { dataUrl, name: file.name || 'pasted-image.png' }])
+      }
+      reader.readAsDataURL(file)
+    })
+  }, [])
+
+  const removePastedImage = useCallback((idx: number) => {
+    setPastedImages((prev) => prev.filter((_, i) => i !== idx))
+  }, [])
 
   // When the user has typed @ and the node picker is open, clicking a canvas node inserts @[label|id]
   useEffect(() => {
@@ -257,11 +322,16 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
 
   const handleSend = useCallback(() => {
     const text = input.trim()
-    if (!text && !implicitNodeId) return
+    if (!text && !implicitNodeId && pastedImages.length === 0) return
     setInput('')
     setShowNodePicker(false)
-    sendMessage(text)
-  }, [input, implicitNodeId, sendMessage])
+    // Append pasted image data URLs as a note in the message
+    const imageNote = pastedImages.length > 0
+      ? `\n[已附加 ${pastedImages.length} 张图片]`
+      : ''
+    setPastedImages([])
+    sendMessage(text + imageNote)
+  }, [input, implicitNodeId, pastedImages, sendMessage])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -337,15 +407,26 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
           <span className="text-sm font-semibold">画布助手</span>
         </div>
         <div className="flex items-center gap-2">
+          {fullWidth && (
+            <button
+              onClick={onViewCanvas}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg px-2.5 py-1 hover:bg-muted transition-colors"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              查看画布
+            </button>
+          )}
           <button
             onClick={reset}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-0.5 rounded hover:bg-muted"
           >
             清空
           </button>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded">
-            <X className="w-4 h-4" />
-          </button>
+          {!fullWidth && (
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded">
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -353,7 +434,14 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         {messages.map((msg, idx) => {
           if (msg.role === 'result') {
-            return <ResultBubble key={msg.id} message={msg} />
+            return (
+              <ResultBubble
+                key={msg.id}
+                message={msg}
+                onRegenerate={() => sendMessage(`重新生成 ${msg.nodeLabel}`)}
+                onUseThis={(urls) => sendMessage(`继续用这个结果：${urls.join(', ')}`)}
+              />
+            )
           }
           // A guide_step card is "active" only if it's the latest guide_step message
           // and the workflow is still in progress
@@ -412,16 +500,34 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
           </div>
         )}
 
+        {/* Pasted image previews */}
+        {pastedImages.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {pastedImages.map((img, i) => (
+              <div key={i} className="relative group">
+                <img src={img.dataUrl} alt="" className="w-14 h-14 object-cover rounded-lg border border-border" />
+                <button
+                  onClick={() => removePastedImage(i)}
+                  className="absolute -top-1 -right-1 bg-background border border-border rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               phase === 'running'
                 ? '执行中，也可以输入新需求...'
-                : '描述你的需求，聚焦后点击节点可 @ 引用'
+                : '描述你的需求，Ctrl+V 可粘贴图片'
             }
             rows={1}
             className="flex-1 resize-none bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50 transition-colors placeholder:text-muted-foreground/60 max-h-24 overflow-y-auto"
@@ -430,7 +536,7 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
           />
           <button
             onClick={handleSend}
-            disabled={(!input.trim() && !implicitNodeId) || (isWaiting && phase !== 'running')}
+            disabled={(!input.trim() && !implicitNodeId && pastedImages.length === 0) || (isWaiting && phase !== 'running')}
             className="shrink-0 w-8 h-8 flex items-center justify-center bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-40"
           >
             <Send className="w-3.5 h-3.5" />

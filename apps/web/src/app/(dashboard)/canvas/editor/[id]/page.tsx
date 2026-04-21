@@ -227,6 +227,7 @@ export default function CanvasEditorPage() {
               onNodeSelectedRef={onNodeSelectedRef}
               onStoryboardExpandedRef={onStoryboardExpandedRef}
               fullWidth
+              onViewCanvas={() => setViewMode('canvas')}
             />
           </div>
         )}
