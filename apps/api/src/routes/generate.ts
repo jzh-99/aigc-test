@@ -44,6 +44,30 @@ function sanitizeParams(raw: Record<string, unknown>): Record<string, unknown> {
   return sanitized
 }
 
+function logGenerateSubmissionError(
+  app: FastifyInstance,
+  payload: {
+    userId: string
+    errorCode: string
+    httpStatus: number | null
+    detail?: string | null
+    model?: string | null
+    canvasId?: string | null
+  },
+): void {
+  getDb().insertInto('submission_errors').values({
+    user_id: payload.userId,
+    source: 'generate_api',
+    error_code: payload.errorCode,
+    http_status: payload.httpStatus,
+    detail: payload.detail ? payload.detail.slice(0, 1000) : null,
+    model: payload.model ?? null,
+    canvas_id: payload.canvasId ?? null,
+  }).execute().catch((err) => {
+    app.log.warn({ err, errorCode: payload.errorCode }, 'Failed to log submission error')
+  })
+}
+
 const PROXY_URL_PREFIX = '/api/v1/assets/proxy?token='
 
 /**
@@ -117,6 +141,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       .executeTakeFirstOrThrow()
 
     if (Number(pendingCount.count) >= MAX_PENDING_BATCHES) {
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'TOO_MANY_PENDING',
+        httpStatus: 429,
+        detail: `pending_count=${pendingCount.count}`,
+        model,
+        canvasId: canvas_id,
+      })
       return reply.status(429).send({
         success: false,
         error: { code: 'TOO_MANY_PENDING', message: `您有 ${pendingCount.count} 个任务正在处理中，请等待完成后再提交新任务（上限 ${MAX_PENDING_BATCHES}）` },
@@ -134,6 +166,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
 
     // Admin users bypass workspace membership check
     if (!wsMember && request.user.role !== 'admin') {
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'FORBIDDEN',
+        httpStatus: 403,
+        detail: 'not_workspace_member',
+        model,
+        canvasId: canvas_id,
+      })
       return reply.status(403).send({
         success: false,
         error: { code: 'FORBIDDEN', message: '你不是此工作区的成员' },
@@ -141,6 +181,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (wsMember && wsMember.role === 'viewer' && request.user.role !== 'admin') {
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'FORBIDDEN',
+        httpStatus: 403,
+        detail: 'viewer_role',
+        model,
+        canvasId: canvas_id,
+      })
       return reply.status(403).send({
         success: false,
         error: { code: 'FORBIDDEN', message: '查看者无权生成图片' },
@@ -158,10 +206,20 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
         .select('team_id')
         .where('id', '=', workspaceId)
         .executeTakeFirst()
-      if (!workspace) return reply.status(404).send({
-        success: false,
-        error: { code: 'NOT_FOUND', message: '工作区未找到' },
-      })
+      if (!workspace) {
+        logGenerateSubmissionError(app, {
+          userId,
+          errorCode: 'NOT_FOUND',
+          httpStatus: 404,
+          detail: 'workspace_not_found',
+          model,
+          canvasId: canvas_id,
+        })
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'NOT_FOUND', message: '工作区未找到' },
+        })
+      }
       teamId = workspace.team_id
     }
 
@@ -174,6 +232,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       .executeTakeFirst()
 
     if (!teamMember) {
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'FORBIDDEN',
+        httpStatus: 403,
+        detail: 'not_team_member',
+        model,
+        canvasId: canvas_id,
+      })
       return reply.status(403).send({
         success: false,
         error: { code: 'FORBIDDEN', message: '必须是团队成员才能生成图片' },
@@ -231,6 +297,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
     // Prompt filter check (also check negative_prompt if present)
     const filterResult = await checkPrompt(userId, prompt)
     if (!filterResult.allowed) {
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'PROMPT_BLOCKED',
+        httpStatus: 403,
+        detail: filterResult.ruleLabel,
+        model,
+        canvasId: canvas_id,
+      })
       return reply.status(403).send({
         success: false,
         error: {
@@ -242,6 +316,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
     if (typeof params.negative_prompt === 'string' && params.negative_prompt.length > 0) {
       const negFilter = await checkPrompt(userId, params.negative_prompt)
       if (!negFilter.allowed) {
+        logGenerateSubmissionError(app, {
+          userId,
+          errorCode: 'PROMPT_BLOCKED',
+          httpStatus: 403,
+          detail: `negative_prompt:${negFilter.ruleLabel}`,
+          model,
+          canvasId: canvas_id,
+        })
         return reply.status(403).send({
           success: false,
           error: {
@@ -268,6 +350,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       .executeTakeFirst()
 
     if (!providerModel) {
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'NOT_FOUND',
+        httpStatus: 404,
+        detail: 'model_not_found_or_inactive',
+        model,
+        canvasId: canvas_id,
+      })
       return reply.status(404).send({
         success: false,
         error: { code: 'NOT_FOUND', message: `模型 "${model}" 未找到或已停用` },
@@ -283,6 +373,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       creditAccountId = result.creditAccountId
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Credit error'
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'INSUFFICIENT_CREDITS',
+        httpStatus: 402,
+        detail: msg,
+        model,
+        canvasId: canvas_id,
+      })
       return reply.status(402).send({
         success: false,
         error: { code: 'INSUFFICIENT_CREDITS', message: msg },
@@ -351,6 +449,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       // DB or queue error after freeze — refund to prevent orphan frozen credits
       app.log.error({ err }, 'Failed to create batch/tasks after freeze, refunding credits')
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'INTERNAL_ERROR',
+        httpStatus: 500,
+        detail: err instanceof Error ? err.message : 'batch_creation_failed',
+        model,
+        canvasId: canvas_id,
+      })
       try {
         await refundCredits(teamId, creditAccountId, userId, totalCost)
       } catch (refundErr) {

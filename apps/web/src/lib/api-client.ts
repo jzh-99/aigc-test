@@ -19,6 +19,28 @@ export class ApiError extends Error {
   }
 }
 
+export function getRequestErrorMessage(error: unknown, fallback = '提交失败，请稍后重试'): string {
+  if (error instanceof ApiError) return error.message
+
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return '请求超时，请稍后重试'
+  }
+
+  if (error instanceof SyntaxError) {
+    return '服务响应异常，请稍后重试'
+  }
+
+  const raw = typeof error === 'string' ? error : error instanceof Error ? error.message : ''
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return '网络连接失败，请检查网络后重试'
+  }
+  if (/failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(raw)) {
+    return '网络连接失败，请检查网络后重试'
+  }
+
+  return fallback
+}
+
 function getHeaders(): Record<string, string> {
   const token = useAuthStore.getState().accessToken
   const headers: Record<string, string> = {}
@@ -161,4 +183,24 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return fetchWithAuth<T>(path, { method: 'DELETE' })
 }
 
-export const apiFetcher = <T,>(path: string) => apiGet<T>(path)
+export const apiFetcher = <T>(path: string): Promise<T> => apiGet<T>(path)
+
+export type ClientSubmissionErrorCode =
+  | 'NETWORK_ERROR'
+  | 'TIMEOUT'
+  | 'PARSE_ERROR'
+  | 'CLIENT_ERROR'
+
+export async function reportClientSubmissionError(payload: {
+  error_code: ClientSubmissionErrorCode
+  detail?: string
+  http_status?: number | null
+  model?: string
+  canvas_id?: string
+}): Promise<void> {
+  try {
+    await apiPost('/client-errors', payload)
+  } catch {
+    // fire-and-forget reporting must not impact UX
+  }
+}

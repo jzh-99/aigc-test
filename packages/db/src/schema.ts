@@ -328,6 +328,20 @@ export interface AiAssistantErrorsTable {
   created_at: Generated<Timestamp>
 }
 
+// ─── Submission Errors ────────────────────────────────────────────────────────
+
+export interface SubmissionErrorsTable {
+  id: Generated<string>
+  user_id: string
+  source: 'generate_api' | 'client'
+  error_code: string
+  http_status: number | null
+  detail: string | null
+  model: string | null
+  canvas_id: string | null
+  created_at: Generated<Timestamp>
+}
+
 // ─── Database Interface ───────────────────────────────────────────────────────
 
 export interface Database {
@@ -356,4 +370,5 @@ export interface Database {
   canvases: CanvasesTable
   canvas_node_outputs: CanvasNodeOutputsTable
   ai_assistant_errors: AiAssistantErrorsTable
+  submission_errors: SubmissionErrorsTable
 }

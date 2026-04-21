@@ -20,14 +20,13 @@ import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { Sparkles, Loader2, Coins, Image as ImageIcon, Video, Zap, Target, ImagePlus, Trash2, Search, Film, X, UserSquare2, Music, Clapperboard, Play } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
-import { ApiError } from '@/lib/api-client'
+import { ApiError, fetchWithAuth, getRequestErrorMessage, reportClientSubmissionError } from '@/lib/api-client'
 import { ReferenceImageUploadCompact } from './reference-image-upload-compact'
 import { CompanyAImagePicker } from './company-a-image-picker'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 import { IMAGE_MODEL_CREDITS, VIDEO_PER_SECOND_CREDITS, VIDEO_FLAT_CREDITS } from '@/lib/credits'
-import { fetchWithAuth } from '@/lib/api-client'
 
 const MAX_REF_IMAGES = 10
 const MAX_FILE_MB = 20
@@ -520,11 +519,22 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       }
       onBatchCreated(batch)
     } catch (err) {
-      if (err instanceof ApiError) {
-        toast.error(err.message)
-      } else {
-        toast.error('数字人生成请求失败，请稍后重试')
-      }
+      const rawMessage = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
+      const normalized = rawMessage.toLowerCase()
+      const errorCode =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'TIMEOUT'
+          : /failed to fetch|fetch failed|networkerror|network request failed|load failed/.test(normalized)
+            ? 'NETWORK_ERROR'
+            : err instanceof SyntaxError
+              ? 'PARSE_ERROR'
+              : 'CLIENT_ERROR'
+      void reportClientSubmissionError({
+        error_code: errorCode,
+        detail: rawMessage.slice(0, 500) || undefined,
+        http_status: err instanceof ApiError ? err.status : null,
+      })
+      toast.error(getRequestErrorMessage(err, '数字人生成请求失败，请稍后重试'))
     } finally {
       setIsAvatarGenerating(false)
     }
@@ -569,11 +579,22 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       }
       onBatchCreated(batch)
     } catch (err) {
-      if (err instanceof ApiError) {
-        toast.error(err.message)
-      } else {
-        toast.error('动作模仿生成请求失败，请稍后重试')
-      }
+      const rawMessage = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
+      const normalized = rawMessage.toLowerCase()
+      const errorCode =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'TIMEOUT'
+          : /failed to fetch|fetch failed|networkerror|network request failed|load failed/.test(normalized)
+            ? 'NETWORK_ERROR'
+            : err instanceof SyntaxError
+              ? 'PARSE_ERROR'
+              : 'CLIENT_ERROR'
+      void reportClientSubmissionError({
+        error_code: errorCode,
+        detail: rawMessage.slice(0, 500) || undefined,
+        http_status: err instanceof ApiError ? err.status : null,
+      })
+      toast.error(getRequestErrorMessage(err, '动作模仿生成请求失败，请稍后重试'))
     } finally {
       setIsActionGenerating(false)
     }
@@ -586,11 +607,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         onBatchCreated(batch)
       }
     } catch (err) {
-      if (err instanceof ApiError) {
-        toast.error(err.message)
-      } else {
-        toast.error('生成请求失败，请稍后重试')
-      }
+      toast.error(getRequestErrorMessage(err, '生成请求失败，请稍后重试'))
     }
   }
 
@@ -940,11 +957,23 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       })
       if (batch) onBatchCreated(batch)
     } catch (err) {
-      if (err instanceof ApiError) {
-        toast.error(err.message)
-      } else {
-        toast.error('视频生成请求失败，请稍后重试')
-      }
+      const rawMessage = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
+      const normalized = rawMessage.toLowerCase()
+      const errorCode =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'TIMEOUT'
+          : /failed to fetch|fetch failed|networkerror|network request failed|load failed/.test(normalized)
+            ? 'NETWORK_ERROR'
+            : err instanceof SyntaxError
+              ? 'PARSE_ERROR'
+              : 'CLIENT_ERROR'
+      void reportClientSubmissionError({
+        error_code: errorCode,
+        detail: rawMessage.slice(0, 500) || undefined,
+        http_status: err instanceof ApiError ? err.status : null,
+        model: videoModel,
+      })
+      toast.error(getRequestErrorMessage(err, '视频生成请求失败，请稍后重试'))
     } finally {
       setIsVideoUploading(false)
     }
