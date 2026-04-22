@@ -28,6 +28,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'gemini-3.1-flash-image-preview':    '全能图片2 1K',
   'gemini-3.1-flash-image-preview-2k': '全能图片2 2K',
   'gemini-3.1-flash-image-preview-4k': '全能图片2 4K',
+  'gpt-image-2':                       '超能图片2',
   'nano-banana-2':                     '全能图片Pro 1K',
   'nano-banana-2-2k':                  '全能图片Pro 2K',
   'nano-banana-2-4k':                  '全能图片Pro 4K',

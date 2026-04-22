@@ -12,6 +12,9 @@ const MODEL_CODE_MAP = {
     '2k': 'gemini-3.1-flash-image-preview-2k',
     '4k': 'gemini-3.1-flash-image-preview-4k',
   },
+  'gpt-image-2': {
+    '2k': 'gpt-image-2',
+  },
   'nano-banana-pro': {
     '1k': 'nano-banana-2',
     '2k': 'nano-banana-2-2k',
@@ -48,7 +51,11 @@ export function useGenerate() {
       if (!model) throw new Error(`Unknown resolution for ${modelType}: ${resolution}`)
       resolvedModel = model
 
-      const params: Record<string, unknown> = { aspect_ratio: aspectRatio, resolution, watermark }
+      const params: Record<string, unknown> = {
+        aspect_ratio: aspectRatio,
+        ...(model === 'gpt-image-2' ? {} : { resolution }),
+        watermark,
+      }
 
       if (referenceImages.length > 0) {
         params.image = referenceImages.map((img) => img.dataUrl)

@@ -19,6 +19,7 @@ interface PromptInputProps {
 export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
   const { prompt, setPrompt, modelType, setModelType, resolution, setResolution, quantity, setQuantity, isGenerating } = useGenerationStore()
   const estimatedCredits = (IMAGE_MODEL_CREDITS[modelType] ?? 5) * quantity
+  const showQualitySelector = modelType !== 'gpt-image-2'
   const { generate } = useGenerate()
 
   const handleGenerate = async () => {
@@ -69,12 +70,13 @@ export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={modelType} onValueChange={(v) => setModelType(v as 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0')} disabled={disabled}>
+        <Select value={modelType} onValueChange={(v) => setModelType(v as 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0')} disabled={disabled}>
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="模型" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="gemini">全能图片2</SelectItem>
+            <SelectItem value="gpt-image-2">超能图片2</SelectItem>
             <SelectItem value="nano-banana-pro">全能图片Pro</SelectItem>
             <SelectItem value="seedream-5.0-lite">Seedream 5.0</SelectItem>
             <SelectItem value="seedream-4.5">Seedream 4.5</SelectItem>
@@ -82,16 +84,18 @@ export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
           </SelectContent>
         </Select>
 
-        <Select value={resolution} onValueChange={(v) => setResolution(v as '1k' | '2k' | '4k')} disabled={disabled}>
-          <SelectTrigger className="w-[90px]">
-            <SelectValue placeholder="分辨率" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="1k">1K</SelectItem>
-            <SelectItem value="2k">2K</SelectItem>
-            <SelectItem value="4k">4K</SelectItem>
-          </SelectContent>
-        </Select>
+        {showQualitySelector && (
+          <Select value={resolution} onValueChange={(v) => setResolution(v as '1k' | '2k' | '4k')} disabled={disabled}>
+            <SelectTrigger className="w-[90px]">
+              <SelectValue placeholder="分辨率" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1k">1K</SelectItem>
+              <SelectItem value="2k">2K</SelectItem>
+              <SelectItem value="4k">4K</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
 
         <Select value={String(quantity)} onValueChange={(v) => setQuantity(Number(v))} disabled={disabled}>
           <SelectTrigger className="w-[100px]">

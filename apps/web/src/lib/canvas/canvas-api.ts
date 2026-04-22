@@ -168,7 +168,7 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
     prompt: string
     params: {
       aspect_ratio: string
-      resolution: string
+      resolution?: string
       watermark?: boolean
       image?: string[]
     }
@@ -182,7 +182,7 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
     prompt: cfg.prompt || '',
     params: {
       aspect_ratio: cfg.aspectRatio || '1:1',
-      resolution: cfg.resolution || '2k',
+      ...(modelCode === 'gpt-image-2' ? {} : { resolution: cfg.resolution || '2k' }),
       ...(cfg.watermark !== undefined ? { watermark: cfg.watermark } : {}),
     },
   }

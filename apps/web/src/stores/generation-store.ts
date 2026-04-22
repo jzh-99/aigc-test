@@ -9,10 +9,11 @@ interface ReferenceImage {
   dataUrl: string
 }
 
-const MODEL_REVERSE_MAP: Record<string, { modelType: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'; resolution: '1k' | '2k' | '4k' }> = {
+const MODEL_REVERSE_MAP: Record<string, { modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'; resolution: '1k' | '2k' | '4k' }> = {
   'gemini-3.1-flash-image-preview':    { modelType: 'gemini', resolution: '1k' },
   'gemini-3.1-flash-image-preview-2k': { modelType: 'gemini', resolution: '2k' },
   'gemini-3.1-flash-image-preview-4k': { modelType: 'gemini', resolution: '4k' },
+  'gpt-image-2':                       { modelType: 'gpt-image-2', resolution: '2k' },
   'nano-banana-2':    { modelType: 'nano-banana-pro', resolution: '1k' },
   'nano-banana-2-2k': { modelType: 'nano-banana-pro', resolution: '2k' },
   'nano-banana-2-4k': { modelType: 'nano-banana-pro', resolution: '4k' },
@@ -33,7 +34,7 @@ interface VideoParams {
 }
 
 interface UserDefaults {
-  modelType: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
+  modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
   resolution: '1k' | '2k' | '3k' | '4k'
   quantity: number
   aspectRatio: string
@@ -56,7 +57,7 @@ interface AvatarDefaults {
 interface GenerationState {
   // Image generation state
   prompt: string
-  modelType: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
+  modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
   resolution: '1k' | '2k' | '3k' | '4k'
   quantity: number
   aspectRatio: string
@@ -78,7 +79,7 @@ interface GenerationState {
 
   // Image generation actions
   setPrompt: (prompt: string) => void
-  setModelType: (modelType: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0') => void
+  setModelType: (modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0') => void
   setResolution: (resolution: '1k' | '2k' | '3k' | '4k') => void
   setQuantity: (quantity: number) => void
   setAspectRatio: (ratio: string) => void

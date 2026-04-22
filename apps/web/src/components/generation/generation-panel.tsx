@@ -53,7 +53,7 @@ function isValidAudioFile(file: File): boolean {
 type ModelResolution = '1k' | '2k' | '3k' | '4k'
 
 const MODEL_OPTIONS: Array<{
-  value: 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
+  value: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
   label: string
   icon: React.ElementType
   desc: string
@@ -68,6 +68,15 @@ const MODEL_OPTIONS: Array<{
     desc: '快速生成，适合日常使用',
     credits: IMAGE_MODEL_CREDITS['gemini'],
     resolutions: ['1k', '2k', '4k'],
+    supportsWatermark: false,
+  },
+  {
+    value: 'gpt-image-2',
+    label: '超能图片2',
+    icon: Zap,
+    desc: '文字渲染准确，UI截图逼真，照片级真实感',
+    credits: IMAGE_MODEL_CREDITS['gpt-image-2'],
+    resolutions: ['2k'],
     supportsWatermark: false,
   },
   {
@@ -980,6 +989,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   }
 
   const currentModel = MODEL_OPTIONS.find(m => m.value === modelType)
+  const showImageQualitySelector = modelType !== 'gpt-image-2'
   const isSeedance = videoModel.startsWith('seedance-')
   const availableResolutions = ALL_RESOLUTION_OPTIONS.filter(r =>
     currentModel?.resolutions.includes(r.value) ?? true
@@ -2073,7 +2083,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 <Label className="text-xs text-muted-foreground mb-1 block">模型</Label>
                 <Select
                   value={modelType}
-                  onValueChange={(v) => setModelType(v as 'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0')}
+                  onValueChange={(v) => setModelType(v as 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0')}
                   disabled={disabled}
                 >
                   <SelectTrigger className="h-9">
@@ -2107,27 +2117,29 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               </div>
 
               {/* 质量 */}
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">质量</Label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {availableResolutions.map((res) => (
-                    <button
-                      key={res.value}
-                      onClick={() => setResolution(res.value)}
-                      disabled={disabled}
-                      className={cn(
-                        'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
-                        resolution === res.value
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border hover:border-primary/50',
-                        disabled && 'opacity-50 cursor-not-allowed'
-                      )}
-                    >
-                      {res.label}
-                    </button>
-                  ))}
+              {showImageQualitySelector && (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">质量</Label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {availableResolutions.map((res) => (
+                      <button
+                        key={res.value}
+                        onClick={() => setResolution(res.value)}
+                        disabled={disabled}
+                        className={cn(
+                          'py-1.5 px-3 rounded-lg border-2 text-sm font-medium transition-all',
+                          resolution === res.value
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border hover:border-primary/50',
+                          disabled && 'opacity-50 cursor-not-allowed'
+                        )}
+                      >
+                        {res.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 画面比例 */}
               <div>
