@@ -9,10 +9,11 @@
 
 // ─── 图片模型积分（每张）───────────────────────────────────────────────────
 export const IMAGE_MODEL_CREDITS: Record<
-  'gemini' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0',
+  'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0',
   number
 > = {
   'gemini':            5,
+  'gpt-image-2':       5,
   'nano-banana-pro':  10,
   'seedream-5.0-lite': 10,
   'seedream-4.5':     10,

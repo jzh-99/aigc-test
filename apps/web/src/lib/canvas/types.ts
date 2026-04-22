@@ -15,6 +15,7 @@ export type VideoMode = 'multiref' | 'keyframe'
 
 export type ImageModelType =
   | 'gemini'
+  | 'gpt-image-2'
   | 'nano-banana-pro'
   | 'seedream-5.0-lite'
   | 'seedream-4.5'

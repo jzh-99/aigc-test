@@ -49,6 +49,7 @@ export function ImageGenPanel({
   onExecute,
 }: ImageGenPanelProps) {
   const currentModel = IMAGE_MODEL_OPTIONS.find((m) => m.value === modelType) ?? IMAGE_MODEL_OPTIONS[0]
+  const showQualitySelector = modelType !== 'gpt-image-2'
   const credits = IMAGE_MODEL_CREDITS[modelType] ?? 5
 
   return (
@@ -113,23 +114,25 @@ export function ImageGenPanel({
       </div>
 
       <div className="p-3 flex flex-col gap-3" style={{ width: 140 }}>
-        <div className="space-y-1">
-          <label className="text-[11px] font-medium text-muted-foreground">分辨率</label>
-          <div className="flex flex-wrap gap-1">
-            {currentModel.resolutions.map((r) => (
-              <button
-                key={r}
-                onClick={() => onUpdateCfg({ resolution: r })}
-                className={cn(
-                  'px-2 py-0.5 rounded text-[11px] font-medium border transition-colors',
-                  resolution === r ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted'
-                )}
-              >
-                {r.toUpperCase()}
-              </button>
-            ))}
+        {showQualitySelector && (
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium text-muted-foreground">分辨率</label>
+            <div className="flex flex-wrap gap-1">
+              {currentModel.resolutions.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => onUpdateCfg({ resolution: r })}
+                  className={cn(
+                    'px-2 py-0.5 rounded text-[11px] font-medium border transition-colors',
+                    resolution === r ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted'
+                  )}
+                >
+                  {r.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">宽高比</label>
           <div className="flex flex-wrap gap-1">

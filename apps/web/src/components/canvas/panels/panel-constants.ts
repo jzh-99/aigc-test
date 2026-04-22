@@ -15,6 +15,7 @@ export interface ImageModelOption {
 
 export const IMAGE_MODEL_OPTIONS: ImageModelOption[] = [
   { value: 'gemini', label: '全能图片2', icon: Zap, resolutions: ['1k', '2k', '4k'], supportsWatermark: false },
+  { value: 'gpt-image-2', label: '超能图片2', icon: Zap, resolutions: ['2k'], supportsWatermark: false },
   { value: 'nano-banana-pro', label: '全能图片Pro', icon: Target, resolutions: ['1k', '2k', '4k'], supportsWatermark: false },
   { value: 'seedream-5.0-lite', label: 'Seedream 5.0', icon: Sparkles, resolutions: ['2k', '3k'], supportsWatermark: true },
   { value: 'seedream-4.5', label: 'Seedream 4.5', icon: Sparkles, resolutions: ['2k', '4k'], supportsWatermark: true },
@@ -26,6 +27,9 @@ export const MODEL_CODE_MAP: Record<ModelType, Partial<Record<Resolution, string
     '1k': 'gemini-3.1-flash-image-preview',
     '2k': 'gemini-3.1-flash-image-preview-2k',
     '4k': 'gemini-3.1-flash-image-preview-4k',
+  },
+  'gpt-image-2': {
+    '2k': 'gpt-image-2',
   },
   'nano-banana-pro': {
     '1k': 'nano-banana-2',
