@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -24,12 +25,14 @@ interface AdminPasswordDialogProps {
 export function AdminPasswordDialog({ userId, open, onOpenChange }: AdminPasswordDialogProps) {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [unlockAccount, setUnlockAccount] = useState(true)
   const [loading, setLoading] = useState(false)
 
   function handleClose(nextOpen: boolean) {
     if (!nextOpen) {
       setNewPassword('')
       setConfirmPassword('')
+      setUnlockAccount(true)
     }
     onOpenChange(nextOpen)
   }
@@ -53,8 +56,8 @@ export function AdminPasswordDialog({ userId, open, onOpenChange }: AdminPasswor
 
     setLoading(true)
     try {
-      await apiPatch(`/admin/users/${userId}/password`, { new_password: newPassword })
-      toast.success('密码已修改，该用户下次登录需使用新密码')
+      await apiPatch(`/admin/users/${userId}/password`, { new_password: newPassword, unlock_account: unlockAccount })
+      toast.success(unlockAccount ? '密码已修改，账户锁定已解除' : '密码已修改，该用户下次登录需使用新密码')
       handleClose(false)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : '修改失败')
@@ -88,6 +91,16 @@ export function AdminPasswordDialog({ userId, open, onOpenChange }: AdminPasswor
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="unlock-account"
+              checked={unlockAccount}
+              onCheckedChange={setUnlockAccount}
+            />
+            <Label htmlFor="unlock-account" className="text-sm font-normal cursor-pointer">
+              同时解除账户登录锁定（因多次失败被锁定 15 分钟）
+            </Label>
           </div>
           <p className="text-xs text-muted-foreground">修改后该用户的所有登录会话将失效，需重新登录。</p>
           <DialogFooter>
