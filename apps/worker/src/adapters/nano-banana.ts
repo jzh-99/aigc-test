@@ -77,7 +77,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
 
     // gemini-3.1-flash-image-preview-* and gpt-image-2: always use generations
     // (reference images are passed as JSON image[])
-    // nano-banana-2* models: use edits when reference images are present, otherwise generations
+    // nano-banana-pro* models: use edits when reference images are present, otherwise generations
     const supportsJsonImageInGenerations = model.startsWith('gemini-3.1-flash-image-preview') || model === 'gpt-image-2'
     const useEdits = !supportsJsonImageInGenerations && imageUrls !== null
 
