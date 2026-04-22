@@ -13,6 +13,7 @@ import {
 import { useLayoutStore } from '@/stores/layout-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
+import { useMemo } from 'react'
 import { apiPost } from '@/lib/api-client'
 import { useRouter } from 'next/navigation'
 import { MobileSidebar } from './mobile-sidebar'
@@ -25,9 +26,17 @@ interface TopbarProps {
 export function Topbar({ title }: TopbarProps) {
   const { mobileOpen, setMobileOpen } = useLayoutStore()
   const user = useAuthStore((s) => s.user)
+  const activeTeam = useAuthStore((s) => s.activeTeam())
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const resetGeneration = useGenerationStore((s) => s.reset)
   const router = useRouter()
+
+  const canViewCredits = useMemo(() => {
+    if (!activeTeam) return true
+    const isOwnerOrAdmin = activeTeam.role === 'owner' || activeTeam.role === 'admin' || user?.role === 'admin'
+    if (isOwnerOrAdmin) return true
+    return activeTeam.allow_member_topup === true
+  }, [activeTeam, user?.role])
 
   async function handleLogout() {
     try { await apiPost('/auth/logout', {}) } catch {}
@@ -80,12 +89,14 @@ export function Topbar({ title }: TopbarProps) {
                 个人设置
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/credits">
-                <Coins className="mr-2 h-4 w-4" />
-                积分管理
-              </Link>
-            </DropdownMenuItem>
+            {canViewCredits && (
+              <DropdownMenuItem asChild>
+                <Link href="/credits">
+                  <Coins className="mr-2 h-4 w-4" />
+                  积分管理
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-error">
               <LogOut className="mr-2 h-4 w-4" />
