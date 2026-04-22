@@ -376,6 +376,10 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     } else if (!isSeedance && !VIDEO_ASPECT_RATIOS_DEFAULT.find(r => r.value === videoAspectRatio)) {
       setVideoAspectRatio('')
     }
+    // seedance-2.0-fast does not support 1080p — downgrade if needed
+    if (videoModel === 'seedance-2.0-fast' && videoUpsample) {
+      setVideoUpsample(false)
+    }
   }, [videoModel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ensure current tab is allowed by team feature flags
@@ -2310,7 +2314,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {VIDEO_RESOLUTIONS.map((r) => (
+                      {VIDEO_RESOLUTIONS.filter((r) => !(r.value === true && videoModel === 'seedance-2.0-fast')).map((r) => (
                         <SelectItem key={String(r.value)} value={String(r.value)}>
                           <span className="font-medium">{r.label}</span>
                           <span className="text-xs text-muted-foreground ml-1.5">{r.desc}</span>
