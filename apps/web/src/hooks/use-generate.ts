@@ -16,9 +16,9 @@ const MODEL_CODE_MAP = {
     '2k': 'gpt-image-2',
   },
   'nano-banana-pro': {
-    '1k': 'nano-banana-pro',
-    '2k': 'nano-banana-pro-2k',
-    '4k': 'nano-banana-pro-4k',
+    '1k': 'nano-banana-2',
+    '2k': 'nano-banana-2-2k',
+    '4k': 'nano-banana-2-4k',
   },
   'seedream-5.0-lite': {
     '2k': 'seedream-5.0-lite',
