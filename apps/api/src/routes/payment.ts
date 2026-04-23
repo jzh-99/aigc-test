@@ -1,14 +1,16 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import { sql } from 'kysely'
-import { createLifeOrder, buildPaySign } from '../lib/life-service.js'
-import { TOPUP_PACKAGES, TOPUP_PACKAGE_MAP } from '../lib/topup-packages.js'
+import { createLifeOrder, createLifeSubscriptionOrder, buildPaySign } from '../lib/life-service.js'
+import { TOPUP_PACKAGES, TOPUP_PACKAGE_MAP, ONETIME_PACKAGES, MONTHLY_PACKAGES } from '../lib/topup-packages.js'
 import type { CreateOrderRequest } from '@aigc/types'
 
 export async function paymentRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /payment/packages
-  app.get('/payment/packages', async () => ({ data: TOPUP_PACKAGES }))
+  app.get('/payment/packages', async () => ({
+    onetime: ONETIME_PACKAGES,
+    monthly: MONTHLY_PACKAGES,
+  }))
 
   // GET /payment/ledger?account=personal|team&team_id=xxx&page=1&limit=20
   app.get<{ Querystring: { account?: string; team_id?: string; page?: string; limit?: string } }>(
@@ -140,7 +142,7 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
     const amountYuan = (pkg.amount_fen / 100).toFixed(2)
     const platformCode = process.env.LIFE_SERVICE_PLATFORM_CODE!
     const webBaseUrl = process.env.WEB_BASE_URL!
-    const baseUrl = process.env.LIFE_SERVICE_BASE_URL!
+    const baseUrl = process.env.LIFE_SERVICE_BASE_URL!.replace(/\/$/, '')
 
     // 文档说明：return_url = 异步回调（支付结果通知），notify_url = 页面跳转（支付后跳转页面）
     const asyncCallbackUrl = `${process.env.API_BASE_URL}/api/v1/payment/notify`
@@ -149,28 +151,44 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
     const user = await db
       .selectFrom('users').select(['phone', 'email'])
       .where('id', '=', userId).executeTakeFirstOrThrow()
-    const memberId = user.phone ?? user.email ?? userId
+    const memberId = user.phone ?? '13800138000'
 
-    const lifeOrder = await createLifeOrder(app.redis, {
-      MEMBER_ID: memberId,
-      PLATFORM_CODE: platformCode,
-      CHANNEL: 'H5',
-      AMOUNT: amountYuan,
-      ADD_AMOUNT: '0',
-      GOODS_NAME: pkg.name,
-      SUM_AMOUNT: amountYuan,
-      return_url: asyncCallbackUrl,   // 异步回调
-      notify_url: pageRedirectUrl,    // 页面跳转
-    })
+    const lifeOrder = pkg.type === 'monthly'
+      ? await createLifeSubscriptionOrder(app.redis, {
+          MEMBER_ID: memberId,
+          PLATFORM_CODE: platformCode,
+          CHANNEL: 'H5',
+          AMOUNT: amountYuan,
+          ADD_AMOUNT: '0',
+          GOODS_NAME: pkg.name,
+          SUM_AMOUNT: amountYuan,
+          return_url: asyncCallbackUrl,
+          notify_url: pageRedirectUrl,
+        })
+      : await createLifeOrder(app.redis, {
+          MEMBER_ID: memberId,
+          PLATFORM_CODE: platformCode,
+          CHANNEL: 'H5',
+          AMOUNT: amountYuan,
+          ADD_AMOUNT: '0',
+          GOODS_NAME: pkg.name,
+          SUM_AMOUNT: amountYuan,
+          return_url: asyncCallbackUrl,
+          notify_url: pageRedirectUrl,
+        })
 
     const order = await db
       .insertInto('payment_orders')
       .values({
+        order_no: String(lifeOrder.orderid),
+        provider: 'life',
+        type: 'topup',
         life_order_id: String(lifeOrder.orderid),
         user_id: userId,
         team_id: team_id ?? null,
         credit_account_id: creditAccountId,
         amount_fen: pkg.amount_fen,
+        credits: pkg.credits,
         credits_to_grant: pkg.credits,
         status: 'pending',
         order_type: 'topup',
@@ -179,9 +197,12 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
       .returning('id')
       .executeTakeFirstOrThrow()
 
-    // sign = SHA1(base64("orderId=X&c=X&userid=X&show_uri=X"))，showUrl 用页面跳转地址
+    // sign = SHA1(base64("orderId=X&c=X&userid=X&show_uri=X"))
     const paySign = buildPaySign(String(lifeOrder.orderid), amountYuan, lifeOrder.userid, pageRedirectUrl)
-    const payUrl = `${baseUrl}/LifeServicePay/pay/payViewWAP`
+    const payPage = pkg.type === 'monthly'
+      ? `${baseUrl}/LifeServicePay/multiplePayment/wapPage`
+      : `${baseUrl}/LifeServicePay/pay/payViewWAP`
+    const payUrl = payPage
       + `?orderIds=${lifeOrder.orderid}`
       + `&orderAmount=${amountYuan}`
       + `&userid=${lifeOrder.userid}`

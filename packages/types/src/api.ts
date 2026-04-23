@@ -106,11 +106,12 @@ export interface TopupPackage {
   name: string
   amount_fen: number   // 分
   credits: number
-  tag?: string         // e.g. "推荐"
+  type: 'onetime' | 'monthly'
+  tag?: string
 }
 
 export interface CreateOrderRequest {
-  team_id?: string     // null = personal topup
+  team_id?: string
   package_id: string
 }
 
