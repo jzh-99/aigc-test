@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check, Video, Play } from 'lucide-react'
+import { User, Loader2, RotateCcw, Check, Video, Play, X } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useGenerationStore } from '@/stores/generation-store'
 import { translateTaskError } from '@/lib/error-messages'
+import { apiDelete } from '@/lib/api-client'
 
 interface BatchListCardProps {
   batch: BatchResponse & { thumbnail_urls?: string[] }
@@ -29,7 +30,26 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
   const router = useRouter()
   const applyBatch = useGenerationStore((s) => s.applyBatch)
   const [applied, setApplied] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const status = statusConfig[batch.status] ?? statusConfig.pending
+
+  const isCancellable =
+    (batch as any).module === 'video' &&
+    (batch as any).provider === 'volcengine' &&
+    (batch.status === 'processing' || batch.status === 'pending')
+
+  async function handleCancel(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (cancelling) return
+    setCancelling(true)
+    try {
+      await apiDelete(`/videos/batches/${batch.id}/cancel`)
+    } catch {
+      // SSE will update status; ignore errors silently
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   function handleApply(e: React.MouseEvent) {
     e.stopPropagation()
@@ -189,8 +209,19 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
           </>
         )}
 
-        {/* Reuse button */}
-        <div className="flex justify-end">
+        {/* Reuse / Cancel buttons */}
+        <div className="flex justify-end gap-1">
+          {isCancellable && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+              onClick={handleCancel}
+              disabled={cancelling}
+            >
+              {cancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <><X className="h-3 w-3 mr-1" />取消</>}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
