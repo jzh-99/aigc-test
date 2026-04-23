@@ -18,10 +18,12 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 // Track consecutive poll errors per task to detect persistent API failures
 const pollErrorCounts = new Map<string, number>()
 const MAX_CONSECUTIVE_POLL_ERRORS = 5
+let pollTick = 0
+const POLL_CONCURRENCY = 10
 
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
-const MAX_VIDEO_AGE_MS = 15 * 60 * 1000 // 15 minutes
+const MAX_VIDEO_AGE_MS = 60 * 60 * 1000 // 1 hour
 
 interface VideoTaskRow {
   taskId: string
@@ -239,6 +241,63 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
   logger.warn({ taskId, batchId, errorMessage }, 'Video task failed')
 }
 
+async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void> {
+  try {
+    const ageMs = task.processingStartedAt
+      ? Date.now() - new Date(task.processingStartedAt).getTime()
+      : MAX_VIDEO_AGE_MS + 1
+
+    if (ageMs > MAX_VIDEO_AGE_MS) {
+      if (task.provider === 'volcengine') {
+        try {
+          const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
+          await fetch(`https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/${task.externalTaskId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${volcengineApiKey}` },
+            signal: AbortSignal.timeout(10_000),
+          })
+        } catch (cancelErr) {
+          logger.warn({ taskId: task.taskId, cancelErr }, 'Failed to cancel volcengine task on timeout')
+        }
+      }
+      await handleVideoFailure(task, 'Video generation timed out after 1 hour')
+      return
+    }
+
+    // Age-based poll skipping: reduce API calls for older tasks
+    const skipThisTick =
+      ageMs >= 10 * 60_000 ? tick % 8 !== 0 :
+      ageMs >= 2 * 60_000  ? tick % 4 !== 0 :
+      false
+    if (skipThisTick) return
+
+    const result = task.provider === 'volcengine'
+      ? await checkVolcengineTask(task.externalTaskId)
+      : await checkVeoTask(task.externalTaskId)
+
+    if (result.status === 'SUCCESS' && result.videoUrl) {
+      pollErrorCounts.delete(task.taskId)
+      await handleVideoSuccess(task, result.videoUrl)
+    } else if (result.status === 'FAILURE') {
+      pollErrorCounts.delete(task.taskId)
+      await handleVideoFailure(task, result.failReason ?? 'Video generation failed')
+    } else if (result.status === 'POLL_ERROR') {
+      const count = (pollErrorCounts.get(task.taskId) ?? 0) + 1
+      pollErrorCounts.set(task.taskId, count)
+      if (count >= MAX_CONSECUTIVE_POLL_ERRORS) {
+        logger.warn({ taskId: task.taskId, count }, 'Video task exceeded max poll errors, failing task')
+        pollErrorCounts.delete(task.taskId)
+        await handleVideoFailure(task, '生成过程中出现异常，请重新发起请求')
+      }
+    } else {
+      // NOT_START, IN_PROGRESS: still in progress, reset error count
+      pollErrorCounts.delete(task.taskId)
+    }
+  } catch (err) {
+    logger.error({ taskId: task.taskId, err }, 'Error processing video task')
+  }
+}
+
 async function pollVideoTasks(): Promise<void> {
   const db = getDb()
 
@@ -265,46 +324,12 @@ async function pollVideoTasks(): Promise<void> {
 
   if (tasks.length === 0) return
 
-  logger.debug({ count: tasks.length }, 'Polling video tasks')
+  pollTick++
+  logger.debug({ count: tasks.length, tick: pollTick }, 'Polling video tasks')
 
-  for (const task of tasks) {
-    try {
-      // Timeout guard: fail tasks running > 15 minutes
-      const ageMs = task.processingStartedAt
-        ? Date.now() - new Date(task.processingStartedAt).getTime()
-        : MAX_VIDEO_AGE_MS + 1
-
-      if (ageMs > MAX_VIDEO_AGE_MS) {
-        await handleVideoFailure(task, 'Video generation timed out after 15 minutes')
-        continue
-      }
-
-      const result = task.provider === 'volcengine'
-        ? await checkVolcengineTask(task.externalTaskId)
-        : await checkVeoTask(task.externalTaskId)
-
-      if (result.status === 'SUCCESS' && result.videoUrl) {
-        pollErrorCounts.delete(task.taskId)
-        await handleVideoSuccess(task, result.videoUrl)
-      } else if (result.status === 'FAILURE') {
-        pollErrorCounts.delete(task.taskId)
-        await handleVideoFailure(task, result.failReason ?? 'Video generation failed')
-      } else if (result.status === 'POLL_ERROR') {
-        const count = (pollErrorCounts.get(task.taskId) ?? 0) + 1
-        pollErrorCounts.set(task.taskId, count)
-        if (count >= MAX_CONSECUTIVE_POLL_ERRORS) {
-          logger.warn({ taskId: task.taskId, count }, 'Video task exceeded max poll errors, failing task')
-          pollErrorCounts.delete(task.taskId)
-          await handleVideoFailure(task, '生成过程中出现异常，请重新发起请求')
-        }
-      } else {
-        // NOT_START, IN_PROGRESS: still in progress, reset error count
-        pollErrorCounts.delete(task.taskId)
-      }
-      // NOT_START, IN_PROGRESS, POLL_ERROR: skip until next interval
-    } catch (err) {
-      logger.error({ taskId: task.taskId, err }, 'Error processing video task')
-    }
+  // Process in parallel chunks to cap concurrent outbound requests
+  for (let i = 0; i < tasks.length; i += POLL_CONCURRENCY) {
+    await Promise.all(tasks.slice(i, i + POLL_CONCURRENCY).map((t) => processVideoTask(t, pollTick)))
   }
 }
 

@@ -775,4 +775,90 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       }],
     })
   })
+
+  // DELETE /videos/batches/:batchId/cancel — cancel a queued/processing seedance video task
+  app.delete<{ Params: { batchId: string } }>('/videos/batches/:batchId/cancel', async (request, reply) => {
+    const { batchId } = request.params
+    const userId = request.user.id
+    const db = getDb()
+
+    const batch = await db
+      .selectFrom('task_batches')
+      .select(['id', 'user_id', 'provider', 'status', 'team_id', 'credit_account_id'])
+      .where('id', '=', batchId)
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+
+    if (!batch) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '任务不存在' } })
+    if (batch.user_id !== userId && request.user.role !== 'admin') {
+      return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权操作此任务' } })
+    }
+    if (batch.provider !== 'volcengine') {
+      return reply.status(400).send({ success: false, error: { code: 'NOT_SUPPORTED', message: '仅支持取消 Seedance 视频任务' } })
+    }
+    if (batch.status !== 'processing' && batch.status !== 'pending') {
+      return reply.status(400).send({ success: false, error: { code: 'INVALID_STATE', message: '任务已完成或已取消，无法取消' } })
+    }
+
+    const task = await db
+      .selectFrom('tasks')
+      .select(['id', 'external_task_id', 'estimated_credits', 'status'])
+      .where('batch_id', '=', batchId)
+      .where('status', 'in', ['processing', 'pending'])
+      .executeTakeFirst()
+
+    if (!task) return reply.status(400).send({ success: false, error: { code: 'INVALID_STATE', message: '任务已完成或已取消，无法取消' } })
+
+    // Attempt to cancel on Volcengine side (only works for queued tasks; ignore errors)
+    if (task.external_task_id) {
+      try {
+        const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
+        await fetch(`https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/${task.external_task_id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${volcengineApiKey}` },
+          signal: AbortSignal.timeout(10_000),
+        })
+      } catch { /* best-effort */ }
+    }
+
+    // Mark task/batch as failed and refund credits
+    await db.transaction().execute(async (trx: any) => {
+      const updated = await trx
+        .updateTable('tasks')
+        .set({ status: 'failed', error_message: '用户已取消', completed_at: new Date().toISOString() })
+        .where('id', '=', task.id)
+        .where('status', 'in', ['processing', 'pending'])
+        .execute()
+
+      if (Number((updated as any)[0]?.numUpdatedRows ?? (updated as any).numUpdatedRows ?? 0) === 0) return
+
+      await trx.updateTable('task_batches')
+        .set({ status: 'failed', failed_count: sql`failed_count + 1` })
+        .where('id', '=', batchId).execute()
+
+      await trx.updateTable('credit_accounts')
+        .set({ frozen_credits: sql`frozen_credits - ${task.estimated_credits}` })
+        .where('id', '=', batch.credit_account_id).execute()
+
+      await trx.updateTable('team_members')
+        .set({ credit_used: sql`GREATEST(credit_used - ${task.estimated_credits}, 0)` })
+        .where('team_id', '=', batch.team_id).where('user_id', '=', userId).execute()
+
+      await trx.insertInto('credits_ledger').values({
+        credit_account_id: batch.credit_account_id,
+        user_id: userId,
+        amount: task.estimated_credits,
+        type: 'refund',
+        task_id: task.id,
+        batch_id: batchId,
+        description: '用户取消视频生成',
+      }).execute()
+    })
+
+    try {
+      await (request.server as any).redis.publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+    } catch { /* ignore SSE errors */ }
+
+    return reply.send({ success: true })
+  })
 }
