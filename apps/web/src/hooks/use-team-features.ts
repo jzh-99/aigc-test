@@ -11,5 +11,6 @@ export function useTeamFeatures() {
     showAvatarTab: teamType === 'standard' || teamType === 'avatar_enabled',
     showActionImitationTab: teamType === 'standard' || teamType === 'avatar_enabled',
     showCanvasTab: teamType === 'avatar_enabled',
+    showVideoStudioTab: teamType === 'avatar_enabled',
   }
 }

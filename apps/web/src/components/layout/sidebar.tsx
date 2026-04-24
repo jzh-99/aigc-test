@@ -22,6 +22,7 @@ import {
   Users,
   Shield,
   Palette,
+  Clapperboard,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -37,6 +38,7 @@ const baseNavItems: NavItem[] = [
   { href: '/', label: '工作台', icon: LayoutDashboard },
   { href: '/generation', label: '创作生成', icon: Sparkles },
   { href: '/canvas', label: '画布', icon: Palette },
+  { href: '/video-studio', label: '视频工坊', icon: Clapperboard },
   { href: '/assets', label: '资产库', icon: Images },
 ]
 
@@ -52,11 +54,15 @@ const bottomNavItems: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname()
   const { sidebarCollapsed, toggleSidebar } = useLayoutStore()
-  const { showCanvasTab } = useTeamFeatures()
+  const { showCanvasTab, showVideoStudioTab } = useTeamFeatures()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
 
-  const visibleBaseItems = baseNavItems.filter((item) => item.href !== '/canvas' || showCanvasTab)
+  const visibleBaseItems = baseNavItems.filter((item) => {
+    if (item.href === '/canvas') return showCanvasTab
+    if (item.href === '/video-studio') return showVideoStudioTab
+    return true
+  })
 
   const visibleRoleItems = roleNavItems.filter((item) => {
     if (item.requireUserRole && user?.role !== item.requireUserRole) return false

@@ -459,6 +459,24 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
 
         if (instruction?.type === 'apply_workflow') {
           handleApplyWorkflow(instruction.workflow)
+        } else if (instruction?.type === 'autorun') {
+          // Start autorun from current step — use setState callback to avoid stale closure
+          setActiveWorkflow((wf) => {
+            if (wf) {
+              setPhase('autorunning')
+              setCurrentStepIndex((idx) => {
+                setStepParams((sp) => {
+                  // Defer to avoid calling autoRunAllSteps before it's defined
+                  setTimeout(() => autoRunAllStepsRef.current?.(idx, wf, sp[idx] ?? {}), 0)
+                  return sp
+                })
+                return idx
+              })
+            } else {
+              setPhase('idle')
+            }
+            return wf
+          })
         } else if (instruction) {
           setPhase('waiting_user')
         } else {
@@ -573,6 +591,24 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
     [],
   )
 
+  const autorunRef = useRef(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const autoRunRef = useRef<((startIndex: number, workflow: AgentWorkflow, params: StepParams) => Promise<void>) | null>(null)
+  const autoRunAllStepsRef = useRef<((startIndex: number, workflow: AgentWorkflow, params: StepParams) => Promise<void>) | null>(null)
+
+  const autoRunAllSteps = useCallback(
+    async (startIndex: number, workflow: AgentWorkflow, params: StepParams) => {
+      autorunRef.current = true
+      for (let i = startIndex; i < workflow.steps.length; i++) {
+        if (!autorunRef.current) break
+        await confirmStep(i, params)
+      }
+      autorunRef.current = false
+    },
+    [confirmStep],
+  )
+  autoRunAllStepsRef.current = autoRunAllSteps
+
   const reset = useCallback(() => {
     abortRef.current?.abort()
     setPhase('idle')
@@ -585,6 +621,14 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
     useCanvasExecutionStore.getState().setHighlightedNodes(new Set())
   }, [canvasId])
 
+  // Keep ref in sync so sendMessage can call it without circular dep
+  autoRunRef.current = autoRunAllSteps
+
+  const stopAutorun = useCallback(() => {
+    autorunRef.current = false
+    setPhase('waiting_user')
+  }, [])
+
   return {
     phase,
     messages,
@@ -595,6 +639,8 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
     setImplicitNodeId,
     sendMessage,
     confirmStep,
+    autoRunAllSteps,
+    stopAutorun,
     reset,
     estimateStepCredits,
   }

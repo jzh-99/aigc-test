@@ -59,9 +59,13 @@ function InstructionWidget({
   if (instruction.type === 'confirm_plan') {
     return (
       <ConfirmPlanCard
+        summary={instruction.summary}
+        estimatedCredits={instruction.estimatedCredits}
+        estimatedMinutes={instruction.estimatedMinutes}
         items={instruction.items}
         onConfirm={(selected) => onAction('plan_confirmed', selected)}
         onModify={() => onAction('plan_modify')}
+        onAutorun={(selected) => onAction('plan_autorun', selected)}
       />
     )
   }
@@ -246,6 +250,8 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
     setImplicitNodeId,
     sendMessage,
     confirmStep,
+    autoRunAllSteps,
+    stopAutorun,
     reset,
   } = useCanvasAgent(canvasId, kickPoll)
 
@@ -370,6 +376,8 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
         sendMessage(`素材标注完成：\n${lines}\n请根据以上素材搭建工作流。`)
       } else if (type === 'plan_confirmed') {
         sendMessage('方案已确认，请搭建工作流')
+      } else if (type === 'plan_autorun') {
+        sendMessage('方案已确认，请搭建工作流，完成后直接全部执行，不需要我逐步确认')
       } else if (type === 'plan_modify') {
         inputRef.current?.focus()
       } else if (type === 'storyboard_confirmed') {
@@ -380,7 +388,7 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
         inputRef.current?.focus()
       }
     },
-    [sendMessage],
+    [sendMessage, autoRunAllSteps, stopAutorun],
   )
 
   const handleConfirmStep = useCallback(
@@ -429,6 +437,30 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
           )}
         </div>
       </div>
+
+      {/* Autorun progress bar */}
+      {phase === 'autorunning' && activeWorkflow && (
+        <div className="px-3 py-2 border-b bg-primary/5 flex items-center gap-2 text-xs">
+          <div className="flex-1">
+            <div className="flex justify-between text-muted-foreground mb-1">
+              <span>托管执行中</span>
+              <span>{currentStepIndex + 1} / {activeWorkflow.steps.length} 步</span>
+            </div>
+            <div className="h-1 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-500"
+                style={{ width: `${((currentStepIndex + 1) / activeWorkflow.steps.length) * 100}%` }}
+              />
+            </div>
+          </div>
+          <button
+            onClick={stopAutorun}
+            className="shrink-0 text-xs border border-border rounded px-2 py-0.5 hover:bg-muted transition-colors"
+          >
+            暂停
+          </button>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
