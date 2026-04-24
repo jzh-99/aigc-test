@@ -171,6 +171,7 @@ export interface TaskBatchesTable {
   deleted_at: Timestamp | null
   canvas_id: string | null
   canvas_node_id: string | null
+  video_studio_project_id: string | null
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>
 }
