@@ -12,9 +12,11 @@ import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiGet } from '@/lib/api-client'
 import { ApiError } from '@/lib/api-client'
-import { AlertTriangle, FolderX } from 'lucide-react'
+import { AlertTriangle, FolderX, EyeOff } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 import type { BatchResponse } from '@aigc/types'
+import { useHiddenBatches } from '@/hooks/use-batches'
+import { Button } from '@/components/ui/button'
 
 interface TeamMember {
   user_id: string
@@ -43,6 +45,8 @@ export default function ImagePage() {
   const [activeBatchCount, setActiveBatchCount] = useState(0)
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const { batches: hiddenBatches } = useHiddenBatches(true)
+  const hasHidden = hiddenBatches.length > 0
 
   // Map<batchId, intervalId> — each batch polled independently
   const pollTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
@@ -203,6 +207,17 @@ export default function ImagePage() {
               <span>历史记录</span>
               {activeBatchCount > 0 && (
                 <Badge variant="processing" className="text-xs">生成中 ({activeBatchCount})</Badge>
+              )}
+              {hasHidden && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-7 px-2 text-xs text-muted-foreground gap-1"
+                  onClick={() => batchListRef.current?.openHiddenDrawer()}
+                >
+                  <EyeOff className="h-3.5 w-3.5" />
+                  已隐藏
+                </Button>
               )}
             </CardTitle>
           </CardHeader>

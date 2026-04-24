@@ -1,8 +1,9 @@
 'use client'
 
+import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { useAuthStore } from '@/stores/auth-store'
-import { apiDelete } from '@/lib/api-client'
+import { apiDelete, apiPost } from '@/lib/api-client'
 
 export interface AssetItem {
   id: string
@@ -12,6 +13,15 @@ export interface AssetItem {
   original_url: string | null
   created_at: string
   batch: { id: string; prompt: string; model: string }
+}
+
+export interface TrashAssetItem {
+  id: string
+  type: 'image' | 'video'
+  storage_url: string | null
+  original_url: string | null
+  deleted_at: string
+  prompt: string
 }
 
 interface AssetListResponse {
@@ -55,6 +65,23 @@ export function useAssets(type?: 'image' | 'video', date?: string) {
   }
 }
 
+export function useTrashAssets(enabled: boolean) {
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const { data, error, mutate } = useSWR<{ data: TrashAssetItem[] }>(
+    enabled && activeWorkspaceId ? `/assets/trash?workspace_id=${activeWorkspaceId}` : null,
+  )
+  return { assets: data?.data ?? [], error, isLoading: !data && !error, mutate }
+}
+
 export async function deleteAsset(id: string): Promise<void> {
   await apiDelete<void>(`/assets/${id}`)
 }
+
+export async function restoreAsset(id: string): Promise<void> {
+  await apiPost<void>(`/assets/trash/${id}/restore`, {})
+}
+
+export async function permanentDeleteAsset(id: string): Promise<void> {
+  await apiDelete<void>(`/assets/trash/${id}`)
+}
+

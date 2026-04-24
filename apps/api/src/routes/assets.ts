@@ -133,6 +133,7 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
         ])
         .where('b.workspace_id', '=', workspace_id)
         .where('b.canvas_id', 'is', null)
+        .where('b.video_studio_project_id', 'is', null)
         .where('a.is_deleted', '=', false)
         .where((eb: any) => eb.or([
           eb('a.transfer_status', '=', 'completed'),
@@ -232,7 +233,8 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // Authorization: must own the asset, be a workspace member, or be admin
-      if (asset.user_id !== userId && request.user.role !== 'admin') {
+      const isOwner = asset.user_id != null && asset.user_id === userId
+      if (!isOwner && request.user.role !== 'admin') {
         if (asset.workspace_id) {
           const wsMember = await db
             .selectFrom('workspace_members')
