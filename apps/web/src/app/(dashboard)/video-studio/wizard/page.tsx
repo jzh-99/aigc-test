@@ -125,6 +125,7 @@ function WizardContent() {
             style={wizard.describeData.style}
             characterImages={wizard.characterImages}
             sceneImages={wizard.sceneImages}
+            projectId={projectId}
             onSelectCharacterImage={wizard.setCharacterImage}
             onSelectSceneImage={wizard.setSceneImage}
             onComplete={() => wizard.completeStep('characters')}
@@ -139,6 +140,7 @@ function WizardContent() {
             describeData={wizard.describeData}
             characterImages={wizard.characterImages}
             sceneImages={wizard.sceneImages}
+            projectId={projectId}
             onVideoReady={wizard.setShotVideo}
             onComplete={() => {
               wizard.completeStep('video')
