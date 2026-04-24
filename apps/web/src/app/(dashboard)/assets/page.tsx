@@ -226,15 +226,6 @@ export default function AssetsPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-xl font-semibold">资产库</h2>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs text-muted-foreground"
-            onClick={() => setTrashOpen(true)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            回收站
-          </Button>
           {/* Date filter */}
           <div className="relative flex items-center">
             <CalendarSearch className="absolute left-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -278,6 +269,15 @@ export default function AssetsPage() {
             </Button>
           </div>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs text-muted-foreground"
+            onClick={() => setTrashOpen(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            回收站
+          </Button>
         </div>
       </div>
 
