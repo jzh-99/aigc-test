@@ -39,7 +39,7 @@ interface AssetItem {
   selectedUrl: string | null
 }
 
-async function generateImages(prompt: string, aspectRatio: string, workspaceId: string, params: ImageParams): Promise<string[]> {
+async function generateImages(prompt: string, aspectRatio: string, workspaceId: string, params: ImageParams, projectId: string): Promise<string[]> {
   const batch = await apiPost<BatchResponse>('/generate/image', {
     idempotency_key: `vs_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     workspace_id: workspaceId,
@@ -47,6 +47,7 @@ async function generateImages(prompt: string, aspectRatio: string, workspaceId: 
     model: params.model,
     prompt,
     params: { aspect_ratio: aspectRatio, resolution: params.resolution },
+    video_studio_project_id: projectId,
   })
 
   for (let i = 0; i < 60; i++) {
@@ -65,12 +66,13 @@ async function generateImages(prompt: string, aspectRatio: string, workspaceId: 
 interface ImageCardProps {
   item: AssetItem
   workspaceId: string
+  projectId: string
   imageParams: ImageParams
   onUpdate: (updated: Partial<AssetItem>) => void
   registerGenerate: (name: string, type: AssetItem['type'], fn: () => Promise<void>) => void
 }
 
-function ImageCard({ item, workspaceId, imageParams, onUpdate, registerGenerate }: ImageCardProps) {
+function ImageCard({ item, workspaceId, projectId, imageParams, onUpdate, registerGenerate }: ImageCardProps) {
   const [loading, setLoading] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [editedPrompt, setEditedPrompt] = useState(item.prompt)
@@ -81,7 +83,7 @@ function ImageCard({ item, workspaceId, imageParams, onUpdate, registerGenerate 
     try {
       const isCharacter = item.type === 'character'
       const aspectRatio = isCharacter ? '1:1' : '16:9'
-      const urls = await generateImages(promptOverride ?? editedPrompt, aspectRatio, workspaceId, imageParams)
+      const urls = await generateImages(promptOverride ?? editedPrompt, aspectRatio, workspaceId, imageParams, projectId)
       onUpdate({ urls, selectedUrl: urls[0] ?? null, prompt: promptOverride ?? editedPrompt })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '生成失败')
@@ -227,6 +229,7 @@ function ImageCard({ item, workspaceId, imageParams, onUpdate, registerGenerate 
 }
 
 interface Props {
+  projectId: string
   scriptData: Omit<ScriptResult, 'success'>
   style: string
   characterImages: Record<string, string>
@@ -236,7 +239,7 @@ interface Props {
   onComplete: () => void
 }
 
-export function StepCharacters({ scriptData, style, characterImages, sceneImages, onSelectCharacterImage, onSelectSceneImage, onComplete }: Props) {
+export function StepCharacters({ projectId, scriptData, style, characterImages, sceneImages, onSelectCharacterImage, onSelectSceneImage, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const [loadingPrompts, setLoadingPrompts] = useState(false)
@@ -449,6 +452,7 @@ export function StepCharacters({ scriptData, style, characterImages, sceneImages
                   key={item.name}
                   item={item}
                   workspaceId={workspaceId}
+                  projectId={projectId}
                   imageParams={imageParams}
                   onUpdate={(u) => updateItem(item.name, 'character', u)}
                   registerGenerate={registerGenerate}
@@ -467,6 +471,7 @@ export function StepCharacters({ scriptData, style, characterImages, sceneImages
                   key={item.name}
                   item={item}
                   workspaceId={workspaceId}
+                  projectId={projectId}
                   imageParams={imageParams}
                   onUpdate={(u) => updateItem(item.name, 'scene', u)}
                   registerGenerate={registerGenerate}

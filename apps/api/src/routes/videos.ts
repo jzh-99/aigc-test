@@ -149,6 +149,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           idempotency_key: { type: 'string', minLength: 1, maxLength: 128 },
           canvas_id: { type: 'string', format: 'uuid' },
           canvas_node_id: { type: 'string', maxLength: 128 },
+          video_studio_project_id: { type: 'string', format: 'uuid' },
           model: {
             type: 'string',
             enum: ['veo3.1-fast', 'veo3.1-components', 'seedance-1.5-pro', 'seedance-2.0', 'seedance-2.0-fast'],
@@ -176,6 +177,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       idempotency_key: idempotencyKey,
       canvas_id: canvasId,
       canvas_node_id: canvasNodeId,
+      video_studio_project_id: videoStudioProjectId,
       model = 'veo3.1-fast',
       images: rawImages,
       reference_images: rawReferenceImages,
@@ -475,6 +477,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
           status: 'processing',
           estimated_credits: VIDEO_CREDITS,
           ...(canvasId ? { canvas_id: canvasId, canvas_node_id: canvasNodeId ?? null } : {}),
+          ...(videoStudioProjectId ? { video_studio_project_id: videoStudioProjectId } : {}),
         })
         .returning('id')
         .executeTakeFirstOrThrow()

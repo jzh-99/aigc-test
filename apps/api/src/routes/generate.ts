@@ -112,12 +112,13 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
           params: { type: 'object', default: {} },
           canvas_id: { type: 'string', format: 'uuid' },
           canvas_node_id: { type: 'string', maxLength: 128 },
+          video_studio_project_id: { type: 'string', format: 'uuid' },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { idempotency_key, model, prompt, quantity = 1, params: rawParams = {}, workspace_id: workspaceId, canvas_id, canvas_node_id } = request.body
+    const { idempotency_key, model, prompt, quantity = 1, params: rawParams = {}, workspace_id: workspaceId, canvas_id, canvas_node_id, video_studio_project_id } = request.body as any
 
     // Sanitize params: whitelist keys, validate types
     const params = resolveProxyUrls(sanitizeParams(rawParams))
@@ -409,6 +410,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
             status: 'pending',
             estimated_credits: totalCost,
             ...(canvas_id ? { canvas_id, canvas_node_id: canvas_node_id ?? null } : {}),
+            ...(video_studio_project_id ? { video_studio_project_id } : {}),
           })
           .returningAll()
           .executeTakeFirstOrThrow()

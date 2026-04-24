@@ -38,6 +38,7 @@ async function generateVideo(params: {
   duration: number
   referenceImages: string[]
   workspaceId: string
+  projectId: string
 }): Promise<string> {
   const clampedDuration = Math.min(Math.max(Math.round(params.duration), 4), 15)
   const batch = await apiPost<BatchResponse>('/videos/generate', {
@@ -49,6 +50,7 @@ async function generateVideo(params: {
     duration: clampedDuration,
     generate_audio: false,
     ...(params.referenceImages.length > 0 ? { reference_images: params.referenceImages } : {}),
+    ...(params.projectId ? { video_studio_project_id: params.projectId } : {}),
   })
 
   for (let i = 0; i < 120; i++) {
@@ -70,12 +72,13 @@ interface ShotVideoCardProps {
   videoUrl: string | undefined
   aspectRatio: string
   workspaceId: string
+  projectId: string
   videoParams: VideoParams
   onVideoReady: (url: string) => void
   registerGenerate: (shotId: string, fn: () => Promise<void>) => void
 }
 
-function ShotVideoCard({ shot, referenceImages, videoUrl, aspectRatio, workspaceId, videoParams, onVideoReady, registerGenerate }: ShotVideoCardProps) {
+function ShotVideoCard({ shot, referenceImages, videoUrl, aspectRatio, workspaceId, projectId, videoParams, onVideoReady, registerGenerate }: ShotVideoCardProps) {
   const [loading, setLoading] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [showParams, setShowParams] = useState(false)
@@ -100,6 +103,7 @@ function ShotVideoCard({ shot, referenceImages, videoUrl, aspectRatio, workspace
         duration: videoParams.durationOverride ?? shot.duration,
         referenceImages,
         workspaceId,
+        projectId,
       })
       onVideoReady(url)
     } catch (err) {
@@ -107,7 +111,7 @@ function ShotVideoCard({ shot, referenceImages, videoUrl, aspectRatio, workspace
     } finally {
       setLoading(false)
     }
-  }, [shot, referenceImages, aspectRatio, workspaceId, videoParams, onVideoReady])
+  }, [shot, referenceImages, aspectRatio, workspaceId, projectId, videoParams, onVideoReady])
 
   const generateRef = useRef(generate)
   generateRef.current = generate
@@ -244,11 +248,12 @@ interface Props {
   describeData: DescribeData
   characterImages: Record<string, string>
   sceneImages: Record<string, string>
+  projectId: string
   onVideoReady: (shotId: string, url: string) => void
   onComplete: () => void
 }
 
-export function StepVideo({ shots, shotImages, shotVideos, describeData, characterImages, sceneImages, onVideoReady, onComplete }: Props) {
+export function StepVideo({ shots, shotImages, shotVideos, describeData, characterImages, sceneImages, projectId, onVideoReady, onComplete }: Props) {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const [showParams, setShowParams] = useState(false)
   const [videoParams, setVideoParams] = useState<VideoParams>(DEFAULT_VIDEO_PARAMS)
@@ -393,6 +398,7 @@ export function StepVideo({ shots, shotImages, shotVideos, describeData, charact
             videoUrl={shotVideos[shot.id]}
             aspectRatio={describeData.aspectRatio}
             workspaceId={workspaceId}
+            projectId={projectId}
             videoParams={videoParams}
             onVideoReady={(url) => onVideoReady(shot.id, url)}
             registerGenerate={registerGenerate}
