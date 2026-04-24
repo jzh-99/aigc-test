@@ -56,7 +56,8 @@ export interface AgentWorkflow {
 export type AgentInstruction =
   | { type: 'ask_upload'; assetTypes: AssetTypeHint[] }
   | { type: 'annotate_assets'; assets: UploadedFile[]; options: AnnotationOptions }
-  | { type: 'confirm_plan'; items: PlanItem[] }
+  | { type: 'confirm_plan'; summary: string; estimatedCredits: number; estimatedMinutes: number; items: PlanItem[] }
+  | { type: 'autorun'; message: string }
   | { type: 'confirm_storyboard'; items: StoryboardItem[] }
   | { type: 'apply_workflow'; workflow: AgentWorkflow }
   | { type: 'guide_step'; step: AgentStep }
@@ -69,6 +70,7 @@ export type AgentPhase =
   | 'waiting_llm'
   | 'waiting_user'
   | 'running'
+  | 'autorunning'
 
 export interface StepParams {
   modelType?: ImageModelType
@@ -142,6 +144,9 @@ function fillInstructionDefaults(raw: any): AgentInstruction | null {
     case 'confirm_plan':
       return {
         type: 'confirm_plan',
+        summary: raw.summary ?? '',
+        estimatedCredits: raw.estimatedCredits ?? 0,
+        estimatedMinutes: raw.estimatedMinutes ?? 0,
         items: (raw.items ?? []).map((item: any) => ({
           id: item.id ?? crypto.randomUUID(),
           label: item.label ?? '',
@@ -149,6 +154,8 @@ function fillInstructionDefaults(raw: any): AgentInstruction | null {
           selected: item.selected ?? true,
         })),
       }
+    case 'autorun':
+      return { type: 'autorun', message: raw.message ?? '' }
     case 'confirm_storyboard':
       return {
         type: 'confirm_storyboard',

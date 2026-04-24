@@ -24,6 +24,7 @@ import { avatarRoutes } from './routes/avatar.js'
 import { actionImitationRoutes } from './routes/action-imitation.js'
 import { canvasRoutes } from './routes/canvas.js'
 import { canvasAgentRoutes } from './routes/canvas-agent.js'
+import { videoStudioRoutes } from './routes/video-studio.js'
 import { companyARoutes } from './routes/company-a.js'
 import { clientErrorsRoutes } from './routes/client-errors.js'
 import { paymentRoutes } from './routes/payment.js'
@@ -111,6 +112,7 @@ export async function buildApp() {
       await v1.register(actionImitationRoutes)
       await v1.register(canvasRoutes)
       await v1.register(canvasAgentRoutes)
+      await v1.register(videoStudioRoutes)
       await v1.register(companyARoutes)
       await v1.register(clientErrorsRoutes)
       await v1.register(paymentRoutes)
