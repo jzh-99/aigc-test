@@ -146,7 +146,9 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           'actual_credits', 'created_at', 'user_id', 'workspace_id', 'is_deleted',
         ])
         .where('is_deleted', '=', false)
+        .where('is_hidden', '=', false)
         .where('canvas_id', 'is', null)
+        .where('video_studio_project_id', 'is', null)
         .orderBy('created_at', 'desc')
         .orderBy('id', 'desc')
         .limit(limit + 1) // fetch one extra to determine if there's a next page
@@ -292,6 +294,165 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
           thumbnail_urls: thumbnailMap.get(b.id) ?? [],
           error_message: errorMap.get(b.id) ?? null,
           user: userMap.get(b.user_id) ?? undefined,
+        })),
+        cursor: nextCursor,
+      })
+    },
+  )
+
+  // Helper: build the batch list query (shared by GET /batches and GET /batches/hidden)
+  function buildBatchListQuery(db: ReturnType<typeof getDb>, isHidden: boolean) {
+    return db
+      .selectFrom('task_batches')
+      .select([
+        'id', 'module', 'provider', 'model', 'prompt', 'params', 'quantity',
+        'completed_count', 'failed_count', 'status', 'estimated_credits',
+        'actual_credits', 'created_at', 'user_id', 'workspace_id',
+      ])
+      .where('is_deleted', '=', false)
+      .where('is_hidden', '=', isHidden)
+      .where('canvas_id', 'is', null)
+      .where('video_studio_project_id', 'is', null)
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+  }
+
+  // PATCH /batches/:id/hide — hide a batch from history
+  app.patch<{ Params: { id: string } }>('/batches/:id/hide', async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+    const userId = request.user.id
+
+    const batch = await db
+      .selectFrom('task_batches')
+      .select(['id', 'user_id', 'workspace_id'])
+      .where('id', '=', id)
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+
+    if (!batch) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '记录未找到' } })
+
+    if (batch.user_id !== userId && request.user.role !== 'admin') {
+      if (batch.workspace_id) {
+        const wsMember = await db.selectFrom('workspace_members').select('role')
+          .where('workspace_id', '=', batch.workspace_id).where('user_id', '=', userId).executeTakeFirst()
+        if (!wsMember) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Not authorized' } })
+      } else {
+        return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Not authorized' } })
+      }
+    }
+
+    await db.updateTable('task_batches').set({ is_hidden: true }).where('id', '=', id).execute()
+    return { success: true }
+  })
+
+  // PATCH /batches/:id/unhide — restore a hidden batch
+  app.patch<{ Params: { id: string } }>('/batches/:id/unhide', async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+    const userId = request.user.id
+
+    const batch = await db
+      .selectFrom('task_batches')
+      .select(['id', 'user_id', 'workspace_id'])
+      .where('id', '=', id)
+      .where('is_deleted', '=', false)
+      .where('is_hidden', '=', true)
+      .executeTakeFirst()
+
+    if (!batch) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '记录未找到' } })
+
+    if (batch.user_id !== userId && request.user.role !== 'admin') {
+      if (batch.workspace_id) {
+        const wsMember = await db.selectFrom('workspace_members').select('role')
+          .where('workspace_id', '=', batch.workspace_id).where('user_id', '=', userId).executeTakeFirst()
+        if (!wsMember) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Not authorized' } })
+      } else {
+        return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Not authorized' } })
+      }
+    }
+
+    await db.updateTable('task_batches').set({ is_hidden: false }).where('id', '=', id).execute()
+    return { success: true }
+  })
+
+  // GET /batches/hidden — list hidden batches (same pagination as GET /batches)
+  app.get<{ Querystring: { workspace_id?: string; cursor?: string; limit?: string } }>(
+    '/batches/hidden',
+    async (request, reply) => {
+      const db = getDb()
+      const userId = request.user.id
+      const limit = Math.min(parseInt(request.query.limit ?? '10', 10) || 10, 50)
+      const cursor = request.query.cursor
+
+      let decodedCursor: { created_at: string; id: string } | null = null
+      if (cursor) {
+        try {
+          decodedCursor = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'))
+        } catch {
+          return reply.badRequest('Invalid cursor')
+        }
+      }
+
+      let query = buildBatchListQuery(db, true).limit(limit + 1)
+
+      const workspaceId = request.query.workspace_id
+      if (workspaceId) {
+        if (request.user.role !== 'admin') {
+          const wsMember = await db.selectFrom('workspace_members').select('role')
+            .where('workspace_id', '=', workspaceId).where('user_id', '=', userId).executeTakeFirst()
+          if (!wsMember) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Not a member of this workspace' } })
+        }
+        query = query.where('workspace_id', '=', workspaceId)
+      } else {
+        if (request.user.role !== 'admin') query = query.where('user_id', '=', userId)
+      }
+
+      if (decodedCursor) {
+        query = query.where((eb: any) =>
+          eb.or([
+            eb('created_at', '<', decodedCursor!.created_at),
+            eb.and([eb('created_at', '=', decodedCursor!.created_at), eb('id', '<', decodedCursor!.id)]),
+          ]),
+        )
+      }
+
+      const rows = await query.execute()
+      const hasMore = rows.length > limit
+      const batches = hasMore ? rows.slice(0, limit) : rows
+
+      const batchIds = batches.map((b: any) => b.id)
+      const thumbnailMap = new Map<string, string[]>()
+      if (batchIds.length > 0) {
+        const assets = await db.selectFrom('assets').select(['batch_id', 'storage_url', 'original_url', 'type'])
+          .where('batch_id', 'in', batchIds).where('is_deleted', '=', false).execute()
+        const signed = await Promise.all(assets.map(async (a) => ({
+          batch_id: (a as any).batch_id,
+          url: (a as any).storage_url ? await signAssetUrl((a as any).storage_url) : ((a as any).original_url ?? null),
+          type: (a as any).type,
+        })))
+        for (const s of signed) {
+          if (!s.url) continue
+          const list = thumbnailMap.get(s.batch_id) ?? []
+          if (list.length < 4) { list.push(s.url); thumbnailMap.set(s.batch_id, list) }
+        }
+      }
+
+      const nextCursor = hasMore && batches.length > 0
+        ? Buffer.from(JSON.stringify({
+            created_at: batches[batches.length - 1].created_at.toISOString?.() ?? String(batches[batches.length - 1].created_at),
+            id: batches[batches.length - 1].id,
+          })).toString('base64')
+        : null
+
+      return reply.send({
+        data: batches.map((b: any) => ({
+          id: b.id, module: b.module, provider: b.provider, model: b.model,
+          prompt: b.prompt, params: b.params ?? {}, quantity: b.quantity,
+          completed_count: b.completed_count, failed_count: b.failed_count,
+          status: b.status, estimated_credits: b.estimated_credits, actual_credits: b.actual_credits,
+          created_at: b.created_at.toISOString?.() ?? String(b.created_at),
+          tasks: [], thumbnail_urls: thumbnailMap.get(b.id) ?? [],
         })),
         cursor: nextCursor,
       })

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check, Video, Play, X } from 'lucide-react'
+import { User, Loader2, RotateCcw, Check, Video, Play, X, EyeOff } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,7 @@ import { apiDelete } from '@/lib/api-client'
 interface BatchListCardProps {
   batch: BatchResponse & { thumbnail_urls?: string[] }
   onClick?: () => void
+  onHide?: (id: string) => void
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
@@ -26,11 +27,12 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
   failed: { label: '失败', variant: 'destructive' },
 }
 
-export function BatchListCard({ batch, onClick }: BatchListCardProps) {
+export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
   const router = useRouter()
   const applyBatch = useGenerationStore((s) => s.applyBatch)
   const [applied, setApplied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [hiding, setHiding] = useState(false)
   const status = statusConfig[batch.status] ?? statusConfig.pending
 
   const isCancellable =
@@ -48,6 +50,17 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
       // SSE will update status; ignore errors silently
     } finally {
       setCancelling(false)
+    }
+  }
+
+  async function handleHide(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (hiding) return
+    setHiding(true)
+    try {
+      onHide?.(batch.id)
+    } finally {
+      setHiding(false)
     }
   }
 
@@ -209,7 +222,7 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
           </>
         )}
 
-        {/* Reuse / Cancel buttons */}
+        {/* Reuse / Cancel / Hide buttons */}
         <div className="flex justify-end gap-1">
           {isCancellable && (
             <Button
@@ -233,6 +246,18 @@ export function BatchListCard({ batch, onClick }: BatchListCardProps) {
           >
             {applied ? <><Check className="h-3 w-3 mr-1" />已填入</> : <><RotateCcw className="h-3 w-3 mr-1" />复用</>}
           </Button>
+          {onHide && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={handleHide}
+              disabled={hiding}
+              title="隐藏"
+            >
+              {hiding ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

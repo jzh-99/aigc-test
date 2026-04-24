@@ -20,6 +20,7 @@ import {
   Dialog,
   DialogContent,
 } from '@/components/ui/dialog'
+import { AssetTrashDrawer } from '@/components/assets/asset-trash-drawer'
 
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'gemini-3.1-flash-image-preview':    '全能图片2 1K',
@@ -143,6 +144,7 @@ export default function AssetsPage() {
   const [videoDialogAsset, setVideoDialogAsset] = useState<AssetItem | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [reusingId, setReusingId] = useState<string | null>(null)
+  const [trashOpen, setTrashOpen] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const { showVideoTab } = useTeamFeatures()
 
@@ -224,6 +226,15 @@ export default function AssetsPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-xl font-semibold">资产库</h2>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs text-muted-foreground"
+            onClick={() => setTrashOpen(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            回收站
+          </Button>
           {/* Date filter */}
           <div className="relative flex items-center">
             <CalendarSearch className="absolute left-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -452,6 +463,12 @@ export default function AssetsPage() {
           </Dialog>
         )
       })()}
+
+      <AssetTrashDrawer
+        open={trashOpen}
+        onOpenChange={setTrashOpen}
+        onRestored={() => mutate()}
+      />
     </div>
   )
 }
