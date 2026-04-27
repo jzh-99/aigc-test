@@ -61,7 +61,8 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
   const [confirming, setConfirming] = useState(false)
 
-  const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt } = execState
+  const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt, submissionStatus } = execState
+  const isFailed = submissionStatus === 'failed'
   const isUpstream = useNodeHighlighted(id)
   const selectedOutput = outputs.find((o) => o.id === selectedOutputId)
   const currentImageUrl = selectedOutput?.url
@@ -100,6 +101,8 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
         'bg-white',
         isGenerating
           ? 'border-blue-400 shadow-blue-200 ring-1 ring-blue-400'
+          : isFailed
+          ? 'border-red-400 shadow-red-100 ring-1 ring-red-300'
           : isUpstream
           ? 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100'
           : 'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
@@ -170,9 +173,9 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
         <div className="bg-red-50 text-red-500 text-[11px] px-3 py-1.5 flex items-center justify-between gap-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <AlertCircle className="w-3 h-3 shrink-0" />
-            <span className="truncate">{errorMessage}</span>
+            <span className="truncate" title={errorMessage}>{errorMessage}</span>
           </div>
-          <span className="text-[10px] text-red-400 shrink-0 underline underline-offset-2 cursor-pointer">点击重试</span>
+          <span className="text-[10px] text-red-400 shrink-0 underline underline-offset-2 cursor-pointer">点击节点重试</span>
         </div>
       )}
 
