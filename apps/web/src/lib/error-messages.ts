@@ -60,7 +60,7 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /already exists|duplicate/i, message: '资源已存在' },
 
   // 服务器错误
-  { pattern: /internal server error|500/i, message: '服务器错误，请稍后重试' },
+  { pattern: /internal server error|500/i, message: '服务繁忙，请稍后重试' },
   { pattern: /service unavailable|503/i, message: '服务暂时不可用，请稍后重试' },
   { pattern: /bad gateway|502/i, message: '网关错误，请稍后重试' },
 
@@ -266,7 +266,7 @@ export function translateTaskError(errorMessage: string | null | undefined): str
     // 根据状态码返回通用提示
     if (statusCode === '422') return '生成失败，请尝试修改提示词'
     if (statusCode === '429') return '请求过于频繁'
-    if (statusCode === '500') return '服务器错误'
+    if (statusCode === '500') return '服务繁忙，请稍后重试'
     if (statusCode === '503') return '服务暂时不可用'
   }
 
