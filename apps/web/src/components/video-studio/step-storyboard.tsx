@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Loader2, Plus, Trash2, ArrowRight, RefreshCw, User, MapPin, MessageSquare } from 'lucide-react'
+import { Loader2, Plus, Trash2, ArrowRight, RefreshCw, User, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { splitStoryboard } from '@/lib/video-studio-api'
@@ -13,19 +13,41 @@ interface Props {
   script: string
   characters?: Array<{ name: string; description: string }>
   scenes?: Array<{ name: string; description: string }>
+  characterImages?: Record<string, string>
+  sceneImages?: Record<string, string>
   initial?: Shot[]
   onComplete: (shots: Shot[]) => void
 }
 
-export function StepStoryboard({ describeData, script, characters, scenes, initial, onComplete }: Props) {
+export function StepStoryboard({ describeData, script, characters, scenes, characterImages, sceneImages, initial, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [loading, setLoading] = useState(false)
   const [shots, setShots] = useState<Shot[]>(initial ?? [])
   const [shotCount, setShotCount] = useState(() => Math.ceil(describeData.duration / 10))
 
+  // Build referenceMap: 图1=角色名, 图2=场景名, etc. — only for items that have generated images
+  const buildReferenceMap = useCallback((): Record<string, string> => {
+    const map: Record<string, string> = {}
+    let idx = 1
+    for (const c of (characters ?? [])) {
+      if (characterImages?.[c.name]) {
+        map[`图${idx}`] = c.name
+        idx++
+      }
+    }
+    for (const s of (scenes ?? [])) {
+      if (sceneImages?.[s.name]) {
+        map[`图${idx}`] = s.name
+        idx++
+      }
+    }
+    return map
+  }, [characters, scenes, characterImages, sceneImages])
+
   const generate = useCallback(async () => {
     setLoading(true)
     try {
+      const referenceMap = buildReferenceMap()
       const res = await splitStoryboard({
         script,
         shotCount,
@@ -33,6 +55,7 @@ export function StepStoryboard({ describeData, script, characters, scenes, initi
         style: describeData.style,
         characters,
         scenes,
+        ...(Object.keys(referenceMap).length > 0 ? { referenceMap } : {}),
       }, token ?? undefined)
       setShots(res.shots)
     } catch (err) {
@@ -40,14 +63,10 @@ export function StepStoryboard({ describeData, script, characters, scenes, initi
     } finally {
       setLoading(false)
     }
-  }, [script, shotCount, describeData.aspectRatio, describeData.style, characters, scenes, token])
+  }, [script, shotCount, describeData.aspectRatio, describeData.style, characters, scenes, buildReferenceMap, token])
 
   const updateContent = (id: string, content: string) => {
     setShots((prev) => prev.map((s) => s.id === id ? { ...s, content } : s))
-  }
-
-  const updateDialogue = (id: string, dialogue: string) => {
-    setShots((prev) => prev.map((s) => s.id === id ? { ...s, dialogue } : s))
   }
 
   const removeShot = (id: string) => {
@@ -56,7 +75,7 @@ export function StepStoryboard({ describeData, script, characters, scenes, initi
 
   const addShot = () => {
     const newId = `shot_${Date.now()}`
-    setShots((prev) => [...prev, { id: newId, label: `镜头${prev.length + 1}`, content: '', dialogue: '', cameraMove: '固定镜头', duration: 5 }])
+    setShots((prev) => [...prev, { id: newId, label: `镜头${prev.length + 1}`, content: '', cameraMove: '固定镜头', duration: 5 }])
   }
 
   return (
@@ -172,20 +191,6 @@ export function StepStoryboard({ describeData, script, characters, scenes, initi
                     placeholder="镜头内容描述…"
                   />
                 </div>
-
-                {(shot.dialogue !== undefined) && (
-                  <div>
-                    <label className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1">
-                      <MessageSquare className="w-2.5 h-2.5" />台词
-                    </label>
-                    <textarea
-                      className="w-full text-xs bg-muted/50 rounded-lg p-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
-                      value={shot.dialogue}
-                      onChange={(e) => updateDialogue(shot.id, e.target.value)}
-                      placeholder="无台词"
-                    />
-                  </div>
-                )}
               </div>
             ))}
           </div>
