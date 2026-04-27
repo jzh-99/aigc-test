@@ -13,41 +13,19 @@ interface Props {
   script: string
   characters?: Array<{ name: string; description: string }>
   scenes?: Array<{ name: string; description: string }>
-  characterImages?: Record<string, string>
-  sceneImages?: Record<string, string>
   initial?: Shot[]
   onComplete: (shots: Shot[]) => void
 }
 
-export function StepStoryboard({ describeData, script, characters, scenes, characterImages, sceneImages, initial, onComplete }: Props) {
+export function StepStoryboard({ describeData, script, characters, scenes, initial, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [loading, setLoading] = useState(false)
   const [shots, setShots] = useState<Shot[]>(initial ?? [])
   const [shotCount, setShotCount] = useState(() => Math.ceil(describeData.duration / 10))
 
-  // Build referenceMap: 图1=角色名, 图2=场景名, etc. — only for items that have generated images
-  const buildReferenceMap = useCallback((): Record<string, string> => {
-    const map: Record<string, string> = {}
-    let idx = 1
-    for (const c of (characters ?? [])) {
-      if (characterImages?.[c.name]) {
-        map[`图${idx}`] = c.name
-        idx++
-      }
-    }
-    for (const s of (scenes ?? [])) {
-      if (sceneImages?.[s.name]) {
-        map[`图${idx}`] = s.name
-        idx++
-      }
-    }
-    return map
-  }, [characters, scenes, characterImages, sceneImages])
-
   const generate = useCallback(async () => {
     setLoading(true)
     try {
-      const referenceMap = buildReferenceMap()
       const res = await splitStoryboard({
         script,
         shotCount,
@@ -55,7 +33,6 @@ export function StepStoryboard({ describeData, script, characters, scenes, chara
         style: describeData.style,
         characters,
         scenes,
-        ...(Object.keys(referenceMap).length > 0 ? { referenceMap } : {}),
       }, token ?? undefined)
       setShots(res.shots)
     } catch (err) {
@@ -63,7 +40,7 @@ export function StepStoryboard({ describeData, script, characters, scenes, chara
     } finally {
       setLoading(false)
     }
-  }, [script, shotCount, describeData.aspectRatio, describeData.style, characters, scenes, buildReferenceMap, token])
+  }, [script, shotCount, describeData.aspectRatio, describeData.style, characters, scenes, token])
 
   const updateContent = (id: string, content: string) => {
     setShots((prev) => prev.map((s) => s.id === id ? { ...s, content } : s))

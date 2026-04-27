@@ -216,6 +216,7 @@ function WizardContent() {
             describeData={wizard.describeData}
             initial={wizard.scriptData}
             scriptHistory={wizard.scriptHistory ?? []}
+            onGenerated={wizard.setScriptData}
             onComplete={(data) => {
               wizard.setScriptData(data)
               wizard.completeStep('script')
@@ -229,8 +230,6 @@ function WizardContent() {
             script={wizard.scriptData.script}
             characters={wizard.scriptData.characters}
             scenes={wizard.scriptData.scenes}
-            characterImages={wizard.characterImages}
-            sceneImages={wizard.sceneImages}
             initial={wizard.shots.length > 0 ? wizard.shots : undefined}
             onComplete={(shots) => {
               wizard.setShots(shots)
