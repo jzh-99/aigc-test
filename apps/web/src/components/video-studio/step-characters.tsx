@@ -40,6 +40,7 @@ interface AssetItem {
 }
 
 async function generateImages(prompt: string, aspectRatio: string, workspaceId: string, params: ImageParams, projectId: string): Promise<string[]> {
+  if (!workspaceId) throw new Error('未选择工作区')
   const batch = await apiPost<BatchResponse>('/generate/image', {
     idempotency_key: `vs_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     workspace_id: workspaceId,
@@ -47,7 +48,7 @@ async function generateImages(prompt: string, aspectRatio: string, workspaceId: 
     model: params.model,
     prompt,
     params: { aspect_ratio: aspectRatio, resolution: params.resolution },
-    video_studio_project_id: projectId,
+    ...(projectId ? { video_studio_project_id: projectId } : {}),
   })
 
   for (let i = 0; i < 60; i++) {
@@ -69,7 +70,7 @@ interface ImageCardProps {
   projectId: string
   imageParams: ImageParams
   onUpdate: (updated: Partial<AssetItem>) => void
-  registerGenerate: (name: string, type: AssetItem['type'], fn: () => Promise<void>) => void
+  registerGenerate: (name: string, type: AssetItem['type'], fn: () => Promise<boolean>) => void
 }
 
 function ImageCard({ item, workspaceId, projectId, imageParams, onUpdate, registerGenerate }: ImageCardProps) {
@@ -78,19 +79,21 @@ function ImageCard({ item, workspaceId, projectId, imageParams, onUpdate, regist
   const [editedPrompt, setEditedPrompt] = useState(item.prompt)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
-  const generate = useCallback(async (promptOverride?: string) => {
+  const generate = useCallback(async (promptOverride?: string): Promise<boolean> => {
     setLoading(true)
     try {
       const isCharacter = item.type === 'character'
       const aspectRatio = isCharacter ? '1:1' : '16:9'
       const urls = await generateImages(promptOverride ?? editedPrompt, aspectRatio, workspaceId, imageParams, projectId)
       onUpdate({ urls, selectedUrl: urls[0] ?? null, prompt: promptOverride ?? editedPrompt })
+      return true
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '生成失败')
+      toast.error(`${item.name}：${err instanceof Error ? err.message : '生成失败'}`)
+      return false
     } finally {
       setLoading(false)
     }
-  }, [editedPrompt, item.type, workspaceId, imageParams, onUpdate])
+  }, [editedPrompt, item.type, item.name, workspaceId, imageParams, projectId, onUpdate])
 
   const generateRef = useRef(generate)
   generateRef.current = generate
@@ -267,8 +270,8 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
   ])
 
   // Registry for batch generation — each card registers its own generate fn
-  const generateFnsRef = useRef<Record<string, () => Promise<void>>>({})
-  const registerGenerate = useCallback((name: string, type: AssetItem['type'], fn: () => Promise<void>) => {
+  const generateFnsRef = useRef<Record<string, () => Promise<boolean>>>({})
+  const registerGenerate = useCallback((name: string, type: AssetItem['type'], fn: () => Promise<boolean>) => {
     generateFnsRef.current[`${type}:${name}`] = fn
   }, [])
 
@@ -307,7 +310,7 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
       .filter(Boolean)
     const results = await Promise.allSettled(fns.map((fn) => fn()))
     setBatchRunning(false)
-    const successCount = results.filter((r) => r.status === 'fulfilled').length
+    const successCount = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
     if (successCount > 0) toast.success(`批量生成完成，${successCount}/${fns.length} 成功`)
   }, [items])
 
