@@ -36,7 +36,11 @@ export interface WizardState {
   statuses: Record<WizardStepId, StepStatus>
   activeStep: WizardStepId
   describeData: DescribeData | null
+  // unsaved draft for describe step (survives step switching without clicking 下一步)
+  draftDescribeData: DescribeData | null
   scriptData: (Omit<ScriptResult, 'success'>) | null
+  // history of all generated scripts, newest last
+  scriptHistory: (Omit<ScriptResult, 'success'>)[]
   shots: Shot[]
   shotImages: Record<string, string>
   // selected URL per character/scene name
@@ -57,7 +61,9 @@ function defaultState(): WizardState {
     statuses: initialStatuses(),
     activeStep: 'describe',
     describeData: null,
+    draftDescribeData: null,
     scriptData: null,
+    scriptHistory: [],
     shots: [],
     shotImages: {},
     characterImages: {},
@@ -183,11 +189,24 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
   }, [syncNow])
 
   const setDescribeData = useCallback((data: DescribeData) => {
-    setState((s) => ({ ...s, describeData: data }))
+    setState((s) => ({ ...s, describeData: data, draftDescribeData: data }))
+  }, [])
+
+  const setDraftDescribeData = useCallback((data: DescribeData) => {
+    setState((s) => ({ ...s, draftDescribeData: data }))
   }, [])
 
   const setScriptData = useCallback((data: Omit<ScriptResult, 'success'>) => {
-    setState((s) => ({ ...s, scriptData: data }))
+    setState((s) => {
+      const history = s.scriptHistory ?? []
+      // avoid duplicate if same title+script
+      const alreadyIn = history.length > 0 && history[history.length - 1].script === data.script
+      return {
+        ...s,
+        scriptData: data,
+        scriptHistory: alreadyIn ? history : [...history, data],
+      }
+    })
   }, [])
 
   const setShots = useCallback((shots: Shot[]) => {
@@ -239,6 +258,7 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
     setActiveStep,
     completeStep,
     setDescribeData,
+    setDraftDescribeData,
     setScriptData,
     setShots,
     setShotImage,

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Loader2, RefreshCw, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, RefreshCw, ArrowRight, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { writeScript } from '@/lib/video-studio-api'
@@ -11,16 +11,19 @@ import type { ScriptResult } from '@/lib/video-studio-api'
 interface Props {
   describeData: DescribeData
   initial?: Omit<ScriptResult, 'success'> | null
+  scriptHistory?: Omit<ScriptResult, 'success'>[]
   onComplete: (data: Omit<ScriptResult, 'success'>) => void
 }
 
-export function StepScript({ describeData, initial, onComplete }: Props) {
+export function StepScript({ describeData, initial, scriptHistory = [], onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [loading, setLoading] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [showFeedback, setShowFeedback] = useState(false)
   const [result, setResult] = useState<Omit<ScriptResult, 'success'> | null>(initial ?? null)
   const [editedScript, setEditedScript] = useState(initial?.script ?? '')
+  // index into scriptHistory; -1 means the latest freshly generated result
+  const [historyIndex, setHistoryIndex] = useState<number>(scriptHistory.length > 0 ? scriptHistory.length - 1 : -1)
 
   const generate = useCallback(async (fb?: string) => {
     setLoading(true)
@@ -35,6 +38,7 @@ export function StepScript({ describeData, initial, onComplete }: Props) {
       setEditedScript(res.script)
       setFeedback('')
       setShowFeedback(false)
+      setHistoryIndex(-1)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '生成失败')
     } finally {
@@ -45,6 +49,33 @@ export function StepScript({ describeData, initial, onComplete }: Props) {
   const handleConfirm = () => {
     if (!result) return
     onComplete({ ...result, script: editedScript })
+  }
+
+  const loadHistoryVersion = (idx: number) => {
+    const entry = scriptHistory[idx]
+    if (!entry) return
+    setResult(entry)
+    setEditedScript(entry.script)
+    setHistoryIndex(idx)
+  }
+
+  const hasFreshResult = result && historyIndex === -1
+  const totalVersions = scriptHistory.length + (hasFreshResult ? 1 : 0)
+  const displayIndex = historyIndex === -1 ? totalVersions : historyIndex + 1
+  const canGoPrev = totalVersions > 1 && displayIndex > 1
+  const canGoNext = totalVersions > 1 && displayIndex < totalVersions
+
+  const goPrev = () => {
+    const prevIdx = historyIndex === -1 ? scriptHistory.length - 1 : historyIndex - 1
+    if (prevIdx >= 0) loadHistoryVersion(prevIdx)
+  }
+
+  const goNext = () => {
+    if (historyIndex === -1) return
+    const nextIdx = historyIndex + 1
+    if (nextIdx < scriptHistory.length) {
+      loadHistoryVersion(nextIdx)
+    }
   }
 
   return (
@@ -72,6 +103,30 @@ export function StepScript({ describeData, initial, onComplete }: Props) {
           </button>
         ) : (
           <div className="space-y-3">
+            {totalVersions > 1 && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground border rounded-lg px-3 py-2">
+                <span>版本 {displayIndex} / {totalVersions}</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={goPrev}
+                    disabled={!canGoPrev}
+                    className="p-0.5 hover:text-foreground disabled:opacity-30 transition-colors"
+                    title="上一版本"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={goNext}
+                    disabled={!canGoNext}
+                    className="p-0.5 hover:text-foreground disabled:opacity-30 transition-colors"
+                    title="下一版本"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={() => setShowFeedback(!showFeedback)}
               className="w-full flex items-center justify-between text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
