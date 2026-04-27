@@ -9,6 +9,7 @@ import type { ScriptResult } from '@/lib/video-studio-api'
 import { apiPost, apiGet } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
+import { MODEL_CODE_MAP } from '@/components/canvas/panels/panel-constants'
 
 type ImageModel = 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
 type ImageResolution = '1k' | '2k' | '3k' | '4k'
@@ -28,7 +29,7 @@ const IMAGE_MODEL_OPTIONS: Array<{ value: ImageModel; label: string; resolutions
   { value: 'gpt-image-2',       label: '超能图片2',     resolutions: ['2k'] },
 ]
 
-const DEFAULT_IMAGE_PARAMS: ImageParams = { model: 'seedream-5.0-lite', resolution: '2k', quantity: 1 }
+const DEFAULT_IMAGE_PARAMS: ImageParams = { model: 'gemini', resolution: '2k', quantity: 1 }
 
 interface AssetItem {
   name: string
@@ -41,11 +42,12 @@ interface AssetItem {
 
 async function generateImages(prompt: string, aspectRatio: string, workspaceId: string, params: ImageParams, projectId: string): Promise<string[]> {
   if (!workspaceId) throw new Error('未选择工作区')
+  const modelCode = MODEL_CODE_MAP[params.model as keyof typeof MODEL_CODE_MAP]?.[params.resolution as keyof (typeof MODEL_CODE_MAP)[keyof typeof MODEL_CODE_MAP]] ?? params.model
   const batch = await apiPost<BatchResponse>('/generate/image', {
     idempotency_key: `vs_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     workspace_id: workspaceId,
     quantity: params.quantity,
-    model: params.model,
+    model: modelCode,
     prompt,
     params: { aspect_ratio: aspectRatio, resolution: params.resolution },
     ...(projectId ? { video_studio_project_id: projectId } : {}),
