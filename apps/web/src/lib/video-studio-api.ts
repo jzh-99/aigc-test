@@ -31,11 +31,11 @@ export interface Shot {
   id: string
   label: string
   content: string
-  dialogue?: string
   characters?: string[]
   scene?: string
   cameraMove: string
   duration: number
+  visualPrompt?: string
 }
 
 export interface StoryboardResult {
@@ -75,6 +75,7 @@ export function splitStoryboard(params: {
   style?: string
   characters?: Array<{ name: string; description: string }>
   scenes?: Array<{ name: string; description: string }>
+  referenceMap?: Record<string, string>
 }, token?: string) {
   return post<StoryboardResult>('/storyboard-split', params, token)
 }

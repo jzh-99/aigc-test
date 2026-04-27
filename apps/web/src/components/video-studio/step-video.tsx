@@ -84,20 +84,20 @@ function ShotVideoCard({ shot, referenceImages, videoUrl, aspectRatio, workspace
   const [showParams, setShowParams] = useState(false)
 
   const buildPrompt = useCallback(() => {
+    if (shot.visualPrompt) return shot.visualPrompt
     const parts = [shot.content]
-    if (shot.cameraMove) parts.push(`Camera: ${shot.cameraMove}`)
-    if (shot.dialogue) parts.push(`Dialogue: ${shot.dialogue}`)
-    return parts.join('. ')
+    if (shot.cameraMove) parts.push(`运镜：${shot.cameraMove}`)
+    return parts.join('。')
   }, [shot])
 
   const generate = useCallback(async () => {
     setLoading(true)
     try {
-      const parts = [shot.content]
-      if (shot.cameraMove) parts.push(`Camera: ${shot.cameraMove}`)
-      if (shot.dialogue) parts.push(`Dialogue: ${shot.dialogue}`)
+      const prompt = shot.visualPrompt
+        ? shot.visualPrompt
+        : [shot.content, shot.cameraMove ? `运镜：${shot.cameraMove}` : ''].filter(Boolean).join('。')
       const url = await generateVideo({
-        prompt: parts.join('. '),
+        prompt,
         model: videoParams.model,
         aspectRatio,
         duration: videoParams.durationOverride ?? shot.duration,
@@ -197,12 +197,6 @@ function ShotVideoCard({ shot, referenceImages, videoUrl, aspectRatio, workspace
             <div><span className="font-medium text-foreground">运镜</span>　{shot.cameraMove || '—'}</div>
             <div><span className="font-medium text-foreground">模型</span>　seedance-2.0</div>
           </div>
-          {shot.dialogue && (
-            <div>
-              <p className="font-medium text-foreground mb-0.5">台词</p>
-              <p className="text-muted-foreground leading-relaxed bg-background rounded p-2">{shot.dialogue}</p>
-            </div>
-          )}
           {shot.characters && shot.characters.length > 0 && (
             <div>
               <p className="font-medium text-foreground mb-0.5">出场角色</p>

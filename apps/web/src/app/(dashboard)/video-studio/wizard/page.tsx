@@ -111,6 +111,8 @@ function WizardContent() {
             script={wizard.scriptData.script}
             characters={wizard.scriptData.characters}
             scenes={wizard.scriptData.scenes}
+            characterImages={wizard.characterImages}
+            sceneImages={wizard.sceneImages}
             initial={wizard.shots.length > 0 ? wizard.shots : undefined}
             onComplete={(shots) => {
               wizard.setShots(shots)
