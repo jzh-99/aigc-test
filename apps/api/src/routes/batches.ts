@@ -106,7 +106,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
                 id: asset.id,
                 type: asset.type,
                 original_url: await signAssetUrl(asset.original_url),
-                storage_url: asset.storage_url,
+                storage_url: await signAssetUrl(asset.storage_url),
                 transfer_status: asset.transfer_status,
                 file_size: asset.file_size,
                 width: asset.width,
