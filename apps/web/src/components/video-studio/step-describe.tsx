@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowRight } from 'lucide-react'
 import type { DescribeData } from '@/hooks/video-studio/use-wizard-state'
 
@@ -9,10 +9,13 @@ const RATIO_OPTIONS = [{ value: '16:9', label: '16:9 横屏' }, { value: '9:16',
 
 interface Props {
   initial?: DescribeData | null
+  projectType?: 'single' | 'series'
+  episodeCount?: number
   onComplete: (data: DescribeData) => void
+  onDraftChange?: (data: DescribeData) => void
 }
 
-export function StepDescribe({ initial, onComplete }: Props) {
+export function StepDescribe({ initial, projectType = 'single', episodeCount = 1, onComplete, onDraftChange }: Props) {
   const [description, setDescription] = useState(initial?.description ?? '')
   const [duration, setDuration] = useState(initial?.duration ?? 60)
   const [aspectRatio, setAspectRatio] = useState(initial?.aspectRatio ?? '16:9')
@@ -26,12 +29,25 @@ export function StepDescribe({ initial, onComplete }: Props) {
   const style = selectedPreset === '自定义' ? customStyle : selectedPreset
   const canProceed = description.trim().length > 0 && style.trim().length > 0
 
+  // Sync draft to parent on every change so switching steps doesn't lose edits
+  useEffect(() => {
+    if (!onDraftChange) return
+    onDraftChange({ description, style, duration, aspectRatio })
+  }, [description, style, duration, aspectRatio, onDraftChange])
+
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <div>
         <h2 className="text-xl font-bold">描述你的视频</h2>
         <p className="text-sm text-muted-foreground mt-1">告诉 AI 你想要什么，越详细越好</p>
       </div>
+
+      {projectType === 'series' && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-primary/8 border border-primary/20 rounded-lg text-xs text-primary">
+          <span>📺</span>
+          <span>系列剧集 · 共 {episodeCount} 集 — 此处描述整个系列的世界观和主线故事</span>
+        </div>
+      )}
 
       <div className="space-y-4 p-5 border rounded-xl bg-card">
         <div>

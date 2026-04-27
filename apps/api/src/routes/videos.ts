@@ -9,6 +9,7 @@ import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 import { VIDEO_CREDITS_MAP } from '../lib/credits.js'
 import { encryptProxyUrl } from '../lib/storage.js'
+import { runConcatExport, type ConcatJobStore } from '../services/concat-export.js'
 
 // ── Temp upload config ────────────────────────────────────────────────────────
 const UPLOAD_DIR = '/tmp/video-uploads'
@@ -16,6 +17,9 @@ const MAX_FILE_AGE_MS = 60 * 60 * 1000 // 60 minutes
 const MAX_IMAGE_SIZE = 30 * 1024 * 1024  // 30 MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024  // 50 MB
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024  // 15 MB
+
+// In-memory job store for concat-export jobs (hot path); DB is the durable fallback
+const concatJobStore: ConcatJobStore = new Map()
 
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff', 'gif']
 const VIDEO_EXTS = ['mp4', 'mov', 'webm']
@@ -863,5 +867,58 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     } catch { /* ignore SSE errors */ }
 
     return reply.send({ success: true })
+  })
+
+  // ── Concat export ─────────────────────────────────────────────────────────────
+
+  app.post('/videos/concat-export', async (request, reply) => {
+    const userId = (request as any).userId as string
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' })
+
+    const { segments, projectName } = request.body as {
+      segments: Array<{ url: string; inPoint: number; outPoint: number }>
+      projectName?: string
+    }
+    if (!Array.isArray(segments) || segments.length === 0) {
+      return reply.status(400).send({ error: 'segments required' })
+    }
+
+    const jobId = randomUUID()
+    const db = getDb()
+
+    await db.insertInto('concat_jobs' as any).values({
+      id: jobId,
+      status: 'processing',
+      created_at: new Date(),
+      updated_at: new Date(),
+    }).execute()
+
+    concatJobStore.set(jobId, { status: 'processing' })
+
+    // fire-and-forget
+    runConcatExport(jobId, segments, projectName ?? 'export', concatJobStore, db).catch((err) => {
+      app.log.error({ err, jobId }, 'concat-export failed')
+    })
+
+    return reply.status(202).send({ jobId })
+  })
+
+  app.get('/videos/concat-export/:jobId', async (request, reply) => {
+    const userId = (request as any).userId as string
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' })
+
+    const { jobId } = request.params as { jobId: string }
+
+    const mem = concatJobStore.get(jobId)
+    if (mem) return reply.send(mem)
+
+    const db = getDb()
+    const row = await db.selectFrom('concat_jobs' as any)
+      .selectAll()
+      .where('id', '=', jobId)
+      .executeTakeFirst()
+
+    if (!row) return reply.status(404).send({ error: 'not found' })
+    return reply.send({ status: (row as any).status, resultUrl: (row as any).result_url, error: (row as any).error })
   })
 }
