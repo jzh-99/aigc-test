@@ -125,8 +125,8 @@ function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio,
     for (const [name, label] of Object.entries(labelMap)) {
       base = base.replaceAll(`[${name}]`, label)
     }
-    // fallback only: if no visualPrompt, append cameraMove separately
     if (!shot.visualPrompt && shot.cameraMove) base += `。运镜：${shot.cameraMove}。`
+    if (!base.includes('不要有字幕')) base += '视频需要有台词和音效，不要有字幕和bgm。'
     return base
   }, [shot, labelMap])
 
@@ -139,6 +139,7 @@ function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio,
         base = base.replaceAll(`[${name}]`, label)
       }
       if (!shot.visualPrompt && shot.cameraMove) base += `。运镜：${shot.cameraMove}。`
+      if (!base.includes('不要有字幕')) base += '视频需要有台词和音效，不要有字幕和bgm。'
       const url = await generateVideo({
         prompt: base,
         model: videoParams.model,
