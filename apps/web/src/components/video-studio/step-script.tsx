@@ -12,10 +12,11 @@ interface Props {
   describeData: DescribeData
   initial?: Omit<ScriptResult, 'success'> | null
   scriptHistory?: Omit<ScriptResult, 'success'>[]
+  onGenerated?: (data: Omit<ScriptResult, 'success'>) => void
   onComplete: (data: Omit<ScriptResult, 'success'>) => void
 }
 
-export function StepScript({ describeData, initial, scriptHistory = [], onComplete }: Props) {
+export function StepScript({ describeData, initial, scriptHistory = [], onGenerated, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [loading, setLoading] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -39,12 +40,14 @@ export function StepScript({ describeData, initial, scriptHistory = [], onComple
       setFeedback('')
       setShowFeedback(false)
       setHistoryIndex(-1)
+      // Persist immediately so switching steps doesn't lose the generated result
+      onGenerated?.(res)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '生成失败')
     } finally {
       setLoading(false)
     }
-  }, [describeData, token])
+  }, [describeData, token, onGenerated])
 
   const handleConfirm = () => {
     if (!result) return
@@ -59,22 +62,27 @@ export function StepScript({ describeData, initial, scriptHistory = [], onComple
     setHistoryIndex(idx)
   }
 
-  const hasFreshResult = result && historyIndex === -1
+  const hasFreshResult = result != null && (scriptHistory.length === 0 || scriptHistory[scriptHistory.length - 1]?.script !== result.script)
   const totalVersions = scriptHistory.length + (hasFreshResult ? 1 : 0)
-  const displayIndex = historyIndex === -1 ? totalVersions : historyIndex + 1
-  const canGoPrev = totalVersions > 1 && displayIndex > 1
-  const canGoNext = totalVersions > 1 && displayIndex < totalVersions
+  // if result is already in history, point to its index; otherwise it's the last (fresh) one
+  const effectiveIndex = hasFreshResult ? totalVersions - 1 : historyIndex
+  const displayIndex = effectiveIndex + 1
+  const canGoPrev = totalVersions > 1 && effectiveIndex > 0
+  const canGoNext = totalVersions > 1 && effectiveIndex < totalVersions - 1
 
   const goPrev = () => {
-    const prevIdx = historyIndex === -1 ? scriptHistory.length - 1 : historyIndex - 1
+    const prevIdx = effectiveIndex - 1
     if (prevIdx >= 0) loadHistoryVersion(prevIdx)
   }
 
   const goNext = () => {
-    if (historyIndex === -1) return
-    const nextIdx = historyIndex + 1
+    const nextIdx = effectiveIndex + 1
     if (nextIdx < scriptHistory.length) {
       loadHistoryVersion(nextIdx)
+    } else if (hasFreshResult === false && initial) {
+      setResult(initial)
+      setEditedScript(initial.script)
+      setHistoryIndex(-1)
     }
   }
 

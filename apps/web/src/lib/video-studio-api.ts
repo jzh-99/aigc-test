@@ -75,7 +75,6 @@ export function splitStoryboard(params: {
   style?: string
   characters?: Array<{ name: string; description: string }>
   scenes?: Array<{ name: string; description: string }>
-  referenceMap?: Record<string, string>
 }, token?: string) {
   return post<StoryboardResult>('/storyboard-split', params, token)
 }
