@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback, KeyboardEvent, MutableRefObject, ClipboardEvent } from 'react'
-import { X, Send, Sparkles, AtSign, LayoutGrid, RefreshCw, Download, ArrowRight } from 'lucide-react'
+import { X, Send, Sparkles, AtSign, RefreshCw, Download, ArrowRight } from 'lucide-react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasAgent } from '@/hooks/canvas/use-canvas-agent'
 import type { AgentMessage, AgentInstruction } from '@/lib/canvas/agent-types'
@@ -19,8 +19,6 @@ interface Props {
   onNodeSelectedRef?: MutableRefObject<((nodeId: string) => boolean) | null>
   onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
   hidden?: boolean
-  fullWidth?: boolean  // chat mode: panel takes full width
-  onViewCanvas?: () => void  // chat mode: switch to canvas view
 }
 
 // ── Instruction renderer ─────────────────────────────────────────────────────
@@ -240,7 +238,7 @@ function ResultBubble({
 
 // ── Main panel ───────────────────────────────────────────────────────────────
 
-export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRef, onStoryboardExpandedRef, hidden, fullWidth, onViewCanvas }: Props) {
+export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRef, onStoryboardExpandedRef, hidden }: Props) {
   const {
     phase,
     messages,
@@ -407,7 +405,7 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
   }
 
   return (
-    <div data-agent-panel className={`flex flex-col h-full border-l border-border bg-background shrink-0${fullWidth ? ' w-full border-l-0' : ' w-[360px]'}${hidden ? ' hidden' : ''}`}>
+    <div data-agent-panel className={`flex flex-col h-full border-l border-border bg-background shrink-0 w-[360px]${hidden ? ' hidden' : ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b shrink-0">
         <div className="flex items-center gap-2">
@@ -415,26 +413,15 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
           <span className="text-sm font-semibold">画布助手</span>
         </div>
         <div className="flex items-center gap-2">
-          {fullWidth && (
-            <button
-              onClick={onViewCanvas}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg px-2.5 py-1 hover:bg-muted transition-colors"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              查看画布
-            </button>
-          )}
           <button
             onClick={reset}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-0.5 rounded hover:bg-muted"
           >
             清空
           </button>
-          {!fullWidth && (
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded">
-              <X className="w-4 h-4" />
-            </button>
-          )}
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
