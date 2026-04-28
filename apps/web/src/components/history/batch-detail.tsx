@@ -101,31 +101,18 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
     onClose()
   }
 
-  async function handleSendToReference(url: string) {
+  async function handleSendToReference(url: string, showSuccess = true) {
     if (referenceCount >= 10) {
       toast.error('最多添加 10 张参考图')
       return
     }
     setSendingUrl(url)
     try {
-      const resp = await fetch(url)
-      if (!resp.ok) throw new Error('fetch failed')
-      const blob = await resp.blob()
-      const ext = blob.type.split('/')[1] || 'jpg'
-      const file = new File([blob], `reference.${ext}`, { type: blob.type })
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
       addReferenceImage({
         id: crypto.randomUUID(),
-        file,
-        previewUrl: URL.createObjectURL(blob),
-        dataUrl,
+        previewUrl: url,
       })
-      toast.success('已发送至参考区')
+      if (showSuccess) toast.success('已发送至参考区')
     } catch {
       toast.error('发送至参考失败')
     } finally {
@@ -142,9 +129,13 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
     setSendingAll(true)
     try {
       const availableSlots = 10 - referenceCount
-      for (const url of completedUrls.slice(0, availableSlots)) {
-        await handleSendToReference(url)
-      }
+      completedUrls.slice(0, availableSlots).forEach((url) => {
+        addReferenceImage({
+          id: crypto.randomUUID(),
+          previewUrl: url,
+        })
+      })
+      toast.success('已发送至参考区')
       if (completedUrls.length > availableSlots) {
         toast.info(`参考区最多 10 张，已添加前 ${availableSlots} 张`)
       }

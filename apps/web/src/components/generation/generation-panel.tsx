@@ -416,17 +416,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         continue
       }
 
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
+      const previewUrl = URL.createObjectURL(file)
       addReferenceImage({
         id: crypto.randomUUID(),
         file,
-        previewUrl: URL.createObjectURL(file),
-        dataUrl,
+        previewUrl,
       })
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -470,27 +464,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       toast.error(`最多添加 ${MAX_REF_IMAGES} 张参考图`)
       return
     }
-    try {
-      const resp = await fetch(url)
-      if (!resp.ok) throw new Error('fetch failed')
-      const blob = await resp.blob()
-      const ext = blob.type.split('/')[1] || 'jpg'
-      const file = new File([blob], `${name}.${ext}`, { type: blob.type })
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-      addReferenceImage({
-        id: crypto.randomUUID(),
-        file,
-        previewUrl: URL.createObjectURL(blob),
-        dataUrl,
-      })
-    } catch {
-      toast.error('图片加载失败，请确认网络可访问图片服务器')
-    }
+    addReferenceImage({
+      id: crypto.randomUUID(),
+      previewUrl: url,
+    })
+    toast.success('已添加参考图，提交时会自动加载原图')
   }, [referenceImages.length, addReferenceImage])
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()

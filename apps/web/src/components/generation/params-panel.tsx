@@ -19,15 +19,6 @@ const aspectRatios = [
 const MAX_IMAGES = 5
 const MAX_SIZE_MB = 10
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 export function ParamsPanel() {
   const { aspectRatio, setAspectRatio, referenceImages, addReferenceImage, removeReferenceImage } = useGenerationStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -39,12 +30,10 @@ export function ParamsPanel() {
       if (!file.type.startsWith('image/')) continue
       if (file.size > MAX_SIZE_MB * 1024 * 1024) continue
 
-      const dataUrl = await fileToDataUrl(file)
       addReferenceImage({
         id: crypto.randomUUID(),
         file,
         previewUrl: URL.createObjectURL(file),
-        dataUrl,
       })
     }
     // Reset input so same file can be re-selected

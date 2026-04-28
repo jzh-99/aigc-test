@@ -12,15 +12,6 @@ const MAX_SIZE_MB = 10
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const ALLOWED_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 export function ReferenceImageUpload() {
   const { referenceImages, addReferenceImage, removeReferenceImage } = useGenerationStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -45,12 +36,11 @@ export function ReferenceImageUpload() {
         continue
       }
 
-      const dataUrl = await fileToDataUrl(file)
+      const previewUrl = URL.createObjectURL(file)
       addReferenceImage({
         id: crypto.randomUUID(),
         file,
-        previewUrl: URL.createObjectURL(file),
-        dataUrl,
+        previewUrl,
       })
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
