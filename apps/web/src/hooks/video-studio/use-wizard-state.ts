@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { fetchWithAuth } from '@/lib/api-client'
 import type { Shot, ScriptResult } from '@/lib/video-studio-api'
 
-export type WizardStepId = 'describe' | 'script' | 'storyboard' | 'characters' | 'video'
+export type WizardStepId = 'describe' | 'script' | 'storyboard' | 'characters' | 'video' | 'complete'
 export type StepStatus = 'locked' | 'pending' | 'completed'
 
 export interface WizardStepDef {
@@ -21,15 +21,21 @@ export const WIZARD_STEP_DEFS: WizardStepDef[] = [
   { id: 'storyboard',  label: '分镜规划',  icon: '🎞️',  description: '拆分分镜，生成画面提示词' },
   { id: 'characters',  label: '角色&场景', icon: '🎨',  description: '生成角色和场景参考图' },
   { id: 'video',       label: '生成视频',  icon: '🎬',  description: '逐镜头生成视频片段' },
+  { id: 'complete',    label: '完成导出',  icon: '✅',  description: '预览、剪辑并导出成品' },
 ]
 
-const UNLOCK_ORDER: WizardStepId[] = ['describe', 'script', 'storyboard', 'characters', 'video']
+const UNLOCK_ORDER: WizardStepId[] = ['describe', 'script', 'storyboard', 'characters', 'video', 'complete']
 
 export interface DescribeData {
   description: string
   style: string
   duration: number
   aspectRatio: string
+}
+
+export interface PendingImageBatchTarget {
+  name: string
+  type: 'character' | 'scene'
 }
 
 export interface WizardState {
@@ -50,10 +56,12 @@ export interface WizardState {
   characterImageHistory: Record<string, string[][]>
   sceneImageHistory: Record<string, string[][]>
   shotVideos: Record<string, string>
+  pendingImageBatches: Record<string, PendingImageBatchTarget>
+  pendingVideoBatches: Record<string, string>
 }
 
 function initialStatuses(): Record<WizardStepId, StepStatus> {
-  return { describe: 'pending', script: 'locked', storyboard: 'locked', characters: 'locked', video: 'locked' }
+  return { describe: 'pending', script: 'locked', storyboard: 'locked', characters: 'locked', video: 'locked', complete: 'locked' }
 }
 
 function defaultState(): WizardState {
@@ -71,6 +79,8 @@ function defaultState(): WizardState {
     characterImageHistory: {},
     sceneImageHistory: {},
     shotVideos: {},
+    pendingImageBatches: {},
+    pendingVideoBatches: {},
   }
 }
 
@@ -247,6 +257,34 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
     setState((s) => ({ ...s, shotVideos: { ...s.shotVideos, [shotId]: url } }))
   }, [])
 
+  const addPendingImageBatch = useCallback((batchId: string, target: PendingImageBatchTarget) => {
+    setState((s) => ({
+      ...s,
+      pendingImageBatches: { ...(s.pendingImageBatches ?? {}), [batchId]: target },
+    }))
+  }, [])
+
+  const clearPendingImageBatch = useCallback((batchId: string) => {
+    setState((s) => {
+      const { [batchId]: _removed, ...pendingImageBatches } = s.pendingImageBatches ?? {}
+      return { ...s, pendingImageBatches }
+    })
+  }, [])
+
+  const addPendingVideoBatch = useCallback((batchId: string, shotId: string) => {
+    setState((s) => ({
+      ...s,
+      pendingVideoBatches: { ...(s.pendingVideoBatches ?? {}), [batchId]: shotId },
+    }))
+  }, [])
+
+  const clearPendingVideoBatch = useCallback((batchId: string) => {
+    setState((s) => {
+      const { [batchId]: _removed, ...pendingVideoBatches } = s.pendingVideoBatches ?? {}
+      return { ...s, pendingVideoBatches }
+    })
+  }, [])
+
   const reset = useCallback(() => {
     const fresh = defaultState()
     setState(fresh)
@@ -265,6 +303,10 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
     setCharacterImage,
     setSceneImage,
     setShotVideo,
+    addPendingImageBatch,
+    clearPendingImageBatch,
+    addPendingVideoBatch,
+    clearPendingVideoBatch,
     reset,
   }
 }
