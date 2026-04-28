@@ -191,6 +191,7 @@ interface FrameImage {
   id?: string
   previewUrl: string
   dataUrl: string
+  file?: File
 }
 
 interface GenerationPanelProps {
@@ -277,7 +278,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Video mode state
-  const [videoMode, setVideoMode] = useState<'frames' | 'components' | 'multimodal'>('frames')
+  const [videoMode, setVideoMode] = useState<'frames' | 'components' | 'multimodal'>('multimodal')
   const [isVideoUploading, setIsVideoUploading] = useState(false)   // 素材上传中（上传完才调 generateVideo）
   const [videoPrompt, setVideoPrompt] = useState('')
   const [videoModel, setVideoModel] = useState(() => videoDefaults?.videoModel ?? 'seedance-2.0')
@@ -652,6 +653,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         id: crypto.randomUUID(),
         previewUrl: URL.createObjectURL(file),
         dataUrl: reader.result as string,
+        file,
       })
       reader.onerror = () => resolve(null)
       reader.readAsDataURL(file)
@@ -700,14 +702,27 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     }
     const asset = getDraggedAsset(e.dataTransfer)
     if (asset.url) {
-      try {
-        if (asset.type === 'video') {
-          toast.error('当前参考区不支持视频参考，请切换到全能参考或动作模仿的视频区域')
+      const looksLikeAssetImage = asset.type === 'image' || !asset.type
+      if (looksLikeAssetImage) {
+        if (videoReferenceImages.length >= 3) {
+          toast.error('最多添加 3 张参考图')
           return
         }
+        setVideoReferenceImages(prev => prev.length < 3 ? [...prev, {
+          id: crypto.randomUUID(),
+          previewUrl: asset.url,
+          dataUrl: asset.url,
+        }] : prev)
+        return
+      }
+      try {
         const file = await fetchAssetFile(asset.url, asset.type, 'asset')
-        const img = await readFrameFile(file)
-        if (img) setVideoReferenceImages(prev => prev.length < 3 ? [...prev, img] : prev)
+        if (isValidImageFile(file)) {
+          const img = await readFrameFile(file)
+          if (img) setVideoReferenceImages(prev => prev.length < 3 ? [...prev, img] : prev)
+          return
+        }
+        toast.error('当前参考区只支持图片参考')
       } catch {
         toast.error('图片加载失败，请确认网络可访问图片服务器')
       }
@@ -720,6 +735,15 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     if (!asset.url) return
     if (asset.type === 'video') {
       toast.error('首尾帧区域不支持视频参考，请切换到全能参考或动作模仿的视频区域')
+      return
+    }
+    const looksLikeAssetImage = asset.type === 'image' || !asset.type
+    if (looksLikeAssetImage) {
+      if (!firstFrame) {
+        setFirstFrame({ id: crypto.randomUUID(), previewUrl: asset.url, dataUrl: asset.url })
+        return
+      }
+      setLastFrame({ id: crypto.randomUUID(), previewUrl: asset.url, dataUrl: asset.url })
       return
     }
     try {
@@ -988,6 +1012,18 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     const asset = getDraggedAsset(e.dataTransfer)
     if (!asset.url) return
     try {
+      if (asset.type === 'image') {
+        if (multimodalImages.length >= MAX_MULTIMODAL_IMAGES) {
+          toast.error(`最多添加 ${MAX_MULTIMODAL_IMAGES} 张参考图`)
+          return
+        }
+        setMultimodalImages(prev => prev.length < MAX_MULTIMODAL_IMAGES ? [...prev, {
+          id: crypto.randomUUID(),
+          previewUrl: asset.url,
+          dataUrl: asset.url,
+        }] : prev)
+        return
+      }
       const file = await fetchAssetFile(asset.url, asset.type, 'asset')
       if (asset.type === 'video' || isValidVideoFile(file)) {
         if (multimodalVideos.length >= MAX_MULTIMODAL_VIDEOS) {
@@ -1024,6 +1060,20 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     return json.url
   }
 
+  const resolveVideoImageInput = async (img: FrameImage, filename: string, requireUrl: boolean): Promise<string> => {
+    if (requireUrl) return uploadToVideoTemp(img.file ?? img.dataUrl, filename)
+    if (img.dataUrl.startsWith('data:')) return img.dataUrl
+    const resp = await fetch(img.dataUrl)
+    if (!resp.ok) throw new Error('reference image fetch failed')
+    const blob = await resp.blob()
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  }
+
   const handleVideoGenerate = async () => {
     if (!videoPrompt.trim()) return
     setIsVideoUploading(true)
@@ -1047,15 +1097,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         const arr: string[] = []
         if (firstFrame) {
           // Seedance 首尾帧也必须是 URL
-          const url = isSeedance
-            ? await uploadToVideoTemp(firstFrame.dataUrl, 'first_frame.jpg')
-            : firstFrame.dataUrl
+          const url = await resolveVideoImageInput(firstFrame, 'first_frame.jpg', isSeedance)
           arr.push(url)
         }
         if (lastFrame) {
-          const url = isSeedance
-            ? await uploadToVideoTemp(lastFrame.dataUrl, 'last_frame.jpg')
-            : lastFrame.dataUrl
+          const url = await resolveVideoImageInput(lastFrame, 'last_frame.jpg', isSeedance)
           arr.push(url)
         }
         imagesParam = arr.length > 0 ? arr : undefined
@@ -1063,7 +1109,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         // 全能参考：全部直接用 File 上传（跳过 base64 中转，避免卡顿）
         if (multimodalImages.length > 0) {
           referenceImagesParam = await Promise.all(
-            multimodalImages.map((img, i) => uploadToVideoTemp(img.dataUrl, `ref_image_${i}.jpg`))
+            multimodalImages.map((img, i) => resolveVideoImageInput(img, `ref_image_${i}.jpg`, true))
           )
         }
         if (multimodalVideos.length > 0) {
@@ -1081,12 +1127,12 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         if (isSeedance2) {
           if (videoReferenceImages.length > 0) {
             referenceImagesParam = await Promise.all(
-              videoReferenceImages.map((img, i) => uploadToVideoTemp(img.dataUrl, `ref_image_${i}.jpg`))
+              videoReferenceImages.map((img, i) => resolveVideoImageInput(img, `ref_image_${i}.jpg`, true))
             )
           }
         } else {
           imagesParam = videoReferenceImages.length > 0
-            ? videoReferenceImages.map(img => img.dataUrl)
+            ? await Promise.all(videoReferenceImages.map((img, i) => resolveVideoImageInput(img, `ref_image_${i}.jpg`, false)))
             : undefined
         }
       }
@@ -1349,6 +1395,25 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => {
+                  setVideoMode('multimodal')
+                  if (!VIDEO_MODEL_OPTIONS.multimodal.find(m => m.value === videoModel)) {
+                    setVideoModel('seedance-2.0')
+                  }
+                  setFirstFrame(null)
+                  setLastFrame(null)
+                  setVideoReferenceImages([])
+                }}
+                className={cn(
+                  'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
+                  videoMode === 'multimodal'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
+                )}
+              >
+                全能参考
+              </button>
+              <button
+                onClick={() => {
                   setVideoMode('frames')
                   if (!VIDEO_MODEL_OPTIONS.frames.find(m => m.value === videoModel)) {
                     setVideoModel('veo3.1-fast')
@@ -1381,25 +1446,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 )}
               >
                 参考生视频
-              </button>
-              <button
-                onClick={() => {
-                  setVideoMode('multimodal')
-                  if (!VIDEO_MODEL_OPTIONS.multimodal.find(m => m.value === videoModel)) {
-                    setVideoModel('seedance-2.0')
-                  }
-                  setFirstFrame(null)
-                  setLastFrame(null)
-                  setVideoReferenceImages([])
-                }}
-                className={cn(
-                  'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
-                  videoMode === 'multimodal'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
-                )}
-              >
-                全能参考
               </button>
             </div>
 
