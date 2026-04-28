@@ -305,6 +305,8 @@ export interface CanvasesTable {
   thumbnail_url: string | null
   structure_data: ColumnType<unknown, string, string>
   version: Generated<number>
+  is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>
 }
@@ -328,6 +330,8 @@ export interface VideoStudioProjectsTable {
   user_id: string
   name: string
   wizard_state: ColumnType<unknown, string, string>
+  is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>
 }

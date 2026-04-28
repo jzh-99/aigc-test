@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import crypto from 'node:crypto'
 
@@ -116,6 +116,11 @@ export async function uploadToS3(
   }))
   const publicUrl = process.env.STORAGE_PUBLIC_URL ?? ''
   return `${publicUrl}/${key}`
+}
+
+export async function deleteS3Object(key: string): Promise<void> {
+  const s3 = getS3()
+  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
 }
 
 /**

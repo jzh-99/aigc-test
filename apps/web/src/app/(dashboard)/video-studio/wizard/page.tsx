@@ -33,7 +33,8 @@ function makeEdge(id: string, source: string, target: string, sourceHandle?: str
 function WizardContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const projectName = searchParams.get('name') ?? '未命名项目'
+  const initialProjectName = searchParams.get('name') ?? '未命名项目'
+  const [projectName, setProjectName] = useState(initialProjectName)
   const projectType = (searchParams.get('type') ?? 'single') as 'single' | 'series'
   const episodeCount = Number(searchParams.get('episodes') ?? '1')
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -69,6 +70,7 @@ function WizardContent() {
     fetchWithAuth<{ wizard_state?: WizardState }>(`/video-studio/projects/${projectId}`)
       .then((project) => {
         if (project?.wizard_state) setServerState(project.wizard_state)
+        if ((project as any)?.name) setProjectName((project as any).name)
       })
       .catch(() => {})
       .finally(() => setServerLoaded(true))
@@ -177,6 +179,26 @@ function WizardContent() {
     }
   }
 
+  const handleRenameProject = async (name: string) => {
+    await fetchWithAuth(`/video-studio/projects/${projectId}/name`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    setProjectName(name)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('name', name)
+    router.replace(`/video-studio/wizard?${params.toString()}`)
+    toast.success('项目名称已更新')
+  }
+
+  const handleDeleteProject = async () => {
+    if (!confirm('删除后项目会进入回收站，7 天内可恢复。确认删除？')) return
+    await fetchWithAuth(`/video-studio/projects/${projectId}`, { method: 'DELETE' })
+    toast.success('项目已移入回收站')
+    router.push('/video-studio')
+  }
+
   if (!serverLoaded) return null
 
   const headerRight = (
@@ -196,6 +218,9 @@ function WizardContent() {
         activeStep={wizard.activeStep}
         onStepClick={wizard.setActiveStep}
         projectName={projectName}
+        projectId={projectId}
+        onProjectNameChange={handleRenameProject}
+        onDeleteProject={handleDeleteProject}
         headerRight={headerRight}
       >
         {wizard.activeStep === 'describe' && (

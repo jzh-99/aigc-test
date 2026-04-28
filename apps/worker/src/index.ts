@@ -14,6 +14,7 @@ import { completePipeline } from './pipelines/complete.js'
 import { failPipeline } from './pipelines/fail.js'
 import { runTimeoutGuardian } from './jobs/timeout-guardian.js'
 import { runPurgeOldRecords } from './jobs/purge-old-records.js'
+import { runPurgeDeletedProjects } from './jobs/purge-deleted-projects.js'
 import { transferWorker } from './workers/transfer.js'
 import { getRedis, closeRedis } from './lib/redis.js'
 import { startVideoPoller } from './pollers/video-poller.js'
@@ -96,9 +97,11 @@ const PURGE_INTERVAL = 24 * 60 * 60 * 1000 // once a day
 // Delay first run by 5 minutes
 setTimeout(() => {
   runPurgeOldRecords().catch((err) => logger.error({ err }, 'Purge old records error'))
+  runPurgeDeletedProjects().catch((err) => logger.error({ err }, 'Purge deleted projects error'))
 }, 5 * 60 * 1000)
 const purgeTimer = setInterval(() => {
   runPurgeOldRecords().catch((err) => logger.error({ err }, 'Purge old records error'))
+  runPurgeDeletedProjects().catch((err) => logger.error({ err }, 'Purge deleted projects error'))
 }, PURGE_INTERVAL)
 
 // ─── Video Poller ─────────────────────────────────────────────────────────────

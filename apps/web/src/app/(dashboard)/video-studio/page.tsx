@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Clapperboard, Film, Loader2, Clock } from 'lucide-react'
+import { Plus, Clapperboard, Film, Loader2, Clock, Trash2, Archive } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { VideoStudioTrashDrawer } from '@/components/video-studio/video-studio-trash-drawer'
 import { useAuthStore } from '@/stores/auth-store'
 import { fetchWithAuth } from '@/lib/api-client'
 
@@ -28,6 +31,7 @@ export default function VideoStudioPage() {
   const isInitialized = useAuthStore((s) => s.isInitialized)
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const [trashOpen, setTrashOpen] = useState(false)
 
   useEffect(() => {
     if (!isInitialized) return
@@ -37,6 +41,17 @@ export default function VideoStudioPage() {
       .catch(() => setProjects([]))
       .finally(() => setLoading(false))
   }, [isInitialized, workspaceId])
+
+  const deleteProject = async (id: string) => {
+    if (!confirm('删除后项目会进入回收站，7 天内可恢复。确认删除？')) return
+    try {
+      await fetchWithAuth(`/video-studio/projects/${id}`, { method: 'DELETE' })
+      setProjects((items) => items.filter((item) => item.id !== id))
+      toast.success('项目已移入回收站')
+    } catch {
+      toast.error('删除项目失败')
+    }
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
@@ -48,13 +63,19 @@ export default function VideoStudioPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">从故事描述到成片，AI 全程辅助</p>
         </div>
-        <Link
-          href="/video-studio/new"
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          新建项目
-        </Link>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setTrashOpen(true)} className="gap-2">
+            <Archive className="w-4 h-4" />
+            回收站
+          </Button>
+          <Link
+            href="/video-studio/new"
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            新建项目
+          </Link>
+        </div>
       </div>
 
       {loading ? (
@@ -97,22 +118,30 @@ export default function VideoStudioPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {projects.map((p) => (
-            <Link
-              key={p.id}
-              href={`/video-studio/wizard?id=${p.id}&name=${encodeURIComponent(p.name)}`}
-              className="border rounded-xl p-4 space-y-3 hover:bg-muted/40 transition-colors group"
-            >
-              <div className="w-full aspect-video rounded-lg bg-muted flex items-center justify-center">
-                <Film className="w-8 h-8 text-muted-foreground/40" />
-              </div>
-              <div>
-                <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">{p.name}</p>
-                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                  <Clock className="w-3 h-3" />
-                  {timeAgo(p.updated_at)}
-                </p>
-              </div>
-            </Link>
+            <div key={p.id} className="relative group border rounded-xl hover:bg-muted/40 transition-colors">
+              <Link
+                href={`/video-studio/wizard?id=${p.id}&name=${encodeURIComponent(p.name)}`}
+                className="block p-4 space-y-3"
+              >
+                <div className="w-full aspect-video rounded-lg bg-muted flex items-center justify-center">
+                  <Film className="w-8 h-8 text-muted-foreground/40" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">{p.name}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <Clock className="w-3 h-3" />
+                    {timeAgo(p.updated_at)}
+                  </p>
+                </div>
+              </Link>
+              <button
+                onClick={(e) => { e.preventDefault(); deleteProject(p.id) }}
+                className="absolute right-2 top-2 rounded-md bg-background/90 p-1.5 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-red-600 group-hover:opacity-100"
+                title="删除项目"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           ))}
           <Link
             href="/video-studio/new"
@@ -123,6 +152,17 @@ export default function VideoStudioPage() {
           </Link>
         </div>
       )}
+      <VideoStudioTrashDrawer
+        open={trashOpen}
+        workspaceId={workspaceId}
+        onClose={() => setTrashOpen(false)}
+        onChanged={() => {
+          if (!workspaceId) return
+          fetchWithAuth<Project[]>(`/video-studio/projects?workspace_id=${workspaceId}`)
+            .then((data) => setProjects(Array.isArray(data) ? data : []))
+            .catch(() => {})
+        }}
+      />
     </div>
   )
 }

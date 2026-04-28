@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { signAssetUrl, signAssetUrls, uploadToS3 } from '../lib/storage.js'
+import { purgeCanvasProject, restoreProjectAssets, softDeleteProjectAssets } from '../lib/project-purge.js'
 import { randomUUID } from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
 
@@ -130,6 +131,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvases')
       .select(['id', 'name', 'thumbnail_url', 'created_at', 'updated_at'])
       .where('workspace_id', 'in', targetWsIds)
+      .where('is_deleted', '=', false)
       .orderBy('updated_at', 'desc')
       .execute()
 
@@ -237,6 +239,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvases')
       .selectAll()
       .where('id', '=', request.params.id)
+      .where('is_deleted', '=', false)
       .executeTakeFirst()
 
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
@@ -280,6 +283,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvases')
       .select(['workspace_id', 'version'])
       .where('id', '=', id)
+      .where('is_deleted', '=', false)
       .executeTakeFirst()
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
 
@@ -325,6 +329,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvases')
       .select(['workspace_id', 'user_id'])
       .where('id', '=', request.params.id)
+      .where('is_deleted', '=', false)
       .executeTakeFirst()
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
 
@@ -345,8 +350,106 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
     }
 
-    await db.deleteFrom('canvases').where('id', '=', request.params.id).execute()
-    return reply.status(204).send()
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('canvases')
+        .set({ is_deleted: true, deleted_at: sql`now()`, updated_at: sql`now()` })
+        .where('id', '=', request.params.id)
+        .execute()
+      await softDeleteProjectAssets(trx, 'canvas_id', request.params.id)
+    })
+    return reply.send({ success: true })
+  })
+
+  // GET /canvases/trash — list deleted canvases
+  app.get<{ Querystring: { workspace_id?: string } }>('/canvases/trash', async (request, reply) => {
+    const db = getDb()
+    const userId = request.user.id
+    const filterWsId = request.query.workspace_id
+
+    const memberships = await db
+      .selectFrom('workspace_members')
+      .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
+      .innerJoin('teams', 'teams.id', 'workspaces.team_id')
+      .select(['workspace_members.workspace_id', 'workspace_members.role'])
+      .where('workspace_members.user_id', '=', userId)
+      .where('teams.team_type', '=', 'avatar_enabled')
+      .execute()
+
+    const targetWsIds = memberships.map((m) => m.workspace_id).filter((id) => !filterWsId || id === filterWsId)
+    if (targetWsIds.length === 0) return reply.send([])
+
+    const canvases = await db
+      .selectFrom('canvases')
+      .select(['id', 'name', 'thumbnail_url', 'created_at', 'updated_at', 'deleted_at', 'user_id', 'workspace_id'])
+      .where('workspace_id', 'in', targetWsIds)
+      .where('is_deleted', '=', true)
+      .where((eb) => eb.or([
+        eb('user_id', '=', userId),
+        eb('workspace_id', 'in', memberships.filter((m) => m.role === 'admin').map((m) => m.workspace_id)),
+      ]))
+      .orderBy('deleted_at', 'desc')
+      .execute()
+
+    return reply.send(canvases)
+  })
+
+  // POST /canvases/:id/restore
+  app.post<{ Params: { id: string } }>('/canvases/:id/restore', async (request, reply) => {
+    const db = getDb()
+    const canvas = await db
+      .selectFrom('canvases')
+      .select(['workspace_id', 'user_id'])
+      .where('id', '=', request.params.id)
+      .where('is_deleted', '=', true)
+      .executeTakeFirst()
+    if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
+
+    const member = await db
+      .selectFrom('workspace_members')
+      .select('role')
+      .where('workspace_id', '=', canvas.workspace_id)
+      .where('user_id', '=', request.user.id)
+      .executeTakeFirst()
+    if (!member || (canvas.user_id !== request.user.id && member.role !== 'admin')) {
+      return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权恢复该画布' } })
+    }
+
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('canvases')
+        .set({ is_deleted: false, deleted_at: null, updated_at: sql`now()` })
+        .where('id', '=', request.params.id)
+        .execute()
+      await restoreProjectAssets(trx, 'canvas_id', request.params.id)
+    })
+
+    return reply.send({ success: true })
+  })
+
+  // DELETE /canvases/:id/permanent
+  app.delete<{ Params: { id: string } }>('/canvases/:id/permanent', async (request, reply) => {
+    const db = getDb()
+    const canvas = await db
+      .selectFrom('canvases')
+      .select(['workspace_id', 'user_id'])
+      .where('id', '=', request.params.id)
+      .where('is_deleted', '=', true)
+      .executeTakeFirst()
+    if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
+
+    const member = await db
+      .selectFrom('workspace_members')
+      .select('role')
+      .where('workspace_id', '=', canvas.workspace_id)
+      .where('user_id', '=', request.user.id)
+      .executeTakeFirst()
+    if (!member || (canvas.user_id !== request.user.id && member.role !== 'admin')) {
+      return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权永久删除该画布' } })
+    }
+
+    await purgeCanvasProject(db, request.params.id)
+    return reply.send({ success: true })
   })
 
   // GET /canvases/:id/active-tasks — polling endpoint for execution progress
@@ -365,6 +468,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvases')
       .select('workspace_id')
       .where('id', '=', id)
+      .where('is_deleted', '=', false)
       .executeTakeFirst()
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
 
@@ -482,6 +586,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvases')
       .select('workspace_id')
       .where('id', '=', id)
+      .where('is_deleted', '=', false)
       .executeTakeFirst()
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
 
@@ -541,6 +646,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvases')
       .select('workspace_id')
       .where('id', '=', id)
+      .where('is_deleted', '=', false)
       .executeTakeFirst()
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
 
@@ -617,6 +723,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvases')
       .select('workspace_id')
       .where('id', '=', id)
+      .where('is_deleted', '=', false)
       .executeTakeFirst()
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
 
@@ -684,7 +791,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     const cursor = request.query.cursor
 
     const canvas = await db
-      .selectFrom('canvases').select('workspace_id').where('id', '=', id).executeTakeFirst()
+      .selectFrom('canvases').select('workspace_id').where('id', '=', id).where('is_deleted', '=', false).executeTakeFirst()
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
 
     const member = await db
@@ -777,7 +884,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     const type = request.query.type
 
     const canvas = await db
-      .selectFrom('canvases').select('workspace_id').where('id', '=', id).executeTakeFirst()
+      .selectFrom('canvases').select('workspace_id').where('id', '=', id).where('is_deleted', '=', false).executeTakeFirst()
     if (!canvas) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
 
     const member = await db
