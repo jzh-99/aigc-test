@@ -4,9 +4,9 @@ import type { BatchResponse } from '@aigc/types'
 
 interface ReferenceImage {
   id: string
-  file: File
+  file?: File
   previewUrl: string
-  dataUrl: string
+  dataUrl?: string
 }
 
 const MODEL_REVERSE_MAP: Record<string, { modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'; resolution: '1k' | '2k' | '4k' }> = {

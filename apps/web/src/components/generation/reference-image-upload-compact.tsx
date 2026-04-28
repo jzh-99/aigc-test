@@ -14,15 +14,6 @@ const MAX_SIZE_MB = 20
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const ALLOWED_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 interface ReferenceImageUploadCompactProps {
   expanded?: boolean
 }
@@ -54,12 +45,11 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
         continue
       }
 
-      const dataUrl = await fileToDataUrl(file)
+      const previewUrl = URL.createObjectURL(file)
       addReferenceImage({
         id: crypto.randomUUID(),
         file,
-        previewUrl: URL.createObjectURL(file),
-        dataUrl,
+        previewUrl,
       })
     }
     if (fileInputRef.current) fileInputRef.current.value = ''

@@ -35,6 +35,22 @@ const MODEL_CODE_MAP = {
   },
 } as const
 
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+async function imageUrlToDataUrl(url: string): Promise<string> {
+  const resp = await fetch(url)
+  if (!resp.ok) throw new Error('reference image fetch failed')
+  const blob = await resp.blob()
+  return fileToDataUrl(new File([blob], 'reference', { type: blob.type || 'image/jpeg' }))
+}
+
 export function useGenerate() {
   const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, setIsGenerating, setActiveBatchId } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -58,7 +74,11 @@ export function useGenerate() {
       }
 
       if (referenceImages.length > 0) {
-        params.image = referenceImages.map((img) => img.dataUrl)
+        params.image = await Promise.all(referenceImages.map(async (img) => {
+          if (img.dataUrl) return img.dataUrl
+          if (img.file) return fileToDataUrl(img.file)
+          return imageUrlToDataUrl(img.previewUrl)
+        }))
       }
 
       const body: GenerateImageRequest = {

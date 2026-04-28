@@ -506,7 +506,7 @@ export function AiAssistant() {
         className={cn(
           'fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-200 gradient-accent hover:scale-105 active:scale-95 cursor-move',
           open && 'rotate-90',
-          showHint && !open && 'animate-bounce ring-4 ring-primary/30 shadow-2xl shadow-primary/40'
+          showHint && !open && 'ring-4 ring-primary/30 shadow-2xl shadow-primary/40'
         )}
         style={{
           left: buttonPosition.x ? `${buttonPosition.x}px` : 'auto',
@@ -520,7 +520,7 @@ export function AiAssistant() {
       </button>
       {showHint && !open && (
         <div
-          className="fixed z-50 w-64 rounded-2xl border border-primary/30 bg-background p-4 text-sm text-foreground shadow-2xl shadow-primary/20 animate-in fade-in slide-in-from-bottom-3 zoom-in-95 duration-500"
+          className="fixed z-50 w-64 rounded-2xl bg-background p-[2px] text-sm text-foreground shadow-2xl shadow-primary/20 animate-in fade-in slide-in-from-bottom-3 zoom-in-95 duration-500 gradient-accent"
           style={{
             right: buttonPosition.x ? 'auto' : '24px',
             left: buttonPosition.x ? `${Math.max(16, buttonPosition.x - 208)}px` : 'auto',
@@ -528,16 +528,27 @@ export function AiAssistant() {
             top: buttonPosition.y ? `${Math.max(16, buttonPosition.y - 104)}px` : 'auto',
           }}
         >
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full gradient-accent shadow-lg animate-pulse">
-              <Bot className="h-5 w-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold">试试 Toby.AI 创作助手</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">点这里可以优化提示词、解析图片，帮你更快生成想要的内容。</p>
+          <div className="relative rounded-[14px] bg-background p-4">
+            <button
+              type="button"
+              className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => setShowHint(false)}
+              aria-label="关闭提示"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <div className="flex items-start gap-3 pr-5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full gradient-accent shadow-lg animate-pulse">
+                <Bot className="h-5 w-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold">试试 Toby.AI 创作助手</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">点这里可以优化提示词、解析图片，帮你更快生成想要的内容。</p>
+              </div>
             </div>
           </div>
-          <div className="absolute -bottom-2 right-7 h-4 w-4 rotate-45 border-b border-r border-primary/30 bg-background" />
+          <div className="absolute -bottom-2 right-7 h-4 w-4 rotate-45 gradient-accent" />
+          <div className="absolute -bottom-[5px] right-[30px] h-3 w-3 rotate-45 bg-background" />
         </div>
       )}
 
