@@ -22,8 +22,6 @@ const TAB_CONFIG: { id: Tab; label: string; icon: React.ReactNode }[] = [
   // { id: 'video', label: '视频解析', icon: <Video className="h-3.5 w-3.5" /> },
 ]
 
-const ASSISTANT_HINT_KEY = 'toby-ai-assistant-hint-seen'
-
 export function AiAssistant() {
   const user = useAuthStore((s) => s.user)
   const userId = user?.id ?? 'guest'
@@ -82,15 +80,11 @@ export function AiAssistant() {
   }, [open, userId])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (localStorage.getItem(ASSISTANT_HINT_KEY)) return
+    if (!user) return
     setShowHint(true)
-    const timer = setTimeout(() => {
-      setShowHint(false)
-      localStorage.setItem(ASSISTANT_HINT_KEY, '1')
-    }, 3000)
+    const timer = setTimeout(() => setShowHint(false), 6000)
     return () => clearTimeout(timer)
-  }, [])
+  }, [user?.id])
 
   // Auto-scroll
   useEffect(() => {
@@ -225,7 +219,6 @@ export function AiAssistant() {
     if (!buttonDraggedRef.current) {
       setOpen((v) => !v)
       setShowHint(false)
-      localStorage.setItem(ASSISTANT_HINT_KEY, '1')
     }
     buttonDraggedRef.current = false // 重置标记
   }
@@ -513,7 +506,7 @@ export function AiAssistant() {
         className={cn(
           'fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-200 gradient-accent hover:scale-105 active:scale-95 cursor-move',
           open && 'rotate-90',
-          showHint && !open && 'animate-pulse'
+          showHint && !open && 'animate-bounce ring-4 ring-primary/30 shadow-2xl shadow-primary/40'
         )}
         style={{
           left: buttonPosition.x ? `${buttonPosition.x}px` : 'auto',
@@ -527,15 +520,24 @@ export function AiAssistant() {
       </button>
       {showHint && !open && (
         <div
-          className="fixed z-50 rounded-full bg-background px-3 py-2 text-xs font-medium text-foreground shadow-lg border border-border"
+          className="fixed z-50 w-64 rounded-2xl border border-primary/30 bg-background p-4 text-sm text-foreground shadow-2xl shadow-primary/20 animate-in fade-in slide-in-from-bottom-3 zoom-in-95 duration-500"
           style={{
             right: buttonPosition.x ? 'auto' : '24px',
-            left: buttonPosition.x ? `${buttonPosition.x - 56}px` : 'auto',
-            bottom: buttonPosition.y ? 'auto' : '148px',
-            top: buttonPosition.y ? `${buttonPosition.y - 48}px` : 'auto',
+            left: buttonPosition.x ? `${Math.max(16, buttonPosition.x - 208)}px` : 'auto',
+            bottom: buttonPosition.y ? 'auto' : '152px',
+            top: buttonPosition.y ? `${Math.max(16, buttonPosition.y - 104)}px` : 'auto',
           }}
         >
-          点这里可以优化提示词哦~
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full gradient-accent shadow-lg animate-pulse">
+              <Bot className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold">试试 Toby.AI 创作助手</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">点这里可以优化提示词、解析图片，帮你更快生成想要的内容。</p>
+            </div>
+          </div>
+          <div className="absolute -bottom-2 right-7 h-4 w-4 rotate-45 border-b border-r border-primary/30 bg-background" />
         </div>
       )}
 
