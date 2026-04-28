@@ -387,12 +387,42 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     const dirtyVersion = parseInt(await redis.get(`canvas:dirty:${id}`) ?? '0', 10)
 
     // Fetch active batches for this canvas
-    const batches = await db
+    const activeRows = await db
       .selectFrom('task_batches')
-      .select(['id', 'canvas_node_id', 'status', 'quantity', 'completed_count', 'failed_count'])
+      .select(['id', 'canvas_node_id', 'status', 'quantity', 'completed_count', 'failed_count', 'provider', 'created_at'])
       .where('canvas_id', '=', id)
       .where('status', 'in', ['pending', 'processing'])
       .execute()
+
+    const batches = await Promise.all(activeRows.map(async (batch: any) => {
+      const queuePosition = batch.status === 'pending'
+        ? Number((await db
+            .selectFrom('task_batches')
+            .select((eb: any) => eb.fn.countAll().as('count'))
+            .where('is_deleted', '=', false)
+            .where('status', '=', 'pending')
+            .where('provider', '=', batch.provider)
+            .where('created_at', '<', batch.created_at)
+            .executeTakeFirst() as any)?.count ?? 0)
+        : null
+      const processing = await db
+        .selectFrom('tasks')
+        .select('processing_started_at')
+        .where('batch_id', '=', batch.id)
+        .where('processing_started_at', 'is not', null)
+        .orderBy('processing_started_at', 'asc')
+        .executeTakeFirst()
+      return {
+        id: batch.id,
+        canvas_node_id: batch.canvas_node_id,
+        status: batch.status,
+        quantity: batch.quantity,
+        completed_count: batch.completed_count,
+        failed_count: batch.failed_count,
+        queue_position: queuePosition,
+        processing_started_at: processing?.processing_started_at ?? null,
+      }
+    }))
 
     return reply.send({ version: dirtyVersion, batches })
   })
@@ -678,7 +708,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     let query = db
       .selectFrom('task_batches')
       .select(['id', 'canvas_node_id', 'model', 'prompt', 'quantity', 'completed_count',
-               'failed_count', 'status', 'actual_credits', 'created_at', 'module'])
+               'failed_count', 'status', 'actual_credits', 'created_at', 'module', 'provider'])
       .where('canvas_id', '=', id)
       .where('is_deleted', '=', false)
       .orderBy('created_at', 'desc')
@@ -696,7 +726,31 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
     const rows = await query.execute()
     const hasMore = rows.length > limitN
-    const items = hasMore ? rows.slice(0, limitN) : rows
+    const items = await Promise.all((hasMore ? rows.slice(0, limitN) : rows).map(async (batch: any) => {
+      const queuePosition = batch.status === 'pending'
+        ? Number((await db
+            .selectFrom('task_batches')
+            .select((eb: any) => eb.fn.countAll().as('count'))
+            .where('is_deleted', '=', false)
+            .where('status', '=', 'pending')
+            .where('provider', '=', batch.provider)
+            .where('created_at', '<', batch.created_at)
+            .executeTakeFirst() as any)?.count ?? 0)
+        : null
+      const processing = await db
+        .selectFrom('tasks')
+        .select('processing_started_at')
+        .where('batch_id', '=', batch.id)
+        .where('processing_started_at', 'is not', null)
+        .orderBy('processing_started_at', 'asc')
+        .executeTakeFirst()
+      const { provider: _provider, ...item } = batch
+      return {
+        ...item,
+        queue_position: queuePosition,
+        processing_started_at: processing?.processing_started_at ?? null,
+      }
+    }))
     const nextCursor = hasMore
       ? Buffer.from(JSON.stringify({ created_at: items[items.length - 1].created_at, id: items[items.length - 1].id })).toString('base64')
       : null

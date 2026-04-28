@@ -75,6 +75,8 @@ export interface CanvasHistoryItem {
   actual_credits: number | null
   created_at: string
   module?: string
+  queue_position?: number | null
+  processing_started_at?: string | null
 }
 
 export interface CanvasAssetItem {
@@ -109,6 +111,8 @@ export interface CanvasActiveBatch {
   quantity: number
   completed_count: number
   failed_count: number
+  queue_position?: number | null
+  processing_started_at?: string | null
   error?: {
     message?: string
     code?: string

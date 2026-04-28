@@ -106,8 +106,16 @@ export function useCanvasPoller(canvasId: string | null) {
         idleCountRef.current = 0
 
         const store = useCanvasExecutionStore.getState()
+        const sidebarStore = useCanvasSidebarDataStore.getState()
         for (const batch of data.batches) {
           store.updateNodeFromBatch(batch.canvas_node_id, batch)
+          sidebarStore.updateHistoryItemStatus(canvasId, batch.id, {
+            status: batch.status,
+            completed_count: batch.completed_count,
+            failed_count: batch.failed_count,
+            queue_position: batch.queue_position,
+            processing_started_at: batch.processing_started_at,
+          })
         }
         store.reconcileNodes(data.batches.map((b) => b.canvas_node_id))
 

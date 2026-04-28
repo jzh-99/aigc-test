@@ -183,6 +183,13 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
   )
 }
 
+function formatElapsed(ms: number) {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return minutes > 0 ? `${minutes}分${rest}秒` : `${rest}秒`
+}
+
 function HistoryTab({
   data,
   onOpenDetail,
@@ -197,6 +204,14 @@ function HistoryTab({
   onOpenDetail: (id: string) => void
 }) {
   const { items, loading, loaded, hasMore, loadMore } = data
+  const hasProcessing = items.some((item) => item.status === 'processing')
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!hasProcessing) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [hasProcessing])
 
   if (loading && items.length === 0) {
     return (
@@ -213,6 +228,13 @@ function HistoryTab({
     <div className="divide-y">
       {items.map((batch) => {
         const st = STATUS_MAP[batch.status] ?? { label: batch.status, cls: 'bg-zinc-100 text-zinc-500' }
+        const statusHint = batch.status === 'pending'
+          ? typeof batch.queue_position === 'number'
+            ? `前方还有 ${batch.queue_position} 个任务`
+            : '等待调度'
+          : batch.status === 'processing' && batch.processing_started_at
+            ? `已用时 ${formatElapsed(now - new Date(batch.processing_started_at).getTime())}`
+            : null
         return (
           <button
             key={batch.id}
@@ -229,6 +251,12 @@ function HistoryTab({
             <p className="text-xs text-zinc-700 line-clamp-2 mb-1.5">{batch.prompt || '(无提示词)'}</p>
             <div className="flex items-center gap-2 text-[10px] text-zinc-400">
               <span>{batch.completed_count}/{batch.quantity} {(batch.module === 'video' || /^(seedance-|veo)/i.test(batch.model || '')) ? '条' : '张'}</span>
+              {statusHint && (
+                <>
+                  <span>·</span>
+                  <span>{statusHint}</span>
+                </>
+              )}
               {batch.actual_credits != null && (
                 <>
                   <span>·</span>
