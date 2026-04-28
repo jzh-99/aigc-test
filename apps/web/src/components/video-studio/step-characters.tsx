@@ -6,8 +6,10 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { generateAssetPrompts } from '@/lib/video-studio-api'
 import type { ScriptResult } from '@/lib/video-studio-api'
-import { apiPost, apiGet } from '@/lib/api-client'
+import { apiPost } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
+import { usePendingBatchWatcher } from '@/hooks/video-studio/use-pending-batch-watcher'
+import type { PendingImageBatchTarget } from '@/hooks/video-studio/use-wizard-state'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import { MODEL_CODE_MAP } from '@/components/canvas/panels/panel-constants'
 
@@ -40,7 +42,7 @@ interface AssetItem {
   selectedUrl: string | null
 }
 
-async function generateImages(prompt: string, aspectRatio: string, workspaceId: string, params: ImageParams, projectId: string): Promise<string[]> {
+async function submitImageBatch(prompt: string, aspectRatio: string, workspaceId: string, params: ImageParams, projectId: string): Promise<string> {
   if (!workspaceId) throw new Error('未选择工作区')
   const modelCode = MODEL_CODE_MAP[params.model as keyof typeof MODEL_CODE_MAP]?.[params.resolution as keyof (typeof MODEL_CODE_MAP)[keyof typeof MODEL_CODE_MAP]] ?? params.model
   const batch = await apiPost<BatchResponse>('/generate/image', {
@@ -52,18 +54,7 @@ async function generateImages(prompt: string, aspectRatio: string, workspaceId: 
     params: { aspect_ratio: aspectRatio, resolution: params.resolution },
     ...(projectId ? { video_studio_project_id: projectId } : {}),
   })
-
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 3000))
-    const updated = await apiGet<BatchResponse>(`/batches/${batch.id}`)
-    if (updated.status === 'completed' || updated.status === 'partial_complete') {
-      return updated.tasks
-        .map((t) => t.asset?.storage_url ?? t.asset?.original_url)
-        .filter(Boolean) as string[]
-    }
-    if (updated.status === 'failed') throw new Error('图片生成失败')
-  }
-  throw new Error('生成超时')
+  return batch.id
 }
 
 interface ImageCardProps {
@@ -71,11 +62,13 @@ interface ImageCardProps {
   workspaceId: string
   projectId: string
   imageParams: ImageParams
+  isPending: boolean
   onUpdate: (updated: Partial<AssetItem>) => void
+  onBatchSubmitted: (batchId: string) => void
   registerGenerate: (name: string, type: AssetItem['type'], fn: () => Promise<boolean>) => void
 }
 
-function ImageCard({ item, workspaceId, projectId, imageParams, onUpdate, registerGenerate }: ImageCardProps) {
+function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpdate, onBatchSubmitted, registerGenerate }: ImageCardProps) {
   const [loading, setLoading] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [editedPrompt, setEditedPrompt] = useState(item.prompt)
@@ -86,8 +79,11 @@ function ImageCard({ item, workspaceId, projectId, imageParams, onUpdate, regist
     try {
       const isCharacter = item.type === 'character'
       const aspectRatio = isCharacter ? '1:1' : '16:9'
-      const urls = await generateImages(promptOverride ?? editedPrompt, aspectRatio, workspaceId, imageParams, projectId)
-      onUpdate({ urls, selectedUrl: urls[0] ?? null, prompt: promptOverride ?? editedPrompt })
+      const prompt = promptOverride ?? editedPrompt
+      const batchId = await submitImageBatch(prompt, aspectRatio, workspaceId, imageParams, projectId)
+      onBatchSubmitted(batchId)
+      onUpdate({ prompt })
+      toast.success(`${item.name}：任务已提交`)
       return true
     } catch (err) {
       toast.error(`${item.name}：${err instanceof Error ? err.message : '生成失败'}`)
@@ -95,7 +91,7 @@ function ImageCard({ item, workspaceId, projectId, imageParams, onUpdate, regist
     } finally {
       setLoading(false)
     }
-  }, [editedPrompt, item.type, item.name, workspaceId, imageParams, projectId, onUpdate])
+  }, [editedPrompt, item.type, item.name, workspaceId, imageParams, projectId, onUpdate, onBatchSubmitted])
 
   const generateRef = useRef(generate)
   generateRef.current = generate
@@ -162,7 +158,7 @@ function ImageCard({ item, workspaceId, projectId, imageParams, onUpdate, regist
         </div>
       ) : (
         <div className="h-20 bg-muted/40 rounded-lg flex items-center justify-center text-muted-foreground text-xs">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : '尚未生成'}
+          {loading || isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : '尚未生成'}
         </div>
       )}
 
@@ -207,11 +203,11 @@ function ImageCard({ item, workspaceId, projectId, imageParams, onUpdate, regist
       <div className="flex gap-2">
         <button
           onClick={() => generate()}
-          disabled={loading}
+          disabled={loading || isPending}
           className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-primary text-primary-foreground py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          {loading ? '生成中…' : item.urls.length > 0 ? `重新生成 · ${(IMAGE_MODEL_CREDITS[imageParams.model] ?? 10) * imageParams.quantity}积分` : `生成参考图 · ${(IMAGE_MODEL_CREDITS[imageParams.model] ?? 10) * imageParams.quantity}积分`}
+          {loading || isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {loading || isPending ? '生成中…' : item.urls.length > 0 ? `重新生成 · ${(IMAGE_MODEL_CREDITS[imageParams.model] ?? 10) * imageParams.quantity}积分` : `生成参考图 · ${(IMAGE_MODEL_CREDITS[imageParams.model] ?? 10) * imageParams.quantity}积分`}
         </button>
         <label className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1.5 border rounded-lg transition-colors">
           <Upload className="w-3.5 h-3.5" />
@@ -239,12 +235,15 @@ interface Props {
   style: string
   characterImages: Record<string, string>
   sceneImages: Record<string, string>
-  onSelectCharacterImage: (name: string, url: string) => void
-  onSelectSceneImage: (name: string, url: string) => void
+  pendingImageBatches: Record<string, PendingImageBatchTarget>
+  onAddPendingImageBatch: (batchId: string, target: PendingImageBatchTarget) => void
+  onClearPendingImageBatch: (batchId: string) => void
+  onSelectCharacterImage: (name: string, url: string, batch?: string[]) => void
+  onSelectSceneImage: (name: string, url: string, batch?: string[]) => void
   onComplete: () => void
 }
 
-export function StepCharacters({ projectId, scriptData, style, characterImages, sceneImages, onSelectCharacterImage, onSelectSceneImage, onComplete }: Props) {
+export function StepCharacters({ projectId, scriptData, style, characterImages, sceneImages, pendingImageBatches, onAddPendingImageBatch, onClearPendingImageBatch, onSelectCharacterImage, onSelectSceneImage, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const [loadingPrompts, setLoadingPrompts] = useState(false)
@@ -277,6 +276,28 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
     generateFnsRef.current[`${type}:${name}`] = fn
   }, [])
 
+  const updateItem = useCallback((name: string, type: 'character' | 'scene', updated: Partial<AssetItem>) => {
+    setItems((prev) => prev.map((item) =>
+      item.name === name && item.type === type ? { ...item, ...updated } : item
+    ))
+    if (updated.selectedUrl) {
+      if (type === 'character') onSelectCharacterImage(name, updated.selectedUrl, updated.urls)
+      else onSelectSceneImage(name, updated.selectedUrl, updated.urls)
+    }
+  }, [onSelectCharacterImage, onSelectSceneImage])
+
+  usePendingBatchWatcher({
+    pendingBatches: pendingImageBatches ?? {},
+    failureMessage: '图片生成失败',
+    emptyMessage: '图片生成完成但未返回URL',
+    onCompleted: (target, urls) => {
+      updateItem(target.name, target.type, { urls, selectedUrl: urls[0] ?? null })
+    },
+    onClear: onClearPendingImageBatch,
+  })
+
+  const pendingImageKeys = new Set(Object.values(pendingImageBatches ?? {}).map((target) => `${target.type}:${target.name}`))
+
   const generateAllPrompts = useCallback(async () => {
     if (!token) return
     setLoadingPrompts(true)
@@ -308,23 +329,14 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
   const batchGenerate = useCallback(async () => {
     setBatchRunning(true)
     const fns = items
+      .filter((item) => !pendingImageKeys.has(`${item.type}:${item.name}`))
       .map((item) => generateFnsRef.current[`${item.type}:${item.name}`])
       .filter(Boolean)
     const results = await Promise.allSettled(fns.map((fn) => fn()))
     setBatchRunning(false)
     const successCount = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
     if (successCount > 0) toast.success(`批量生成完成，${successCount}/${fns.length} 成功`)
-  }, [items])
-
-  const updateItem = (name: string, type: 'character' | 'scene', updated: Partial<AssetItem>) => {
-    setItems((prev) => prev.map((item) =>
-      item.name === name && item.type === type ? { ...item, ...updated } : item
-    ))
-    if (updated.selectedUrl) {
-      if (type === 'character') onSelectCharacterImage(name, updated.selectedUrl)
-      else onSelectSceneImage(name, updated.selectedUrl)
-    }
-  }
+  }, [items, pendingImageKeys])
 
   const allSelected = items.every((item) => item.selectedUrl)
   const characters = items.filter((i) => i.type === 'character')
@@ -459,7 +471,9 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
                   workspaceId={workspaceId}
                   projectId={projectId}
                   imageParams={imageParams}
+                  isPending={pendingImageKeys.has(`character:${item.name}`)}
                   onUpdate={(u) => updateItem(item.name, 'character', u)}
+                  onBatchSubmitted={(batchId) => onAddPendingImageBatch(batchId, { name: item.name, type: 'character' })}
                   registerGenerate={registerGenerate}
                 />
               ))}
@@ -478,7 +492,9 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
                   workspaceId={workspaceId}
                   projectId={projectId}
                   imageParams={imageParams}
+                  isPending={pendingImageKeys.has(`scene:${item.name}`)}
                   onUpdate={(u) => updateItem(item.name, 'scene', u)}
+                  onBatchSubmitted={(batchId) => onAddPendingImageBatch(batchId, { name: item.name, type: 'scene' })}
                   registerGenerate={registerGenerate}
                 />
               ))}
