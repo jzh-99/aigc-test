@@ -54,6 +54,7 @@ export interface BatchResponse {
   estimated_credits: number
   actual_credits: number
   created_at: string
+  queue_position?: number | null
   tasks: TaskResponse[]
   user?: BatchUser
 }

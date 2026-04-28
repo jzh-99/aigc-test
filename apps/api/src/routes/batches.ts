@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
+import { sql } from 'kysely'
 import { signAssetUrl, signAssetUrls, encryptProxyUrl } from '../lib/storage.js'
 
 export async function batchRoutes(app: FastifyInstance): Promise<void> {
@@ -75,6 +76,17 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
       .where('id', '=', batch.user_id)
       .executeTakeFirst()
 
+    const queuePosition = batch.status === 'pending'
+      ? Number((await db
+          .selectFrom('task_batches')
+          .select((eb: any) => eb.fn.countAll().as('count'))
+          .where('is_deleted', '=', false)
+          .where('status', '=', 'pending')
+          .where('provider', '=', batch.provider)
+          .where('created_at', '<', batch.created_at)
+          .executeTakeFirst())?.count ?? 0)
+      : null
+
     return reply.send({
       id: batch.id,
       module: batch.module,
@@ -89,6 +101,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
       estimated_credits: batch.estimated_credits,
       actual_credits: batch.actual_credits,
       created_at: batch.created_at.toISOString?.() ?? String(batch.created_at),
+      queue_position: queuePosition,
       user: creator ? { id: creator.id, username: creator.username, avatar_url: creator.avatar_url ?? null } : undefined,
       tasks: await Promise.all(tasks.map(async (t: any) => {
         const asset = assetByTask.get(t.id)

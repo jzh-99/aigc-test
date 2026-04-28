@@ -17,6 +17,7 @@ import useSWR, { mutate } from 'swr'
 import type { BatchResponse } from '@aigc/types'
 import { useHiddenBatches } from '@/hooks/use-batches'
 import { Button } from '@/components/ui/button'
+import { AssetsLibraryTab } from '@/components/generation/assets-library-tab'
 
 interface TeamMember {
   user_id: string
@@ -36,6 +37,14 @@ function isTerminalStatus(status: string) {
   return status === 'completed' || status === 'failed' || status === 'partial_complete'
 }
 
+function hasExpectedOutputs(batch: BatchResponse) {
+  if (batch.status === 'failed') return true
+  if (batch.completed_count === 0) return true
+  const completedTasks = batch.tasks?.filter((task) => task.status === 'completed') ?? []
+  if (completedTasks.length < batch.completed_count) return false
+  return completedTasks.every((task) => Boolean(task.asset?.storage_url || task.asset?.original_url))
+}
+
 export default function ImagePage() {
   const searchParams = useSearchParams()
   const _mode = searchParams.get('mode')
@@ -45,6 +54,7 @@ export default function ImagePage() {
   const [activeBatchCount, setActiveBatchCount] = useState(0)
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [rightTab, setRightTab] = useState<'history' | 'assets'>('history')
   const { batches: hiddenBatches } = useHiddenBatches(true)
   const hasHidden = hiddenBatches.length > 0
 
@@ -92,9 +102,9 @@ export default function ImagePage() {
       console.log('[Poll]', batchId, updated.status, updated.completed_count, '/', updated.quantity)
       batchListRef.current?.update(updated)
 
-      if (isTerminalStatus(updated.status)) {
+      if (isTerminalStatus(updated.status) && hasExpectedOutputs(updated)) {
         stopPolling(batchId)
-        // Short delay so the API has time to populate thumbnail_urls
+        batchListRef.current?.refresh()
         setTimeout(() => { batchListRef.current?.refresh() }, 800)
         // Refresh credit balance after task completes (credits confirmed/refunded)
         if (activeTeamIdRef.current) mutate(`/teams/${activeTeamIdRef.current}`)
@@ -204,11 +214,28 @@ export default function ImagePage() {
         <Card className="flex-1 flex flex-col overflow-hidden">
           <CardHeader className="pb-3 shrink-0">
             <CardTitle className="text-base flex items-center gap-2">
-              <span>历史记录</span>
-              {activeBatchCount > 0 && (
+              <div className="flex rounded-lg border p-1">
+                <Button
+                  variant={rightTab === 'history' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setRightTab('history')}
+                >
+                  历史记录
+                </Button>
+                <Button
+                  variant={rightTab === 'assets' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setRightTab('assets')}
+                >
+                  资产库
+                </Button>
+              </div>
+              {activeBatchCount > 0 && rightTab === 'history' && (
                 <Badge variant="processing" className="text-xs">生成中 ({activeBatchCount})</Badge>
               )}
-              {hasHidden && (
+              {hasHidden && rightTab === 'history' && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -222,10 +249,14 @@ export default function ImagePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 overflow-y-auto min-w-0">
-            <BatchList
-              ref={batchListRef}
-              onSelect={(batch) => { setSelectedBatchId(batch.id); setDetailOpen(true) }}
-            />
+            {rightTab === 'history' ? (
+              <BatchList
+                ref={batchListRef}
+                onSelect={(batch) => { setSelectedBatchId(batch.id); setDetailOpen(true) }}
+              />
+            ) : (
+              <AssetsLibraryTab />
+            )}
           </CardContent>
         </Card>
       </div>
