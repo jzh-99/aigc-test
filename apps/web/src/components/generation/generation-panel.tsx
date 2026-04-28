@@ -194,6 +194,28 @@ interface FrameImage {
   file?: File
 }
 
+async function getActionImagePayload(image: FrameImage): Promise<{ base64: string; mime: 'image/jpeg' | 'image/png' }> {
+  const dataUrl = image.dataUrl.startsWith('data:')
+    ? image.dataUrl
+    : await fetch(image.dataUrl).then(async (r) => {
+      if (!r.ok) throw new Error('reference image fetch failed')
+      const blob = await r.blob()
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    })
+  const [header, base64] = dataUrl.split(',')
+  const rawMime = header?.replace('data:', '').replace(';base64', '')
+  const mime = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime
+  if ((mime !== 'image/jpeg' && mime !== 'image/png') || !base64) {
+    throw new Error('ACTION_IMAGE_UNSUPPORTED_FORMAT')
+  }
+  return { base64, mime }
+}
+
 interface GenerationPanelProps {
   onBatchCreated: (batch: BatchResponse) => void
   disabled?: boolean
@@ -578,9 +600,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       if (!videoUploadRes.ok) throw new ApiError(videoUploadRes.status, 'UPLOAD_ERROR', '视频上传失败')
       const videoUpload = (await videoUploadRes.json()) as { url: string }
 
-      // Extract base64 from dataUrl
-      const [header, imageBase64] = actionImage.dataUrl.split(',')
-      const imageMime = header.replace('data:', '').replace(';base64', '') || 'image/jpeg'
+      const actionImagePayload = await getActionImagePayload(actionImage)
 
       // Submit generation
       const res = await fetch('/api/v1/action-imitation/generate', {
@@ -588,8 +608,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           workspace_id: activeWorkspaceId,
-          image_base64: imageBase64,
-          image_mime: imageMime,
+          image_base64: actionImagePayload.base64,
+          image_mime: actionImagePayload.mime,
           video_url: videoUpload.url,
           video_duration: actionVideo.duration,
         }),
@@ -600,6 +620,10 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       }
       onBatchCreated(batch)
     } catch (err) {
+      if (err instanceof Error && err.message === 'ACTION_IMAGE_UNSUPPORTED_FORMAT') {
+        toast.error('动作模仿仅支持 JPG / PNG 人物图片，请更换图片')
+        return
+      }
       const rawMessage = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
       const normalized = rawMessage.toLowerCase()
       const errorCode =
