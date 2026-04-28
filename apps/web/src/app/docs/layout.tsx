@@ -41,7 +41,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
 
         {/* Logo */}
         <div className="px-6 py-6" style={{ borderBottom: '1px solid #EDE5F5' }}>
-          <Link href="/docs" className="flex items-center gap-3 group">
+          <Link href="/" className="flex items-center gap-3 group">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl shrink-0 shadow-sm" style={{ background: 'linear-gradient(135deg, #F5A962, #C89BEC, #6BA3F5)' }}>
               <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="2" y="2.5" width="16" height="4" rx="1.5" fill="white"/>
