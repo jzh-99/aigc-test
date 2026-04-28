@@ -54,22 +54,22 @@ export function StepScript({ describeData, initial, scriptHistory = [], onGenera
     onComplete({ ...result, script: editedScript })
   }
 
+  const hasFreshResult = result != null && (scriptHistory.length === 0 || scriptHistory[scriptHistory.length - 1]?.script !== result.script)
+  // Display newest first: latest version is always 1/N, older versions count upward.
+  const versions = result && hasFreshResult ? [result, ...scriptHistory.toReversed()] : scriptHistory.toReversed()
+  const totalVersions = versions.length
+  const effectiveIndex = result ? Math.max(0, versions.findIndex((entry) => entry.script === result.script)) : 0
+  const displayIndex = effectiveIndex + 1
+  const canGoPrev = totalVersions > 1 && effectiveIndex > 0
+  const canGoNext = totalVersions > 1 && effectiveIndex < totalVersions - 1
+
   const loadVersion = (idx: number) => {
     const entry = versions[idx]
     if (!entry) return
     setResult(entry)
     setEditedScript(entry.script)
-    setHistoryIndex(idx < scriptHistory.length ? idx : -1)
+    setHistoryIndex(scriptHistory.findIndex((historyEntry) => historyEntry.script === entry.script))
   }
-
-  const hasFreshResult = result != null && (scriptHistory.length === 0 || scriptHistory[scriptHistory.length - 1]?.script !== result.script)
-  const versions = result && hasFreshResult ? [...scriptHistory, result] : scriptHistory
-  const totalVersions = versions.length
-  const historyMatchIndex = result ? scriptHistory.findLastIndex((entry) => entry.script === result.script) : -1
-  const effectiveIndex = hasFreshResult ? totalVersions - 1 : historyMatchIndex >= 0 ? historyMatchIndex : Math.max(0, historyIndex)
-  const displayIndex = effectiveIndex + 1
-  const canGoPrev = totalVersions > 1 && effectiveIndex > 0
-  const canGoNext = totalVersions > 1 && effectiveIndex < totalVersions - 1
 
   const goPrev = () => {
     if (!canGoPrev) return
