@@ -30,6 +30,9 @@ import { IMAGE_MODEL_CREDITS, VIDEO_PER_SECOND_CREDITS, VIDEO_FLAT_CREDITS } fro
 
 const MAX_REF_IMAGES = 10
 const MAX_FILE_MB = 20
+const MAX_MULTIMODAL_IMAGES = 9
+const MAX_MULTIMODAL_VIDEOS = 3
+const MAX_MULTIMODAL_AUDIOS = 3
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const ALLOWED_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm']
@@ -334,6 +337,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   const { isCompanyA, showVideoTab, showAvatarTab, showActionImitationTab } = useTeamFeatures()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isSeedance = videoModel.startsWith('seedance-')
 
   // Switch to the right tab when applyBatch is called (from history / assets)
   useEffect(() => {
@@ -434,6 +438,21 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     if (dragCounterRef.current === 1) setIsDragging(true)
   }, [])
 
+  const getDraggedAsset = (dataTransfer: React.DragEvent['dataTransfer']) => ({
+    url: dataTransfer.getData('application/x-aigc-asset-url') || dataTransfer.getData('text/uri-list') || dataTransfer.getData('text/plain'),
+    type: dataTransfer.getData('application/x-aigc-asset-type'),
+  })
+
+  async function fetchAssetFile(url: string, assetType: string, baseName: string) {
+    const resp = await fetch(url)
+    if (!resp.ok) throw new Error('fetch failed')
+    const blob = await resp.blob()
+    const fallbackExt = assetType === 'video' ? 'mp4' : assetType === 'audio' ? 'mp3' : 'jpg'
+    const ext = blob.type.split('/')[1] || fallbackExt
+    const mime = blob.type || (assetType === 'video' ? 'video/mp4' : assetType === 'audio' ? 'audio/mpeg' : 'image/jpeg')
+    return new File([blob], `${baseName}.${ext}`, { type: mime })
+  }
+
   const handleDragLeave = useCallback(() => {
     dragCounterRef.current--
     if (dragCounterRef.current === 0) setIsDragging(false)
@@ -442,13 +461,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
   }, [])
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault()
-    dragCounterRef.current = 0
-    setIsDragging(false)
-    await handleImageFiles(e.dataTransfer.files)
-  }, [handleImageFiles])
 
   const estimatedCredits = (IMAGE_MODEL_CREDITS[modelType] ?? 5) * quantity
 
@@ -480,6 +492,23 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       toast.error('图片加载失败，请确认网络可访问图片服务器')
     }
   }, [referenceImages.length, addReferenceImage])
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setIsDragging(false)
+    if (e.dataTransfer.files.length > 0) {
+      await handleImageFiles(e.dataTransfer.files)
+      return
+    }
+    const asset = getDraggedAsset(e.dataTransfer)
+    if (asset.url) {
+      if (asset.type === 'video') {
+        toast.error('当前参考区不支持视频参考，请切换到视频的全能参考或动作模仿视频区域')
+        return
+      }
+      await handleSelectCompanyAImage(asset.url, 'asset')
+    }
+  }, [handleImageFiles, handleSelectCompanyAImage])
   const { generate } = useGenerate()
   const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
 
@@ -687,8 +716,119 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     e.preventDefault()
     referenceDragCounterRef.current = 0
     setIsReferenceDragging(false)
-    await handleReferenceFiles(e.dataTransfer.files)
-  }, [handleReferenceFiles])
+    if (e.dataTransfer.files.length > 0) {
+      await handleReferenceFiles(e.dataTransfer.files)
+      return
+    }
+    const asset = getDraggedAsset(e.dataTransfer)
+    if (asset.url) {
+      try {
+        if (asset.type === 'video') {
+          toast.error('当前参考区不支持视频参考，请切换到全能参考或动作模仿的视频区域')
+          return
+        }
+        const file = await fetchAssetFile(asset.url, asset.type, 'asset')
+        const img = await readFrameFile(file)
+        if (img) setVideoReferenceImages(prev => prev.length < 3 ? [...prev, img] : prev)
+      } catch {
+        toast.error('图片加载失败，请确认网络可访问图片服务器')
+      }
+    }
+  }, [handleReferenceFiles, readFrameFile])
+
+  const handleFrameDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    const asset = getDraggedAsset(e.dataTransfer)
+    if (!asset.url) return
+    if (asset.type === 'video') {
+      toast.error('首尾帧区域不支持视频参考，请切换到全能参考或动作模仿的视频区域')
+      return
+    }
+    try {
+      const file = await fetchAssetFile(asset.url, asset.type, 'frame')
+      const img = await readFrameFile(file)
+      if (!img) return
+      if (!firstFrame) {
+        setFirstFrame(img)
+        return
+      }
+      setLastFrame(img)
+    } catch {
+      toast.error('图片加载失败，请确认网络可访问图片服务器')
+    }
+  }, [firstFrame, readFrameFile])
+
+  const handleActionVideoDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    const asset = getDraggedAsset(e.dataTransfer)
+    if (!asset.url) return
+    if (asset.type !== 'video') {
+      toast.error('当前区域只支持视频参考，请拖拽视频资产')
+      return
+    }
+    try {
+      const file = await fetchAssetFile(asset.url, asset.type, 'action-video')
+      if (!isValidVideoFile(file)) {
+        toast.error(`文件「${file.name}」格式不支持，请上传 MP4 / MOV / WEBM 格式的视频`)
+        return
+      }
+      const url = URL.createObjectURL(file)
+      const video = document.createElement('video')
+      video.src = url
+      video.onloadedmetadata = () => {
+        const dur = video.duration
+        URL.revokeObjectURL(url)
+        if (dur > 30) { toast.error('驱动视频时长不能超过 30 秒'); return }
+        const previewUrl = URL.createObjectURL(file)
+        setActionVideo({ file, previewUrl, duration: dur, name: file.name })
+      }
+    } catch {
+      toast.error('视频加载失败，请确认网络可访问视频服务器')
+    }
+  }, [])
+
+  const handleActionImageDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    const asset = getDraggedAsset(e.dataTransfer)
+    if (!asset.url) return
+    if (asset.type === 'video') {
+      toast.error('当前区域只支持图片参考，请拖拽图片资产')
+      return
+    }
+    try {
+      const file = await fetchAssetFile(asset.url, asset.type, 'action-image')
+      if (file.size > 4.7 * 1024 * 1024) { toast.error('人物图片不能超过 4.7 MB'); return }
+      const img = await readFrameFile(file, true)
+      if (img) setActionImage(img)
+    } catch {
+      toast.error('图片加载失败，请确认网络可访问图片服务器')
+    }
+  }, [readFrameFile])
+
+  const handleAvatarImageDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    const asset = getDraggedAsset(e.dataTransfer)
+    if (!asset.url) return
+    if (asset.type === 'video') {
+      toast.error('当前区域只支持图片参考，请拖拽图片资产')
+      return
+    }
+    try {
+      const file = await fetchAssetFile(asset.url, asset.type, 'avatar-image')
+      if (file.size > 5 * 1024 * 1024) { toast.error('人物图片不能超过 5 MB'); return }
+      const img = await readFrameFile(file, true)
+      if (img) setAvatarImage(img)
+    } catch {
+      toast.error('图片加载失败，请确认网络可访问图片服务器')
+    }
+  }, [readFrameFile])
+
+  const handleAvatarAudioDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    const asset = getDraggedAsset(e.dataTransfer)
+    if (!asset.url) return
+    toast.error('当前区域不支持视频参考，请上传音频文件')
+  }, [])
 
   const removeReferenceImage = useCallback((index: number) => {
     setVideoReferenceImages(prev => prev.filter((_, i) => i !== index))
@@ -833,9 +973,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   const handleMultimodalFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
-    const MAX_MULTIMODAL_IMAGES = 9
-    const MAX_MULTIMODAL_VIDEOS = 3
-    const MAX_MULTIMODAL_AUDIOS = 3
     for (const f of Array.from(files)) {
       if (isValidImageFile(f)) {
         if (multimodalImages.length >= MAX_MULTIMODAL_IMAGES) {
@@ -866,8 +1003,34 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     e.preventDefault()
     multimodalDragCounterRef.current = 0
     setIsMultimodalDragging(false)
-    await handleMultimodalFiles(e.dataTransfer.files)
-  }, [handleMultimodalFiles])
+    if (e.dataTransfer.files.length > 0) {
+      await handleMultimodalFiles(e.dataTransfer.files)
+      return
+    }
+    const asset = getDraggedAsset(e.dataTransfer)
+    if (!asset.url) return
+    try {
+      const file = await fetchAssetFile(asset.url, asset.type, 'asset')
+      if (asset.type === 'video' || isValidVideoFile(file)) {
+        if (multimodalVideos.length >= MAX_MULTIMODAL_VIDEOS) {
+          toast.error(`最多添加 ${MAX_MULTIMODAL_VIDEOS} 个参考视频`)
+          return
+        }
+        validateAndAddVideo(file, isSeedance)
+        return
+      }
+      if (asset.type === 'image' || isValidImageFile(file)) {
+        if (multimodalImages.length >= MAX_MULTIMODAL_IMAGES) {
+          toast.error(`最多添加 ${MAX_MULTIMODAL_IMAGES} 张参考图`)
+          return
+        }
+        const img = await readFrameFile(file, true)
+        if (img) setMultimodalImages(prev => prev.length < MAX_MULTIMODAL_IMAGES ? [...prev, img] : prev)
+      }
+    } catch {
+      toast.error('素材加载失败，请确认网络可访问素材服务器')
+    }
+  }, [handleMultimodalFiles, multimodalVideos.length, multimodalImages.length, validateAndAddVideo, isSeedance, readFrameFile])
 
   // Upload a File (or dataUrl for images) to /videos/upload; returns public URL.
   const uploadToVideoTemp = async (fileOrDataUrl: File | string, filename: string): Promise<string> => {
@@ -994,7 +1157,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
 
   const currentModel = MODEL_OPTIONS.find(m => m.value === modelType)
   const showImageQualitySelector = modelType !== 'gpt-image-2'
-  const isSeedance = videoModel.startsWith('seedance-')
   const availableResolutions = ALL_RESOLUTION_OPTIONS.filter(r =>
     currentModel?.resolutions.includes(r.value) ?? true
   )
@@ -1285,6 +1447,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                   ) : (
                     <button
                       onClick={() => firstFrameRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleFrameDrop}
                       className="h-[90px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
                     >
                       <Film className="h-4 w-4 text-muted-foreground" />
@@ -1311,6 +1475,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                   ) : (
                     <button
                       onClick={() => lastFrameRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleFrameDrop}
                       disabled={!firstFrame}
                       className={cn(
                         'h-[90px] w-full rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
@@ -1837,7 +2003,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex-1 min-h-0 flex flex-col">
               <p className="text-[11px] text-muted-foreground mb-1 shrink-0">人物图片（必填，≤4.7MB）</p>
               {actionImage ? (
-                <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-muted group">
+                <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-muted group" onDragOver={(e) => e.preventDefault()} onDrop={handleActionImageDrop}>
                   <Image src={actionImage.previewUrl} alt="" fill className="object-contain" sizes="300px" unoptimized />
                   <button
                     onClick={() => setActionImage(null)}
@@ -1849,6 +2015,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               ) : (
                 <button
                   onClick={() => actionImageRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleActionImageDrop}
                   className="flex-1 min-h-0 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex flex-col items-center justify-center gap-1"
                 >
                   <ImagePlus className="h-5 w-5 text-primary shrink-0" />
@@ -1867,6 +2035,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 <div
                   className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-black group cursor-pointer"
                   onClick={() => setActionVideoPreviewOpen(true)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleActionVideoDrop}
                 >
                   <video
                     src={actionVideo.previewUrl}
@@ -1894,6 +2064,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               ) : (
                 <button
                   onClick={() => actionVideoRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleActionVideoDrop}
                   className="flex-1 min-h-0 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex flex-col items-center justify-center gap-1"
                 >
                   <Clapperboard className="h-4 w-4 text-primary shrink-0" />
@@ -1962,7 +2134,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="shrink-0">
               <p className="text-[11px] text-muted-foreground mb-1">人物图片（必填，≤5MB）</p>
               {avatarImage ? (
-                <div className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group">
+                <div className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group" onDragOver={(e) => e.preventDefault()} onDrop={handleAvatarImageDrop}>
                   <Image src={avatarImage.previewUrl} alt="" fill className="object-contain" sizes="300px" unoptimized />
                   <button
                     onClick={() => setAvatarImage(null)}
@@ -1974,6 +2146,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               ) : (
                 <button
                   onClick={() => avatarImageRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleAvatarImageDrop}
                   className="h-[90px] w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
                 >
                   <ImagePlus className="h-5 w-5 text-primary shrink-0" />
@@ -1989,7 +2163,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="shrink-0">
               <p className="text-[11px] text-muted-foreground mb-1">驱动音频（必填，≤60秒）</p>
               {avatarAudio ? (
-                <div className="flex items-center gap-3 h-10 px-3 rounded-lg border bg-muted">
+                <div className="flex items-center gap-3 h-10 px-3 rounded-lg border bg-muted" onDragOver={(e) => e.preventDefault()} onDrop={handleAvatarAudioDrop}>
                   <Music className="h-4 w-4 text-primary shrink-0" />
                   <span className="flex-1 text-sm truncate">{avatarAudio.name}</span>
                   <span className="text-xs text-muted-foreground shrink-0">{avatarAudio.duration.toFixed(1)}s</span>
@@ -2000,6 +2174,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               ) : (
                 <button
                   onClick={() => avatarAudioRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleAvatarAudioDrop}
                   className="h-10 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
                 >
                   <Music className="h-4 w-4 text-primary shrink-0" />

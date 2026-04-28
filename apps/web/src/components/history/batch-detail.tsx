@@ -11,11 +11,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Download, RotateCcw, Check } from 'lucide-react'
+import { Download, RotateCcw, Check, ImagePlus, Loader2 } from 'lucide-react'
 import { useBatch } from '@/hooks/use-batches'
 import { downloadImage } from '@/lib/download'
 import { translateTaskError } from '@/lib/error-messages'
 import { useGenerationStore } from '@/stores/generation-store'
+import { toast } from 'sonner'
 
 interface BatchDetailProps {
   batchId: string | null
@@ -83,10 +84,14 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied }: BatchDet
 
 function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchResponse; onClose: () => void; onApplied?: () => void }) {
   const applyBatch = useGenerationStore((s) => s.applyBatch)
+  const addReferenceImage = useGenerationStore((s) => s.addReferenceImage)
+  const referenceCount = useGenerationStore((s) => s.referenceImages.length)
   const status = statusConfig[batch.status] ?? statusConfig.pending
   const time = new Date(batch.created_at)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [applied, setApplied] = useState(false)
+  const [sendingUrl, setSendingUrl] = useState<string | null>(null)
+  const [sendingAll, setSendingAll] = useState(false)
 
   function handleApply() {
     applyBatch(batch)
@@ -94,6 +99,58 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
     setTimeout(() => setApplied(false), 1500)
     onApplied?.()
     onClose()
+  }
+
+  async function handleSendToReference(url: string) {
+    if (referenceCount >= 10) {
+      toast.error('最多添加 10 张参考图')
+      return
+    }
+    setSendingUrl(url)
+    try {
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error('fetch failed')
+      const blob = await resp.blob()
+      const ext = blob.type.split('/')[1] || 'jpg'
+      const file = new File([blob], `reference.${ext}`, { type: blob.type })
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      addReferenceImage({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(blob),
+        dataUrl,
+      })
+      toast.success('已发送至参考区')
+    } catch {
+      toast.error('发送至参考失败')
+    } finally {
+      setSendingUrl(null)
+    }
+  }
+
+  async function handleSendAllToReference() {
+    if (completedUrls.length === 0) return
+    if (referenceCount >= 10) {
+      toast.error('最多添加 10 张参考图')
+      return
+    }
+    setSendingAll(true)
+    try {
+      const availableSlots = 10 - referenceCount
+      for (const url of completedUrls.slice(0, availableSlots)) {
+        await handleSendToReference(url)
+      }
+      if (completedUrls.length > availableSlots) {
+        toast.info(`参考区最多 10 张，已添加前 ${availableSlots} 张`)
+      }
+    } finally {
+      setSendingAll(false)
+    }
   }
 
   // Collect completed tasks that have a URL
@@ -148,6 +205,18 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
           <><RotateCcw className="h-4 w-4 mr-2" />复用此配置</>
         )}
       </Button>
+
+      {!isVideo && completedUrls.length > 0 && (
+        <Button
+          size="sm"
+          className="w-full gap-2"
+          onClick={handleSendAllToReference}
+          disabled={sendingAll || referenceCount >= 10}
+        >
+          {sendingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+          发送至参考
+        </Button>
+      )}
 
       <Separator />
 
@@ -217,6 +286,16 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-end p-2 opacity-0 group-hover:opacity-100">
                       <div className="flex gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 bg-background/80 hover:bg-background"
+                          onClick={(e) => { e.stopPropagation(); handleSendToReference(url) }}
+                          disabled={sendingUrl === url}
+                          title="发送至参考"
+                        >
+                          {sendingUrl === url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { User, Loader2, RotateCcw, Check, Video, Play, X, EyeOff } from 'lucide-react'
@@ -20,11 +20,18 @@ interface BatchListCardProps {
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
-  pending: { label: '等待中', variant: 'outline' },
+  pending: { label: '排队中', variant: 'outline' },
   processing: { label: '生成中', variant: 'processing' },
   completed: { label: '已完成', variant: 'success' },
   partial_complete: { label: '部分完成', variant: 'warning' },
   failed: { label: '失败', variant: 'destructive' },
+}
+
+function formatElapsed(ms: number) {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return minutes > 0 ? `${minutes}分${rest}秒` : `${rest}秒`
 }
 
 export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
@@ -33,12 +40,19 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
   const [applied, setApplied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [hiding, setHiding] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
   const status = statusConfig[batch.status] ?? statusConfig.pending
 
   const isCancellable =
     (batch as any).module === 'video' &&
     (batch as any).provider === 'volcengine' &&
     (batch.status === 'processing' || batch.status === 'pending')
+
+  useEffect(() => {
+    if (batch.status !== 'processing') return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [batch.status])
 
   async function handleCancel(e: React.MouseEvent) {
     e.stopPropagation()
@@ -108,6 +122,16 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
       ?? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.original_url
       ?? (batch as any).thumbnail_urls?.[0]  // fallback: list API puts video URL here
     : undefined
+  const firstProcessingStartedAt = batch.tasks
+    .map((task) => task.processing_started_at)
+    .find(Boolean)
+  const statusHint = batch.status === 'pending'
+    ? typeof (batch as any).queue_position === 'number'
+      ? `前方还有 ${(batch as any).queue_position} 个任务`
+      : '等待调度'
+    : batch.status === 'processing' && firstProcessingStartedAt
+      ? `已用时 ${formatElapsed(now - new Date(firstProcessingStartedAt).getTime())}`
+      : null
 
   return (
     <Card
@@ -126,6 +150,9 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               <span className="text-xs text-muted-foreground">
                 {batch.completed_count}/{batch.quantity}
               </span>
+              {statusHint && (
+                <span className="text-xs text-muted-foreground">{statusHint}</span>
+              )}
               {batch.user && (
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                   <User className="h-3 w-3" />
@@ -168,7 +195,9 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
           ) : (batch.status === 'failed' || batch.status === 'partial_complete') && firstError ? (
             <div className="flex h-16 w-full items-center gap-2 rounded-md bg-destructive/10 px-3">
               <Video className="h-4 w-4 shrink-0 text-destructive" />
-              <p className="text-xs text-destructive line-clamp-2">{translateTaskError(firstError)}</p>
+              <p className="text-xs text-destructive line-clamp-2">
+                {translateTaskError(firstError)}，本次失败任务积分已退还
+              </p>
             </div>
           ) : (
             <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
@@ -211,7 +240,9 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
             {thumbnails.length === 0 && batch.status !== 'pending' && batch.status !== 'processing' && (
               (batch.status === 'failed' || batch.status === 'partial_complete') && firstError ? (
                 <div className="flex h-16 w-full items-center gap-2 rounded-md bg-destructive/10 px-3">
-                  <p className="text-xs text-destructive line-clamp-2">{translateTaskError(firstError)}</p>
+                  <p className="text-xs text-destructive line-clamp-2">
+                    {translateTaskError(firstError)}，本次失败任务积分已退还
+                  </p>
                 </div>
               ) : (
                 <div className="flex h-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">

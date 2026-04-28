@@ -19,6 +19,7 @@ import {
   PanelLeft,
   Sparkles,
   Settings,
+  BookOpen,
   Users,
   Shield,
   Palette,
@@ -48,6 +49,7 @@ const roleNavItems: NavItem[] = [
 ]
 
 const bottomNavItems: NavItem[] = [
+  { href: '/docs', label: '操作手册', icon: BookOpen },
   { href: '/settings', label: '设置', icon: Settings },
 ]
 

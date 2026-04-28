@@ -22,6 +22,8 @@ const TAB_CONFIG: { id: Tab; label: string; icon: React.ReactNode }[] = [
   // { id: 'video', label: '视频解析', icon: <Video className="h-3.5 w-3.5" /> },
 ]
 
+const ASSISTANT_HINT_KEY = 'toby-ai-assistant-hint-seen'
+
 export function AiAssistant() {
   const user = useAuthStore((s) => s.user)
   const userId = user?.id ?? 'guest'
@@ -31,6 +33,7 @@ export function AiAssistant() {
   const [messages, setMessages] = useState<AiChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showHint, setShowHint] = useState(false)
 
   // Chat tab attachments
   const [chatImage, setChatImage] = useState<{ base64: string; type: string; preview: string; name: string } | null>(null)
@@ -77,6 +80,17 @@ export function AiAssistant() {
       setMessages(loadAiChatHistory(userId))
     }
   }, [open, userId])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (localStorage.getItem(ASSISTANT_HINT_KEY)) return
+    setShowHint(true)
+    const timer = setTimeout(() => {
+      setShowHint(false)
+      localStorage.setItem(ASSISTANT_HINT_KEY, '1')
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [])
 
   // Auto-scroll
   useEffect(() => {
@@ -210,6 +224,8 @@ export function AiAssistant() {
     // Only toggle if not dragged (pure click without drag)
     if (!buttonDraggedRef.current) {
       setOpen((v) => !v)
+      setShowHint(false)
+      localStorage.setItem(ASSISTANT_HINT_KEY, '1')
     }
     buttonDraggedRef.current = false // 重置标记
   }
@@ -496,7 +512,8 @@ export function AiAssistant() {
         onClick={handleButtonClick}
         className={cn(
           'fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-200 gradient-accent hover:scale-105 active:scale-95 cursor-move',
-          open && 'rotate-90'
+          open && 'rotate-90',
+          showHint && !open && 'animate-pulse'
         )}
         style={{
           left: buttonPosition.x ? `${buttonPosition.x}px` : 'auto',
@@ -508,6 +525,19 @@ export function AiAssistant() {
       >
         {open ? <X className="h-6 w-6 text-white" /> : <Bot className="h-6 w-6 text-white" />}
       </button>
+      {showHint && !open && (
+        <div
+          className="fixed z-50 rounded-full bg-background px-3 py-2 text-xs font-medium text-foreground shadow-lg border border-border"
+          style={{
+            right: buttonPosition.x ? 'auto' : '24px',
+            left: buttonPosition.x ? `${buttonPosition.x - 56}px` : 'auto',
+            bottom: buttonPosition.y ? 'auto' : '148px',
+            top: buttonPosition.y ? `${buttonPosition.y - 48}px` : 'auto',
+          }}
+        >
+          点这里可以优化提示词哦~
+        </div>
+      )}
 
       {/* Chat panel */}
       {open && (
