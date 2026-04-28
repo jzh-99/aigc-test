@@ -1,6 +1,8 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback, KeyboardEvent, MutableRefObject, ClipboardEvent } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { X, Send, Sparkles, AtSign, RefreshCw, Download, ArrowRight } from 'lucide-react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasAgent } from '@/hooks/canvas/use-canvas-agent'
@@ -123,14 +125,27 @@ function MessageBubble({
   return (
     <div className={`flex flex-col gap-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
       <div
-        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed break-words ${
           isUser
-            ? 'bg-primary text-primary-foreground rounded-br-sm'
+            ? 'bg-primary text-primary-foreground rounded-br-sm whitespace-pre-wrap'
             : 'bg-muted text-foreground rounded-bl-sm'
         } ${message.status === 'error' ? 'opacity-60' : ''}`}
       >
-        {isUser ? renderUserContent(message.content) : message.content}
-        {message.status === 'streaming' && (
+        {isUser ? (
+          <>
+            {renderUserContent(message.content)}
+          </>
+        ) : (
+          <div className="prose prose-sm dark:prose-invert max-w-full [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_pre]:overflow-x-auto [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+            {message.status === 'streaming' && (
+              <span className="inline-block w-1 h-3.5 bg-current ml-0.5 animate-pulse rounded-sm" />
+            )}
+          </div>
+        )}
+        {isUser && message.status === 'streaming' && (
           <span className="inline-block w-1 h-3.5 bg-current ml-0.5 animate-pulse rounded-sm" />
         )}
       </div>
