@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
+import { signAssetUrl } from '../lib/storage.js'
+import { purgeVideoStudioProject, restoreProjectAssets, softDeleteProjectAssets } from '../lib/project-purge.js'
 
 const SCRIPT_SYSTEM_PROMPT = `你是专业影视编剧。根据用户描述生成完整剧本。
 
@@ -120,6 +122,26 @@ export async function videoStudioRoutes(app: FastifyInstance) {
     } catch {
       return null
     }
+  }
+
+  async function assertProjectAccess(projectId: string, userId: string, requireDelete = false) {
+    const db = getDb()
+    const project = await db
+      .selectFrom('video_studio_projects')
+      .select(['workspace_id', 'user_id'])
+      .where('id', '=', projectId)
+      .executeTakeFirst()
+    if (!project) return null
+
+    const member = await db
+      .selectFrom('workspace_members')
+      .select('role')
+      .where('workspace_id', '=', project.workspace_id)
+      .where('user_id', '=', userId)
+      .executeTakeFirst()
+    if (!member) return null
+    if (requireDelete && project.user_id !== userId && member.role !== 'admin') return null
+    return { project, member }
   }
 
   // ── Script write ──────────────────────────────────────────────────────────────
@@ -322,7 +344,16 @@ export async function videoStudioRoutes(app: FastifyInstance) {
         .selectFrom('video_studio_projects')
         .select(['id', 'name', 'created_at', 'updated_at'])
         .where('workspace_id', '=', workspace_id)
-        .where('user_id', '=', userId)
+        .where('is_deleted', '=', false)
+        .where((eb) => eb.or([
+          eb('user_id', '=', userId),
+          eb.exists(db
+            .selectFrom('workspace_members')
+            .select('workspace_id')
+            .where('workspace_id', '=', workspace_id)
+            .where('user_id', '=', userId)
+            .where('role', '=', 'admin')),
+        ]))
         .orderBy('updated_at', 'desc')
         .execute()
 
@@ -342,10 +373,17 @@ export async function videoStudioRoutes(app: FastifyInstance) {
         .selectFrom('video_studio_projects')
         .selectAll()
         .where('id', '=', id)
-        .where('user_id', '=', userId)
+        .where('is_deleted', '=', false)
         .executeTakeFirst()
 
       if (!project) return reply.status(404).send({ error: 'not found' })
+      const member = await db
+        .selectFrom('workspace_members')
+        .select('workspace_id')
+        .where('workspace_id', '=', project.workspace_id)
+        .where('user_id', '=', userId)
+        .executeTakeFirst()
+      if (!member) return reply.status(403).send({ error: 'forbidden' })
       return reply.send(project)
     },
   )
@@ -383,6 +421,13 @@ export async function videoStudioRoutes(app: FastifyInstance) {
         .executeTakeFirst()
       if (!member) return reply.status(403).send({ error: 'forbidden' })
 
+      const existing = await db
+        .selectFrom('video_studio_projects')
+        .select(['workspace_id', 'is_deleted'])
+        .where('id', '=', id)
+        .executeTakeFirst()
+      if (existing?.is_deleted) return reply.status(404).send({ error: 'not found' })
+
       await db
         .insertInto('video_studio_projects')
         .values({
@@ -405,21 +450,241 @@ export async function videoStudioRoutes(app: FastifyInstance) {
     },
   )
 
+  // GET /video-studio/projects/:id/history
+  app.get<{
+    Params: { id: string }
+    Querystring: { limit?: string; cursor?: string }
+  }>('/video-studio/projects/:id/history', async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+    const limitN = Math.min(parseInt(request.query.limit ?? '30', 10) || 30, 100)
+    const cursor = request.query.cursor
+
+    const access = await assertProjectAccess(id, request.user.id)
+    if (!access) return reply.status(404).send({ error: 'not found' })
+
+    let decodedCursor: { created_at: string; id: string } | null = null
+    if (cursor) {
+      try { decodedCursor = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8')) }
+      catch { return reply.badRequest('Invalid cursor') }
+    }
+
+    let query = db
+      .selectFrom('task_batches')
+      .select(['id', 'model', 'prompt', 'quantity', 'completed_count', 'failed_count', 'status', 'actual_credits', 'created_at', 'module', 'provider'])
+      .where('video_studio_project_id', '=', id)
+      .where('is_deleted', '=', false)
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(limitN + 1) as any
+
+    if (decodedCursor) {
+      query = query.where((eb: any) => eb.or([
+        eb('created_at', '<', decodedCursor!.created_at),
+        eb.and([eb('created_at', '=', decodedCursor!.created_at), eb('id', '<', decodedCursor!.id)]),
+      ]))
+    }
+
+    const rows = await query.execute()
+    const hasMore = rows.length > limitN
+    const items = await Promise.all((hasMore ? rows.slice(0, limitN) : rows).map(async (batch: any) => {
+      const queuePosition = batch.status === 'pending'
+        ? Number((await db
+            .selectFrom('task_batches')
+            .select((eb: any) => eb.fn.countAll().as('count'))
+            .where('is_deleted', '=', false)
+            .where('status', '=', 'pending')
+            .where('provider', '=', batch.provider)
+            .where('created_at', '<', batch.created_at)
+            .executeTakeFirst() as any)?.count ?? 0)
+        : null
+      const processing = await db
+        .selectFrom('tasks')
+        .select('processing_started_at')
+        .where('batch_id', '=', batch.id)
+        .where('processing_started_at', 'is not', null)
+        .orderBy('processing_started_at', 'asc')
+        .executeTakeFirst()
+      const { provider: _provider, ...item } = batch
+      return { ...item, canvas_node_id: null, queue_position: queuePosition, processing_started_at: processing?.processing_started_at ?? null }
+    }))
+
+    const nextCursor = hasMore
+      ? Buffer.from(JSON.stringify({ created_at: items[items.length - 1].created_at, id: items[items.length - 1].id })).toString('base64')
+      : null
+
+    return reply.send({ items, nextCursor })
+  })
+
+  // GET /video-studio/projects/:id/assets
+  app.get<{
+    Params: { id: string }
+    Querystring: { limit?: string; cursor?: string; type?: string }
+  }>('/video-studio/projects/:id/assets', async (request, reply) => {
+    const db = getDb()
+    const { id } = request.params
+    const limitN = Math.min(parseInt(request.query.limit ?? '50', 10) || 50, 200)
+    const cursor = request.query.cursor
+    const type = request.query.type
+
+    const access = await assertProjectAccess(id, request.user.id)
+    if (!access) return reply.status(404).send({ error: 'not found' })
+
+    let decodedCursor: { created_at: string; id: string } | null = null
+    if (cursor) {
+      try { decodedCursor = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8')) }
+      catch { return reply.badRequest('Invalid cursor') }
+    }
+
+    let query = db
+      .selectFrom('assets as a')
+      .innerJoin('task_batches as b', 'b.id', 'a.batch_id')
+      .select(['a.id', 'a.type', 'a.storage_url', 'a.original_url', 'a.created_at', 'b.id as batch_id', 'b.prompt', 'b.model'])
+      .where('b.video_studio_project_id', '=', id)
+      .where('a.is_deleted', '=', false)
+      .where((eb: any) => eb.or([
+        eb('a.transfer_status', '=', 'completed'),
+        eb('a.original_url', 'is not', null),
+      ]))
+      .orderBy('a.created_at', 'desc')
+      .orderBy('a.id', 'desc')
+      .limit(limitN + 1) as any
+
+    if (type) query = query.where('a.type', '=', type)
+
+    if (decodedCursor) {
+      query = query.where((eb: any) => eb.or([
+        eb('a.created_at', '<', decodedCursor!.created_at),
+        eb.and([eb('a.created_at', '=', decodedCursor!.created_at), eb('a.id', '<', decodedCursor!.id)]),
+      ]))
+    }
+
+    const rows = await query.execute()
+    const hasMore = rows.length > limitN
+    const items = hasMore ? rows.slice(0, limitN) : rows
+    const signedItems = await Promise.all(items.map(async (item: any) => ({
+      ...item,
+      canvas_node_id: null,
+      storage_url: await signAssetUrl(item.storage_url),
+      original_url: item.original_url ? await signAssetUrl(item.original_url) : null,
+    })))
+
+    const nextCursor = hasMore
+      ? Buffer.from(JSON.stringify({ created_at: items[items.length - 1].created_at, id: items[items.length - 1].id })).toString('base64')
+      : null
+
+    return reply.send({ items: signedItems, nextCursor })
+  })
+
+  // PATCH /video-studio/projects/:id/name
+  app.patch<{
+    Params: { id: string }
+    Body: { name: string }
+  }>(
+    '/video-studio/projects/:id/name',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['name'],
+          properties: { name: { type: 'string', minLength: 1, maxLength: 200 } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const db = getDb()
+      const name = request.body.name.trim()
+      if (!name) return reply.status(400).send({ error: 'name required' })
+
+      const access = await assertProjectAccess(request.params.id, request.user.id, true)
+      if (!access) return reply.status(404).send({ error: 'not found' })
+
+      await db
+        .updateTable('video_studio_projects')
+        .set({ name, updated_at: sql`now()` })
+        .where('id', '=', request.params.id)
+        .where('is_deleted', '=', false)
+        .execute()
+
+      return reply.send({ success: true, name })
+    },
+  )
+
   // DELETE /video-studio/projects/:id
   app.delete<{ Params: { id: string } }>(
     '/video-studio/projects/:id',
     async (request, reply) => {
       const db = getDb()
-      const userId = request.user.id
-      const { id } = request.params
+      const access = await assertProjectAccess(request.params.id, request.user.id, true)
+      if (!access) return reply.status(404).send({ error: 'not found' })
 
-      await db
-        .deleteFrom('video_studio_projects')
-        .where('id', '=', id)
-        .where('user_id', '=', userId)
-        .execute()
+      await db.transaction().execute(async (trx) => {
+        await trx
+          .updateTable('video_studio_projects')
+          .set({ is_deleted: true, deleted_at: sql`now()`, updated_at: sql`now()` })
+          .where('id', '=', request.params.id)
+          .where('is_deleted', '=', false)
+          .execute()
+        await softDeleteProjectAssets(trx, 'video_studio_project_id', request.params.id)
+      })
 
       return reply.send({ success: true })
     },
   )
+
+  // GET /video-studio/projects/trash
+  app.get<{ Querystring: { workspace_id: string } }>('/video-studio/projects/trash', async (request, reply) => {
+    const db = getDb()
+    const userId = request.user.id
+    const { workspace_id } = request.query
+    if (!workspace_id) return reply.status(400).send({ error: 'workspace_id required' })
+
+    const member = await db
+      .selectFrom('workspace_members')
+      .select('role')
+      .where('workspace_id', '=', workspace_id)
+      .where('user_id', '=', userId)
+      .executeTakeFirst()
+    if (!member) return reply.status(403).send({ error: 'forbidden' })
+
+    const projects = await db
+      .selectFrom('video_studio_projects')
+      .select(['id', 'name', 'created_at', 'updated_at', 'deleted_at', 'user_id', 'workspace_id'])
+      .where('workspace_id', '=', workspace_id)
+      .where('is_deleted', '=', true)
+      .where((eb) => member.role === 'admin' ? eb.val(true) : eb('user_id', '=', userId))
+      .orderBy('deleted_at', 'desc')
+      .execute()
+
+    return reply.send(projects)
+  })
+
+  // POST /video-studio/projects/:id/restore
+  app.post<{ Params: { id: string } }>('/video-studio/projects/:id/restore', async (request, reply) => {
+    const db = getDb()
+    const access = await assertProjectAccess(request.params.id, request.user.id, true)
+    if (!access) return reply.status(404).send({ error: 'not found' })
+
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('video_studio_projects')
+        .set({ is_deleted: false, deleted_at: null, updated_at: sql`now()` })
+        .where('id', '=', request.params.id)
+        .where('is_deleted', '=', true)
+        .execute()
+      await restoreProjectAssets(trx, 'video_studio_project_id', request.params.id)
+    })
+
+    return reply.send({ success: true })
+  })
+
+  // DELETE /video-studio/projects/:id/permanent
+  app.delete<{ Params: { id: string } }>('/video-studio/projects/:id/permanent', async (request, reply) => {
+    const db = getDb()
+    const access = await assertProjectAccess(request.params.id, request.user.id, true)
+    if (!access) return reply.status(404).send({ error: 'not found' })
+
+    await purgeVideoStudioProject(db, request.params.id)
+    return reply.send({ success: true })
+  })
 }

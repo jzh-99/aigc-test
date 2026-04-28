@@ -87,11 +87,59 @@ export function generateAssetPrompts(params: {
   return post<AssetPromptsResult>('/asset-prompts', params, token)
 }
 
-export function writeSeriesOutline(params: {
-  description: string
-  style: string
-  episodeCount: number
-  episodeDuration: number
-}, token?: string) {
-  return post<SeriesOutlineResult>('/series-outline', params, token)
+export interface VideoStudioHistoryItem {
+  id: string
+  canvas_node_id: string | null
+  model: string
+  prompt: string
+  quantity: number
+  completed_count: number
+  failed_count: number
+  status: string
+  actual_credits: number | null
+  created_at: string
+  module?: string
+  queue_position?: number | null
+  processing_started_at?: string | null
+}
+
+export interface VideoStudioAssetItem {
+  id: string
+  type: string
+  storage_url: string | null
+  original_url: string | null
+  created_at: string
+  batch_id: string
+  canvas_node_id: string | null
+  prompt: string
+  model: string
+}
+
+interface CursorListResponse<T> {
+  items: T[]
+  nextCursor: string | null
+}
+
+async function get<T>(path: string, token?: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } | string }
+    throw new Error(typeof err.error === 'string' ? err.error : err.error?.message ?? `请求失败 (${res.status})`)
+  }
+  return res.json() as Promise<T>
+}
+
+export function fetchVideoStudioHistory(projectId: string, token?: string, cursor?: string | null) {
+  const qs = new URLSearchParams()
+  if (cursor) qs.set('cursor', cursor)
+  return get<CursorListResponse<VideoStudioHistoryItem>>(`/projects/${projectId}/history${qs.size ? `?${qs.toString()}` : ''}`, token)
+}
+
+export function fetchVideoStudioAssets(projectId: string, token?: string, cursor?: string | null, type?: string) {
+  const qs = new URLSearchParams()
+  if (cursor) qs.set('cursor', cursor)
+  if (type) qs.set('type', type)
+  return get<CursorListResponse<VideoStudioAssetItem>>(`/projects/${projectId}/assets${qs.size ? `?${qs.toString()}` : ''}`, token)
 }
