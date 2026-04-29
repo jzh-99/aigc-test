@@ -10,7 +10,7 @@
 - 使用独立 `.env`。
 - Web 使用 `6008` 端口，走平台映射地址访问。
 - API、数据库、Redis 尽量与当前 6006 测试环境隔离。
-- 用它预先跑一遍 `docs/contractor/local-setup.md`，发现并修复交接流程中的问题。
+- 用它预先跑一遍 `docs/onboarding/local-setup.md`，发现并修复交接流程中的问题。
 
 ## 2. 建议目录
 

@@ -4,7 +4,7 @@
 # 部署、运维、CI/CD、文档
 /.github/ @jzh-99
 /scripts/ @jzh-99
-/docs/contractor/ @jzh-99
+/docs/onboarding/ @jzh-99
 /docker-compose.yml @jzh-99
 /ecosystem.config.cjs @jzh-99
 /setup.sh @jzh-99
