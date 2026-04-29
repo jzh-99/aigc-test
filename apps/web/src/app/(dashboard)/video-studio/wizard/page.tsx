@@ -10,6 +10,7 @@ import { StepScript } from '@/components/video-studio/step-script'
 import { StepStoryboard } from '@/components/video-studio/step-storyboard'
 import { StepCharacters } from '@/components/video-studio/step-characters'
 import { StepVideo } from '@/components/video-studio/step-video'
+import { StepComplete } from '@/components/video-studio/step-complete'
 import { useWizardState } from '@/hooks/video-studio/use-wizard-state'
 import { useAuthStore } from '@/stores/auth-store'
 import { fetchWithAuth } from '@/lib/api-client'
@@ -33,7 +34,8 @@ function makeEdge(id: string, source: string, target: string, sourceHandle?: str
 function WizardContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const projectName = searchParams.get('name') ?? '未命名项目'
+  const initialProjectName = searchParams.get('name') ?? '未命名项目'
+  const [projectName, setProjectName] = useState(initialProjectName)
   const projectType = (searchParams.get('type') ?? 'single') as 'single' | 'series'
   const episodeCount = Number(searchParams.get('episodes') ?? '1')
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -69,6 +71,7 @@ function WizardContent() {
     fetchWithAuth<{ wizard_state?: WizardState }>(`/video-studio/projects/${projectId}`)
       .then((project) => {
         if (project?.wizard_state) setServerState(project.wizard_state)
+        if ((project as any)?.name) setProjectName((project as any).name)
       })
       .catch(() => {})
       .finally(() => setServerLoaded(true))
@@ -77,12 +80,11 @@ function WizardContent() {
   const storageKey = `video-studio:${projectId}`
   const wizard = useWizardState(storageKey, projectId, projectName, serverState)
 
-  const handleVideoComplete = async (opts?: { exportToCanvas?: boolean }) => {
+  const handleVideoComplete = () => {
     wizard.completeStep('video')
-    if (!opts?.exportToCanvas) {
-      router.push('/video-studio')
-      return
-    }
+  }
+
+  const handleExportToCanvas = async () => {
     if (!workspaceId) { router.push('/video-studio'); return }
     try {
       toast.loading('正在创建画布…', { id: 'canvas-export' })
@@ -137,8 +139,12 @@ function WizardContent() {
         nodes.push(makeNode(vidGenNodeId, 'video_gen', { x: COL * 4, y }, {
           prompt: shot.content,
           model: 'seedance-2.0',
-          mode: 'multiref',
+          videoMode: 'multiref',
+          aspectRatio: wizard.describeData?.aspectRatio ?? 'adaptive',
           duration: shot.duration,
+          generateAudio: true,
+          cameraFixed: false,
+          watermark: false,
         }))
         edges.push(makeEdge(`e-ref-vidgen-${i}`, refNodeId, vidGenNodeId))
 
@@ -157,7 +163,7 @@ function WizardContent() {
       })
 
       // Write node outputs for video_gen nodes so videos show as completed
-      await Promise.allSettled(
+      const outputResults = await Promise.allSettled(
         wizard.shots
           .filter((s) => wizard.shotVideos[s.id])
           .map((s) =>
@@ -165,16 +171,42 @@ function WizardContent() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ output_urls: [wizard.shotVideos[s.id]], is_selected: true }),
-            }).catch(() => {})
+            })
           )
       )
+      const failedOutput = outputResults.find((result) => result.status === 'rejected')
+      if (failedOutput) throw failedOutput.reason
 
       toast.success('画布已创建', { id: 'canvas-export' })
       router.push(`/canvas/editor/${canvas.id}`)
     } catch (err) {
-      toast.error('创建画布失败', { id: 'canvas-export' })
+      toast.error(err instanceof Error ? err.message : '创建画布失败', { id: 'canvas-export' })
       router.push('/video-studio')
     }
+  }
+
+  const handleReturnToProjects = () => {
+    router.push('/video-studio')
+  }
+
+  const handleRenameProject = async (name: string) => {
+    await fetchWithAuth(`/video-studio/projects/${projectId}/name`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    setProjectName(name)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('name', name)
+    router.replace(`/video-studio/wizard?${params.toString()}`)
+    toast.success('项目名称已更新')
+  }
+
+  const handleDeleteProject = async () => {
+    if (!confirm('删除后项目会进入回收站，7 天内可恢复。确认删除？')) return
+    await fetchWithAuth(`/video-studio/projects/${projectId}`, { method: 'DELETE' })
+    toast.success('项目已移入回收站')
+    router.push('/video-studio')
   }
 
   if (!serverLoaded) return null
@@ -196,6 +228,9 @@ function WizardContent() {
         activeStep={wizard.activeStep}
         onStepClick={wizard.setActiveStep}
         projectName={projectName}
+        projectId={projectId}
+        onProjectNameChange={handleRenameProject}
+        onDeleteProject={handleDeleteProject}
         headerRight={headerRight}
       >
         {wizard.activeStep === 'describe' && (
@@ -245,6 +280,9 @@ function WizardContent() {
             characterImages={wizard.characterImages}
             sceneImages={wizard.sceneImages}
             projectId={projectId}
+            pendingImageBatches={wizard.pendingImageBatches ?? {}}
+            onAddPendingImageBatch={wizard.addPendingImageBatch}
+            onClearPendingImageBatch={wizard.clearPendingImageBatch}
             onSelectCharacterImage={wizard.setCharacterImage}
             onSelectSceneImage={wizard.setSceneImage}
             onComplete={() => wizard.completeStep('characters')}
@@ -261,8 +299,21 @@ function WizardContent() {
             sceneImages={wizard.sceneImages}
             projectId={projectId}
             projectName={projectName}
+            pendingVideoBatches={wizard.pendingVideoBatches ?? {}}
+            onAddPendingVideoBatch={wizard.addPendingVideoBatch}
+            onClearPendingVideoBatch={wizard.clearPendingVideoBatch}
             onVideoReady={wizard.setShotVideo}
             onComplete={handleVideoComplete}
+          />
+        )}
+
+        {wizard.activeStep === 'complete' && wizard.describeData && (
+          <StepComplete
+            shots={wizard.shots}
+            shotVideos={wizard.shotVideos}
+            projectName={projectName}
+            onExportToCanvas={handleExportToCanvas}
+            onReturn={handleReturnToProjects}
           />
         )}
       </WizardLayout>

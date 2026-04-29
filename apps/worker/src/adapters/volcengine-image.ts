@@ -10,6 +10,15 @@ const VOLCENGINE_MAX_PIXELS = 6000 * 6000            // 36M px
 const VOLCENGINE_MAX_LONG_SIDE = 6000
 const VOLCENGINE_JPEG_QUALITY = 85
 const VOLCENGINE_ALLOWED_FORMATS = new Set(['jpeg', 'jpg', 'png', 'webp', 'bmp', 'tiff', 'gif'])
+const VOLCENGINE_FORMAT_MIME: Record<string, string> = {
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  tiff: 'image/tiff',
+  gif: 'image/gif',
+}
 
 // ---------------------------------------------------------------------------
 // aspect_ratio + resolution → size (pixel dimensions) lookup table
@@ -75,8 +84,14 @@ async function fetchImageBuffer(urlOrDataUri: string, index: number): Promise<{ 
   const res = await fetch(urlOrDataUri)
   if (!res.ok) throw new Error(`Failed to fetch reference image ${index + 1}: HTTP ${res.status}`)
   const buffer = Buffer.from(await res.arrayBuffer())
-  const ct = res.headers.get('content-type') ?? 'image/jpeg'
-  const mimeType = ct.split(';')[0].trim()
+  const ct = res.headers.get('content-type') ?? ''
+  let mimeType = ct.split(';')[0].trim()
+
+  if (!mimeType || mimeType === 'application/octet-stream' || mimeType === 'binary/octet-stream') {
+    const format = (await sharp(buffer).metadata()).format
+    mimeType = format ? (VOLCENGINE_FORMAT_MIME[format] ?? `image/${format}`) : 'image/jpeg'
+  }
+
   return { buffer, mimeType }
 }
 

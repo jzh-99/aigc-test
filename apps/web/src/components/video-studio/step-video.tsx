@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Loader2, Play, Download, ArrowRight, ChevronDown, ChevronUp, Archive, Pause, Scissors, LayoutGrid, X, Check, Link2, AlertCircle } from 'lucide-react'
+import { Loader2, Play, Download, ArrowRight, ChevronDown, ChevronUp, Check, Link2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
-import JSZip from 'jszip'
 import { useAuthStore } from '@/stores/auth-store'
-import { apiPost, apiGet, fetchWithAuth } from '@/lib/api-client'
+import { apiPost, apiGet } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
 import type { Shot } from '@/lib/video-studio-api'
 import type { DescribeData } from '@/hooks/video-studio/use-wizard-state'
+import { usePendingBatchWatcher } from '@/hooks/video-studio/use-pending-batch-watcher'
 import { VIDEO_PER_SECOND_CREDITS } from '@/lib/credits'
 
 type VideoModel = 'seedance-2.0' | 'seedance-2.0-fast' | 'seedance-1.5-pro'
@@ -32,7 +32,7 @@ function calcVideoCost(shot: Shot, params: VideoParams): number {
   return dur * cps
 }
 
-async function generateVideo(params: {
+async function submitVideoBatch(params: {
   prompt: string
   model: VideoModel
   aspectRatio: string
@@ -52,22 +52,10 @@ async function generateVideo(params: {
     duration: clampedDuration,
     generate_audio: false,
     ...(params.referenceImages.length > 0 ? { reference_images: params.referenceImages } : {}),
-    // images[1] = last_frame of previous shot for continuity
     ...(params.tailFrameUrl ? { images: [params.tailFrameUrl] } : {}),
     ...(params.projectId ? { video_studio_project_id: params.projectId } : {}),
   })
-
-  for (let i = 0; i < 120; i++) {
-    await new Promise((r) => setTimeout(r, 5000))
-    const updated = await apiGet<BatchResponse>(`/batches/${batch.id}`)
-    if (updated.status === 'completed' || updated.status === 'partial_complete') {
-      const url = updated.tasks[0]?.asset?.storage_url ?? updated.tasks[0]?.asset?.original_url
-      if (url) return url
-      throw new Error('视频URL为空')
-    }
-    if (updated.status === 'failed') throw new Error('视频生成失败')
-  }
-  throw new Error('生成超时')
+  return batch.id
 }
 
 interface ShotVideoCardProps {
@@ -82,13 +70,15 @@ interface ShotVideoCardProps {
   tailFrameUrl?: string
   sequentialMode: boolean
   isLocked: boolean
+  isPending: boolean
   onVideoReady: (url: string) => void
+  onBatchSubmitted: (batchId: string) => void
   onConfirm: () => void
   onTailFrameExtracted: (shotId: string, dataUrl: string) => void
   registerGenerate: (shotId: string, fn: () => Promise<void>) => void
 }
 
-function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio, workspaceId, projectId, videoParams, tailFrameUrl, sequentialMode, isLocked, onVideoReady, onConfirm, onTailFrameExtracted, registerGenerate }: ShotVideoCardProps) {
+function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio, workspaceId, projectId, videoParams, tailFrameUrl, sequentialMode, isLocked, isPending, onVideoReady, onBatchSubmitted, onConfirm, onTailFrameExtracted, registerGenerate }: ShotVideoCardProps) {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -140,7 +130,7 @@ function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio,
       }
       if (!shot.visualPrompt && shot.cameraMove) base += `。运镜：${shot.cameraMove}。`
       if (!base.includes('不要有字幕')) base += '视频需要有台词和音效，不要有字幕和bgm。'
-      const url = await generateVideo({
+      const batchId = await submitVideoBatch({
         prompt: base,
         model: videoParams.model,
         aspectRatio,
@@ -150,7 +140,8 @@ function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio,
         workspaceId,
         projectId,
       })
-      onVideoReady(url)
+      onBatchSubmitted(batchId)
+      toast.success(`${shot.label}：任务已提交`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : '生成失败'
       setErrorMessage(msg)
@@ -158,7 +149,7 @@ function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio,
     } finally {
       setLoading(false)
     }
-  }, [shot, labelMap, referenceImages, tailFrameUrl, sequentialMode, aspectRatio, workspaceId, projectId, videoParams, onVideoReady])
+  }, [shot, labelMap, referenceImages, tailFrameUrl, sequentialMode, aspectRatio, workspaceId, projectId, videoParams, onBatchSubmitted])
 
   const handleConfirm = useCallback(async () => {
     setConfirmed(true)
@@ -242,8 +233,8 @@ function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio,
                 <Download className="w-3 h-3" />
                 下载
               </a>
-              <button onClick={generate} disabled={loading} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
-                重新生成
+              <button onClick={generate} disabled={loading || isPending} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
+                {loading || isPending ? '生成中…' : '重新生成'}
               </button>
               {sequentialMode && !confirmed && (
                 <button
@@ -258,11 +249,11 @@ function ShotVideoCard({ shot, referenceImages, labelMap, videoUrl, aspectRatio,
           ) : (
             <button
               onClick={generate}
-              disabled={loading}
+              disabled={loading || isPending}
               className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {loading ? '生成中…' : `生成视频 · ${calcVideoCost(shot, videoParams)}积分`}
+              {(loading || isPending) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {loading || isPending ? '生成中…' : `生成视频 · ${calcVideoCost(shot, videoParams)}积分`}
             </button>
           )}
 
@@ -331,21 +322,17 @@ interface Props {
   sceneImages: Record<string, string>
   projectId: string
   projectName: string
+  pendingVideoBatches: Record<string, string>
+  onAddPendingVideoBatch: (batchId: string, shotId: string) => void
+  onClearPendingVideoBatch: (batchId: string) => void
   onVideoReady: (shotId: string, url: string) => void
-  onComplete: (opts?: { exportToCanvas?: boolean }) => void
+  onComplete: () => void
 }
 
-export function StepVideo({ shots, shotImages, shotVideos, describeData, characterImages, sceneImages, projectId, projectName, onVideoReady, onComplete }: Props) {
+export function StepVideo({ shots, shotImages, shotVideos, describeData, characterImages, sceneImages, projectId, projectName, pendingVideoBatches, onAddPendingVideoBatch, onClearPendingVideoBatch, onVideoReady, onComplete }: Props) {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const [showParams, setShowParams] = useState(false)
   const [videoParams, setVideoParams] = useState<VideoParams>(DEFAULT_VIDEO_PARAMS)
-  const [zipExporting, setZipExporting] = useState(false)
-  const [showSplicePreview, setShowSplicePreview] = useState(false)
-  const [showTrimEditor, setShowTrimEditor] = useState(false)
-  const [trimPoints, setTrimPoints] = useState<Record<string, { inPoint: number; outPoint: number }>>({})
-  const [concatJobId, setConcatJobId] = useState<string | null>(null)
-  const [concatStatus, setConcatStatus] = useState<'idle' | 'processing' | 'done' | 'error'>('idle')
-  const [concatError, setConcatError] = useState<string | null>(null)
   const [sequentialMode, setSequentialMode] = useState(false)
   const [confirmedShots, setConfirmedShots] = useState<Set<string>>(new Set())
   const [tailFrames, setTailFrames] = useState<Record<string, string>>({})
@@ -354,6 +341,19 @@ export function StepVideo({ shots, shotImages, shotVideos, describeData, charact
   const registerGenerate = useCallback((shotId: string, fn: () => Promise<void>) => {
     generateFnsRef.current[shotId] = fn
   }, [])
+
+  usePendingBatchWatcher({
+    pendingBatches: pendingVideoBatches ?? {},
+    intervalMs: 5000,
+    failureMessage: '视频生成失败',
+    emptyMessage: '视频生成完成但未返回URL',
+    onCompleted: (shotId, urls) => {
+      onVideoReady(shotId, urls[0])
+    },
+    onClear: onClearPendingVideoBatch,
+  })
+
+  const pendingShotIds = new Set(Object.values(pendingVideoBatches ?? {}))
 
   // Resolve reference images for a shot, returns ordered list + name→label map
   const resolveRefs = useCallback((shot: Shot): { refs: string[]; labelMap: Record<string, string> } => {
@@ -380,7 +380,7 @@ export function StepVideo({ shots, shotImages, shotVideos, describeData, charact
   }, [shotImages, characterImages, sceneImages])
 
   const generateAll = useCallback(async () => {
-    const pending = shots.filter((s) => !shotVideos[s.id])
+    const pending = shots.filter((s) => !shotVideos[s.id] && !pendingShotIds.has(s.id))
     if (pending.length === 0) return
     setBatchRunning(true)
     const fns = pending.map((s) => generateFnsRef.current[s.id]).filter(Boolean)
@@ -388,80 +388,7 @@ export function StepVideo({ shots, shotImages, shotVideos, describeData, charact
     setBatchRunning(false)
     const success = results.filter((r) => r.status === 'fulfilled').length
     if (success > 0) toast.success(`批量生成完成，${success}/${fns.length} 成功`)
-  }, [shots, shotVideos])
-
-  const exportZip = useCallback(async () => {
-    setZipExporting(true)
-    try {
-      const zip = new JSZip()
-      await Promise.all(
-        shots.map(async (shot, i) => {
-          const url = shotVideos[shot.id]
-          if (!url) return
-          const absUrl = url.startsWith('/') ? `${window.location.origin}${url}` : url
-          const res = await fetch(absUrl)
-          if (!res.ok) throw new Error(`下载失败: ${shot.label}`)
-          const blob = await res.blob()
-          zip.file(`${projectName}_${shot.label}_${i + 1}.mp4`, blob)
-        })
-      )
-      const content = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(content)
-      a.download = `${projectName}_videos.zip`
-      a.click()
-      URL.revokeObjectURL(a.href)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'ZIP 导出失败')
-    } finally {
-      setZipExporting(false)
-    }
-  }, [shots, shotVideos, projectName])
-
-  const startConcatExport = useCallback(async () => {
-    setConcatStatus('processing')
-    setConcatError(null)
-    try {
-      const segments = shots
-        .filter((s) => shotVideos[s.id])
-        .map((s) => ({
-          url: shotVideos[s.id],
-          inPoint: trimPoints[s.id]?.inPoint ?? 0,
-          outPoint: trimPoints[s.id]?.outPoint ?? s.duration,
-        }))
-      const { jobId } = await apiPost<{ jobId: string }>('/videos/concat-export', { segments, projectName })
-      setConcatJobId(jobId)
-      for (let i = 0; i < 120; i++) {
-        await new Promise((r) => setTimeout(r, 3000))
-        const result = await apiGet<{ status: string; resultUrl?: string; error?: string }>(`/videos/concat-export/${jobId}`)
-        if (result.status === 'done' && result.resultUrl) {
-          setConcatStatus('done')
-          const a = document.createElement('a')
-          a.href = result.resultUrl
-          a.download = `${projectName}_final.mp4`
-          a.click()
-          toast.success('合并导出完成')
-          return
-        }
-        if (result.status === 'failed') {
-          const errMsg = result.error ?? '合并失败'
-          setConcatStatus('error')
-          setConcatError(errMsg)
-          toast.error(errMsg)
-          return
-        }
-      }
-      const timeoutMsg = '导出超时'
-      setConcatStatus('error')
-      setConcatError(timeoutMsg)
-      toast.error(timeoutMsg)
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : '导出失败'
-      setConcatStatus('error')
-      setConcatError(errMsg)
-      toast.error(errMsg)
-    }
-  }, [shots, shotVideos, trimPoints, projectName])
+  }, [shots, shotVideos, pendingShotIds])
 
   const [batchRunning, setBatchRunning] = useState(false)
   const completedCount = shots.filter((s) => shotVideos[s.id]).length
@@ -568,37 +495,8 @@ export function StepVideo({ shots, shotImages, shotVideos, describeData, charact
               onClick={() => onComplete()}
               className="w-full flex items-center justify-center gap-2 text-sm bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition-colors"
             >
-              完成项目
+              下一步：完成导出
               <ArrowRight className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => onComplete({ exportToCanvas: true })}
-              className="w-full flex items-center justify-center gap-2 text-xs border border-border py-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              在画布中查看工作流
-            </button>
-            <button
-              onClick={exportZip}
-              disabled={zipExporting}
-              className="w-full flex items-center justify-center gap-2 text-xs border border-border py-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground disabled:opacity-50"
-            >
-              {zipExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
-              {zipExporting ? '打包中…' : '导出全部 ZIP'}
-            </button>
-            <button
-              onClick={() => setShowSplicePreview((v) => !v)}
-              className="w-full flex items-center justify-center gap-2 text-xs border border-border py-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-            >
-              <Play className="w-3.5 h-3.5" />
-              {showSplicePreview ? '关闭拼接预览' : '拼接预览'}
-            </button>
-            <button
-              onClick={() => setShowTrimEditor(true)}
-              className="w-full flex items-center justify-center gap-2 text-xs border border-border py-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-            >
-              <Scissors className="w-3.5 h-3.5" />
-              裁剪 & 导出定稿
             </button>
           </div>
         ) : completedCount > 0 ? (
@@ -606,16 +504,13 @@ export function StepVideo({ shots, shotImages, shotVideos, describeData, charact
             onClick={() => onComplete()}
             className="w-full flex items-center justify-center gap-2 text-sm border border-border py-2.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
           >
-            跳过，完成项目
+            跳过，进入导出
             <ArrowRight className="w-4 h-4" />
           </button>
         ) : null}
       </div>
 
       <div className="flex-1 p-5 overflow-y-auto space-y-3">
-        {showSplicePreview && allDone && (
-          <SplicePreview shots={shots} shotVideos={shotVideos} />
-        )}
         {shots.map((shot, i) => {
           const prevShot = shots[i - 1]
           const isLocked = sequentialMode && i > 0 && !confirmedShots.has(prevShot?.id ?? '')
@@ -633,225 +528,17 @@ export function StepVideo({ shots, shotImages, shotVideos, describeData, charact
               projectId={projectId}
               videoParams={videoParams}
               onVideoReady={(url) => onVideoReady(shot.id, url)}
+              onBatchSubmitted={(batchId) => onAddPendingVideoBatch(batchId, shot.id)}
               registerGenerate={registerGenerate}
               sequentialMode={sequentialMode}
               isLocked={isLocked}
+              isPending={pendingShotIds.has(shot.id)}
               tailFrameUrl={tailFrameUrl}
               onConfirm={() => handleConfirmShot(shot.id)}
               onTailFrameExtracted={handleTailFrameExtracted}
             />
           )
         })}
-      </div>
-
-      {showTrimEditor && (
-        <TrimEditor
-          shots={shots}
-          shotVideos={shotVideos}
-          trimPoints={trimPoints}
-          onTrimChange={(shotId, trim) => setTrimPoints((p) => ({ ...p, [shotId]: trim }))}
-          concatStatus={concatStatus}
-          concatError={concatError}
-          onExport={startConcatExport}
-          onClose={() => setShowTrimEditor(false)}
-        />
-      )}
-    </div>
-  )
-}
-
-// ── SplicePreview ──────────────────────────────────────────────────────────────
-
-function SplicePreview({ shots, shotVideos }: { shots: Shot[]; shotVideos: Record<string, string> }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [playing, setPlaying] = useState(false)
-  const [currentIdx, setCurrentIdx] = useState(0)
-  const orderedUrls = shots.map((s) => shotVideos[s.id]).filter(Boolean)
-  const currentIdxRef = useRef(currentIdx)
-  currentIdxRef.current = currentIdx
-
-  const playFrom = useCallback((idx: number) => {
-    const video = videoRef.current
-    if (!video || idx >= orderedUrls.length) { setPlaying(false); return }
-    setCurrentIdx(idx)
-    video.src = orderedUrls[idx]
-    video.play().catch(() => {})
-  }, [orderedUrls])
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    const onEnded = () => playFrom(currentIdxRef.current + 1)
-    video.addEventListener('ended', onEnded)
-    return () => video.removeEventListener('ended', onEnded)
-  }, [playFrom])
-
-  const toggle = () => {
-    const video = videoRef.current
-    if (!video) return
-    if (playing) {
-      video.pause()
-      setPlaying(false)
-    } else {
-      setPlaying(true)
-      if (!video.src) {
-        playFrom(0)
-      } else {
-        video.play().catch(() => {})
-      }
-    }
-  }
-
-  if (orderedUrls.length === 0) return null
-
-  return (
-    <div className="border rounded-xl overflow-hidden bg-card">
-      <div className="flex items-center justify-between px-3 py-2 border-b">
-        <span className="text-xs font-medium">拼接预览</span>
-        <span className="text-xs text-muted-foreground">
-          {playing ? `镜头 ${currentIdx + 1} / ${orderedUrls.length}` : `共 ${orderedUrls.length} 个镜头`}
-        </span>
-      </div>
-      <video ref={videoRef} className="w-full bg-black max-h-48" />
-      <div className="flex items-center gap-2 px-3 py-2">
-        <button
-          onClick={toggle}
-          className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg"
-        >
-          {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-          {playing ? '暂停' : '播放全部'}
-        </button>
-        {playing && (
-          <span className="text-xs text-muted-foreground">{shots[currentIdx]?.label}</span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── TrimEditor ─────────────────────────────────────────────────────────────────
-
-interface TrimEditorProps {
-  shots: Shot[]
-  shotVideos: Record<string, string>
-  trimPoints: Record<string, { inPoint: number; outPoint: number }>
-  onTrimChange: (shotId: string, trim: { inPoint: number; outPoint: number }) => void
-  concatStatus: 'idle' | 'processing' | 'done' | 'error'
-  concatError: string | null
-  onExport: () => void
-  onClose: () => void
-}
-
-function TrimEditor({ shots, shotVideos, trimPoints, onTrimChange, concatStatus, concatError, onExport, onClose }: TrimEditorProps) {
-  const validShots = shots.filter((s) => shotVideos[s.id])
-  return (
-    <div className="absolute inset-0 z-20 bg-background flex flex-col">
-      <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
-        <div>
-          <h3 className="text-sm font-bold">裁剪 & 导出定稿</h3>
-          <p className="text-xs text-muted-foreground">设置每个镜头的入点和出点，确认后合并导出</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {concatStatus === 'done' ? (
-            <span className="flex items-center gap-1 text-xs text-green-600">
-              <Check className="w-3.5 h-3.5" /> 导出完成
-            </span>
-          ) : concatStatus === 'error' ? (
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1 text-xs text-red-500">
-                <AlertCircle className="w-3.5 h-3.5" />
-                {concatError ?? '导出失败'}
-              </span>
-              <button
-                onClick={onExport}
-                className="flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                重试
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={onExport}
-              disabled={concatStatus === 'processing'}
-              className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg disabled:opacity-50"
-            >
-              {concatStatus === 'processing' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Scissors className="w-3.5 h-3.5" />}
-              {concatStatus === 'processing' ? '合并中…' : '开始合并导出'}
-            </button>
-          )}
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto p-5 space-y-4">
-        {validShots.map((shot) => (
-          <TrimShotRow
-            key={shot.id}
-            shot={shot}
-            url={shotVideos[shot.id]}
-            trim={trimPoints[shot.id] ?? { inPoint: 0, outPoint: shot.duration }}
-            onChange={(trim) => onTrimChange(shot.id, trim)}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function TrimShotRow({ shot, url, trim, onChange }: {
-  shot: Shot
-  url: string
-  trim: { inPoint: number; outPoint: number }
-  onChange: (trim: { inPoint: number; outPoint: number }) => void
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [duration, setDuration] = useState(shot.duration)
-  const trimRef = useRef(trim)
-  trimRef.current = trim
-
-  const onLoadedMetadata = () => {
-    if (videoRef.current) setDuration(videoRef.current.duration)
-  }
-
-  const previewTrim = () => {
-    const v = videoRef.current
-    if (!v) return
-    v.currentTime = trimRef.current.inPoint
-    v.play().catch(() => {})
-    const stop = () => {
-      if (v.currentTime >= trimRef.current.outPoint) {
-        v.pause()
-        v.removeEventListener('timeupdate', stop)
-      }
-    }
-    v.addEventListener('timeupdate', stop)
-  }
-
-  return (
-    <div className="border rounded-lg p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold">{shot.label}</span>
-        <button onClick={previewTrim} className="text-xs text-primary hover:underline">预览片段</button>
-      </div>
-      <video ref={videoRef} src={url} onLoadedMetadata={onLoadedMetadata} className="w-full max-h-32 bg-black rounded" />
-      <div className="grid grid-cols-2 gap-3 text-xs">
-        <label className="space-y-1">
-          <span className="text-muted-foreground">入点 {trim.inPoint.toFixed(1)}s</span>
-          <input
-            type="range" min={0} max={duration} step={0.1} value={trim.inPoint}
-            onChange={(e) => onChange({ ...trim, inPoint: Math.min(+e.target.value, trim.outPoint - 0.1) })}
-            className="w-full"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-muted-foreground">出点 {trim.outPoint.toFixed(1)}s</span>
-          <input
-            type="range" min={0} max={duration} step={0.1} value={trim.outPoint}
-            onChange={(e) => onChange({ ...trim, outPoint: Math.max(+e.target.value, trim.inPoint + 0.1) })}
-            className="w-full"
-          />
-        </label>
       </div>
     </div>
   )

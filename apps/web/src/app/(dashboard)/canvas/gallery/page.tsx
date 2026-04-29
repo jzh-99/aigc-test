@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { PlusCircle, Loader2 } from 'lucide-react'
+import { PlusCircle, Loader2, Trash2, Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { CanvasTrashDrawer } from '@/components/canvas/canvas-trash-drawer'
 
 type Canvas = {
   id: string
@@ -22,6 +23,7 @@ export default function CanvasGalleryPage() {
   const [canvases, setCanvases] = useState<Canvas[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [trashOpen, setTrashOpen] = useState(false)
 
   const fetchCanvases = useCallback(async () => {
     if (!token) return
@@ -70,6 +72,22 @@ export default function CanvasGalleryPage() {
     }
   }
 
+  async function deleteCanvas(id: string) {
+    if (!token) return
+    if (!confirm('删除后画布会进入回收站，7 天内可恢复。确认删除？')) return
+    try {
+      const res = await fetch(`/api/v1/canvases/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Failed to delete')
+      setCanvases((items) => items.filter((item) => item.id !== id))
+      toast.success('画布已移入回收站')
+    } catch {
+      toast.error('删除画布失败')
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -77,10 +95,16 @@ export default function CanvasGalleryPage() {
           <h1 className="text-3xl font-bold">全部画布</h1>
           <p className="text-muted-foreground mt-1">浏览和管理你的所有 AI 创意画布</p>
         </div>
-        <Button onClick={createNewCanvas} disabled={creating} size="lg" className="gap-2" data-testid="canvas-create-button">
-          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
-          新建画布
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setTrashOpen(true)} size="lg" className="gap-2">
+            <Archive className="w-4 h-4" />
+            回收站
+          </Button>
+          <Button onClick={createNewCanvas} disabled={creating} size="lg" className="gap-2" data-testid="canvas-create-button">
+            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+            新建画布
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -102,12 +126,12 @@ export default function CanvasGalleryPage() {
           </div>
         ) : (
           canvases.map((canvas) => (
-            <Link
-              data-testid={`canvas-card-${canvas.id}`}
-              key={canvas.id}
-              href={`/canvas/editor/${canvas.id}`}
-              className="group border rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-card"
-            >
+            <div key={canvas.id} className="relative group border rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-card">
+              <Link
+                data-testid={`canvas-card-${canvas.id}`}
+                href={`/canvas/editor/${canvas.id}`}
+                className="block"
+              >
               <div className="aspect-video bg-muted overflow-hidden">
                 {canvas.preview_urls && canvas.preview_urls.length > 0 ? (
                   <div className="grid grid-cols-2 w-full h-full">
@@ -141,10 +165,25 @@ export default function CanvasGalleryPage() {
                   </p>
                 )}
               </div>
-            </Link>
+              </Link>
+              <button
+                onClick={(e) => { e.preventDefault(); deleteCanvas(canvas.id) }}
+                className="absolute right-2 top-2 rounded-md bg-background/90 p-1.5 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-red-600 group-hover:opacity-100"
+                title="删除画布"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           ))
         )}
       </div>
+      <CanvasTrashDrawer
+        open={trashOpen}
+        workspaceId={activeWorkspaceId}
+        token={token}
+        onClose={() => setTrashOpen(false)}
+        onChanged={fetchCanvases}
+      />
     </div>
   )
 }

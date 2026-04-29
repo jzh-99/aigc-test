@@ -54,36 +54,31 @@ export function StepScript({ describeData, initial, scriptHistory = [], onGenera
     onComplete({ ...result, script: editedScript })
   }
 
-  const loadHistoryVersion = (idx: number) => {
-    const entry = scriptHistory[idx]
-    if (!entry) return
-    setResult(entry)
-    setEditedScript(entry.script)
-    setHistoryIndex(idx)
-  }
-
   const hasFreshResult = result != null && (scriptHistory.length === 0 || scriptHistory[scriptHistory.length - 1]?.script !== result.script)
-  const totalVersions = scriptHistory.length + (hasFreshResult ? 1 : 0)
-  // if result is already in history, point to its index; otherwise it's the last (fresh) one
-  const effectiveIndex = hasFreshResult ? totalVersions - 1 : historyIndex
+  // Display newest first: latest version is always 1/N, older versions count upward.
+  const versions = result && hasFreshResult ? [result, ...scriptHistory.toReversed()] : scriptHistory.toReversed()
+  const totalVersions = versions.length
+  const effectiveIndex = result ? Math.max(0, versions.findIndex((entry) => entry.script === result.script)) : 0
   const displayIndex = effectiveIndex + 1
   const canGoPrev = totalVersions > 1 && effectiveIndex > 0
   const canGoNext = totalVersions > 1 && effectiveIndex < totalVersions - 1
 
+  const loadVersion = (idx: number) => {
+    const entry = versions[idx]
+    if (!entry) return
+    setResult(entry)
+    setEditedScript(entry.script)
+    setHistoryIndex(scriptHistory.findIndex((historyEntry) => historyEntry.script === entry.script))
+  }
+
   const goPrev = () => {
-    const prevIdx = effectiveIndex - 1
-    if (prevIdx >= 0) loadHistoryVersion(prevIdx)
+    if (!canGoPrev) return
+    loadVersion(effectiveIndex - 1)
   }
 
   const goNext = () => {
-    const nextIdx = effectiveIndex + 1
-    if (nextIdx < scriptHistory.length) {
-      loadHistoryVersion(nextIdx)
-    } else if (hasFreshResult === false && initial) {
-      setResult(initial)
-      setEditedScript(initial.script)
-      setHistoryIndex(-1)
-    }
+    if (!canGoNext) return
+    loadVersion(effectiveIndex + 1)
   }
 
   return (
