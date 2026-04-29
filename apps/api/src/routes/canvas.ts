@@ -488,7 +488,12 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
     // Get dirty version from Redis
     const redis = (app as any).redis
-    const dirtyVersion = parseInt(await redis.get(`canvas:dirty:${id}`) ?? '0', 10)
+    let dirtyVersion = 0
+    try {
+      dirtyVersion = parseInt(await redis.get(`canvas:dirty:${id}`) ?? '0', 10)
+    } catch (error) {
+      request.log.warn({ err: error, canvasId: id }, 'Failed to read canvas dirty version')
+    }
 
     // Fetch active batches for this canvas
     const activeRows = await db

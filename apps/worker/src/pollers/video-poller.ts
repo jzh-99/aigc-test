@@ -177,7 +177,10 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
         is_selected: true,
       })
       .execute()
-    await getPubRedis().incr(`canvas:dirty:${canvasId}`)
+    const redis = getPubRedis()
+    const dirtyKey = `canvas:dirty:${canvasId}`
+    await redis.incr(dirtyKey)
+    await redis.expire(dirtyKey, 60 * 60 * 24)
   }
 
   // Enqueue transfer job — same as image pipeline
