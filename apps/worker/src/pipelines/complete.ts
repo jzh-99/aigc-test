@@ -164,7 +164,10 @@ export async function completePipeline(
       .execute()
 
     // Increment Redis dirty version so the poller detects a change
-    await getPubRedis().incr(`canvas:dirty:${canvasId}`)
+    const redis = getPubRedis()
+    const dirtyKey = `canvas:dirty:${canvasId}`
+    await redis.incr(dirtyKey)
+    await redis.expire(dirtyKey, 60 * 60 * 24)
   }
 
   // 7. Enqueue transfer job
