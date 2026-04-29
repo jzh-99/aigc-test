@@ -1,0 +1,46 @@
+name: 稳定性 / 部署任务
+about: 用于部署、运维、CI/CD、监控、队列、数据库缓存等稳定性工作
+labels: [infra]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 这项任务要解决什么问题？
+      placeholder: 例如：增强健康检查，便于部署后自动判断服务是否正常。
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围
+      description: 本次任务计划改哪些模块或文件？
+      placeholder: 例如：scripts/health-check.sh、apps/api/src/routes/healthz.ts。
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: 不涉及
+      description: 明确哪些内容不在本次任务范围内，减少返工。
+      placeholder: 例如：不改业务接口、不改任务状态语义、不改支付逻辑。
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 完成后如何判断这项任务通过？
+      placeholder: |
+        - 本地可以执行脚本并输出明确结果。
+        - PR 说明包含验证方式和回滚方式。
+        - 不包含真实密钥。
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: 回滚或失败处理
+      description: 如果变更失败，如何恢复？
+    validations:
+      required: false

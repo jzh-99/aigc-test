@@ -1,0 +1,24 @@
+# 默认所有变更需要内部负责人 review
+* @jzh-99
+
+# 部署、运维、CI/CD、文档
+/.github/ @jzh-99
+/scripts/ @jzh-99
+/docs/contractor/ @jzh-99
+/docker-compose.yml @jzh-99
+/ecosystem.config.cjs @jzh-99
+/setup.sh @jzh-99
+/deploy.sh @jzh-99
+/deploy-local.sh @jzh-99
+/start-api.sh @jzh-99
+/start-worker.sh @jzh-99
+/start-web.sh @jzh-99
+
+# 数据库和共享类型变更需要重点 review
+/packages/db/ @jzh-99
+/packages/types/ @jzh-99
+
+# 应用代码变更需要内部负责人确认
+/apps/api/ @jzh-99
+/apps/worker/ @jzh-99
+/apps/web/ @jzh-99
