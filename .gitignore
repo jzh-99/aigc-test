@@ -4,7 +4,22 @@ dist/
 .turbo/
 *.env
 !.env.example
+!.env.*.example
 .worktrees/
+
+# Local Claude/session state
+.claude/settings.local.json
+.claude/worktrees/
+
+# Build artifacts and caches
+*.tsbuildinfo
+apps/docs/out/
+logs/
+.pnpm-build-approvals.json
+
+# Editor/notebook checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
 
 # Stale tsc artifacts in non-src dirs (migrations/scripts run via tsx)
 packages/db/migrations/*.js
