@@ -21,6 +21,12 @@ logs/
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
 
+# Design/planning docs should stay out of the repo
+docs/plans/
+canvas-*-plan.md
+*-design-plan.md
+*-redesign-plan.md
+
 # Stale tsc artifacts in non-src dirs (migrations/scripts run via tsx)
 packages/db/migrations/*.js
 packages/db/migrations/*.d.ts
