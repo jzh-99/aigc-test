@@ -26,6 +26,8 @@ export const WIZARD_STEP_DEFS: WizardStepDef[] = [
 ]
 
 const UNLOCK_ORDER: WizardStepId[] = ['describe', 'outline', 'script', 'storyboard', 'characters', 'video', 'complete']
+const SINGLE_UNLOCK_ORDER: WizardStepId[] = ['describe', 'script', 'storyboard', 'characters', 'video', 'complete']
+const SERIES_UNLOCK_ORDER: WizardStepId[] = ['describe', 'outline', 'characters', 'complete']
 
 export interface DescribeData {
   description: string
@@ -56,6 +58,12 @@ export interface WizardState {
   statuses: Record<WizardStepId, StepStatus>
   activeStep: WizardStepId
   projectType?: 'single' | 'series'
+  seriesParentId?: string | null
+  episodeIndex?: number | null
+  sharedCharacters?: Array<{ name: string; description: string; voiceDescription?: string }>
+  sharedScenes?: Array<{ name: string; description: string }>
+  sharedCharacterImages?: Record<string, string>
+  sharedSceneImages?: Record<string, string>
   seriesOutline: SeriesOutline | null
   activeEpisodeId: string | null
   episodes: EpisodeState[]
@@ -75,6 +83,8 @@ export interface WizardState {
   characterImageHistory: Record<string, string[][]>
   sceneImageHistory: Record<string, string[][]>
   shotVideos: Record<string, string>
+  // full generation history: fragmentId → array of URLs (newest last)
+  shotVideoHistory: Record<string, string[]>
   pendingImageBatches: Record<string, PendingImageBatchTarget>
   pendingVideoBatches: Record<string, string>
 }
@@ -88,6 +98,12 @@ function defaultState(): WizardState {
     statuses: initialStatuses(),
     activeStep: 'describe',
     projectType: 'single',
+    seriesParentId: null,
+    episodeIndex: null,
+    sharedCharacters: [],
+    sharedScenes: [],
+    sharedCharacterImages: {},
+    sharedSceneImages: {},
     seriesOutline: null,
     activeEpisodeId: null,
     episodes: [],
@@ -103,6 +119,7 @@ function defaultState(): WizardState {
     characterImageHistory: {},
     sceneImageHistory: {},
     shotVideos: {},
+    shotVideoHistory: {},
     pendingImageBatches: {},
     pendingVideoBatches: {},
   }
@@ -186,13 +203,15 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
   const syncNow = useCallback((overrideState?: WizardState) => {
     const wsId = workspaceIdRef.current
     if (!wsId || !projectId) return
+    const nextState = overrideState ?? stateRef.current
     fetchWithAuth(`/video-studio/projects/${projectId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         workspace_id: wsId,
         name: projectNameRef.current,
-        wizard_state: overrideState ?? stateRef.current,
+        wizard_state: nextState,
+        project_type: nextState.projectType === 'series' ? 'series' : undefined,
       }),
     }).catch(() => { /* silent — localStorage is the fallback */ })
   }, [projectId])
@@ -223,6 +242,15 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
     }
   }, [syncNow])
 
+  const refreshFromServer = useCallback(async () => {
+    const wsId = workspaceIdRef.current
+    if (!wsId || !projectId) return
+    try {
+      const project = await fetchWithAuth<{ wizard_state?: WizardState }>(`/video-studio/projects/${projectId}`)
+      if (project?.wizard_state) setState(normalizeState({ ...defaultState(), ...project.wizard_state }))
+    } catch { /* local state remains fallback */ }
+  }, [projectId])
+
   const setActiveStep = useCallback((step: WizardStepId) => {
     setState((s) => {
       const next = { ...s, activeStep: step }
@@ -234,8 +262,9 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
 
   const completeStep = useCallback((step: WizardStepId) => {
     setState((s) => {
-      const idx = UNLOCK_ORDER.indexOf(step)
-      const nextStep = UNLOCK_ORDER[idx + 1]
+      const order = s.projectType === 'series' ? SERIES_UNLOCK_ORDER : SINGLE_UNLOCK_ORDER
+      const idx = order.indexOf(step)
+      const nextStep = order[idx + 1]
       const statuses = { ...s.statuses, [step]: 'completed' as StepStatus }
       if (nextStep && statuses[nextStep] === 'locked') statuses[nextStep] = 'pending'
       const next = { ...s, statuses, activeStep: nextStep ?? step }
@@ -358,8 +387,19 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
   }, [])
 
   const setShotVideo = useCallback((shotId: string, url: string) => {
-    setState((s) => ({ ...s, shotVideos: { ...s.shotVideos, [shotId]: url } }))
-  }, [])
+    setState((s) => {
+      const prev = s.shotVideoHistory?.[shotId] ?? []
+      const alreadyIn = prev.length > 0 && prev[prev.length - 1] === url
+      const next = {
+        ...s,
+        shotVideos: { ...s.shotVideos, [shotId]: url },
+        shotVideoHistory: alreadyIn ? (s.shotVideoHistory ?? {}) : { ...(s.shotVideoHistory ?? {}), [shotId]: [...prev, url] },
+      }
+      if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null }
+      syncNow(next)
+      return next
+    })
+  }, [syncNow])
 
   const addPendingImageBatch = useCallback((batchId: string, target: PendingImageBatchTarget) => {
     setState((s) => ({
@@ -376,18 +416,26 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
   }, [])
 
   const addPendingVideoBatch = useCallback((batchId: string, shotId: string) => {
-    setState((s) => ({
-      ...s,
-      pendingVideoBatches: { ...(s.pendingVideoBatches ?? {}), [batchId]: shotId },
-    }))
-  }, [])
+    setState((s) => {
+      const next = {
+        ...s,
+        pendingVideoBatches: { ...(s.pendingVideoBatches ?? {}), [batchId]: shotId },
+      }
+      if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null }
+      syncNow(next)
+      return next
+    })
+  }, [syncNow])
 
   const clearPendingVideoBatch = useCallback((batchId: string) => {
     setState((s) => {
       const { [batchId]: _removed, ...pendingVideoBatches } = s.pendingVideoBatches ?? {}
-      return { ...s, pendingVideoBatches }
+      const next = { ...s, pendingVideoBatches }
+      if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null }
+      syncNow(next)
+      return next
     })
-  }, [])
+  }, [syncNow])
 
   const reset = useCallback(() => {
     const fresh = defaultState()
@@ -415,5 +463,7 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
     addPendingVideoBatch,
     clearPendingVideoBatch,
     reset,
+    syncNow,
+    refreshFromServer,
   }
 }

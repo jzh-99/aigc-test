@@ -371,6 +371,8 @@ function WizardContent() {
               sharedScenes={wizard.sharedScenes ?? []}
               sharedCharacterImages={wizard.sharedCharacterImages ?? {}}
               sharedSceneImages={wizard.sharedSceneImages ?? {}}
+              characterImageHistory={wizard.characterImageHistory ?? {}}
+              sceneImageHistory={wizard.sceneImageHistory ?? {}}
               projectId={projectId}
               pendingImageBatches={wizard.pendingImageBatches ?? {}}
               onAddPendingImageBatch={wizard.addPendingImageBatch}
@@ -387,6 +389,7 @@ function WizardContent() {
             fragments={activeFragments}
             shotImages={wizard.shotImages}
             shotVideos={wizard.shotVideos}
+            shotVideoHistory={wizard.shotVideoHistory ?? {}}
             describeData={wizard.describeData}
             characters={[...(wizard.sharedCharacters ?? []), ...(wizard.scriptData?.characters ?? [])]}
             characterImages={mergedCharacterImages}
@@ -397,6 +400,7 @@ function WizardContent() {
             onAddPendingVideoBatch={wizard.addPendingVideoBatch}
             onClearPendingVideoBatch={wizard.clearPendingVideoBatch}
             onVideoReady={wizard.setShotVideo}
+            refreshFromServer={wizard.refreshFromServer}
             onComplete={handleVideoComplete}
           />
         )}
