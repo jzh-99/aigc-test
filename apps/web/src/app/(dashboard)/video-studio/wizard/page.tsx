@@ -350,6 +350,8 @@ function WizardContent() {
               style={wizard.describeData.style}
               characterImages={wizard.characterImages}
               sceneImages={wizard.sceneImages}
+              characterImageHistory={wizard.characterImageHistory ?? {}}
+              sceneImageHistory={wizard.sceneImageHistory ?? {}}
               projectId={projectId}
               pendingImageBatches={wizard.pendingImageBatches ?? {}}
               onAddPendingImageBatch={wizard.addPendingImageBatch}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Loader2, CheckCircle2, ArrowRight, Upload, RefreshCw, ChevronDown, ChevronUp, Play, X, ZoomIn } from 'lucide-react'
+import { Loader2, CheckCircle2, ArrowRight, Upload, RefreshCw, ChevronDown, ChevronUp, Play, X, ZoomIn, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { generateAssetPrompts } from '@/lib/video-studio-api'
@@ -17,8 +17,10 @@ type ImageModel = 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-l
 type ImageResolution = '1k' | '2k' | '3k' | '4k'
 
 interface ImageParams {
-  model: ImageModel
-  resolution: ImageResolution
+  characterModel: ImageModel
+  characterResolution: ImageResolution
+  sceneModel: ImageModel
+  sceneResolution: ImageResolution
   quantity: number
 }
 
@@ -31,7 +33,7 @@ const IMAGE_MODEL_OPTIONS: Array<{ value: ImageModel; label: string; resolutions
   { value: 'gpt-image-2',       label: '超能图片2',     resolutions: ['2k'] },
 ]
 
-const DEFAULT_IMAGE_PARAMS: ImageParams = { model: 'gemini', resolution: '2k', quantity: 1 }
+const DEFAULT_IMAGE_PARAMS: ImageParams = { characterModel: 'seedream-5.0-lite', characterResolution: '2k', sceneModel: 'gemini', sceneResolution: '2k', quantity: 1 }
 
 interface AssetItem {
   name: string
@@ -40,18 +42,19 @@ interface AssetItem {
   prompt: string
   urls: string[]
   selectedUrl: string | null
+  shared?: boolean
 }
 
-async function submitImageBatch(prompt: string, aspectRatio: string, workspaceId: string, params: ImageParams, projectId: string): Promise<string> {
+async function submitImageBatch(prompt: string, aspectRatio: string, workspaceId: string, model: ImageModel, resolution: ImageResolution, quantity: number, projectId: string): Promise<string> {
   if (!workspaceId) throw new Error('未选择工作区')
-  const modelCode = MODEL_CODE_MAP[params.model as keyof typeof MODEL_CODE_MAP]?.[params.resolution as keyof (typeof MODEL_CODE_MAP)[keyof typeof MODEL_CODE_MAP]] ?? params.model
+  const modelCode = MODEL_CODE_MAP[model as keyof typeof MODEL_CODE_MAP]?.[resolution as keyof (typeof MODEL_CODE_MAP)[keyof typeof MODEL_CODE_MAP]] ?? model
   const batch = await apiPost<BatchResponse>('/generate/image', {
     idempotency_key: `vs_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     workspace_id: workspaceId,
-    quantity: params.quantity,
+    quantity,
     model: modelCode,
     prompt,
-    params: { aspect_ratio: aspectRatio, resolution: params.resolution },
+    params: { aspect_ratio: aspectRatio, resolution },
     ...(projectId ? { video_studio_project_id: projectId } : {}),
   })
   return batch.id
@@ -80,7 +83,9 @@ function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpd
       const isCharacter = item.type === 'character'
       const aspectRatio = isCharacter ? '1:1' : '16:9'
       const prompt = promptOverride ?? editedPrompt
-      const batchId = await submitImageBatch(prompt, aspectRatio, workspaceId, imageParams, projectId)
+      const model = isCharacter ? imageParams.characterModel : imageParams.sceneModel
+      const resolution = isCharacter ? imageParams.characterResolution : imageParams.sceneResolution
+      const batchId = await submitImageBatch(prompt, aspectRatio, workspaceId, model, resolution, imageParams.quantity, projectId)
       onBatchSubmitted(batchId)
       onUpdate({ prompt })
       toast.success(`${item.name}：任务已提交`)
@@ -103,10 +108,11 @@ function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpd
     <div className="border rounded-xl bg-card p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">
-          <span className="text-[11px] text-muted-foreground">{item.type === 'character' ? '角色' : '场景'}</span>
+          <span className="text-[11px] text-muted-foreground">{item.shared ? '共享资产' : item.type === 'character' ? '角色' : '场景'}</span>
           <h3 className="font-semibold text-sm truncate">{item.name}</h3>
         </div>
         <div className="flex items-center gap-1.5">
+          {item.shared && <Lock className="w-3.5 h-3.5 text-muted-foreground" />}
           {item.selectedUrl && <CheckCircle2 className="w-4 h-4 text-green-500" />}
           <button
             onClick={() => setShowDetail(!showDetail)}
@@ -124,11 +130,12 @@ function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpd
             <p className="leading-relaxed">{item.description || '—'}</p>
           </div>
           <div className="space-y-1">
-            <p className="text-muted-foreground">提示词（可编辑）</p>
+            <p className="text-muted-foreground">{item.shared ? '共享资产提示词' : '提示词（可编辑）'}</p>
             <textarea
-              className="w-full h-20 p-2 bg-muted/40 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary text-xs leading-relaxed"
+              className="w-full h-20 p-2 bg-muted/40 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary text-xs leading-relaxed disabled:opacity-70"
               value={editedPrompt}
               onChange={(e) => setEditedPrompt(e.target.value)}
+              disabled={item.shared}
             />
           </div>
         </div>
@@ -183,9 +190,11 @@ function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpd
               <p className="text-sm font-medium">{item.name}</p>
               <button
                 onClick={() => {
+                  if (item.shared) return
                   onUpdate({ selectedUrl: lightboxUrl })
                   setLightboxUrl(null)
                 }}
+                disabled={item.shared}
                 className={`flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-colors ${
                   item.selectedUrl === lightboxUrl
                     ? 'bg-green-600 text-white cursor-default'
@@ -193,41 +202,54 @@ function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpd
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
-                {item.selectedUrl === lightboxUrl ? '已选为定稿' : '选为定稿'}
+                {item.shared ? '共享资产' : item.selectedUrl === lightboxUrl ? '已选为定稿' : '选为定稿'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => generate()}
-          disabled={loading || isPending}
-          className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-primary text-primary-foreground py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {loading || isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          {loading || isPending ? '生成中…' : item.urls.length > 0 ? `重新生成 · ${(IMAGE_MODEL_CREDITS[imageParams.model] ?? 10) * imageParams.quantity}积分` : `生成参考图 · ${(IMAGE_MODEL_CREDITS[imageParams.model] ?? 10) * imageParams.quantity}积分`}
-        </button>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1.5 border rounded-lg transition-colors">
-          <Upload className="w-3.5 h-3.5" />
-          上传
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (!file) return
-              const url = URL.createObjectURL(file)
-              onUpdate({ urls: [url], selectedUrl: url })
-            }}
-          />
-        </label>
-      </div>
+      {!item.shared && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => generate()}
+            disabled={loading || isPending}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-primary text-primary-foreground py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {loading || isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            {loading || isPending ? '生成中…' : item.urls.length > 0 ? `重新生成 · ${(IMAGE_MODEL_CREDITS[item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel] ?? 10) * imageParams.quantity}积分` : `生成参考图 · ${(IMAGE_MODEL_CREDITS[item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel] ?? 10) * imageParams.quantity}积分`}
+          </button>
+          <label className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1.5 border rounded-lg transition-colors">
+            <Upload className="w-3.5 h-3.5" />
+            上传
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const url = URL.createObjectURL(file)
+                onUpdate({ urls: [url], selectedUrl: url })
+              }}
+            />
+          </label>
+        </div>
+      )}
     </div>
   )
 }
+
+const STYLE_PRESETS = [
+  '真人写实',
+  '皮克斯3D',
+  '吉卜力',
+  '赛璐璐动漫',
+  '国风水墨',
+  '赛博朋克',
+  '奇幻史诗',
+  '极简插画',
+]
 
 interface Props {
   projectId: string
@@ -235,7 +257,16 @@ interface Props {
   style: string
   characterImages: Record<string, string>
   sceneImages: Record<string, string>
+  characterImageHistory: Record<string, string[][]>
+  sceneImageHistory: Record<string, string[][]>
   pendingImageBatches: Record<string, PendingImageBatchTarget>
+  mode?: 'single' | 'series-shared' | 'episode'
+  sharedCharacters?: Array<{ name: string; description: string; voiceDescription?: string }>
+  sharedScenes?: Array<{ name: string; description: string }>
+  sharedCharacterImages?: Record<string, string>
+  sharedSceneImages?: Record<string, string>
+  sharedCharacterImageHistory?: Record<string, string[][]>
+  sharedSceneImageHistory?: Record<string, string[][]>
   onAddPendingImageBatch: (batchId: string, target: PendingImageBatchTarget) => void
   onClearPendingImageBatch: (batchId: string) => void
   onSelectCharacterImage: (name: string, url: string, batch?: string[]) => void
@@ -243,32 +274,107 @@ interface Props {
   onComplete: () => void
 }
 
-export function StepCharacters({ projectId, scriptData, style, characterImages, sceneImages, pendingImageBatches, onAddPendingImageBatch, onClearPendingImageBatch, onSelectCharacterImage, onSelectSceneImage, onComplete }: Props) {
+function shouldGenerateCharacterImage(character: { name: string; description: string; visualPresence?: boolean }) {
+  if (character.visualPresence === false) return false
+  return !/(旁白|画外音|不出场|无需形象|不需要生成形象)/.test(`${character.name} ${character.description}`)
+}
+
+function buildAssetItems(params: {
+  scriptData: Omit<ScriptResult, 'success'>
+  style: string
+  characterImages: Record<string, string>
+  sceneImages: Record<string, string>
+  characterImageHistory: Record<string, string[][]>
+  sceneImageHistory: Record<string, string[][]>
+  mode: 'single' | 'series-shared' | 'episode'
+  sharedCharacters: Array<{ name: string; description: string; voiceDescription?: string }>
+  sharedScenes: Array<{ name: string; description: string }>
+  sharedCharacterImages: Record<string, string>
+  sharedSceneImages: Record<string, string>
+  sharedCharacterImageHistory: Record<string, string[][]>
+  sharedSceneImageHistory: Record<string, string[][]>
+}): AssetItem[] {
+  const flatHistory = (history: Record<string, string[][]>, name: string): string[] =>
+    (history[name] ?? []).flatMap((batch) => batch)
+
+  const sharedCharacterNames = new Set(params.sharedCharacters.map((item) => item.name))
+  const sharedSceneNames = new Set(params.sharedScenes.map((item) => item.name))
+  const sharedCharacters = params.mode === 'episode' ? params.sharedCharacters.map((c) => ({
+    name: c.name,
+    type: 'character' as const,
+    description: c.description,
+    prompt: `${c.name}, ${c.description}, character reference sheet, three views: front view, side view, back view, full body, white background, cinematic, ${params.style}`,
+    urls: flatHistory(params.sharedCharacterImageHistory, c.name).length > 0
+      ? flatHistory(params.sharedCharacterImageHistory, c.name)
+      : params.sharedCharacterImages[c.name] ? [params.sharedCharacterImages[c.name]] : [],
+    selectedUrl: params.sharedCharacterImages[c.name] ?? null,
+    shared: true,
+  })) : []
+  const sharedScenes = params.mode === 'episode' ? params.sharedScenes.map((s) => ({
+    name: s.name,
+    type: 'scene' as const,
+    description: s.description,
+    prompt: `${s.name}, ${s.description}, no people, wide shot, cinematic, ${params.style}`,
+    urls: flatHistory(params.sharedSceneImageHistory, s.name).length > 0
+      ? flatHistory(params.sharedSceneImageHistory, s.name)
+      : params.sharedSceneImages[s.name] ? [params.sharedSceneImages[s.name]] : [],
+    selectedUrl: params.sharedSceneImages[s.name] ?? null,
+    shared: true,
+  })) : []
+  const localCharacters = params.scriptData.characters
+    .filter(shouldGenerateCharacterImage)
+    .filter((c) => params.mode !== 'episode' || !sharedCharacterNames.has(c.name))
+    .map((c) => {
+      const allUrls = flatHistory(params.characterImageHistory, c.name)
+      return {
+        name: c.name,
+        type: 'character' as const,
+        description: c.description,
+        prompt: `${c.name}, ${c.description}, character reference sheet, three views: front view, side view, back view, full body, white background, cinematic, ${params.style}`,
+        urls: allUrls.length > 0 ? allUrls : params.characterImages[c.name] ? [params.characterImages[c.name]] : [],
+        selectedUrl: params.characterImages[c.name] ?? null,
+      }
+    })
+  const localScenes = params.scriptData.scenes
+    .filter((s) => params.mode !== 'episode' || !sharedSceneNames.has(s.name))
+    .map((s) => {
+      const allUrls = flatHistory(params.sceneImageHistory, s.name)
+      return {
+        name: s.name,
+        type: 'scene' as const,
+        description: s.description,
+        prompt: `${s.name}, ${s.description}, no people, wide shot, cinematic, ${params.style}`,
+        urls: allUrls.length > 0 ? allUrls : params.sceneImages[s.name] ? [params.sceneImages[s.name]] : [],
+        selectedUrl: params.sceneImages[s.name] ?? null,
+      }
+    })
+  return [...sharedCharacters, ...localCharacters, ...sharedScenes, ...localScenes]
+}
+
+export function StepCharacters({ projectId, scriptData, style: initialStyle, characterImages, sceneImages, characterImageHistory, sceneImageHistory, pendingImageBatches, mode = 'single', sharedCharacters = [], sharedScenes = [], sharedCharacterImages = {}, sharedSceneImages = {}, sharedCharacterImageHistory = {}, sharedSceneImageHistory = {}, onAddPendingImageBatch, onClearPendingImageBatch, onSelectCharacterImage, onSelectSceneImage, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const [loadingPrompts, setLoadingPrompts] = useState(false)
   const [batchRunning, setBatchRunning] = useState(false)
   const [showParams, setShowParams] = useState(false)
   const [imageParams, setImageParams] = useState<ImageParams>(DEFAULT_IMAGE_PARAMS)
-  const [items, setItems] = useState<AssetItem[]>(() => [
-    ...scriptData.characters.map((c) => ({
-      name: c.name,
-      type: 'character' as const,
-      description: c.description,
-      // Three-view sheet prompt for characters
-      prompt: `${c.name}, ${c.description}, character reference sheet, three views: front view, side view, back view, full body, white background, cinematic, ${style}`,
-      urls: characterImages[c.name] ? [characterImages[c.name]] : [],
-      selectedUrl: characterImages[c.name] ?? null,
-    })),
-    ...scriptData.scenes.map((s) => ({
-      name: s.name,
-      type: 'scene' as const,
-      description: s.description,
-      prompt: `${s.name}, ${s.description}, no people, wide shot, cinematic, ${style}`,
-      urls: sceneImages[s.name] ? [sceneImages[s.name]] : [],
-      selectedUrl: sceneImages[s.name] ?? null,
-    })),
-  ])
+  const [activeStyle, setActiveStyle] = useState(initialStyle)
+  const [styleInput, setStyleInput] = useState(initialStyle)
+  const [items, setItems] = useState<AssetItem[]>(() => buildAssetItems({ scriptData, style: initialStyle, characterImages, sceneImages, characterImageHistory, sceneImageHistory, mode, sharedCharacters, sharedScenes, sharedCharacterImages, sharedSceneImages, sharedCharacterImageHistory, sharedSceneImageHistory }))
+
+  // Rebuild default prompts when style changes, preserving existing urls/selectedUrl
+  const prevStyleRef = useRef(initialStyle)
+  useEffect(() => {
+    if (activeStyle === prevStyleRef.current) return
+    prevStyleRef.current = activeStyle
+    setItems((prev) => prev.map((item) => {
+      if (item.shared) return item
+      const basePrompt = item.type === 'character'
+        ? `${item.name}, ${item.description}, character reference sheet, three views: front view, side view, back view, full body, white background, cinematic`
+        : `${item.name}, ${item.description}, no people, wide shot, cinematic`
+      return { ...item, prompt: activeStyle ? `${basePrompt}, ${activeStyle}` : basePrompt }
+    }))
+  }, [activeStyle])
 
   // Registry for batch generation — each card registers its own generate fn
   const generateFnsRef = useRef<Record<string, () => Promise<boolean>>>({})
@@ -292,6 +398,7 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
     emptyMessage: '图片生成完成但未返回URL',
     onCompleted: (target, urls) => {
       updateItem(target.name, target.type, { urls, selectedUrl: urls[0] ?? null })
+      toast.success(`${target.name}：生成完成`)
     },
     onClear: onClearPendingImageBatch,
   })
@@ -302,10 +409,11 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
     if (!token) return
     setLoadingPrompts(true)
     try {
+      const localItems = items.filter((item) => !item.shared)
       const res = await generateAssetPrompts({
-        characters: scriptData.characters,
-        scenes: scriptData.scenes,
-        style,
+        characters: localItems.filter((item) => item.type === 'character').map((item) => ({ name: item.name, description: item.description })),
+        scenes: localItems.filter((item) => item.type === 'scene').map((item) => ({ name: item.name, description: item.description })),
+        style: activeStyle,
       }, token)
       setItems((prev) => prev.map((item) => {
         if (item.type === 'character') {
@@ -324,31 +432,61 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
     } finally {
       setLoadingPrompts(false)
     }
-  }, [scriptData, style, token])
+  }, [items, activeStyle, token])
 
   const batchGenerate = useCallback(async () => {
     setBatchRunning(true)
     const fns = items
-      .filter((item) => !pendingImageKeys.has(`${item.type}:${item.name}`))
+      .filter((item) => !item.shared && !pendingImageKeys.has(`${item.type}:${item.name}`))
       .map((item) => generateFnsRef.current[`${item.type}:${item.name}`])
       .filter(Boolean)
     const results = await Promise.allSettled(fns.map((fn) => fn()))
     setBatchRunning(false)
-    const successCount = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
-    if (successCount > 0) toast.success(`批量生成完成，${successCount}/${fns.length} 成功`)
+    const submittedCount = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
+    if (submittedCount > 0) toast.success(`任务已提交，${submittedCount}/${fns.length} 个`)
   }, [items, pendingImageKeys])
 
+  const localItems = items.filter((item) => !item.shared)
   const allSelected = items.every((item) => item.selectedUrl)
+  const selectedLocalCount = localItems.filter((item) => item.selectedUrl).length
   const characters = items.filter((i) => i.type === 'character')
   const scenes = items.filter((i) => i.type === 'scene')
+  const copy = mode === 'series-shared'
+    ? { title: '主要人物 & 场景图', desc: '为整剧主要人物和场景生成共享参考图', confirm: '确认共享资产，创建分集项目', skip: '跳过，创建分集项目' }
+    : mode === 'episode'
+      ? { title: '角色 & 场景图', desc: '共享资产已自动加载，只需生成本集新增人物和场景', confirm: '确认，生成视频', skip: '跳过，直接生成视频' }
+      : { title: '角色 & 场景图', desc: '为每个角色和场景生成参考图', confirm: '确认，生成视频', skip: '跳过，直接生成视频' }
 
   return (
     <div className="flex h-full">
       {/* Left: controls */}
       <div className="w-[260px] shrink-0 border-r p-5 space-y-4 overflow-y-auto">
         <div>
-          <h2 className="text-lg font-bold">角色 & 场景图</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">为每个角色和场景生成参考图</p>
+          <h2 className="text-lg font-bold">{copy.title}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{copy.desc}</p>
+        </div>
+
+        {/* Style selector */}
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">画风</p>
+          <div className="flex flex-wrap gap-1">
+            {STYLE_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                onClick={() => { setActiveStyle(preset); setStyleInput(preset) }}
+                className={`px-2 py-0.5 rounded text-xs transition-colors ${activeStyle === preset ? 'bg-primary text-primary-foreground' : 'border hover:bg-muted'}`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            value={styleInput}
+            onChange={(e) => { setStyleInput(e.target.value); setActiveStyle(e.target.value) }}
+            placeholder="自定义画风…"
+            className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+          />
         </div>
 
         <button
@@ -368,23 +506,23 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
           >
             <span className="text-muted-foreground">生成参数</span>
             <div className="flex items-center gap-2">
-              <span className="text-foreground">{IMAGE_MODEL_OPTIONS.find(m => m.value === imageParams.model)?.label} · {imageParams.resolution.toUpperCase()} · ×{imageParams.quantity}</span>
+              <span className="text-foreground">角色 Seedream 5.0 · 场景 全能图片2 · ×{imageParams.quantity}</span>
               {showParams ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </div>
           </button>
           {showParams && (
             <div className="border-t p-3 space-y-3 bg-muted/20">
+              <div className="rounded-lg bg-amber-50 text-amber-800 px-2.5 py-2 text-[11px] leading-relaxed">
+                如果想要做真人风格视频，人物生成模型必选 Seedream 5.0，其他模型暂不支持真人视频。
+              </div>
               <div className="space-y-1.5">
-                <p className="text-[11px] text-muted-foreground">模型</p>
+                <p className="text-[11px] text-muted-foreground">人物模型</p>
                 <div className="grid grid-cols-1 gap-1">
-                  {IMAGE_MODEL_OPTIONS.map((m) => (
+                  {IMAGE_MODEL_OPTIONS.filter((m) => m.value === 'seedream-5.0-lite').map((m) => (
                     <button
                       key={m.value}
-                      onClick={() => {
-                        const res = m.resolutions.includes(imageParams.resolution) ? imageParams.resolution : m.resolutions[0]
-                        setImageParams((p) => ({ ...p, model: m.value, resolution: res }))
-                      }}
-                      className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.model === m.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      onClick={() => setImageParams((p) => ({ ...p, characterModel: m.value, characterResolution: m.resolutions.includes(p.characterResolution) ? p.characterResolution : m.resolutions[0] }))}
+                      className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.characterModel === m.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     >
                       {m.label}
                       <span className="ml-1 opacity-60">{IMAGE_MODEL_CREDITS[m.value]}积分/张</span>
@@ -393,13 +531,42 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
                 </div>
               </div>
               <div className="space-y-1.5">
-                <p className="text-[11px] text-muted-foreground">分辨率</p>
+                <p className="text-[11px] text-muted-foreground">人物分辨率</p>
                 <div className="flex gap-1 flex-wrap">
-                  {(IMAGE_MODEL_OPTIONS.find(m => m.value === imageParams.model)?.resolutions ?? ['2k']).map((r) => (
+                  {(IMAGE_MODEL_OPTIONS.find(m => m.value === imageParams.characterModel)?.resolutions ?? ['2k']).map((r) => (
                     <button
                       key={r}
-                      onClick={() => setImageParams((p) => ({ ...p, resolution: r }))}
-                      className={`px-2 py-0.5 rounded text-xs transition-colors ${imageParams.resolution === r ? 'bg-primary text-primary-foreground' : 'border hover:bg-muted'}`}
+                      onClick={() => setImageParams((p) => ({ ...p, characterResolution: r }))}
+                      className={`px-2 py-0.5 rounded text-xs transition-colors ${imageParams.characterResolution === r ? 'bg-primary text-primary-foreground' : 'border hover:bg-muted'}`}
+                    >
+                      {r.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-muted-foreground">场景模型</p>
+                <div className="grid grid-cols-1 gap-1">
+                  {IMAGE_MODEL_OPTIONS.filter((m) => m.value === 'gemini').map((m) => (
+                    <button
+                      key={m.value}
+                      onClick={() => setImageParams((p) => ({ ...p, sceneModel: m.value, sceneResolution: m.resolutions.includes(p.sceneResolution) ? p.sceneResolution : m.resolutions[0] }))}
+                      className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.sceneModel === m.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    >
+                      {m.label}
+                      <span className="ml-1 opacity-60">{IMAGE_MODEL_CREDITS[m.value]}积分/张</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-muted-foreground">场景分辨率</p>
+                <div className="flex gap-1 flex-wrap">
+                  {(IMAGE_MODEL_OPTIONS.find(m => m.value === imageParams.sceneModel)?.resolutions ?? ['2k']).map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setImageParams((p) => ({ ...p, sceneResolution: r }))}
+                      className={`px-2 py-0.5 rounded text-xs transition-colors ${imageParams.sceneResolution === r ? 'bg-primary text-primary-foreground' : 'border hover:bg-muted'}`}
                     >
                       {r.toUpperCase()}
                     </button>
@@ -430,11 +597,12 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
           className="w-full flex items-center justify-center gap-2 text-xs bg-primary text-primary-foreground py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           {batchRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-          {batchRunning ? '批量生成中…' : `批量生成全部 (${items.length}) · ${items.length * (IMAGE_MODEL_CREDITS[imageParams.model] ?? 10) * imageParams.quantity}积分`}
+          {batchRunning ? '批量生成中…' : `批量生成全部 (${localItems.length}) · ${localItems.reduce((sum, item) => sum + (IMAGE_MODEL_CREDITS[item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel] ?? 10) * imageParams.quantity, 0)}积分`}
         </button>
 
         <div className="text-xs text-muted-foreground space-y-1">
           <p>{items.filter((i) => i.selectedUrl).length} / {items.length} 已选定</p>
+          {mode === 'episode' && localItems.length > 0 && <p>本集新增：{selectedLocalCount} / {localItems.length}</p>}
         </div>
 
         {allSelected && (
@@ -442,7 +610,7 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
             onClick={onComplete}
             className="w-full flex items-center justify-center gap-2 text-sm bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition-colors"
           >
-            确认，生成视频
+            {copy.confirm}
             <ArrowRight className="w-4 h-4" />
           </button>
         )}
@@ -452,7 +620,7 @@ export function StepCharacters({ projectId, scriptData, style, characterImages, 
             onClick={onComplete}
             className="w-full flex items-center justify-center gap-2 text-sm border border-border py-2.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
           >
-            跳过，直接生成视频
+            {copy.skip}
             <ArrowRight className="w-4 h-4" />
           </button>
         )}
