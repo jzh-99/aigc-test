@@ -9,7 +9,7 @@ const TERMINAL_STATUSES = new Set(['completed', 'partial_complete', 'failed'])
 
 function extractUrls(batch: BatchResponse): string[] {
   return batch.tasks
-    .map((task) => task.asset?.storage_url ?? task.asset?.original_url)
+    .map((task) => task.asset?.raw_storage_url ?? task.asset?.storage_url ?? task.asset?.original_url)
     .filter(Boolean) as string[]
 }
 
