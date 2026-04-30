@@ -115,7 +115,7 @@ export default function CanvasEditorPage() {
         if (err.name === 'AbortError') return
         if (err.status === 401) { router.replace('/login'); return }
         toast.error(err.status === 403 ? '无权限访问该画布' : '画布加载失败')
-        router.push('/canvas')
+        router.push('/canvas/gallery')
       })
       .finally(() => setLoading(false))
     return () => controller.abort()

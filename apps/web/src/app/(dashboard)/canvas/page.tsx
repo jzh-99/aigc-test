@@ -44,7 +44,7 @@ export default function CanvasIndexPage() {
       .then((r) => r.json())
       .then((canvases: Array<{ id: string }>) => {
         if (canvases.length > 0) {
-          router.replace(`/canvas/editor/${canvases[0].id}`)
+          router.replace('/canvas/gallery')
         } else {
           setChecking(false)
         }
