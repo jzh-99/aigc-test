@@ -12,10 +12,11 @@ import { StepStoryboard } from '@/components/video-studio/step-storyboard'
 import { StepCharacters } from '@/components/video-studio/step-characters'
 import { StepVideo } from '@/components/video-studio/step-video'
 import { StepComplete } from '@/components/video-studio/step-complete'
-import { useWizardState } from '@/hooks/video-studio/use-wizard-state'
+import { useWizardState, WIZARD_STEP_DEFS } from '@/hooks/video-studio/use-wizard-state'
 import { useAuthStore } from '@/stores/auth-store'
 import { fetchWithAuth } from '@/lib/api-client'
 import { toast } from 'sonner'
+import { createSeriesEpisodes } from '@/lib/video-studio-api'
 import type { WizardState, EpisodeState } from '@/hooks/video-studio/use-wizard-state'
 import type { AppNode, AppEdge, CanvasNodeType } from '@/lib/canvas/types'
 
@@ -93,7 +94,7 @@ function WizardContent() {
     if (!workspaceId) { router.push('/video-studio'); return }
     try {
       toast.loading('正在创建画布…', { id: 'canvas-export' })
-      const canvas = await fetchWithAuth<{ id: string }>('/canvases', {
+      const canvas = await fetchWithAuth<{ id: string; version: number }>('/canvases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: `${projectName} 工作流`, workspace_id: workspaceId }),
@@ -120,43 +121,45 @@ function WizardContent() {
       edges.push(makeEdge('e-desc-script', descNodeId, scriptNodeId))
 
       const activeShots = flattenEpisodeShots(wizard)
+      const exportFragments = wizard.fragments.length > 0 ? wizard.fragments : activeShots.length ? [{ id: 'fragment_1', label: '片段1', duration: activeShots.reduce((sum, shot) => sum + (shot.duration || 0), 0), shots: activeShots }] : []
 
       // Column 2: storyboard splitter
       const sbNodeId = 'n-storyboard'
       nodes.push(makeNode(sbNodeId, 'storyboard_splitter', { x: COL * 2, y: 0 }, {
-        shotCount: activeShots.length,
+        shotCount: exportFragments.length,
       }))
       edges.push(makeEdge('e-script-sb', scriptNodeId, sbNodeId))
 
-      // Columns 3-5: per-shot nodes
-      activeShots.forEach((shot, i) => {
+      // Columns 3-5: per-fragment nodes
+      exportFragments.forEach((fragment, i) => {
         const y = i * ROW
-        const refUrl = wizard.shotImages[shot.id]
-          ?? (shot.characters?.[0] ? wizard.characterImages[shot.characters[0]] : undefined)
-          ?? (shot.scene ? wizard.sceneImages[shot.scene] : undefined)
-          ?? ''
+        const firstShot = fragment.shots[0]
+        const refUrl = firstShot ? (wizard.shotImages[firstShot.id]
+          ?? (firstShot.characters?.[0] ? wizard.characterImages[firstShot.characters[0]] : undefined)
+          ?? (firstShot.scene ? wizard.sceneImages[firstShot.scene] : undefined)
+          ?? '') : ''
 
-        const refNodeId = `n-ref-${shot.id}`
+        const refNodeId = `n-ref-${fragment.id}`
         nodes.push(makeNode(refNodeId, 'asset', { x: COL * 3, y }, {
           url: refUrl, mimeType: 'image/jpeg',
         }))
         edges.push(makeEdge(`e-sb-ref-${i}`, sbNodeId, refNodeId))
 
-        const vidGenNodeId = `n-vidgen-${shot.id}`
+        const vidGenNodeId = `n-vidgen-${fragment.id}`
         nodes.push(makeNode(vidGenNodeId, 'video_gen', { x: COL * 4, y }, {
-          prompt: shot.content,
+          prompt: fragment.shots.map((shot) => shot.content).join('\n'),
           model: 'seedance-2.0',
           videoMode: 'multiref',
           aspectRatio: wizard.describeData?.aspectRatio ?? 'adaptive',
-          duration: shot.duration,
+          duration: fragment.duration,
           generateAudio: true,
           cameraFixed: false,
           watermark: false,
         }))
         edges.push(makeEdge(`e-ref-vidgen-${i}`, refNodeId, vidGenNodeId))
 
-        const outNodeId = `n-out-${shot.id}`
-        const videoUrl = wizard.shotVideos[shot.id] ?? ''
+        const outNodeId = `n-out-${fragment.id}`
+        const videoUrl = wizard.shotVideos[fragment.id] ?? ''
         nodes.push(makeNode(outNodeId, 'asset', { x: COL * 5, y }, {
           url: videoUrl, mimeType: 'video/mp4',
         }))
@@ -166,18 +169,18 @@ function WizardContent() {
       await fetchWithAuth(`/canvases/${canvas.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ structure_data: { nodes, edges }, version: 0 }),
+        body: JSON.stringify({ structure_data: { nodes, edges }, version: canvas.version }),
       })
 
       // Write node outputs for video_gen nodes so videos show as completed
       const outputResults = await Promise.allSettled(
-        activeShots
-          .filter((s) => wizard.shotVideos[s.id])
-          .map((s) =>
-            fetchWithAuth(`/canvases/${canvas.id}/node-outputs/${`n-vidgen-${s.id}`}`, {
+        exportFragments
+          .filter((fragment) => wizard.shotVideos[fragment.id])
+          .map((fragment) =>
+            fetchWithAuth(`/canvases/${canvas.id}/node-outputs/${`n-vidgen-${fragment.id}`}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ output_urls: [wizard.shotVideos[s.id]], is_selected: true }),
+              body: JSON.stringify({ output_urls: [wizard.shotVideos[fragment.id]], is_selected: true }),
             })
           )
       )
@@ -189,6 +192,26 @@ function WizardContent() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '创建画布失败', { id: 'canvas-export' })
       router.push('/video-studio')
+    }
+  }
+
+  const handleCreateSeriesEpisodes = async () => {
+    if (!workspaceId || !wizard.describeData || !wizard.seriesOutline) return
+    try {
+      toast.loading('正在创建分集项目…', { id: 'series-episodes' })
+      await createSeriesEpisodes(projectId, {
+        workspace_id: workspaceId,
+        name: projectName,
+        describeData: wizard.describeData,
+        outline: wizard.seriesOutline,
+        characterImages: wizard.characterImages,
+        sceneImages: wizard.sceneImages,
+      })
+      toast.success('分集项目已创建', { id: 'series-episodes' })
+      wizard.completeStep('characters')
+      router.push(`/video-studio/series/${projectId}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '创建分集项目失败', { id: 'series-episodes' })
     }
   }
 
@@ -209,26 +232,25 @@ function WizardContent() {
     toast.success('项目名称已更新')
   }
 
-  const handleDeleteProject = async () => {
-    if (!confirm('删除后项目会进入回收站，7 天内可恢复。确认删除？')) return
-    await fetchWithAuth(`/video-studio/projects/${projectId}`, { method: 'DELETE' })
-    toast.success('项目已移入回收站')
-    router.push('/video-studio')
-  }
-
   if (!serverLoaded) return null
 
   const activeEpisode = wizard.episodes.find((episode: EpisodeState) => episode.id === wizard.activeEpisodeId)
+  const mergedCharacterImages = { ...(wizard.sharedCharacterImages ?? {}), ...wizard.characterImages }
+  const mergedSceneImages = { ...(wizard.sharedSceneImages ?? {}), ...wizard.sceneImages }
   const activeShots = flattenEpisodeShots(wizard)
-  const episodeContext = wizard.seriesOutline && activeEpisode ? [
-    `系列标题：${wizard.seriesOutline.title}`,
-    `全剧梗概：${wizard.seriesOutline.synopsis}`,
-    `世界观：${wizard.seriesOutline.worldbuilding}`,
-    `当前集：${activeEpisode.title}`,
-    `本集梗概：${activeEpisode.synopsis}`,
-    activeEpisode.coreConflict ? `本集核心冲突：${activeEpisode.coreConflict}` : '',
-    activeEpisode.hook ? `本集结尾钩子：${activeEpisode.hook}` : '',
-    wizard.seriesOutline.mainCharacters.length ? `主要人物音色：${wizard.seriesOutline.mainCharacters.map((character) => `${character.name}：${character.voiceDescription ?? character.description}`).join('；')}` : '',
+  const activeFragments = wizard.fragments.length > 0 ? wizard.fragments : activeShots.length ? [{ id: 'fragment_1', label: '片段1', duration: activeShots.reduce((sum, shot) => sum + (shot.duration || 0), 0), shots: activeShots }] : []
+  const completeItems = activeFragments.map((fragment) => ({
+    id: fragment.id,
+    label: fragment.label,
+    content: fragment.shots.map((shot) => shot.content).join(' / '),
+    characters: Array.from(new Set(fragment.shots.flatMap((shot) => shot.characters ?? []))),
+    scene: fragment.shots.find((shot) => shot.scene)?.scene,
+    duration: fragment.duration,
+    visualPrompt: fragment.shots.map((shot) => shot.visualPrompt ?? shot.content).join('\n'),
+  }))
+  const episodeContext = wizard.seriesParentId && ((wizard.sharedCharacters?.length ?? 0) || (wizard.sharedScenes?.length ?? 0)) ? [
+    wizard.sharedCharacters?.length ? `可用共享角色：${wizard.sharedCharacters.map((character) => `${character.name}：${character.description}${character.voiceDescription ? `；音色：${character.voiceDescription}` : ''}`).join('；')}` : '',
+    wizard.sharedScenes?.length ? `可用共享场景：${wizard.sharedScenes.map((scene) => `${scene.name}：${scene.description}`).join('；')}` : '',
   ].filter(Boolean).join('\n') : undefined
 
   const headerRight = (
@@ -241,6 +263,12 @@ function WizardContent() {
     </Link>
   )
 
+  const visibleSteps = projectType === 'series'
+    ? WIZARD_STEP_DEFS
+      .filter((step) => ['describe', 'outline', 'characters', 'complete'].includes(step.id))
+      .map((step) => step.id === 'characters' ? { ...step, label: '主要人物场景', description: '生成整剧共享参考图' } : step.id === 'complete' ? { ...step, label: '分集制作', description: '进入分集项目列表' } : step)
+    : WIZARD_STEP_DEFS.filter((step) => step.id !== 'outline')
+
   return (
     <div className="flex flex-col h-full overflow-hidden -m-4 md:-m-6">
       <WizardLayout
@@ -250,8 +278,8 @@ function WizardContent() {
         projectName={projectName}
         projectId={projectId}
         onProjectNameChange={handleRenameProject}
-        onDeleteProject={handleDeleteProject}
         headerRight={headerRight}
+        visibleSteps={visibleSteps}
       >
         {wizard.activeStep === 'describe' && (
           <StepDescribe
@@ -277,16 +305,7 @@ function WizardContent() {
               onSelectEpisode={wizard.setActiveEpisodeId}
               onComplete={() => wizard.completeStep('outline')}
             />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <button
-                onClick={() => wizard.completeStep('outline')}
-                className="text-sm bg-primary text-primary-foreground px-5 py-2.5 rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                继续生成剧本
-              </button>
-            </div>
-          )
+          ) : null
         )}
 
         {wizard.activeStep === 'script' && wizard.describeData && (
@@ -307,9 +326,10 @@ function WizardContent() {
           <StepStoryboard
             describeData={wizard.describeData}
             script={wizard.scriptData.script}
-            characters={wizard.scriptData.characters}
-            scenes={wizard.scriptData.scenes}
+            characters={[...(wizard.sharedCharacters ?? []), ...wizard.scriptData.characters]}
+            scenes={[...(wizard.sharedScenes ?? []), ...wizard.scriptData.scenes]}
             initial={wizard.fragments.length > 0 ? wizard.fragments : undefined}
+            defaultFragmentCount={wizard.scriptData.actCount}
             onComplete={(fragments) => {
               wizard.setFragments(fragments)
               wizard.completeStep('storyboard')
@@ -317,30 +337,58 @@ function WizardContent() {
           />
         )}
 
-        {wizard.activeStep === 'characters' && wizard.scriptData && wizard.describeData && (
-          <StepCharacters
-            scriptData={wizard.scriptData}
-            style={wizard.describeData.style}
-            characterImages={wizard.characterImages}
-            sceneImages={wizard.sceneImages}
-            projectId={projectId}
-            pendingImageBatches={wizard.pendingImageBatches ?? {}}
-            onAddPendingImageBatch={wizard.addPendingImageBatch}
-            onClearPendingImageBatch={wizard.clearPendingImageBatch}
-            onSelectCharacterImage={wizard.setCharacterImage}
-            onSelectSceneImage={wizard.setSceneImage}
-            onComplete={() => wizard.completeStep('characters')}
-          />
+        {wizard.activeStep === 'characters' && wizard.describeData && (
+          projectType === 'series' && wizard.seriesOutline ? (
+            <StepCharacters
+              mode="series-shared"
+              scriptData={{
+                title: wizard.seriesOutline.title,
+                script: wizard.seriesOutline.synopsis,
+                characters: wizard.seriesOutline.mainCharacters,
+                scenes: wizard.seriesOutline.mainScenes,
+              }}
+              style={wizard.describeData.style}
+              characterImages={wizard.characterImages}
+              sceneImages={wizard.sceneImages}
+              projectId={projectId}
+              pendingImageBatches={wizard.pendingImageBatches ?? {}}
+              onAddPendingImageBatch={wizard.addPendingImageBatch}
+              onClearPendingImageBatch={wizard.clearPendingImageBatch}
+              onSelectCharacterImage={wizard.setCharacterImage}
+              onSelectSceneImage={wizard.setSceneImage}
+              onComplete={handleCreateSeriesEpisodes}
+            />
+          ) : wizard.scriptData ? (
+            <StepCharacters
+              mode={wizard.seriesParentId ? 'episode' : 'single'}
+              scriptData={wizard.scriptData}
+              style={wizard.describeData.style}
+              characterImages={mergedCharacterImages}
+              sceneImages={mergedSceneImages}
+              sharedCharacters={wizard.sharedCharacters ?? []}
+              sharedScenes={wizard.sharedScenes ?? []}
+              sharedCharacterImages={wizard.sharedCharacterImages ?? {}}
+              sharedSceneImages={wizard.sharedSceneImages ?? {}}
+              projectId={projectId}
+              pendingImageBatches={wizard.pendingImageBatches ?? {}}
+              onAddPendingImageBatch={wizard.addPendingImageBatch}
+              onClearPendingImageBatch={wizard.clearPendingImageBatch}
+              onSelectCharacterImage={wizard.setCharacterImage}
+              onSelectSceneImage={wizard.setSceneImage}
+              onComplete={() => wizard.completeStep('characters')}
+            />
+          ) : null
         )}
 
         {wizard.activeStep === 'video' && wizard.describeData && (
           <StepVideo
-            shots={activeShots}
+            fragments={activeFragments}
             shotImages={wizard.shotImages}
             shotVideos={wizard.shotVideos}
             describeData={wizard.describeData}
-            characterImages={wizard.characterImages}
-            sceneImages={wizard.sceneImages}
+            characters={[...(wizard.sharedCharacters ?? []), ...(wizard.scriptData?.characters ?? [])]}
+            characterImages={mergedCharacterImages}
+            sceneImages={mergedSceneImages}
             projectId={projectId}
             projectName={projectName}
             pendingVideoBatches={wizard.pendingVideoBatches ?? {}}
@@ -352,13 +400,29 @@ function WizardContent() {
         )}
 
         {wizard.activeStep === 'complete' && wizard.describeData && (
-          <StepComplete
-            shots={activeShots}
-            shotVideos={wizard.shotVideos}
-            projectName={projectName}
-            onExportToCanvas={handleExportToCanvas}
-            onReturn={handleReturnToProjects}
-          />
+          projectType === 'series' ? (
+            <div className="flex flex-col items-center justify-center h-full gap-6 text-center p-8">
+              <div className="text-5xl">🎬</div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold">分集项目已创建</h2>
+                <p className="text-muted-foreground text-sm">共享人物场景资产已写入每集，点击下方进入分集制作</p>
+              </div>
+              <button
+                onClick={() => router.push(`/video-studio/series/${projectId}`)}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                进入分集制作
+              </button>
+            </div>
+          ) : (
+            <StepComplete
+              shots={completeItems}
+              shotVideos={wizard.shotVideos}
+              projectName={projectName}
+              onExportToCanvas={handleExportToCanvas}
+              onReturn={handleReturnToProjects}
+            />
+          )
         )}
       </WizardLayout>
     </div>
