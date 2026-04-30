@@ -23,7 +23,7 @@ export interface ScriptResult {
   success: boolean
   title: string
   script: string
-  characters: Array<{ name: string; description: string }>
+  characters: Array<{ name: string; description: string; voiceDescription?: string }>
   scenes: Array<{ name: string; description: string }>
 }
 
@@ -35,12 +35,22 @@ export interface Shot {
   scene?: string
   cameraMove: string
   duration: number
+  voiceNote?: string
   visualPrompt?: string
+}
+
+export interface Fragment {
+  id: string
+  label: string
+  duration: number
+  transition?: string
+  shots: Shot[]
 }
 
 export interface StoryboardResult {
   success: boolean
-  shots: Shot[]
+  fragments: Fragment[]
+  shots?: Shot[]
 }
 
 export interface AssetPromptsResult {
@@ -55,8 +65,9 @@ export interface SeriesOutlineResult {
   title: string
   synopsis: string
   worldbuilding: string
-  mainCharacters: Array<{ name: string; description: string }>
-  episodes: Array<{ id: string; title: string; synopsis: string }>
+  mainCharacters: Array<{ name: string; description: string; voiceDescription?: string }>
+  relationships?: Array<{ from: string; to: string; description: string }>
+  episodes: Array<{ id: string; title: string; synopsis: string; coreConflict?: string; hook?: string }>
 }
 
 export function writeScript(params: {
@@ -70,13 +81,24 @@ export function writeScript(params: {
 
 export function splitStoryboard(params: {
   script: string
-  shotCount: number
+  shotCount?: number
+  fragmentCount?: number
+  duration?: number
   aspectRatio?: string
   style?: string
-  characters?: Array<{ name: string; description: string }>
+  characters?: Array<{ name: string; description: string; voiceDescription?: string }>
   scenes?: Array<{ name: string; description: string }>
 }, token?: string) {
   return post<StoryboardResult>('/storyboard-split', params, token)
+}
+
+export function generateSeriesOutline(params: {
+  description: string
+  style: string
+  episodeCount: number
+  episodeDuration: number
+}, token?: string) {
+  return post<SeriesOutlineResult>('/series-outline', params, token)
 }
 
 export function generateAssetPrompts(params: {

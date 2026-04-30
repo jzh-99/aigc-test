@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { WizardLayout } from '@/components/video-studio/wizard-layout'
 import { StepDescribe } from '@/components/video-studio/step-describe'
+import { StepOutline } from '@/components/video-studio/step-outline'
 import { StepScript } from '@/components/video-studio/step-script'
 import { StepStoryboard } from '@/components/video-studio/step-storyboard'
 import { StepCharacters } from '@/components/video-studio/step-characters'
@@ -15,7 +16,7 @@ import { useWizardState } from '@/hooks/video-studio/use-wizard-state'
 import { useAuthStore } from '@/stores/auth-store'
 import { fetchWithAuth } from '@/lib/api-client'
 import { toast } from 'sonner'
-import type { WizardState } from '@/hooks/video-studio/use-wizard-state'
+import type { WizardState, EpisodeState } from '@/hooks/video-studio/use-wizard-state'
 import type { AppNode, AppEdge, CanvasNodeType } from '@/lib/canvas/types'
 
 function makeNode(id: string, type: CanvasNodeType, position: { x: number; y: number }, config: Record<string, unknown>): AppNode {
@@ -29,6 +30,10 @@ function makeNode(id: string, type: CanvasNodeType, position: { x: number; y: nu
 
 function makeEdge(id: string, source: string, target: string, sourceHandle?: string, targetHandle?: string): AppEdge {
   return { id, source, target, sourceHandle, targetHandle } as AppEdge
+}
+
+function flattenEpisodeShots(wizard: WizardState) {
+  return (wizard.fragments?.length ? wizard.fragments : wizard.shots?.length ? [{ id: 'fragment_1', label: '片段1', duration: 0, shots: wizard.shots }] : []).flatMap((fragment) => fragment.shots ?? [])
 }
 
 function WizardContent() {
@@ -114,15 +119,17 @@ function WizardContent() {
       }))
       edges.push(makeEdge('e-desc-script', descNodeId, scriptNodeId))
 
+      const activeShots = flattenEpisodeShots(wizard)
+
       // Column 2: storyboard splitter
       const sbNodeId = 'n-storyboard'
       nodes.push(makeNode(sbNodeId, 'storyboard_splitter', { x: COL * 2, y: 0 }, {
-        shotCount: wizard.shots.length,
+        shotCount: activeShots.length,
       }))
       edges.push(makeEdge('e-script-sb', scriptNodeId, sbNodeId))
 
       // Columns 3-5: per-shot nodes
-      wizard.shots.forEach((shot, i) => {
+      activeShots.forEach((shot, i) => {
         const y = i * ROW
         const refUrl = wizard.shotImages[shot.id]
           ?? (shot.characters?.[0] ? wizard.characterImages[shot.characters[0]] : undefined)
@@ -164,7 +171,7 @@ function WizardContent() {
 
       // Write node outputs for video_gen nodes so videos show as completed
       const outputResults = await Promise.allSettled(
-        wizard.shots
+        activeShots
           .filter((s) => wizard.shotVideos[s.id])
           .map((s) =>
             fetchWithAuth(`/canvases/${canvas.id}/node-outputs/${`n-vidgen-${s.id}`}`, {
@@ -211,6 +218,19 @@ function WizardContent() {
 
   if (!serverLoaded) return null
 
+  const activeEpisode = wizard.episodes.find((episode: EpisodeState) => episode.id === wizard.activeEpisodeId)
+  const activeShots = flattenEpisodeShots(wizard)
+  const episodeContext = wizard.seriesOutline && activeEpisode ? [
+    `系列标题：${wizard.seriesOutline.title}`,
+    `全剧梗概：${wizard.seriesOutline.synopsis}`,
+    `世界观：${wizard.seriesOutline.worldbuilding}`,
+    `当前集：${activeEpisode.title}`,
+    `本集梗概：${activeEpisode.synopsis}`,
+    activeEpisode.coreConflict ? `本集核心冲突：${activeEpisode.coreConflict}` : '',
+    activeEpisode.hook ? `本集结尾钩子：${activeEpisode.hook}` : '',
+    wizard.seriesOutline.mainCharacters.length ? `主要人物音色：${wizard.seriesOutline.mainCharacters.map((character) => `${character.name}：${character.voiceDescription ?? character.description}`).join('；')}` : '',
+  ].filter(Boolean).join('\n') : undefined
+
   const headerRight = (
     <Link
       href="/video-studio"
@@ -240,15 +260,39 @@ function WizardContent() {
             episodeCount={episodeCount}
             onDraftChange={wizard.setDraftDescribeData}
             onComplete={(data) => {
-              wizard.setDescribeData(data)
+              wizard.setDescribeData(data, projectType)
               wizard.completeStep('describe')
             }}
           />
         )}
 
+        {wizard.activeStep === 'outline' && wizard.describeData && (
+          projectType === 'series' ? (
+            <StepOutline
+              describeData={wizard.describeData}
+              episodeCount={episodeCount}
+              initial={wizard.seriesOutline}
+              activeEpisodeId={wizard.activeEpisodeId}
+              onGenerated={wizard.setSeriesOutline}
+              onSelectEpisode={wizard.setActiveEpisodeId}
+              onComplete={() => wizard.completeStep('outline')}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <button
+                onClick={() => wizard.completeStep('outline')}
+                className="text-sm bg-primary text-primary-foreground px-5 py-2.5 rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                继续生成剧本
+              </button>
+            </div>
+          )
+        )}
+
         {wizard.activeStep === 'script' && wizard.describeData && (
           <StepScript
             describeData={wizard.describeData}
+            episodeContext={episodeContext}
             initial={wizard.scriptData}
             scriptHistory={wizard.scriptHistory ?? []}
             onGenerated={wizard.setScriptData}
@@ -265,9 +309,9 @@ function WizardContent() {
             script={wizard.scriptData.script}
             characters={wizard.scriptData.characters}
             scenes={wizard.scriptData.scenes}
-            initial={wizard.shots.length > 0 ? wizard.shots : undefined}
-            onComplete={(shots) => {
-              wizard.setShots(shots)
+            initial={wizard.fragments.length > 0 ? wizard.fragments : undefined}
+            onComplete={(fragments) => {
+              wizard.setFragments(fragments)
               wizard.completeStep('storyboard')
             }}
           />
@@ -291,7 +335,7 @@ function WizardContent() {
 
         {wizard.activeStep === 'video' && wizard.describeData && (
           <StepVideo
-            shots={wizard.shots}
+            shots={activeShots}
             shotImages={wizard.shotImages}
             shotVideos={wizard.shotVideos}
             describeData={wizard.describeData}
@@ -309,7 +353,7 @@ function WizardContent() {
 
         {wizard.activeStep === 'complete' && wizard.describeData && (
           <StepComplete
-            shots={wizard.shots}
+            shots={activeShots}
             shotVideos={wizard.shotVideos}
             projectName={projectName}
             onExportToCanvas={handleExportToCanvas}

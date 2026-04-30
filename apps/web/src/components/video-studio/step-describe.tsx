@@ -139,7 +139,7 @@ export function StepDescribe({ initial, projectType = 'single', episodeCount = 1
         disabled={!canProceed}
         className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-5 py-2.5 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
       >
-        下一步：生成剧本
+        {projectType === 'series' ? '下一步：生成剧集大纲' : '下一步：生成剧本'}
         <ArrowRight className="w-4 h-4" />
       </button>
     </div>

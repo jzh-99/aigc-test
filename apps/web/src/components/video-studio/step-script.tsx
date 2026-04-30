@@ -10,13 +10,14 @@ import type { ScriptResult } from '@/lib/video-studio-api'
 
 interface Props {
   describeData: DescribeData
+  episodeContext?: string
   initial?: Omit<ScriptResult, 'success'> | null
   scriptHistory?: Omit<ScriptResult, 'success'>[]
   onGenerated?: (data: Omit<ScriptResult, 'success'>) => void
   onComplete: (data: Omit<ScriptResult, 'success'>) => void
 }
 
-export function StepScript({ describeData, initial, scriptHistory = [], onGenerated, onComplete }: Props) {
+export function StepScript({ describeData, episodeContext, initial, scriptHistory = [], onGenerated, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [loading, setLoading] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -30,7 +31,7 @@ export function StepScript({ describeData, initial, scriptHistory = [], onGenera
     setLoading(true)
     try {
       const res = await writeScript({
-        description: describeData.description,
+        description: episodeContext ? `${describeData.description}\n\n当前制作单集：\n${episodeContext}` : describeData.description,
         style: describeData.style,
         duration: describeData.duration,
         feedback: fb,
@@ -47,7 +48,7 @@ export function StepScript({ describeData, initial, scriptHistory = [], onGenera
     } finally {
       setLoading(false)
     }
-  }, [describeData, token, onGenerated])
+  }, [describeData, episodeContext, token, onGenerated])
 
   const handleConfirm = () => {
     if (!result) return
@@ -193,6 +194,7 @@ export function StepScript({ describeData, initial, scriptHistory = [], onGenera
                   <div key={c.name} className="text-xs bg-orange-50 border border-orange-200 text-orange-800 px-2.5 py-1.5 rounded-lg max-w-[220px]">
                     <p className="font-semibold">👤 {c.name}</p>
                     {c.description && <p className="text-orange-600 mt-0.5 leading-relaxed">{c.description}</p>}
+                    {c.voiceDescription && <p className="text-orange-500 mt-0.5 leading-relaxed">音色：{c.voiceDescription}</p>}
                   </div>
                 ))}
               </div>
