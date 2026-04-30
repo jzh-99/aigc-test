@@ -19,6 +19,7 @@ type Canvas = {
 export default function CanvasGalleryPage() {
   const router = useRouter()
   const token = useAuthStore((s) => s.accessToken)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const [canvases, setCanvases] = useState<Canvas[]>([])
   const [loading, setLoading] = useState(true)
@@ -26,7 +27,8 @@ export default function CanvasGalleryPage() {
   const [trashOpen, setTrashOpen] = useState(false)
 
   const fetchCanvases = useCallback(async () => {
-    if (!token) return
+    if (!isInitialized) return
+    if (!token) { setLoading(false); return }
     setLoading(true)
     try {
       const qs = activeWorkspaceId ? `?workspace_id=${activeWorkspaceId}` : ''
@@ -40,7 +42,7 @@ export default function CanvasGalleryPage() {
     } finally {
       setLoading(false)
     }
-  }, [token, activeWorkspaceId])
+  }, [isInitialized, token, activeWorkspaceId])
 
   useEffect(() => {
     fetchCanvases()
