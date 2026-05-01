@@ -1,1 +1,0 @@
-sed -i '/if (errorData.error?.code === '\''TOKEN_EXPIRED'\'') {/i \    if (errorData.error?.code === '\''TOKEN_REVOKED'\'' || errorData.error?.code === '\''TOKEN_REUSE_DETECTED'\'') {\n      useAuthStore.getState().clearAuth()\n      window.location.href = '\''/login?reason=kicked'\''\n      return res\n    }\n' /root/autodl-tmp/aigc-test/apps/web/src/lib/fetch-with-auth.ts

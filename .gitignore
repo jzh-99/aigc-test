@@ -23,9 +23,33 @@ logs/
 
 # Design/planning docs should stay out of the repo
 docs/plans/
+docs/ai-platform-pricing-plan.md
 canvas-*-plan.md
 *-design-plan.md
 *-redesign-plan.md
+
+# Internal reports and operations docs
+AI_*_ISSUE.md
+AI_*_REPORT.md
+API_*_DOCUMENTATION.md
+API_*_REPORT.md
+CREDIT_*_GUIDE.md
+DATABASE_*_GUIDE.md
+MIGRATION_*_EXPLAINED.md
+TIMEOUT_*_REPORT.md
+DEPLOY-TEST.md
+
+# Local operations scripts
+/deploy*.sh
+/setup.sh
+/start-*.sh
+/patch_*.sh
+/update_db.js
+/update_db.ts
+
+# Generated test output
+apps/web/playwright-report/
+apps/web/test-results/
 
 # Stale tsc artifacts in non-src dirs (migrations/scripts run via tsx)
 packages/db/migrations/*.js
