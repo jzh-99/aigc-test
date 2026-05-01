@@ -4,6 +4,7 @@ import { config } from 'dotenv'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 config({ path: path.resolve(__dirname, '../../../.env') })
+config({ path: path.resolve(__dirname, '../../../prompts.env'), override: false })
 
 import { buildApp } from './app.js'
 

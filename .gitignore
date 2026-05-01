@@ -3,6 +3,7 @@ dist/
 .next/
 .turbo/
 *.env
+/prompts.env
 !.env.example
 !.env.*.example
 .worktrees/
