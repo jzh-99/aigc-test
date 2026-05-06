@@ -330,6 +330,9 @@ export interface VideoStudioProjectsTable {
   user_id: string
   name: string
   wizard_state: ColumnType<unknown, string, string>
+  project_type: Generated<'single' | 'series' | 'episode'>
+  series_parent_id: string | null
+  episode_index: number | null
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
   created_at: Generated<Timestamp>

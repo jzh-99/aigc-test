@@ -40,7 +40,6 @@ async function submitVideoBatch(params: {
   aspectRatio: string
   duration: number
   referenceImages: string[]
-  tailFrameUrl?: string
   workspaceId: string
   projectId: string
 }): Promise<string> {
@@ -54,7 +53,6 @@ async function submitVideoBatch(params: {
     duration: clampedDuration,
     generate_audio: true,
     ...(params.referenceImages.length > 0 ? { reference_images: params.referenceImages } : {}),
-    ...(params.tailFrameUrl ? { images: [params.tailFrameUrl] } : {}),
     ...(params.projectId ? { video_studio_project_id: params.projectId } : {}),
   })
   return batch.id
@@ -117,7 +115,8 @@ function buildFragmentPrompt(fragment: Fragment, style: string, labelMap: Record
     return `分镜${index + 1}（${shot.duration}秒）: ${prompt}`
   }).join('\n')
   const transition = fragment.transition ? `\n分镜过渡: ${fragment.transition}` : ''
-  return appendPromptSuffix(`画面风格和类型: ${style}\n生成一个由以下${shots.length}个分镜组成的视频:${transition}\n${body}`)
+  const tailFrameInstruction = labelMap.上一片段尾帧 ? `\n上一片段尾帧参考: ${labelMap.上一片段尾帧}，用于保持人物、场景、构图和动作连续。` : ''
+  return appendPromptSuffix(`画面风格和类型: ${style}\n生成一个由以下${shots.length}个分镜组成的视频:${transition}${tailFrameInstruction}\n${body}`)
 }
 
 function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, videoUrl, videoHistory, aspectRatio, workspaceId, projectId, videoParams, tailFrameUrl, sequentialMode, isLocked, isPending, onVideoReady, onSelectVideo, onBatchSubmitted, onConfirm, onTailFrameExtracted, registerGenerate }: FragmentVideoCardProps) {
@@ -165,7 +164,6 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
         aspectRatio,
         duration: videoParams.durationOverride ?? fragment.duration,
         referenceImages,
-        tailFrameUrl: sequentialMode ? tailFrameUrl : undefined,
         workspaceId,
         projectId,
       })
@@ -648,12 +646,14 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
           const isLocked = sequentialMode && i > 0 && !confirmedFragments.has(prevFragment?.id ?? '')
           const { refs: resolvedRefs, labelMap } = resolveRefs(fragment)
           const tailFrameUrl = sequentialMode && prevFragment ? tailFrames[prevFragment.id] : undefined
+          const referenceImages = tailFrameUrl ? [...resolvedRefs, tailFrameUrl] : resolvedRefs
+          const effectiveLabelMap = tailFrameUrl ? { ...labelMap, 上一片段尾帧: `图${referenceImages.length}` } : labelMap
           return (
             <FragmentVideoCard
               key={fragment.id}
               fragment={fragment}
-              referenceImages={resolvedRefs}
-              labelMap={labelMap}
+              referenceImages={referenceImages}
+              labelMap={effectiveLabelMap}
               voiceMap={voiceMap}
               videoUrl={shotVideos[fragment.id]}
               videoHistory={videoHistoryByFragment[fragment.id] ?? []}

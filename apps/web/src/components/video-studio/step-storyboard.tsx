@@ -14,14 +14,15 @@ interface Props {
   characters?: Array<{ name: string; description: string; voiceDescription?: string }>
   scenes?: Array<{ name: string; description: string }>
   initial?: Fragment[]
+  defaultFragmentCount?: number
   onComplete: (fragments: Fragment[]) => void
 }
 
-export function StepStoryboard({ describeData, script, characters, scenes, initial, onComplete }: Props) {
+export function StepStoryboard({ describeData, script, characters, scenes, initial, defaultFragmentCount, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [loading, setLoading] = useState(false)
   const [fragments, setFragments] = useState<Fragment[]>(initial ?? [])
-  const [fragmentCount, setFragmentCount] = useState(() => Math.ceil(describeData.duration / 12))
+  const [fragmentCount, setFragmentCount] = useState(() => defaultFragmentCount ?? Math.ceil(describeData.duration / 12))
   const shots = fragments.flatMap((fragment) => fragment.shots ?? [])
 
   const generate = useCallback(async () => {

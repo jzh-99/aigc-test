@@ -22,6 +22,7 @@ async function post<T>(path: string, body: unknown, token?: string): Promise<T> 
 export interface ScriptResult {
   success: boolean
   title: string
+  actCount?: number
   script: string
   characters: Array<{ name: string; description: string; voiceDescription?: string }>
   scenes: Array<{ name: string; description: string }>

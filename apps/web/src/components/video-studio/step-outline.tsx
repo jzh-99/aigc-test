@@ -37,6 +37,7 @@ export function StepOutline({ describeData, episodeCount, initial, activeEpisode
         synopsis: res.synopsis,
         worldbuilding: res.worldbuilding,
         mainCharacters: res.mainCharacters,
+        mainScenes: res.mainScenes,
         relationships: res.relationships,
         episodes: res.episodes,
       }
@@ -77,7 +78,7 @@ export function StepOutline({ describeData, episodeCount, initial, activeEpisode
             onClick={onComplete}
             className="w-full flex items-center justify-center gap-2 text-sm bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition-colors"
           >
-            制作所选单集
+            确认大纲，生成主要人物场景
             <ArrowRight className="w-4 h-4" />
           </button>
         )}
@@ -103,15 +104,32 @@ export function StepOutline({ describeData, episodeCount, initial, activeEpisode
               {outline.worldbuilding && <p className="text-xs text-muted-foreground leading-relaxed">{outline.worldbuilding}</p>}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {outline.mainCharacters.map((character) => (
-                <div key={character.name} className="text-xs border rounded-lg p-3 bg-orange-50 border-orange-200 text-orange-900">
-                  <p className="font-semibold">{character.name}</p>
-                  <p className="mt-1 text-orange-700 leading-relaxed">{character.description}</p>
-                  {character.voiceDescription && <p className="mt-1 text-orange-600 leading-relaxed">音色：{character.voiceDescription}</p>}
-                </div>
-              ))}
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">主要人物</p>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {outline.mainCharacters.map((character) => (
+                  <div key={character.name} className="text-xs border rounded-lg p-3 bg-orange-50 border-orange-200 text-orange-900">
+                    <p className="font-semibold">{character.name}</p>
+                    <p className="mt-1 text-orange-700 leading-relaxed">{character.description}</p>
+                    {character.voiceDescription && <p className="mt-1 text-orange-600 leading-relaxed">音色：{character.voiceDescription}</p>}
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {outline.mainScenes.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold">主要场景</p>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {outline.mainScenes.map((scene) => (
+                    <div key={scene.name} className="text-xs border rounded-lg p-3 bg-blue-50 border-blue-200 text-blue-900">
+                      <p className="font-semibold">{scene.name}</p>
+                      <p className="mt-1 text-blue-700 leading-relaxed">{scene.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <p className="text-sm font-semibold">分集结构</p>

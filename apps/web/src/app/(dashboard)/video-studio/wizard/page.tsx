@@ -246,6 +246,7 @@ function WizardContent() {
     content: fragment.shots.map((shot) => shot.content).join(' / '),
     characters: Array.from(new Set(fragment.shots.flatMap((shot) => shot.characters ?? []))),
     scene: fragment.shots.find((shot) => shot.scene)?.scene,
+    cameraMove: Array.from(new Set(fragment.shots.map((shot) => shot.cameraMove).filter(Boolean))).join(' / ') || '固定镜头',
     duration: fragment.duration,
     visualPrompt: fragment.shots.map((shot) => shot.visualPrompt ?? shot.content).join('\n'),
   }))
