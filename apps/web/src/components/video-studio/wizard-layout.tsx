@@ -56,12 +56,13 @@ interface Props {
   onProjectNameChange?: (name: string) => Promise<void> | void
   onDeleteProject?: () => void
   headerRight?: React.ReactNode
+  visibleSteps?: WizardStepDef[]
   children: React.ReactNode
 }
 
-export function WizardLayout({ statuses, activeStep, onStepClick, projectName, projectId, onProjectNameChange, onDeleteProject, headerRight, children }: Props) {
-  const completedCount = Object.values(statuses).filter((s) => s === 'completed').length
-  const total = WIZARD_STEP_DEFS.length
+export function WizardLayout({ statuses, activeStep, onStepClick, projectName, projectId, onProjectNameChange, onDeleteProject, headerRight, visibleSteps = WIZARD_STEP_DEFS, children }: Props) {
+  const completedCount = visibleSteps.filter((step) => statuses[step.id] === 'completed').length
+  const total = visibleSteps.length
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState(projectName)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -142,9 +143,9 @@ export function WizardLayout({ statuses, activeStep, onStepClick, projectName, p
         {/* Left nav */}
         <aside className="w-52 shrink-0 border-r bg-background flex flex-col py-3 px-2 gap-1 overflow-y-auto">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">制作步骤</p>
-          {WIZARD_STEP_DEFS.map((def, idx) => (
+          {visibleSteps.map((def, idx) => (
             <div key={def.id} className="relative">
-              {idx < WIZARD_STEP_DEFS.length - 1 && (
+              {idx < visibleSteps.length - 1 && (
                 <div className="absolute left-[22px] top-[44px] w-px h-2 bg-border z-0" />
               )}
               <StepNavItem

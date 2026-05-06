@@ -64,6 +64,7 @@ export interface WizardState {
   sharedScenes?: Array<{ name: string; description: string }>
   sharedCharacterImages?: Record<string, string>
   sharedSceneImages?: Record<string, string>
+  assetStyle?: string
   seriesOutline: SeriesOutline | null
   activeEpisodeId: string | null
   episodes: EpisodeState[]
@@ -104,6 +105,7 @@ function defaultState(): WizardState {
     sharedScenes: [],
     sharedCharacterImages: {},
     sharedSceneImages: {},
+    assetStyle: undefined,
     seriesOutline: null,
     activeEpisodeId: null,
     episodes: [],
@@ -437,6 +439,10 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
     })
   }, [syncNow])
 
+  const setAssetStyle = useCallback((assetStyle: string) => {
+    setState((s) => ({ ...s, assetStyle }))
+  }, [])
+
   const reset = useCallback(() => {
     const fresh = defaultState()
     setState(fresh)
@@ -458,6 +464,7 @@ export function useWizardState(storageKey: string, projectId: string, projectNam
     setCharacterImage,
     setSceneImage,
     setShotVideo,
+    setAssetStyle,
     addPendingImageBatch,
     clearPendingImageBatch,
     addPendingVideoBatch,

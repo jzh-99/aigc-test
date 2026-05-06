@@ -484,12 +484,13 @@ export async function videoStudioRoutes(app: FastifyInstance) {
       }
       characterImages: Record<string, string>
       sceneImages: Record<string, string>
+      assetStyle?: string
     }
   }>('/video-studio/projects/:id/series/episodes', async (request, reply) => {
     const db = getDb()
     const userId = request.user.id
     const { id } = request.params
-    const { workspace_id, name, describeData, outline, characterImages, sceneImages } = request.body
+    const { workspace_id, name, describeData, outline, characterImages, sceneImages, assetStyle } = request.body
 
     const member = await db
       .selectFrom('workspace_members')
@@ -509,6 +510,7 @@ export async function videoStudioRoutes(app: FastifyInstance) {
       episodes: [],
       describeData,
       draftDescribeData: describeData,
+      assetStyle: assetStyle ?? describeData.style,
       scriptData: null,
       scriptHistory: [],
       shots: [],
@@ -579,6 +581,7 @@ export async function videoStudioRoutes(app: FastifyInstance) {
           episodes: [],
           describeData: episodeDescribeData,
           draftDescribeData: episodeDescribeData,
+          assetStyle: assetStyle ?? describeData.style,
           scriptData: null,
           scriptHistory: [],
           shots: [],

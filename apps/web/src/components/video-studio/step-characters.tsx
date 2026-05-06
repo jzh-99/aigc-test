@@ -60,18 +60,25 @@ async function submitImageBatch(prompt: string, aspectRatio: string, workspaceId
   return batch.id
 }
 
+function appendStyleToPrompt(prompt: string, style: string) {
+  const trimmedStyle = style.trim()
+  if (!trimmedStyle || prompt.includes(trimmedStyle)) return prompt
+  return `${prompt}, ${trimmedStyle}`
+}
+
 interface ImageCardProps {
   item: AssetItem
   workspaceId: string
   projectId: string
   imageParams: ImageParams
+  activeStyle: string
   isPending: boolean
   onUpdate: (updated: Partial<AssetItem>) => void
   onBatchSubmitted: (batchId: string) => void
   registerGenerate: (name: string, type: AssetItem['type'], fn: () => Promise<boolean>) => void
 }
 
-function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpdate, onBatchSubmitted, registerGenerate }: ImageCardProps) {
+function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isPending, onUpdate, onBatchSubmitted, registerGenerate }: ImageCardProps) {
   const [loading, setLoading] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [editedPrompt, setEditedPrompt] = useState(item.prompt)
@@ -82,7 +89,7 @@ function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpd
     try {
       const isCharacter = item.type === 'character'
       const aspectRatio = isCharacter ? '1:1' : '16:9'
-      const prompt = promptOverride ?? editedPrompt
+      const prompt = appendStyleToPrompt(promptOverride ?? editedPrompt, activeStyle)
       const model = isCharacter ? imageParams.characterModel : imageParams.sceneModel
       const resolution = isCharacter ? imageParams.characterResolution : imageParams.sceneResolution
       const batchId = await submitImageBatch(prompt, aspectRatio, workspaceId, model, resolution, imageParams.quantity, projectId)
@@ -96,7 +103,7 @@ function ImageCard({ item, workspaceId, projectId, imageParams, isPending, onUpd
     } finally {
       setLoading(false)
     }
-  }, [editedPrompt, item.type, item.name, workspaceId, imageParams, projectId, onUpdate, onBatchSubmitted])
+  }, [editedPrompt, activeStyle, item.type, item.name, workspaceId, imageParams, projectId, onUpdate, onBatchSubmitted])
 
   const generateRef = useRef(generate)
   generateRef.current = generate
@@ -255,6 +262,7 @@ interface Props {
   projectId: string
   scriptData: Omit<ScriptResult, 'success'>
   style: string
+  assetStyle?: string
   characterImages: Record<string, string>
   sceneImages: Record<string, string>
   characterImageHistory: Record<string, string[][]>
@@ -271,6 +279,7 @@ interface Props {
   onClearPendingImageBatch: (batchId: string) => void
   onSelectCharacterImage: (name: string, url: string, batch?: string[]) => void
   onSelectSceneImage: (name: string, url: string, batch?: string[]) => void
+  onAssetStyleChange?: (style: string) => void
   onComplete: () => void
 }
 
@@ -351,22 +360,24 @@ function buildAssetItems(params: {
   return [...sharedCharacters, ...localCharacters, ...sharedScenes, ...localScenes]
 }
 
-export function StepCharacters({ projectId, scriptData, style: initialStyle, characterImages, sceneImages, characterImageHistory, sceneImageHistory, pendingImageBatches, mode = 'single', sharedCharacters = [], sharedScenes = [], sharedCharacterImages = {}, sharedSceneImages = {}, sharedCharacterImageHistory = {}, sharedSceneImageHistory = {}, onAddPendingImageBatch, onClearPendingImageBatch, onSelectCharacterImage, onSelectSceneImage, onComplete }: Props) {
+export function StepCharacters({ projectId, scriptData, style: initialStyle, assetStyle, characterImages, sceneImages, characterImageHistory, sceneImageHistory, pendingImageBatches, mode = 'single', sharedCharacters = [], sharedScenes = [], sharedCharacterImages = {}, sharedSceneImages = {}, sharedCharacterImageHistory = {}, sharedSceneImageHistory = {}, onAddPendingImageBatch, onClearPendingImageBatch, onSelectCharacterImage, onSelectSceneImage, onAssetStyleChange, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const [loadingPrompts, setLoadingPrompts] = useState(false)
   const [batchRunning, setBatchRunning] = useState(false)
   const [showParams, setShowParams] = useState(false)
   const [imageParams, setImageParams] = useState<ImageParams>(DEFAULT_IMAGE_PARAMS)
-  const [activeStyle, setActiveStyle] = useState(initialStyle)
-  const [styleInput, setStyleInput] = useState(initialStyle)
-  const [items, setItems] = useState<AssetItem[]>(() => buildAssetItems({ scriptData, style: initialStyle, characterImages, sceneImages, characterImageHistory, sceneImageHistory, mode, sharedCharacters, sharedScenes, sharedCharacterImages, sharedSceneImages, sharedCharacterImageHistory, sharedSceneImageHistory }))
+  const initialAssetStyle = assetStyle ?? initialStyle
+  const [activeStyle, setActiveStyle] = useState(initialAssetStyle)
+  const [styleInput, setStyleInput] = useState(initialAssetStyle)
+  const [items, setItems] = useState<AssetItem[]>(() => buildAssetItems({ scriptData, style: initialAssetStyle, characterImages, sceneImages, characterImageHistory, sceneImageHistory, mode, sharedCharacters, sharedScenes, sharedCharacterImages, sharedSceneImages, sharedCharacterImageHistory, sharedSceneImageHistory }))
 
   // Rebuild default prompts when style changes, preserving existing urls/selectedUrl
-  const prevStyleRef = useRef(initialStyle)
+  const prevStyleRef = useRef(initialAssetStyle)
   useEffect(() => {
     if (activeStyle === prevStyleRef.current) return
     prevStyleRef.current = activeStyle
+    onAssetStyleChange?.(activeStyle)
     setItems((prev) => prev.map((item) => {
       if (item.shared) return item
       const basePrompt = item.type === 'character'
@@ -374,7 +385,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, cha
         : `${item.name}, ${item.description}, no people, wide shot, cinematic`
       return { ...item, prompt: activeStyle ? `${basePrompt}, ${activeStyle}` : basePrompt }
     }))
-  }, [activeStyle])
+  }, [activeStyle, onAssetStyleChange])
 
   // Registry for batch generation — each card registers its own generate fn
   const generateFnsRef = useRef<Record<string, () => Promise<boolean>>>({})
@@ -416,13 +427,13 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, cha
         style: activeStyle,
       }, token)
       setItems((prev) => prev.map((item) => {
+        if (item.shared) return item
         if (item.type === 'character') {
           const found = res.characters.find((c) => c.name === item.name)
-          // Append three-view keywords to AI-generated prompt
-          if (found) return { ...item, prompt: `${found.prompt}, character reference sheet, three views: front view, side view, back view, full body, white background` }
+          if (found) return { ...item, prompt: appendStyleToPrompt(`${found.prompt}, character reference sheet, three views: front view, side view, back view, full body, white background`, activeStyle) }
         } else {
           const found = res.scenes.find((s) => s.name === item.name)
-          if (found) return { ...item, prompt: found.prompt }
+          if (found) return { ...item, prompt: appendStyleToPrompt(found.prompt, activeStyle) }
         }
         return item
       }))
@@ -639,6 +650,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, cha
                   workspaceId={workspaceId}
                   projectId={projectId}
                   imageParams={imageParams}
+                  activeStyle={activeStyle}
                   isPending={pendingImageKeys.has(`character:${item.name}`)}
                   onUpdate={(u) => updateItem(item.name, 'character', u)}
                   onBatchSubmitted={(batchId) => onAddPendingImageBatch(batchId, { name: item.name, type: 'character' })}
@@ -660,6 +672,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, cha
                   workspaceId={workspaceId}
                   projectId={projectId}
                   imageParams={imageParams}
+                  activeStyle={activeStyle}
                   isPending={pendingImageKeys.has(`scene:${item.name}`)}
                   onUpdate={(u) => updateItem(item.name, 'scene', u)}
                   onBatchSubmitted={(batchId) => onAddPendingImageBatch(batchId, { name: item.name, type: 'scene' })}

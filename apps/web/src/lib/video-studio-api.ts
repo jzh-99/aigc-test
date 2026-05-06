@@ -66,6 +66,7 @@ export interface SeriesOutlineResult {
   synopsis: string
   worldbuilding: string
   mainCharacters: Array<{ name: string; description: string; voiceDescription?: string }>
+  mainScenes: Array<{ name: string; description: string }>
   relationships?: Array<{ from: string; to: string; description: string }>
   episodes: Array<{ id: string; title: string; synopsis: string; coreConflict?: string; hook?: string }>
 }
@@ -107,6 +108,33 @@ export function generateAssetPrompts(params: {
   style: string
 }, token?: string) {
   return post<AssetPromptsResult>('/asset-prompts', params, token)
+}
+
+export interface VideoStudioProjectItem {
+  id: string
+  name: string
+  created_at: string
+  updated_at: string
+  project_type?: 'single' | 'series' | 'episode'
+  series_parent_id?: string | null
+  episode_index?: number | null
+  wizard_state?: unknown
+}
+
+export function createSeriesEpisodes(projectId: string, params: {
+  workspace_id: string
+  name: string
+  describeData: { description: string; style: string; duration: number; aspectRatio: string }
+  outline: SeriesOutlineResult | Omit<SeriesOutlineResult, 'success'>
+  characterImages: Record<string, string>
+  sceneImages: Record<string, string>
+  assetStyle?: string
+}, token?: string) {
+  return post<{ success: boolean; episodes: VideoStudioProjectItem[] }>(`/projects/${projectId}/series/episodes`, params, token)
+}
+
+export function fetchSeriesEpisodes(projectId: string, token?: string) {
+  return get<VideoStudioProjectItem[]>(`/projects/${projectId}/episodes`, token)
 }
 
 export interface VideoStudioHistoryItem {

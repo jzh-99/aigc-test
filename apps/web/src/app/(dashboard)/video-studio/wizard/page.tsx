@@ -206,6 +206,7 @@ function WizardContent() {
         outline: wizard.seriesOutline,
         characterImages: wizard.characterImages,
         sceneImages: wizard.sceneImages,
+        assetStyle: wizard.assetStyle ?? wizard.describeData.style,
       })
       toast.success('分集项目已创建', { id: 'series-episodes' })
       wizard.completeStep('characters')
@@ -348,6 +349,7 @@ function WizardContent() {
                 scenes: wizard.seriesOutline.mainScenes,
               }}
               style={wizard.describeData.style}
+              assetStyle={wizard.assetStyle}
               characterImages={wizard.characterImages}
               sceneImages={wizard.sceneImages}
               characterImageHistory={wizard.characterImageHistory ?? {}}
@@ -358,6 +360,7 @@ function WizardContent() {
               onClearPendingImageBatch={wizard.clearPendingImageBatch}
               onSelectCharacterImage={wizard.setCharacterImage}
               onSelectSceneImage={wizard.setSceneImage}
+              onAssetStyleChange={wizard.setAssetStyle}
               onComplete={handleCreateSeriesEpisodes}
             />
           ) : wizard.scriptData ? (
@@ -365,6 +368,7 @@ function WizardContent() {
               mode={wizard.seriesParentId ? 'episode' : 'single'}
               scriptData={wizard.scriptData}
               style={wizard.describeData.style}
+              assetStyle={wizard.assetStyle}
               characterImages={mergedCharacterImages}
               sceneImages={mergedSceneImages}
               sharedCharacters={wizard.sharedCharacters ?? []}
@@ -379,6 +383,7 @@ function WizardContent() {
               onClearPendingImageBatch={wizard.clearPendingImageBatch}
               onSelectCharacterImage={wizard.setCharacterImage}
               onSelectSceneImage={wizard.setSceneImage}
+              onAssetStyleChange={wizard.setAssetStyle}
               onComplete={() => wizard.completeStep('characters')}
             />
           ) : null

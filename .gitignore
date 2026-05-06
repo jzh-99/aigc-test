@@ -39,6 +39,7 @@ DATABASE_*_GUIDE.md
 MIGRATION_*_EXPLAINED.md
 TIMEOUT_*_REPORT.md
 DEPLOY-TEST.md
+docs/distributed-deployment-handover.md
 
 # Local operations scripts
 /deploy*.sh
