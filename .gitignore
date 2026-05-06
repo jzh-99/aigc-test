@@ -42,8 +42,12 @@ DEPLOY-TEST.md
 
 # Local operations scripts
 /deploy*.sh
+!/deploy.example.sh
 /setup.sh
 /start-*.sh
+!/start-api.example.sh
+!/start-web.example.sh
+!/start-worker.example.sh
 /patch_*.sh
 /update_db.js
 /update_db.ts
