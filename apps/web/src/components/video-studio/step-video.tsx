@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { Loader2, Play, Download, ArrowRight, ChevronDown, ChevronUp, Check, Link2, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Loader2, Play, Download, ArrowRight, ChevronDown, ChevronUp, Check, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiPost } from '@/lib/api-client'
@@ -12,9 +12,11 @@ import { usePendingBatchWatcher } from '@/hooks/video-studio/use-pending-batch-w
 import { VIDEO_PER_SECOND_CREDITS } from '@/lib/credits'
 
 type VideoModel = 'seedance-2.0' | 'seedance-2.0-fast' | 'seedance-1.5-pro'
+type VideoResolution = '720p' | '1080p'
 
 interface VideoParams {
   model: VideoModel
+  resolution: VideoResolution
   durationOverride: number | null
   style: string
 }
@@ -25,11 +27,17 @@ const VIDEO_MODEL_OPTIONS: Array<{ value: VideoModel; label: string; creditsPerS
   { value: 'seedance-1.5-pro',  label: 'Seedance 1.5 Pro',  creditsPerSec: VIDEO_PER_SECOND_CREDITS['seedance-1.5-pro'] },
 ]
 
-const DEFAULT_VIDEO_PARAMS: Omit<VideoParams, 'style'> = { model: 'seedance-2.0', durationOverride: null }
+const VIDEO_RESOLUTION_OPTIONS: Array<{ value: VideoResolution; label: string; desc: string }> = [
+  { value: '720p', label: '720p', desc: '标准' },
+  { value: '1080p', label: '1080p', desc: '高清' },
+]
+
+const FRAGMENT_DURATION_OPTIONS = [null, 4, 5, 6, 8, 10] as const
+const DEFAULT_VIDEO_PARAMS: Omit<VideoParams, 'style'> = { model: 'seedance-2.0', resolution: '720p', durationOverride: null }
 const VIDEO_PROMPT_SUFFIX = '画面稳定流畅，面部清晰不变形，人体结构正常，无文字伪影，无多余手指。视频需要有台词和音效，不要有字幕和bgm。'
 
-function calcVideoCost(fragment: Fragment, params: VideoParams): number {
-  const dur = Math.min(Math.max(Math.round(params.durationOverride ?? fragment.duration), 4), 15)
+function calcVideoCost(fragment: Fragment, params: VideoParams, durationOverride?: number | null): number {
+  const dur = Math.min(Math.max(Math.round(durationOverride ?? params.durationOverride ?? fragment.duration), 4), 15)
   const cps = VIDEO_MODEL_OPTIONS.find(m => m.value === params.model)?.creditsPerSec ?? 5
   return dur * cps
 }
@@ -38,6 +46,7 @@ async function submitVideoBatch(params: {
   prompt: string
   model: VideoModel
   aspectRatio: string
+  resolution: VideoResolution
   duration: number
   referenceImages: string[]
   workspaceId: string
@@ -50,6 +59,7 @@ async function submitVideoBatch(params: {
     workspace_id: params.workspaceId,
     model: params.model,
     aspect_ratio: params.aspectRatio,
+    resolution: params.resolution,
     duration: clampedDuration,
     generate_audio: true,
     ...(params.referenceImages.length > 0 ? { reference_images: params.referenceImages } : {}),
@@ -70,7 +80,11 @@ interface FragmentVideoCardProps {
   projectId: string
   videoParams: VideoParams
   tailFrameUrl?: string
-  sequentialMode: boolean
+  isFirstFragment: boolean
+  tailFrameEnabled: boolean
+  needsTailFrameConfirmation: boolean
+  promptOverride: string | undefined
+  durationOverride: number | null | undefined
   isLocked: boolean
   isPending: boolean
   onVideoReady: (url: string) => void
@@ -78,6 +92,9 @@ interface FragmentVideoCardProps {
   onBatchSubmitted: (batchId: string) => void
   onConfirm: () => void
   onTailFrameExtracted: (fragmentId: string, dataUrl: string) => void
+  onTailFrameToggle: (fragmentId: string, enabled: boolean) => void
+  onPromptChange: (fragmentId: string, prompt: string) => void
+  onDurationChange: (fragmentId: string, duration: number | null) => void
   registerGenerate: (fragmentId: string, fn: () => Promise<void>) => void
 }
 
@@ -119,7 +136,7 @@ function buildFragmentPrompt(fragment: Fragment, style: string, labelMap: Record
   return appendPromptSuffix(`画面风格和类型: ${style}\n生成一个由以下${shots.length}个分镜组成的视频:${transition}${tailFrameInstruction}\n${body}`)
 }
 
-function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, videoUrl, videoHistory, aspectRatio, workspaceId, projectId, videoParams, tailFrameUrl, sequentialMode, isLocked, isPending, onVideoReady, onSelectVideo, onBatchSubmitted, onConfirm, onTailFrameExtracted, registerGenerate }: FragmentVideoCardProps) {
+function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, videoUrl, videoHistory, aspectRatio, workspaceId, projectId, videoParams, tailFrameUrl, isFirstFragment, tailFrameEnabled, needsTailFrameConfirmation, promptOverride, durationOverride, isLocked, isPending, onVideoReady, onSelectVideo, onBatchSubmitted, onConfirm, onTailFrameExtracted, onTailFrameToggle, onPromptChange, onDurationChange, registerGenerate }: FragmentVideoCardProps) {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -153,16 +170,20 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
   }, [videoUrl])
 
   const buildPrompt = useCallback(() => buildFragmentPrompt(fragment, videoParams.style, labelMap, voiceMap), [fragment, videoParams.style, labelMap, voiceMap])
+  const basePrompt = buildPrompt()
+  const effectivePrompt = promptOverride ?? basePrompt
+  const effectiveDuration = durationOverride ?? videoParams.durationOverride ?? fragment.duration
 
   const generate = useCallback(async () => {
     setLoading(true)
     setErrorMessage(null)
     try {
       const batchId = await submitVideoBatch({
-        prompt: buildPrompt(),
+        prompt: effectivePrompt,
         model: videoParams.model,
         aspectRatio,
-        duration: videoParams.durationOverride ?? fragment.duration,
+        resolution: videoParams.resolution,
+        duration: effectiveDuration,
         referenceImages,
         workspaceId,
         projectId,
@@ -176,11 +197,11 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
     } finally {
       setLoading(false)
     }
-  }, [fragment, referenceImages, tailFrameUrl, sequentialMode, aspectRatio, workspaceId, projectId, videoParams, onBatchSubmitted, buildPrompt])
+  }, [fragment.label, referenceImages, aspectRatio, workspaceId, projectId, videoParams.model, videoParams.resolution, onBatchSubmitted, effectivePrompt, effectiveDuration])
 
   const handleConfirm = useCallback(async () => {
     setConfirmed(true)
-    if (sequentialMode && videoUrl) {
+    if (videoUrl && needsTailFrameConfirmation) {
       try {
         const dataUrl = await extractTailFrame()
         onTailFrameExtracted(fragment.id, dataUrl)
@@ -189,7 +210,7 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
       }
     }
     onConfirm()
-  }, [sequentialMode, videoUrl, extractTailFrame, onTailFrameExtracted, onConfirm, fragment.id])
+  }, [videoUrl, needsTailFrameConfirmation, extractTailFrame, onTailFrameExtracted, onConfirm, fragment.id])
 
   const generateRef = useRef(generate)
   generateRef.current = generate
@@ -202,7 +223,7 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
       <div className="flex">
         {/* Reference images column */}
         <div className="w-28 shrink-0 bg-muted/40 relative flex flex-col">
-          {tailFrameUrl && sequentialMode ? (
+          {tailFrameUrl && tailFrameEnabled ? (
             <div className="flex flex-col h-full">
               {referenceImages.length > 0 && (
                 <img src={referenceImages[0]} alt="" className="w-full object-cover" style={{ flex: 1, minHeight: 0 }} />
@@ -285,7 +306,7 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
               <button onClick={generate} disabled={loading || isPending} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
                 {loading || isPending ? '生成中…' : '重新生成'}
               </button>
-              {sequentialMode && !confirmed && (
+              {needsTailFrameConfirmation && !confirmed && (
                 <button
                   onClick={handleConfirm}
                   className="flex items-center gap-1 text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 transition-colors ml-auto"
@@ -302,7 +323,7 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
               className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {(loading || isPending) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {loading || isPending ? '生成中…' : `生成视频 · ${calcVideoCost(fragment, videoParams)}积分`}
+              {loading || isPending ? '生成中…' : `生成视频 · ${calcVideoCost(fragment, videoParams, durationOverride)}积分`}
             </button>
           )}
 
@@ -319,9 +340,10 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
       {showParams && (
         <div className="border-t bg-muted/30 p-3 space-y-2 text-xs">
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
-            <div><span className="font-medium text-foreground">时长</span>　{fragment.duration}s</div>
+            <div><span className="font-medium text-foreground">时长</span>　{effectiveDuration}s</div>
             <div><span className="font-medium text-foreground">比例</span>　{aspectRatio}</div>
             <div><span className="font-medium text-foreground">模型</span>　{videoParams.model}</div>
+            <div><span className="font-medium text-foreground">清晰度</span>　{videoParams.resolution}</div>
           </div>
           {fragment.shots.some((shot) => shot.characters?.length) && (
             <div>
@@ -335,9 +357,38 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
               <p className="text-muted-foreground">{Array.from(new Set(fragment.shots.map((shot) => shot.scene).filter(Boolean))).join('、')}</p>
             </div>
           )}
+          {!isFirstFragment && (
+            <button
+              onClick={() => onTailFrameToggle(fragment.id, !tailFrameEnabled)}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs transition-colors ${tailFrameEnabled ? 'bg-primary/10 border-primary text-primary' : 'border-border text-muted-foreground hover:bg-muted bg-background'}`}
+            >
+              <span>尾帧参考上一片段</span>
+              <div className={`w-8 h-4 rounded-full transition-colors relative ${tailFrameEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}>
+                <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${tailFrameEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </div>
+            </button>
+          )}
+          <div className="space-y-1">
+            <p className="font-medium text-foreground">片段时长</p>
+            <div className="flex gap-1 flex-wrap">
+              {FRAGMENT_DURATION_OPTIONS.map((duration) => (
+                <button
+                  key={duration ?? 'auto'}
+                  onClick={() => onDurationChange(fragment.id, duration)}
+                  className={`px-2 py-0.5 rounded text-xs transition-colors ${durationOverride === duration || (durationOverride === undefined && duration === null) ? 'bg-primary text-primary-foreground' : 'border hover:bg-muted bg-background'}`}
+                >
+                  {duration === null ? `自动 ${videoParams.durationOverride ?? fragment.duration}s` : `${duration}s`}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <p className="font-medium text-foreground mb-0.5">Prompt</p>
-            <p className="text-muted-foreground leading-relaxed bg-background rounded p-2 break-all">{buildPrompt()}</p>
+            <textarea
+              value={effectivePrompt}
+              onChange={(event) => onPromptChange(fragment.id, event.target.value)}
+              className="w-full min-h-32 text-muted-foreground leading-relaxed bg-background rounded p-2 border resize-y outline-none focus:ring-1 focus:ring-primary"
+            />
           </div>
           {referenceImages.length > 0 && (
             <div>
@@ -451,7 +502,9 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const [showParams, setShowParams] = useState(false)
   const [videoParams, setVideoParams] = useState<VideoParams>(() => ({ ...DEFAULT_VIDEO_PARAMS, style: describeData.style }))
-  const [sequentialMode, setSequentialMode] = useState(false)
+  const [fragmentPrompts, setFragmentPrompts] = useState<Record<string, string>>({})
+  const [fragmentDurations, setFragmentDurations] = useState<Record<string, number | null>>({})
+  const [tailFrameEnabled, setTailFrameEnabled] = useState<Record<string, boolean>>({})
   const [confirmedFragments, setConfirmedFragments] = useState<Set<string>>(new Set())
   const [tailFrames, setTailFrames] = useState<Record<string, string>>({})
   const voiceMap = Object.fromEntries((characters ?? []).filter((character) => character.voiceDescription).map((character) => [character.name, character.voiceDescription as string]))
@@ -510,7 +563,10 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
   }, [shotImages, characterImages, sceneImages])
 
   const generateAll = useCallback(async () => {
-    const pending = fragments.filter((fragment) => !shotVideos[fragment.id] && !pendingFragmentIds.has(fragment.id))
+    const pending = fragments.filter((fragment, index) => {
+      const tailFrameOn = index > 0 && (tailFrameEnabled[fragment.id] ?? false)
+      return !shotVideos[fragment.id] && !pendingFragmentIds.has(fragment.id) && !tailFrameOn
+    })
     if (pending.length === 0) return
     setBatchRunning(true)
     const fns = pending.map((fragment) => generateFnsRef.current[fragment.id]).filter(Boolean)
@@ -518,12 +574,16 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
     setBatchRunning(false)
     const success = results.filter((r) => r.status === 'fulfilled').length
     if (success > 0) toast.success(`批量生成完成，${success}/${fns.length} 成功`)
-  }, [fragments, shotVideos, pendingFragmentIds])
+  }, [fragments, shotVideos, pendingFragmentIds, tailFrameEnabled])
 
   const [batchRunning, setBatchRunning] = useState(false)
   const completedCount = fragments.filter((fragment) => shotVideos[fragment.id]).length
   const allDone = completedCount === fragments.length && fragments.length > 0
-  const pendingCount = fragments.length - completedCount
+  const batchEligibleFragments = fragments.filter((fragment, index) => {
+    const tailFrameOn = index > 0 && (tailFrameEnabled[fragment.id] ?? false)
+    return !shotVideos[fragment.id] && !pendingFragmentIds.has(fragment.id) && !tailFrameOn
+  })
+  const batchEligibleCount = batchEligibleFragments.length
 
   const handleConfirmFragment = useCallback((fragmentId: string) => {
     setConfirmedFragments((prev) => new Set([...prev, fragmentId]))
@@ -531,6 +591,18 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
 
   const handleTailFrameExtracted = useCallback((fragmentId: string, dataUrl: string) => {
     setTailFrames((prev) => ({ ...prev, [fragmentId]: dataUrl }))
+  }, [])
+
+  const handleFragmentPromptChange = useCallback((fragmentId: string, prompt: string) => {
+    setFragmentPrompts((prev) => ({ ...prev, [fragmentId]: prompt }))
+  }, [])
+
+  const handleFragmentDurationChange = useCallback((fragmentId: string, duration: number | null) => {
+    setFragmentDurations((prev) => ({ ...prev, [fragmentId]: duration }))
+  }, [])
+
+  const handleTailFrameToggle = useCallback((fragmentId: string, enabled: boolean) => {
+    setTailFrameEnabled((prev) => ({ ...prev, [fragmentId]: enabled }))
   }, [])
 
   return (
@@ -545,20 +617,6 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
           <p>{completedCount} / {fragments.length} 已完成</p>
           <p>比例 {describeData.aspectRatio}　时长约 {describeData.duration}s</p>
         </div>
-
-        {/* Sequential mode toggle */}
-        <button
-          onClick={() => setSequentialMode((v) => !v)}
-          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs transition-colors ${sequentialMode ? 'bg-primary/10 border-primary text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}
-        >
-          <div className="flex items-center gap-1.5">
-            <Link2 className="w-3.5 h-3.5" />
-            顺序生成 + 尾帧参考
-          </div>
-          <div className={`w-8 h-4 rounded-full transition-colors relative ${sequentialMode ? 'bg-primary' : 'bg-muted-foreground/30'}`}>
-            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${sequentialMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
-          </div>
-        </button>
 
         {/* Video params panel */}
         <div className="border rounded-lg overflow-hidden">
@@ -580,7 +638,7 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
                   {VIDEO_MODEL_OPTIONS.map((m) => (
                     <button
                       key={m.value}
-                      onClick={() => setVideoParams((p) => ({ ...p, model: m.value }))}
+                      onClick={() => setVideoParams((p) => ({ ...p, model: m.value, resolution: m.value === 'seedance-2.0-fast' && p.resolution === '1080p' ? '720p' : p.resolution }))}
                       className={`text-left px-2 py-1 rounded text-xs transition-colors ${videoParams.model === m.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     >
                       {m.label}
@@ -590,9 +648,24 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
                 </div>
               </div>
               <div className="space-y-1.5">
+                <p className="text-[11px] text-muted-foreground">清晰度</p>
+                <div className="grid grid-cols-2 gap-1">
+                  {VIDEO_RESOLUTION_OPTIONS.filter((resolution) => !(resolution.value === '1080p' && videoParams.model === 'seedance-2.0-fast')).map((resolution) => (
+                    <button
+                      key={resolution.value}
+                      onClick={() => setVideoParams((p) => ({ ...p, resolution: resolution.value }))}
+                      className={`text-left px-2 py-1 rounded text-xs transition-colors ${videoParams.resolution === resolution.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted border'}`}
+                    >
+                      {resolution.label}
+                      <span className="ml-1 opacity-60">{resolution.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">时长覆盖（留空用分镜时长）</p>
                 <div className="flex gap-1 flex-wrap">
-                  {([null, 4, 5, 6, 8, 10] as const).map((d) => (
+                  {FRAGMENT_DURATION_OPTIONS.map((d) => (
                     <button
                       key={d ?? 'auto'}
                       onClick={() => setVideoParams((p) => ({ ...p, durationOverride: d }))}
@@ -607,15 +680,14 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
           )}
         </div>
 
-        {pendingCount > 0 && (
+        {batchEligibleCount > 0 && (
           <button
             onClick={generateAll}
-            disabled={batchRunning || sequentialMode}
+            disabled={batchRunning}
             className="w-full flex items-center justify-center gap-2 text-xs bg-primary text-primary-foreground py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-            title={sequentialMode ? '顺序生成模式下请逐片段生成' : undefined}
           >
             {batchRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-            {batchRunning ? '批量生成中…' : `批量生成 (${pendingCount}) · ${fragments.filter((fragment) => !shotVideos[fragment.id]).reduce((sum, fragment) => sum + calcVideoCost(fragment, videoParams), 0)}积分`}
+            {batchRunning ? '批量生成中…' : `批量生成 (${batchEligibleCount}) · ${batchEligibleFragments.reduce((sum, fragment) => sum + calcVideoCost(fragment, videoParams, fragmentDurations[fragment.id]), 0)}积分`}
           </button>
         )}
 
@@ -643,9 +715,12 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
       <div className="flex-1 p-5 overflow-y-auto space-y-3">
         {fragments.map((fragment, i) => {
           const prevFragment = fragments[i - 1]
-          const isLocked = sequentialMode && i > 0 && !confirmedFragments.has(prevFragment?.id ?? '')
+          const nextFragment = fragments[i + 1]
+          const tailFrameOn = i > 0 && (tailFrameEnabled[fragment.id] ?? false)
+          const nextNeedsTailFrame = !!nextFragment && (tailFrameEnabled[nextFragment.id] ?? false)
+          const isLocked = tailFrameOn && !confirmedFragments.has(prevFragment?.id ?? '')
           const { refs: resolvedRefs, labelMap } = resolveRefs(fragment)
-          const tailFrameUrl = sequentialMode && prevFragment ? tailFrames[prevFragment.id] : undefined
+          const tailFrameUrl = tailFrameOn && prevFragment ? tailFrames[prevFragment.id] : undefined
           const referenceImages = tailFrameUrl ? [...resolvedRefs, tailFrameUrl] : resolvedRefs
           const effectiveLabelMap = tailFrameUrl ? { ...labelMap, 上一片段尾帧: `图${referenceImages.length}` } : labelMap
           return (
@@ -661,16 +736,23 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
               workspaceId={workspaceId}
               projectId={projectId}
               videoParams={videoParams}
+              promptOverride={fragmentPrompts[fragment.id]}
+              durationOverride={fragmentDurations[fragment.id]}
               onVideoReady={(url) => onVideoReady(fragment.id, url)}
               onSelectVideo={(url) => onVideoReady(fragment.id, url)}
               onBatchSubmitted={(batchId) => onAddPendingVideoBatch(batchId, fragment.id)}
               registerGenerate={registerGenerate}
-              sequentialMode={sequentialMode}
+              isFirstFragment={i === 0}
+              tailFrameEnabled={tailFrameOn}
+              needsTailFrameConfirmation={nextNeedsTailFrame}
               isLocked={isLocked}
               isPending={pendingFragmentIds.has(fragment.id)}
               tailFrameUrl={tailFrameUrl}
               onConfirm={() => handleConfirmFragment(fragment.id)}
               onTailFrameExtracted={handleTailFrameExtracted}
+              onTailFrameToggle={handleTailFrameToggle}
+              onPromptChange={handleFragmentPromptChange}
+              onDurationChange={handleFragmentDurationChange}
             />
           )
         })}
