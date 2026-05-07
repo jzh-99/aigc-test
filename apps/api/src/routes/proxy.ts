@@ -165,7 +165,17 @@ export async function proxyRoutes(app: FastifyInstance) {
       // Partial responses must not be cached indefinitely
       reply.header('Cache-Control', contentRange ? 'no-store' : 'public, max-age=31536000, immutable')
 
-      return reply.send(upstream.body)
+      // Buffer the upstream response before sending so upstream socket failures can be
+      // converted into a controlled 502 instead of a Fastify stream 500.
+      let body: Buffer
+      try {
+        body = Buffer.from(await upstream.arrayBuffer())
+      } catch (err) {
+        request.log.warn({ err, url }, 'Failed to read proxied asset body')
+        return reply.code(502).send({ error: 'Failed to read asset' })
+      }
+
+      return reply.send(body)
     },
   )
 }
