@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Download, RotateCcw, Check, ImagePlus, Loader2 } from 'lucide-react'
-import { useBatch } from '@/hooks/use-batches'
+import { useBatch, cancelSeedanceBatch } from '@/hooks/use-batches'
 import { downloadImage } from '@/lib/download'
 import { translateTaskError } from '@/lib/error-messages'
 import { useGenerationStore } from '@/stores/generation-store'
@@ -48,7 +48,7 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
 }
 
 export function BatchDetail({ batchId, open, onOpenChange, onApplied }: BatchDetailProps) {
-  const { data: batch, isLoading } = useBatch(open ? batchId : null)
+  const { data: batch, isLoading, mutate } = useBatch(open ? batchId : null)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -75,14 +75,14 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied }: BatchDet
             </div>
           </div>
         ) : (
-          <BatchDetailContent batch={batch} onClose={() => onOpenChange(false)} onApplied={onApplied} />
+          <BatchDetailContent batch={batch} onClose={() => onOpenChange(false)} onApplied={onApplied} onCancelled={() => mutate()} />
         )}
       </SheetContent>
     </Sheet>
   )
 }
 
-function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchResponse; onClose: () => void; onApplied?: () => void }) {
+function BatchDetailContent({ batch, onClose, onApplied, onCancelled }: { batch: BatchResponse; onClose: () => void; onApplied?: () => void; onCancelled?: () => void }) {
   const applyBatch = useGenerationStore((s) => s.applyBatch)
   const addReferenceImage = useGenerationStore((s) => s.addReferenceImage)
   const referenceCount = useGenerationStore((s) => s.referenceImages.length)
@@ -92,6 +92,7 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
   const [applied, setApplied] = useState(false)
   const [sendingUrl, setSendingUrl] = useState<string | null>(null)
   const [sendingAll, setSendingAll] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   function handleApply() {
     applyBatch(batch)
@@ -99,6 +100,20 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
     setTimeout(() => setApplied(false), 1500)
     onApplied?.()
     onClose()
+  }
+
+  async function handleCancel() {
+    if (!confirm('确认取消这个 Seedance 任务？')) return
+    setCancelling(true)
+    try {
+      await cancelSeedanceBatch(batch.id)
+      toast.success('任务已取消，积分已退回')
+      onCancelled?.()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '取消任务失败')
+    } finally {
+      setCancelling(false)
+    }
   }
 
   async function handleSendToReference(url: string, showSuccess = true) {
@@ -150,6 +165,7 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
     .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
 
   const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
+  const canCancelSeedance = (batch.status === 'pending' || batch.status === 'processing') && batch.provider === 'volcengine' && /^seedance-/i.test(batch.model)
 
   return (
     <div className="mt-6 space-y-4">
@@ -182,6 +198,19 @@ function BatchDetailContent({ batch, onClose, onApplied }: { batch: BatchRespons
           <p className="font-medium">{time.toLocaleString('zh-CN')}</p>
         </div>
       </div>
+
+      {canCancelSeedance && (
+        <Button
+          variant="destructive"
+          size="sm"
+          className="w-full gap-2"
+          onClick={handleCancel}
+          disabled={cancelling}
+        >
+          {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
+          取消任务
+        </Button>
+      )}
 
       <Button
         variant="outline"

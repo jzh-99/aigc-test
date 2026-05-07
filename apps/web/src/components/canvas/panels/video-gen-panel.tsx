@@ -28,7 +28,6 @@ interface VideoGenPanelProps {
   videoDuration: number
   generateAudio: boolean
   cameraFixed: boolean
-  videoWatermark: boolean
   executing: boolean
   hasPrompt: boolean
   onVideoModelChange: (value: string) => void
@@ -55,7 +54,6 @@ export function VideoGenPanel({
   videoDuration,
   generateAudio,
   cameraFixed,
-  videoWatermark,
   executing,
   hasPrompt,
   onVideoModelChange,
@@ -305,26 +303,6 @@ export function VideoGenPanel({
                   </button>
                 ))}
               </div>
-            </div>
-          </div>
-        )}
-
-        {isSeedance && (
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium text-muted-foreground">水印</label>
-            <div className="flex gap-1">
-              {[{ v: false, l: '无' }, { v: true, l: '有' }].map(({ v, l }) => (
-                <button
-                  key={String(v)}
-                  onClick={() => onUpdateCfg({ watermark: v })}
-                  className={cn(
-                    'flex-1 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                    videoWatermark === v ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted'
-                  )}
-                >
-                  {l}
-                </button>
-              ))}
             </div>
           </div>
         )}

@@ -7,6 +7,7 @@ import { mutate } from 'swr'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useGenerationStore } from '@/stores/generation-store'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { CanvasApiError, executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
 import type {
@@ -75,12 +76,42 @@ const DEFAULT_ASSET_CONFIG: AssetConfig = { url: '', name: '', mimeType: 'image/
 const DEFAULT_SCRIPT_WRITER_CONFIG: ScriptWriterConfig = { description: '', style: '现代都市', duration: 60 }
 const DEFAULT_STORYBOARD_SPLITTER_CONFIG: StoryboardSplitterConfig = { shotCount: 0 }
 
+function normalizeImageConfig(config: unknown): ImageGenConfig {
+  const raw = (config && typeof config === 'object' ? config : {}) as Partial<ImageGenConfig>
+  const model = IMAGE_MODEL_OPTIONS.find((m) => m.value === raw.modelType) ?? IMAGE_MODEL_OPTIONS[0]
+  const resolution = raw.resolution && model.resolutions.includes(raw.resolution) ? raw.resolution : model.resolutions[0]
+
+  return {
+    ...DEFAULT_IMAGE_CONFIG,
+    ...raw,
+    modelType: model.value,
+    resolution,
+    quantity: 1,
+  }
+}
+
+function normalizeVideoConfig(config: unknown): VideoGenConfig {
+  const raw = (config && typeof config === 'object' ? config : {}) as Partial<VideoGenConfig>
+  const model = VIDEO_MODEL_OPTIONS.find((m) => m.value === raw.model) ?? VIDEO_MODEL_OPTIONS[0]
+  const videoMode = raw.videoMode === 'keyframe' || raw.videoMode === 'multiref' ? raw.videoMode : DEFAULT_VIDEO_CONFIG.videoMode
+  const duration = typeof raw.duration === 'number' ? raw.duration : DEFAULT_VIDEO_CONFIG.duration
+
+  return {
+    ...DEFAULT_VIDEO_CONFIG,
+    ...raw,
+    model: model.value,
+    videoMode,
+    duration,
+  }
+}
+
 export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboardExpandedRef }: Props) {
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
   const token = useAuthStore((s) => s.accessToken)
   const setNodeStatus = useCanvasExecutionStore((s) => s.setNodeStatus)
   const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
   const [executing, setExecuting] = useState(false)
+  const globalWatermark = useGenerationStore((s) => s.watermark)
 
   const isImageGen = node.type === 'image_gen'
   const isTextInput = node.type === 'text_input'
@@ -89,11 +120,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const isScriptWriter = node.type === 'script_writer'
   const isStoryboardSplitter = node.type === 'storyboard_splitter'
 
-  const imageCfg = isImageGen && isImageGenConfig(node.data.config)
-    ? node.data.config
+  const imageCfg = isImageGen
+    ? normalizeImageConfig(node.data.config)
     : DEFAULT_IMAGE_CONFIG
-  const videoCfg = isVideoGen && isVideoGenConfig(node.data.config)
-    ? node.data.config
+  const videoCfg = isVideoGen
+    ? normalizeVideoConfig(node.data.config)
     : DEFAULT_VIDEO_CONFIG
   const textCfg = isTextInput && isTextInputConfig(node.data.config)
     ? node.data.config
@@ -146,8 +177,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const modelType: ModelType = imageCfg.modelType
   const resolution: Resolution = imageCfg.resolution
   const aspectRatio = imageCfg.aspectRatio
-  const quantity = imageCfg.quantity
-  const watermark = imageCfg.watermark
+  const quantity = 1
+  const watermark = globalWatermark
 
   const videoModel = videoCfg.model
   const videoMode = videoCfg.videoMode
@@ -155,7 +186,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const videoDuration = videoCfg.duration
   const generateAudio = videoCfg.generateAudio
   const cameraFixed = videoCfg.cameraFixed
-  const videoWatermark = videoCfg.watermark
+  const videoWatermark = globalWatermark
 
   const handleModelChange = useCallback((val: ModelType) => {
     const model = IMAGE_MODEL_OPTIONS.find((m) => m.value === val)
@@ -165,7 +196,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [resolution, updateCfg])
 
   const handleExecuteImage = useCallback(async () => {
-    const modelCode = MODEL_CODE_MAP[modelType][resolution]
+    const modelCode = MODEL_CODE_MAP[modelType]?.[resolution]
     if (!modelCode) {
       toast.error('模型配置错误')
       return
@@ -384,7 +415,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           resolution={resolution}
           aspectRatio={aspectRatio}
           quantity={quantity}
-          watermark={watermark}
           executing={executing}
           hasPrompt={!!hasImagePrompt}
           onModelChange={handleModelChange}
@@ -413,7 +443,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           videoDuration={videoDuration}
           generateAudio={generateAudio}
           cameraFixed={cameraFixed}
-          videoWatermark={videoWatermark}
           executing={executing}
           hasPrompt={!!hasVideoPrompt}
           onVideoModelChange={handleVideoModelChange}

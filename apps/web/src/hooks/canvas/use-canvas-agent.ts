@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useGenerationStore } from '@/stores/generation-store'
 import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig } from '@/lib/canvas/types'
 import { callCanvasAgent } from '@/lib/canvas/agent-api'
 import {
@@ -151,7 +152,7 @@ export function estimateStepCredits(step: AgentStep, params: StepParams): number
     if (!node) return total
     if (node.type === 'image_gen' && isImageGenConfig(node.data.config)) {
       const credits = IMAGE_MODEL_CREDITS[params.modelType ?? 'gemini'] ?? 5
-      return total + credits * (node.data.config.quantity ?? 1)
+      return total + credits
     }
     if (node.type === 'video_gen') {
       const model = params.videoModel ?? 'seedance-2.0'
@@ -213,6 +214,8 @@ async function executeNode(
       }
       const finalPrompt = [...textParts, cfg.prompt].filter(Boolean).join('\n')
 
+      const globalWatermark = useGenerationStore.getState().watermark
+
       await executeCanvasNode(
         {
           canvasId,
@@ -222,7 +225,8 @@ async function executeNode(
             prompt: finalPrompt,
             model: modelCode,
             aspectRatio: params.aspectRatio ?? cfg.aspectRatio ?? '1:1',
-            quantity: cfg.quantity ?? 1,
+            quantity: 1,
+            watermark: globalWatermark,
             resolution,
           },
           workspaceId: workspaceId ?? undefined,

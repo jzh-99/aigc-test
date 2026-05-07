@@ -26,6 +26,27 @@ async function assertCanvasEnabledForWorkspace(db: ReturnType<typeof getDb>, wor
   }
 }
 
+async function resolveCanvasWorkspaceForUser(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+  workspaceId?: string,
+): Promise<string | null> {
+  let query = db
+    .selectFrom('workspace_members')
+    .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
+    .innerJoin('teams', 'teams.id', 'workspaces.team_id')
+    .select('workspace_members.workspace_id')
+    .where('workspace_members.user_id', '=', userId)
+    .where('teams.team_type', '=', 'avatar_enabled')
+    .orderBy('workspace_members.created_at', 'asc')
+    .limit(1) as any
+
+  if (workspaceId) query = query.where('workspace_members.workspace_id', '=', workspaceId)
+
+  const membership = await query.executeTakeFirst()
+  return membership?.workspace_id ?? null
+}
+
 function hasS3UploadConfig(): boolean {
   return Boolean(
     process.env.STORAGE_ENDPOINT
@@ -185,36 +206,8 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
     const userId = request.user.id
     const { name = '未命名画布', workspace_id } = request.body ?? {}
 
-    // Resolve workspace: use provided or pick first membership
-    let wsId = workspace_id
+    const wsId = await resolveCanvasWorkspaceForUser(db, userId, workspace_id)
     if (!wsId) {
-      const membership = await db
-        .selectFrom('workspace_members')
-        .select('workspace_id')
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'asc')
-        .limit(1)
-        .executeTakeFirst()
-      if (!membership) {
-        return reply.status(400).send({ success: false, error: { code: 'NO_WORKSPACE', message: '用户没有可用的工作空间' } })
-      }
-      wsId = membership.workspace_id
-    }
-
-    // Verify membership
-    const member = await db
-      .selectFrom('workspace_members')
-      .select('role')
-      .where('workspace_id', '=', wsId)
-      .where('user_id', '=', userId)
-      .executeTakeFirst()
-    if (!member) {
-      return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该工作空间' } })
-    }
-
-    try {
-      await assertCanvasEnabledForWorkspace(db, wsId)
-    } catch {
       return reply.status(403).send({ success: false, error: { code: 'CANVAS_DISABLED', message: '当前团队未开通画布能力' } })
     }
 

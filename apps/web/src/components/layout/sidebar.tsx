@@ -61,7 +61,7 @@ export function Sidebar() {
   const activeTeam = useAuthStore((s) => s.activeTeam())
 
   const visibleBaseItems = baseNavItems.filter((item) => {
-    if (item.href === '/canvas') return showCanvasTab
+    if (item.href === '/canvas/gallery') return showCanvasTab
     if (item.href === '/video-studio') return showVideoStudioTab
     return true
   })

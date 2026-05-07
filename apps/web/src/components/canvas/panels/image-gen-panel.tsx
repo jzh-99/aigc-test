@@ -5,7 +5,6 @@ import {
   ASPECT_RATIOS_IMAGE,
   IMAGE_MODEL_OPTIONS,
   type ModelType,
-  QUANTITY_OPTIONS,
   type Resolution,
 } from './panel-constants'
 
@@ -23,7 +22,6 @@ interface ImageGenPanelProps {
   resolution: Resolution
   aspectRatio: string
   quantity: number
-  watermark: boolean
   executing: boolean
   hasPrompt: boolean
   onModelChange: (value: ModelType) => void
@@ -41,7 +39,6 @@ export function ImageGenPanel({
   resolution,
   aspectRatio,
   quantity,
-  watermark,
   executing,
   hasPrompt,
   onModelChange,
@@ -153,38 +150,10 @@ export function ImageGenPanel({
       </div>
 
       <div className="p-3 flex flex-col gap-3 justify-between" style={{ width: 120 }}>
-        <div className="space-y-1">
-          <label className="text-[11px] font-medium text-muted-foreground">数量</label>
-          <div className="flex gap-1">
-            {QUANTITY_OPTIONS.map((q) => (
-              <button
-                key={q}
-                onClick={() => onUpdateCfg({ quantity: q })}
-                className={cn(
-                  'flex-1 py-0.5 rounded text-[11px] font-medium border transition-colors',
-                  quantity === q ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted'
-                )}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
+        <div className="space-y-1 text-[11px] text-muted-foreground">
+          <label className="font-medium">数量</label>
+          <div className="rounded border bg-muted/40 px-2 py-1 text-foreground">固定 1 张</div>
         </div>
-
-        {currentModel.supportsWatermark && (
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium text-muted-foreground">水印</label>
-            <button
-              onClick={() => onUpdateCfg({ watermark: !watermark })}
-              className={cn(
-                'w-full py-0.5 rounded text-[11px] font-medium border transition-colors',
-                watermark ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted'
-              )}
-            >
-              {watermark ? '开' : '关'}
-            </button>
-          </div>
-        )}
 
         <button
           data-testid="canvas-execute-image"

@@ -5,7 +5,7 @@ import useSWRInfinite from 'swr/infinite'
 import { useCallback } from 'react'
 import type { BatchResponse, BatchListResponse } from '@aigc/types'
 import { useAuthStore } from '@/stores/auth-store'
-import { apiPatch } from '@/lib/api-client'
+import { apiDelete, apiPatch } from '@/lib/api-client'
 
 const PAGE_SIZE = 10
 
@@ -13,6 +13,10 @@ export function useBatch(batchId: string | null) {
   return useSWR<BatchResponse>(
     batchId ? `/batches/${batchId}` : null,
   )
+}
+
+export async function cancelSeedanceBatch(batchId: string): Promise<void> {
+  await apiDelete(`/videos/batches/${batchId}/cancel`)
 }
 
 export function useBatches() {

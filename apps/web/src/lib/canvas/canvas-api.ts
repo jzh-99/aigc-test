@@ -181,7 +181,7 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
     canvas_id: params.canvasId,
     canvas_node_id: params.canvasNodeId,
     workspace_id: params.workspaceId ?? '',
-    quantity: cfg.quantity ?? 1,
+    quantity: 1,
     model: modelCode,
     prompt: cfg.prompt || '',
     params: {

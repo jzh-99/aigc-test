@@ -92,6 +92,34 @@ function pushSnapshot(
   }, 500)
 }
 
+function createNodeFromAgentNode(agentNode: AppNode): AppNode {
+  try {
+    const baseNode = nodeRegistry.createNodeInstance(
+      agentNode.type ?? '',
+      agentNode.position ?? { x: 0, y: 0 },
+      agentNode.id,
+    )
+
+    return {
+      ...agentNode,
+      id: baseNode.id,
+      type: baseNode.type,
+      position: agentNode.position ?? baseNode.position,
+      data: {
+        ...baseNode.data,
+        ...agentNode.data,
+        label: agentNode.data?.label ?? baseNode.data.label,
+        config: {
+          ...baseNode.data.config,
+          ...((agentNode.data?.config ?? {}) as unknown as Record<string, unknown>),
+        } as CanvasNodeConfig,
+      },
+    }
+  } catch {
+    return agentNode
+  }
+}
+
 export const useCanvasStructureStore = create<CanvasStructureState>((set, get) => ({
   canvasId: null,
   workspaceId: null,
@@ -285,9 +313,10 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
 
   applyAgentWorkflow: (workflow) => {
     const { nodes, edges } = get()
+    const newNodes = workflow.newNodes.map(createNodeFromAgentNode)
     pushSnapshot(get, set, { nodes, edges }, true)
     set({
-      nodes: [...nodes, ...workflow.newNodes],
+      nodes: [...nodes, ...newNodes],
       edges: [...edges, ...workflow.newEdges],
     })
   },

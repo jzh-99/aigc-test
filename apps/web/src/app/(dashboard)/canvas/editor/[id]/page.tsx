@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, History, Sparkles, Trash2 } from 'lucide-react'
+import { Loader2, History, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
@@ -124,22 +124,6 @@ export default function CanvasEditorPage() {
   const togglePanel = (panel: SidePanel) =>
     setSidePanel((prev) => (prev === panel ? null : panel))
 
-  const deleteCanvas = async () => {
-    if (!token) return
-    if (!confirm('删除后画布会进入回收站，7 天内可恢复。确认删除？')) return
-    try {
-      const res = await fetch(`/api/v1/canvases/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) throw new Error('delete failed')
-      toast.success('画布已移入回收站')
-      router.push('/canvas/gallery')
-    } catch {
-      toast.error('删除画布失败')
-    }
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background -m-4 md:-m-6">
       {/* Sub-header */}
@@ -159,13 +143,6 @@ export default function CanvasEditorPage() {
 
         {/* Right controls */}
         <div className="flex items-center gap-1">
-          <button
-            onClick={deleteCanvas}
-            className="flex items-center gap-1.5 text-xs px-2 py-1 rounded text-muted-foreground hover:text-red-600 hover:bg-muted transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            删除
-          </button>
           <button
             onClick={() => togglePanel('agent')}
             className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
