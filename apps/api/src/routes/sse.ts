@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import { signAssetUrl } from '../lib/storage.js'
 
 async function getBatchSnapshot(batchId: string) {

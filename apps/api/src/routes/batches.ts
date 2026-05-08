@@ -77,14 +77,14 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
       .executeTakeFirst()
 
     const queuePosition = batch.status === 'pending'
-      ? Number((await db
+      ? Number(((await db
           .selectFrom('task_batches')
           .select((eb: any) => eb.fn.countAll().as('count'))
           .where('is_deleted', '=', false)
           .where('status', '=', 'pending')
           .where('provider', '=', batch.provider)
           .where('created_at', '<', batch.created_at)
-          .executeTakeFirst())?.count ?? 0)
+          .executeTakeFirst()) as { count: string | number } | undefined)?.count ?? 0)
       : null
 
     return reply.send({

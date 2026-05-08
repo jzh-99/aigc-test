@@ -17,8 +17,8 @@ export interface UsersTable {
   plan_tier: 'free' | 'basic' | 'pro' | 'enterprise'
   password_change_required: Generated<boolean>
   generation_defaults: ColumnType<Record<string, unknown>, string | undefined, string>
-  created_at: Generated<Timestamp>
-  updated_at: Generated<Timestamp>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
 }
 
 export interface SubscriptionPlansTable {
@@ -41,7 +41,7 @@ export interface UserSubscriptionsTable {
   status: 'active' | 'expired' | 'cancelled'
   started_at: Timestamp
   expires_at: Timestamp
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 export interface RefreshTokensTable {
@@ -50,7 +50,7 @@ export interface RefreshTokensTable {
   token_hash: string
   expires_at: Timestamp
   revoked_at: Timestamp | null
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 export interface EmailVerificationsTable {
@@ -60,7 +60,7 @@ export interface EmailVerificationsTable {
   type: 'verify_email' | 'reset_password'
   expires_at: Timestamp
   used_at: Timestamp | null
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 // ─── Teams ────────────────────────────────────────────────────────────────────
@@ -74,15 +74,15 @@ export interface TeamsTable {
   allow_member_topup: Generated<boolean>
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
-  created_at: Generated<Timestamp>
-  updated_at: Generated<Timestamp>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
 }
 
 export interface TeamMembersTable {
   team_id: string
   user_id: string
   role: 'owner' | 'admin' | 'editor' | 'viewer'
-  joined_at: Generated<Timestamp>
+  joined_at: Generated<Date>
   credit_quota: number | null
   credit_used: Generated<number>
   quota_period: 'weekly' | 'monthly' | null
@@ -97,7 +97,7 @@ export interface TeamSubscriptionsTable {
   status: 'active' | 'expired' | 'cancelled'
   started_at: Timestamp
   expires_at: Timestamp
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 export interface WorkspacesTable {
@@ -108,7 +108,7 @@ export interface WorkspacesTable {
   created_by: string
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 export interface WorkspaceMembersTable {
@@ -116,7 +116,7 @@ export interface WorkspaceMembersTable {
   workspace_id: string
   user_id: string
   role: 'admin' | 'editor' | 'viewer'
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 // ─── Credits ──────────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ export interface CreditAccountsTable {
   frozen_credits: Generated<number>
   total_earned: Generated<number>
   total_spent: Generated<number>
-  updated_at: Generated<Timestamp>
+  updated_at: Generated<Date>
 }
 
 export interface CreditsLedgerTable {
@@ -142,7 +142,7 @@ export interface CreditsLedgerTable {
   task_id: string | null
   batch_id: string | null
   description: string | null
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────
@@ -172,8 +172,8 @@ export interface TaskBatchesTable {
   canvas_id: string | null
   canvas_node_id: string | null
   video_studio_project_id: string | null
-  created_at: Generated<Timestamp>
-  updated_at: Generated<Timestamp>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
 }
 
 export interface TasksTable {
@@ -210,7 +210,7 @@ export interface AssetsTable {
   metadata: ColumnType<unknown, string | null, string | null>
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 // ─── Security & Audit ─────────────────────────────────────────────────────────
@@ -221,7 +221,7 @@ export interface PromptFilterLogsTable {
   prompt: string
   matched_rules: ColumnType<unknown, string, string>
   action: 'pass' | 'rejected'
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 export interface WebhookLogsTable {
@@ -230,7 +230,7 @@ export interface WebhookLogsTable {
   external_task_id: string
   payload: ColumnType<unknown, string, string>
   signature_valid: boolean
-  processed_at: Generated<Timestamp>
+  processed_at: Generated<Date>
 }
 
 export interface PaymentOrdersTable {
@@ -245,7 +245,7 @@ export interface PaymentOrdersTable {
   order_type: Generated<'topup' | 'subscription'>
   platform_code: string
   callback_payload: ColumnType<unknown, string | undefined, string | undefined> | null
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
   paid_at: Timestamp | null
 }
 
@@ -282,7 +282,7 @@ export interface VoiceProfilesTable {
   sample_asset_id: string | null
   status: Generated<'pending' | 'ready' | 'failed'>
   is_deleted: Generated<boolean>
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 export interface PromptFilterRulesTable {
@@ -292,7 +292,7 @@ export interface PromptFilterRulesTable {
   action: 'reject' | 'flag'
   description: string | null
   is_active: Generated<boolean>
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 // ─── Canvas ───────────────────────────────────────────────────────────────────
@@ -307,8 +307,8 @@ export interface CanvasesTable {
   version: Generated<number>
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
-  created_at: Generated<Timestamp>
-  updated_at: Generated<Timestamp>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
 }
 
 export interface CanvasNodeOutputsTable {
@@ -319,7 +319,7 @@ export interface CanvasNodeOutputsTable {
   output_urls: ColumnType<string[], string, string>
   params_snapshot: ColumnType<unknown, string | null, string | null> | null
   is_selected: Generated<boolean>
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 // ─── Video Studio ─────────────────────────────────────────────────────────────
@@ -335,8 +335,8 @@ export interface VideoStudioProjectsTable {
   episode_index: number | null
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
-  created_at: Generated<Timestamp>
-  updated_at: Generated<Timestamp>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
 }
 
 // ─── AI Assistant Errors ──────────────────────────────────────────────────────
@@ -346,7 +346,7 @@ export interface AiAssistantErrorsTable {
   user_id: string
   http_status: number | null
   error_detail: string | null
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 // ─── Submission Errors ────────────────────────────────────────────────────────
@@ -360,7 +360,7 @@ export interface SubmissionErrorsTable {
   detail: string | null
   model: string | null
   canvas_id: string | null
-  created_at: Generated<Timestamp>
+  created_at: Generated<Date>
 }
 
 // ─── Database Interface ───────────────────────────────────────────────────────
