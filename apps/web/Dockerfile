@@ -50,9 +50,9 @@ RUN addgroup -S aigc && adduser -S aigc -G aigc
 
 # Next.js standalone 输出（需在 next.config 中开启 output: 'standalone'）
 # 若未开启 standalone，则复制 .next 目录 + node_modules
-COPY --from=builder /repo/apps/web/public ./public
+COPY --from=builder /repo/apps/web/public ./apps/web/public
 COPY --from=builder /repo/apps/web/.next/standalone ./
-COPY --from=builder /repo/apps/web/.next/static ./.next/static
+COPY --from=builder /repo/apps/web/.next/static ./apps/web/.next/static
 
 USER aigc
 
@@ -61,4 +61,4 @@ EXPOSE 6006
 ENV PORT=6006
 ENV HOSTNAME=0.0.0.0
 
-CMD ["node", "server.js"]
+CMD ["node", "apps/web/server.js"]
