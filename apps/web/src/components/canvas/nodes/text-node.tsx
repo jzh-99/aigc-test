@@ -36,13 +36,22 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
     setLocalText(data.config?.text ?? '')
   }, [data.config?.text])
 
+  function writeText(val: string) {
+    updateNodeData(id, { config: { ...data.config, text: val } })
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value
     setLocalText(val)
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      updateNodeData(id, { config: { ...data.config, text: val } })
+      writeText(val)
     }, 300)
+  }
+
+  function handleBlur() {
+    clearTimeout(debounceRef.current)
+    writeText(localText)
   }
 
   return (
@@ -86,6 +95,7 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
           placeholder="输入提示词内容..."
           value={localText}
           onChange={handleChange}
+          onBlur={handleBlur}
           onMouseDown={(e) => e.stopPropagation()}
         />
       </div>
