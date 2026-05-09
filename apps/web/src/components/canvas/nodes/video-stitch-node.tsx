@@ -74,6 +74,9 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
   const previewUrl = previewVideos[currentIdx]?.url
   const currentUrl = stitchedUrl ?? previewUrl
   const displayAspect = videoSize ? `${videoSize.w} / ${videoSize.h}` : '16 / 9'
+  const nodeWidth = videoSize && videoSize.h > 0
+    ? Math.min(400, Math.max(180, Math.round(220 * (videoSize.w / videoSize.h))))
+    : Math.round(220 * (16 / 9))
   const canPreview = !!currentUrl
   const isSequencePreview = !stitchedUrl && previewVideos.length > 0
 
@@ -86,8 +89,11 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
       return
     }
     setCurrentIdx(idx)
+    setPlaying(true)
     video.src = previewVideos[idx].url
-    video.play().catch(() => {})
+    video.play().catch(() => {
+      setPlaying(false)
+    })
   }, [previewVideos])
 
   useEffect(() => {
@@ -116,7 +122,7 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
           : 'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
         '[transform:translateZ(0)] [backface-visibility:hidden]'
       )}
-      style={{ width: 260 }}
+      style={{ width: nodeWidth }}
     >
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
@@ -164,9 +170,13 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
                   videoRef.current?.pause()
                   setPlaying(false)
                 } else {
-                  setPlaying(true)
-                  if (isSequencePreview && currentIdx >= previewVideos.length) playFrom(0)
-                  else videoRef.current?.play().catch(() => {})
+                  if (isSequencePreview) playFrom(currentIdx >= previewVideos.length ? 0 : currentIdx)
+                  else {
+                    setPlaying(true)
+                    videoRef.current?.play().catch(() => {
+                      setPlaying(false)
+                    })
+                  }
                 }
               }}
               onMouseDown={(e) => e.stopPropagation()}
