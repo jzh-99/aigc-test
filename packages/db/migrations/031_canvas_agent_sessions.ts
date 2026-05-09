@@ -5,7 +5,6 @@ export async function up(db: Kysely<any>): Promise<void> {
     .createTable('canvas_agent_sessions')
     .addColumn('id', 'uuid', (col) => col.primaryKey().defaultTo(sql`gen_random_uuid()`))
     .addColumn('canvas_id', 'uuid', (col) => col.notNull().references('canvases.id').onDelete('cascade'))
-    .addColumn('user_id', 'uuid', (col) => col.notNull().references('users.id').onDelete('cascade'))
     .addColumn('session', 'jsonb', (col) => col.notNull())
     .addColumn('created_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
     .addColumn('updated_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
@@ -14,7 +13,7 @@ export async function up(db: Kysely<any>): Promise<void> {
   await db.schema
     .createIndex('idx_canvas_agent_sessions_lookup')
     .on('canvas_agent_sessions')
-    .columns(['canvas_id', 'user_id'])
+    .column('canvas_id')
     .unique()
     .execute()
 }

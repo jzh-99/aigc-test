@@ -325,7 +325,6 @@ export interface CanvasNodeOutputsTable {
 export interface CanvasAgentSessionsTable {
   id: Generated<string>
   canvas_id: string
-  user_id: string
   session: ColumnType<unknown, string, string>
   created_at: Generated<Timestamp>
   updated_at: Generated<Timestamp>

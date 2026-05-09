@@ -147,7 +147,6 @@ export async function canvasAgentRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('canvas_agent_sessions')
       .select('session')
       .where('canvas_id', '=', canvasId)
-      .where('user_id', '=', userId)
       .executeTakeFirst()
 
     return reply.send({ success: true, session: session?.session ?? null })
@@ -176,10 +175,9 @@ export async function canvasAgentRoutes(app: FastifyInstance): Promise<void> {
       .insertInto('canvas_agent_sessions')
       .values({
         canvas_id: canvasId,
-        user_id: userId,
         session: JSON.stringify(request.body.session),
       })
-      .onConflict((oc) => oc.columns(['canvas_id', 'user_id']).doUpdateSet({
+      .onConflict((oc) => oc.column('canvas_id').doUpdateSet({
         session: JSON.stringify(request.body.session) as any,
         updated_at: sql`now()`,
       }))
@@ -197,7 +195,6 @@ export async function canvasAgentRoutes(app: FastifyInstance): Promise<void> {
     await getDb()
       .deleteFrom('canvas_agent_sessions')
       .where('canvas_id', '=', canvasId)
-      .where('user_id', '=', userId)
       .execute()
 
     return reply.send({ success: true })
