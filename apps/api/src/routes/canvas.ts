@@ -150,25 +150,20 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
     const canvases = await db
       .selectFrom('canvases')
-      .select(['id', 'name', 'thumbnail_url', 'created_at', 'updated_at'])
+      .select(['id', 'name', 'created_at', 'updated_at'])
       .where('workspace_id', 'in', targetWsIds)
       .where('is_deleted', '=', false)
       .orderBy('updated_at', 'desc')
       .execute()
 
-    // For canvases with a thumbnail_url, use it directly.
-    // Only query canvas_node_outputs for canvases that have no thumbnail yet.
-    const canvasesWithThumb = canvases.filter((c) => c.thumbnail_url)
-    const canvasesNeedPreview = canvases.filter((c) => !c.thumbnail_url)
-
     const previewMap: Record<string, string[]> = {}
 
-    if (canvasesNeedPreview.length > 0) {
-      const needIds = canvasesNeedPreview.map((c) => c.id)
+    if (canvases.length > 0) {
+      const canvasIds = canvases.map((c) => c.id)
       const rows = await db
         .selectFrom('canvas_node_outputs')
         .select(['canvas_id', 'output_urls'])
-        .where('canvas_id', 'in', needIds)
+        .where('canvas_id', 'in', canvasIds)
         .orderBy('created_at', 'desc')
         .execute()
 
@@ -183,19 +178,38 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
         previewMap[cid].push(url)
       }
+
+      const canvasIdsNeedAssetPreview = canvasIds.filter((id) => !previewMap[id]?.length)
+      if (canvasIdsNeedAssetPreview.length > 0) {
+        const structureRows = await db
+          .selectFrom('canvases')
+          .select(['id', 'structure_data'])
+          .where('id', 'in', canvasIdsNeedAssetPreview)
+          .execute()
+
+        for (const row of structureRows) {
+          const structureData = row.structure_data as { nodes?: Array<{ type?: string; data?: { config?: { url?: string; mimeType?: string } } }> } | null
+          const urls: string[] = []
+          for (const node of structureData?.nodes ?? []) {
+            if (node.type !== 'asset') continue
+            const url = node.data?.config?.url
+            if (!url) continue
+            const mimeType = node.data?.config?.mimeType ?? ''
+            if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) continue
+            if (/\.(mp4|mov|webm)(\?|$)/i.test(url)) continue
+            urls.push(url)
+            if (urls.length >= 2) break
+          }
+          if (urls.length > 0) previewMap[row.id] = urls
+        }
+      }
     }
 
-    // Sign all URLs in parallel
-    await Promise.all([
-      ...canvasesWithThumb.map((c) =>
-        signAssetUrls([c.thumbnail_url!]).then((signed) => { previewMap[c.id] = signed })
+    await Promise.all(
+      Object.keys(previewMap).map((cid) =>
+        signAssetUrls(previewMap[cid]).then((signed) => { previewMap[cid] = signed })
       ),
-      ...Object.keys(previewMap)
-        .filter((cid) => !canvasesWithThumb.find((c) => c.id === cid))
-        .map((cid) =>
-          signAssetUrls(previewMap[cid]).then((signed) => { previewMap[cid] = signed })
-        ),
-    ])
+    )
 
     return reply.send(canvases.map((c) => ({ ...c, preview_urls: previewMap[c.id] ?? [] })))
   })
