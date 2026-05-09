@@ -91,9 +91,7 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
     setCurrentIdx(idx)
     setPlaying(true)
     video.src = previewVideos[idx].url
-    video.play().catch(() => {
-      setPlaying(false)
-    })
+    video.play().catch(() => {})
   }, [previewVideos])
 
   useEffect(() => {
