@@ -35,6 +35,7 @@ const NODE_CANVAS_H: Record<string, number> = {
   video_gen: 220,
   script_writer: 100,
   storyboard_splitter: 100,
+  video_stitch: 220,
 }
 
 function FloatingParamPanel({
@@ -500,6 +501,9 @@ function Flow({
             if (node.type === 'video_gen') return '#7c3aed'
             if (node.type === 'text_input') return '#6b7280'
             if (node.type === 'asset') return '#10b981'
+            if (node.type === 'script_writer') return '#f59e0b'
+            if (node.type === 'storyboard_splitter') return '#0d9488'
+            if (node.type === 'video_stitch') return '#ef4444'
             return '#d4d4d8'
           }}
           maskColor="rgba(250,250,250,0.7)"
@@ -537,6 +541,27 @@ function Flow({
             className="px-3 py-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white rounded-lg shadow transition-colors"
           >
             + AI视频
+          </button>
+          <button
+            data-testid="canvas-add-node-script"
+            onClick={() => handleAddNode('script_writer')}
+            className="px-3 py-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-white rounded-lg shadow transition-colors"
+          >
+            + 剧本
+          </button>
+          <button
+            data-testid="canvas-add-node-storyboard"
+            onClick={() => handleAddNode('storyboard_splitter')}
+            className="px-3 py-1.5 text-xs font-medium bg-teal-600 hover:bg-teal-500 text-white rounded-lg shadow transition-colors"
+          >
+            + 分镜
+          </button>
+          <button
+            data-testid="canvas-add-node-video-stitch"
+            onClick={() => handleAddNode('video_stitch')}
+            className="px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-500 text-white rounded-lg shadow transition-colors"
+          >
+            + 视频拼接
           </button>
         </Panel>
         <Panel position="top-right" className="flex gap-1.5">
@@ -645,6 +670,24 @@ function Flow({
             className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
           >
             + AI 视频节点
+          </button>
+          <button
+            onClick={() => handleContextMenuAdd('script_writer')}
+            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            + 剧本节点
+          </button>
+          <button
+            onClick={() => handleContextMenuAdd('storyboard_splitter')}
+            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            + 分镜节点
+          </button>
+          <button
+            onClick={() => handleContextMenuAdd('video_stitch')}
+            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            + 视频拼接节点
           </button>
         </div>,
         document.body

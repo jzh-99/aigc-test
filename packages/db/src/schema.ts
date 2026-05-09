@@ -322,6 +322,15 @@ export interface CanvasNodeOutputsTable {
   created_at: Generated<Timestamp>
 }
 
+export interface CanvasAgentSessionsTable {
+  id: Generated<string>
+  canvas_id: string
+  user_id: string
+  session: ColumnType<unknown, string, string>
+  created_at: Generated<Timestamp>
+  updated_at: Generated<Timestamp>
+}
+
 // ─── Video Studio ─────────────────────────────────────────────────────────────
 
 export interface VideoStudioProjectsTable {
@@ -390,6 +399,7 @@ export interface Database {
   prompt_filter_rules: PromptFilterRulesTable
   canvases: CanvasesTable
   canvas_node_outputs: CanvasNodeOutputsTable
+  canvas_agent_sessions: CanvasAgentSessionsTable
   video_studio_projects: VideoStudioProjectsTable
   ai_assistant_errors: AiAssistantErrorsTable
   submission_errors: SubmissionErrorsTable

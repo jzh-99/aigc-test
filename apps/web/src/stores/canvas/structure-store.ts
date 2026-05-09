@@ -204,6 +204,13 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
 
     const sourceMime = getNodeMimeType(sourceNode)
 
+    if (targetNode?.type === 'video_stitch') {
+      const isVideoSource = sourceNode?.type === 'video_gen'
+        || sourceNode?.type === 'video_stitch'
+        || (sourceNode?.type === 'asset' && !!sourceMime?.startsWith('video'))
+      if (!isVideoSource) return '视频拼接节点只能连接 AI 视频、拼接视频或视频素材'
+    }
+
     if (targetNode?.type === 'image_gen' && sourceMime && (sourceMime.startsWith('video') || sourceMime.startsWith('audio'))) {
       return '视频/音频素材不能连接到 AI 生图节点'
     }

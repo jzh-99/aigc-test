@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify'
+import { getDb } from '@aigc/db'
+import { sql } from 'kysely'
 import { encryptProxyUrl } from '../lib/storage.js'
 
 const PROXY_URL_PREFIX = '/api/v1/assets/proxy?token='
@@ -108,11 +110,98 @@ function normalizeContentForUpstream(
   }
 }
 
+async function assertCanvasAccess(canvasId: string, userId: string): Promise<boolean> {
+  const db = getDb()
+  const canvas = await db
+    .selectFrom('canvases')
+    .select('workspace_id')
+    .where('id', '=', canvasId)
+    .where('is_deleted', '=', false)
+    .executeTakeFirst()
+
+  if (!canvas) return false
+
+  const member = await db
+    .selectFrom('workspace_members')
+    .select('role')
+    .where('workspace_id', '=', canvas.workspace_id)
+    .where('user_id', '=', userId)
+    .executeTakeFirst()
+
+  return Boolean(member)
+}
+
 export async function canvasAgentRoutes(app: FastifyInstance): Promise<void> {
   const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
   const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
   const AI_MODEL = process.env.GEMINI_MODEL ?? ''
   const AI_SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_AGENT ?? ''
+
+  app.get<{ Params: { canvasId: string } }>('/canvas-agent/sessions/:canvasId', async (request, reply) => {
+    const { canvasId } = request.params
+    const userId = request.user.id
+    const hasAccess = await assertCanvasAccess(canvasId, userId)
+    if (!hasAccess) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
+
+    const session = await getDb()
+      .selectFrom('canvas_agent_sessions')
+      .select('session')
+      .where('canvas_id', '=', canvasId)
+      .where('user_id', '=', userId)
+      .executeTakeFirst()
+
+    return reply.send({ success: true, session: session?.session ?? null })
+  })
+
+  app.put<{
+    Params: { canvasId: string }
+    Body: { session: unknown }
+  }>('/canvas-agent/sessions/:canvasId', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['session'],
+        properties: {
+          session: { type: 'object' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { canvasId } = request.params
+    const userId = request.user.id
+    const hasAccess = await assertCanvasAccess(canvasId, userId)
+    if (!hasAccess) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
+
+    await getDb()
+      .insertInto('canvas_agent_sessions')
+      .values({
+        canvas_id: canvasId,
+        user_id: userId,
+        session: JSON.stringify(request.body.session),
+      })
+      .onConflict((oc) => oc.columns(['canvas_id', 'user_id']).doUpdateSet({
+        session: JSON.stringify(request.body.session) as any,
+        updated_at: sql`now()`,
+      }))
+      .execute()
+
+    return reply.send({ success: true })
+  })
+
+  app.delete<{ Params: { canvasId: string } }>('/canvas-agent/sessions/:canvasId', async (request, reply) => {
+    const { canvasId } = request.params
+    const userId = request.user.id
+    const hasAccess = await assertCanvasAccess(canvasId, userId)
+    if (!hasAccess) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
+
+    await getDb()
+      .deleteFrom('canvas_agent_sessions')
+      .where('canvas_id', '=', canvasId)
+      .where('user_id', '=', userId)
+      .execute()
+
+    return reply.send({ success: true })
+  })
 
   app.post<{
     Body: {

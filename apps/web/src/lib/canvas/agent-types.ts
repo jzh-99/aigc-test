@@ -41,7 +41,7 @@ export interface AgentStep {
   nodeIds: string[]
   needsRun: boolean
   instruction: string
-  nodeType: 'image_gen' | 'video_gen' | 'text_input' | 'mixed'
+  nodeType: 'image_gen' | 'video_gen' | 'text_input' | 'script_writer' | 'storyboard_splitter' | 'video_stitch' | 'mixed'
 }
 
 export interface AgentWorkflow {
