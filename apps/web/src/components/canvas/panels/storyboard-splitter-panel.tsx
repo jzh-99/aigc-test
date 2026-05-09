@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { CanvasApiError, executeStoryboardSplitterNode } from '@/lib/canvas/canvas-api'
 import type { StoryboardSplitterConfig, AppNode, AppEdge } from '@/lib/canvas/types'
 import { isScriptWriterConfig, isTextInputConfig } from '@/lib/canvas/types'
+import { generateUUID } from '@/lib/utils'
 
 interface Shot {
   id: string
@@ -88,7 +89,7 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, 
         token ?? undefined,
       )
       addNodeOutput(nodeId, {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         url: '',
         type: 'text',
         paramsSnapshot: { shots: result.shots },

@@ -37,6 +37,8 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY --from=builder /app/deploy ./
+# pnpm deploy 只复制依赖，需手动补充构建产物
+COPY --from=builder /repo/apps/worker/dist ./apps/worker/dist
 COPY --from=builder /repo/packages/db/dist ./node_modules/@aigc/db/dist
 COPY --from=builder /repo/packages/types/dist ./node_modules/@aigc/types/dist
 

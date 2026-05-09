@@ -191,10 +191,16 @@ vi .env                              # 填写数据库密码、MinIO 密钥
 docker compose up -d
 
 # ---- api / worker / web 服务器（以 api 为例）----
-docker load < aigc-api.tar.gz
+docker load < aigc-web.tar.gz
 cp .env.example .env
+cp docker-compose.yml docker-compose.yml
 vi .env                              # 填写 INFRA_HOST 及各项密钥
 docker compose up -d
+
+# 每次重新构建容器
+docker load < aigc-web.tar.gz
+docker-compose up -d --force-recreate # 强制重新构建容器
+docker logs aigc-web --tail 30 # 查看容器日志
 ```
 
 **数据库迁移（首次部署，在能访问基础设施服务器的机器上执行）**

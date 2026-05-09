@@ -52,4 +52,4 @@ USER aigc
 
 EXPOSE 7001
 
-CMD ["node", "apps/api/dist/index.js"]
+CMD ["node", "dist/index.js"]

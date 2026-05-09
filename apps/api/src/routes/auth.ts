@@ -145,7 +145,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     reply.setCookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.COOKIE_SECURE === 'true',
       sameSite: 'lax',
       path: '/api/v1/auth',
       maxAge: 7 * 24 * 60 * 60,
@@ -235,7 +235,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     reply.setCookie('refresh_token', newRefreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.COOKIE_SECURE === 'true',
       sameSite: 'lax',
       path: '/api/v1/auth',
       maxAge: 7 * 24 * 60 * 60,
@@ -396,7 +396,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     reply.setCookie('refresh_token', refreshTokenStr, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.COOKIE_SECURE === 'true',
       sameSite: 'lax',
       path: '/api/v1/auth',
       maxAge: 7 * 24 * 60 * 60,
@@ -479,7 +479,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     reply.setCookie('refresh_token', refreshTokenStr, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.COOKIE_SECURE === 'true',
       sameSite: 'lax',
       path: '/api/v1/auth',
       maxAge: 7 * 24 * 60 * 60,

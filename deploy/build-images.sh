@@ -32,14 +32,45 @@ case "$TARGET" in
     build_and_save "aigc-api" "apps/api/Dockerfile"
     ;;
   web)
-    build_and_save "aigc-web" "apps/web/Dockerfile"
+    # 从 deploy/web/.env 读取 API_HOST/API_PORT，构建时烧入 routes-manifest.json
+    WEB_ENV="$REPO_ROOT/deploy/web/.env"
+    if [ -f "$WEB_ENV" ]; then
+      API_HOST_VAL=$(grep -E '^API_HOST=' "$WEB_ENV" | cut -d= -f2 | tr -d '[:space:]' | sed 's/#.*//')
+      API_PORT_VAL=$(grep -E '^API_PORT=' "$WEB_ENV" | cut -d= -f2 | tr -d '[:space:]' | sed 's/#.*//')
+    fi
+    API_HOST_VAL="${API_HOST_VAL:-localhost}"
+    API_PORT_VAL="${API_PORT_VAL:-7001}"
+    echo "====== web 构建参数：INTERNAL_API_URL=http://${API_HOST_VAL}:${API_PORT_VAL} ======"
+    docker build \
+      --file "$REPO_ROOT/apps/web/Dockerfile" \
+      --tag "aigc-web:latest" \
+      --build-arg "INTERNAL_API_URL=http://${API_HOST_VAL}:${API_PORT_VAL}" \
+      "$REPO_ROOT"
+    echo "====== 导出 aigc-web → dist/aigc-web.tar.gz ======"
+    docker save "aigc-web:latest" | gzip > "$OUTPUT_DIR/aigc-web.tar.gz"
+    echo "完成：$OUTPUT_DIR/aigc-web.tar.gz ($(du -sh "$OUTPUT_DIR/aigc-web.tar.gz" | cut -f1))"
     ;;
   worker)
     build_and_save "aigc-worker" "apps/worker/Dockerfile"
     ;;
   all)
     build_and_save "aigc-api"    "apps/api/Dockerfile"
-    build_and_save "aigc-web"    "apps/web/Dockerfile"
+    # web 单独处理，需要传入 INTERNAL_API_URL 构建参数
+    WEB_ENV="$REPO_ROOT/deploy/web/.env"
+    if [ -f "$WEB_ENV" ]; then
+      API_HOST_VAL=$(grep -E '^API_HOST=' "$WEB_ENV" | cut -d= -f2 | tr -d '[:space:]' | sed 's/#.*//')
+      API_PORT_VAL=$(grep -E '^API_PORT=' "$WEB_ENV" | cut -d= -f2 | tr -d '[:space:]' | sed 's/#.*//')
+    fi
+    API_HOST_VAL="${API_HOST_VAL:-localhost}"
+    API_PORT_VAL="${API_PORT_VAL:-7001}"
+    echo "====== web 构建参数：INTERNAL_API_URL=http://${API_HOST_VAL}:${API_PORT_VAL} ======"
+    docker build \
+      --file "$REPO_ROOT/apps/web/Dockerfile" \
+      --tag "aigc-web:latest" \
+      --build-arg "INTERNAL_API_URL=http://${API_HOST_VAL}:${API_PORT_VAL}" \
+      "$REPO_ROOT"
+    docker save "aigc-web:latest" | gzip > "$OUTPUT_DIR/aigc-web.tar.gz"
+    echo "完成：$OUTPUT_DIR/aigc-web.tar.gz ($(du -sh "$OUTPUT_DIR/aigc-web.tar.gz" | cut -f1))"
     build_and_save "aigc-worker" "apps/worker/Dockerfile"
     ;;
   *)

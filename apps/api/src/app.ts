@@ -43,6 +43,7 @@ export async function buildApp() {
 
   // CORS — restrict to allowed origins
   const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(',').map(s => s.trim())
+  
   await app.register(cors, {
     origin: allowedOrigins,
     credentials: true,

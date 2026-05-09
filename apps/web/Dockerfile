@@ -29,9 +29,9 @@ COPY packages/types ./packages/types
 # 构建 types 包
 RUN pnpm --filter @aigc/types build
 
-# Next.js 构建时需要环境变量占位（实际值在运行时通过 env 注入）
-# INTERNAL_API_URL 在容器内指向 api 服务
-ENV INTERNAL_API_URL=http://api:7001
+# rewrites() 在 next build 时编译进 routes-manifest.json，必须构建时传入
+ARG INTERNAL_API_URL=http://localhost:7001
+ENV INTERNAL_API_URL=$INTERNAL_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN pnpm --filter @aigc/web build
