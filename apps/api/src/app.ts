@@ -28,6 +28,7 @@ import { videoStudioRoutes } from './routes/video-studio.js'
 import { companyARoutes } from './routes/company-a.js'
 import { clientErrorsRoutes } from './routes/client-errors.js'
 import { paymentRoutes } from './routes/payment.js'
+import { modelRoutes } from './routes/models.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -117,6 +118,7 @@ export async function buildApp() {
       await v1.register(companyARoutes)
       await v1.register(clientErrorsRoutes)
       await v1.register(paymentRoutes)
+      await v1.register(modelRoutes)
     },
     { prefix: '/api/v1' },
   )
