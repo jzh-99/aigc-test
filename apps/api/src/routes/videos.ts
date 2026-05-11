@@ -7,7 +7,6 @@ import { pipeline } from 'node:stream/promises'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
-import { VIDEO_CREDITS_MAP } from '../lib/credits.js'
 import { encryptProxyUrl } from '../lib/storage.js'
 import { runConcatExport, type ConcatJobStore } from '../services/concat-export.js'
 
@@ -290,15 +289,31 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Calculate credits: seedance uses per-second pricing, others use flat rate
-    const CREDITS_PER_SECOND = VIDEO_CREDITS_MAP[model] ?? 5
     const videoDuration = isSeedance ? (duration ?? 5) : undefined
-    const VIDEO_CREDITS = isSeedance
-      ? (videoDuration === -1 ? 15 : videoDuration!) * CREDITS_PER_SECOND
-      : VIDEO_CREDITS_MAP[model] ?? 10
 
     const userId = request.user.id
     const db = getDb()
+
+    // 从 DB 读取模型积分配置（credit_cost 含义：Seedance 系列为每秒积分，Veo 系列为固定积分）
+    const modelRecord = await db
+      .selectFrom('provider_models')
+      .select(['credit_cost'])
+      .where('code', '=', model)
+      .where('is_active', '=', true)
+      .executeTakeFirst()
+
+    if (!modelRecord) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'UNKNOWN_MODEL', message: `未知或已停用的模型：${model}` },
+      })
+    }
+
+    // 计算本次生成所需积分：Seedance 按秒计费，Veo 按次计费
+    const creditsPerUnit = modelRecord.credit_cost
+    const VIDEO_CREDITS = isSeedance
+      ? (videoDuration === -1 ? 15 : videoDuration!) * creditsPerUnit
+      : creditsPerUnit
 
     // Check pending batch limit
     const pendingCount = await db
