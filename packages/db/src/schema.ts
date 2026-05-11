@@ -273,6 +273,15 @@ export interface ProviderModelsTable {
   is_active: Generated<boolean>
 }
 
+export interface TeamModelConfigsTable {
+  id: Generated<string>
+  team_id: string
+  model_id: string
+  is_active: Generated<boolean>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 export interface VoiceProfilesTable {
   id: Generated<string>
   user_id: string
@@ -386,6 +395,7 @@ export interface Database {
   payment_orders: PaymentOrdersTable
   providers: ProvidersTable
   provider_models: ProviderModelsTable
+  team_model_configs: TeamModelConfigsTable
   voice_profiles: VoiceProfilesTable
   prompt_filter_rules: PromptFilterRulesTable
   canvases: CanvasesTable
