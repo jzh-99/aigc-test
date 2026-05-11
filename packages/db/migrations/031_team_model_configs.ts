@@ -6,7 +6,7 @@ export async function up(db: Kysely<any>): Promise<void> {
     .addColumn('id', 'uuid', (col) => col.primaryKey().defaultTo(db.fn('gen_random_uuid', [])))
     .addColumn('team_id', 'uuid', (col) => col.notNull().references('teams.id').onDelete('cascade'))
     .addColumn('model_id', 'uuid', (col) => col.notNull().references('provider_models.id').onDelete('cascade'))
-    .addColumn('is_active', 'boolean', (col) => col.notNull())
+    .addColumn('is_active', 'boolean', (col) => col.notNull().defaultTo(true))
     .addColumn('created_at', 'timestamptz', (col) => col.defaultTo(db.fn('now', [])))
     .addColumn('updated_at', 'timestamptz', (col) => col.defaultTo(db.fn('now', [])))
     .execute()
