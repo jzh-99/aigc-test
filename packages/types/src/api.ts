@@ -173,3 +173,27 @@ export interface CreateWorkspaceRequest {
   name: string
   description?: string
 }
+
+/** 模型配置项，描述平台支持的 AI 模型基本信息 */
+export interface ModelItem {
+  id: string
+  code: string
+  name: string
+  /** 所属功能模块 */
+  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
+  /** 调用该模型消耗的积分数 */
+  credit_cost: number
+  /** 动态定价参数，结构因模型而异 */
+  params_pricing: unknown
+  /** 模型参数 JSON Schema，用于前端动态渲染表单 */
+  params_schema: unknown
+  is_active: boolean
+  /** 对应的服务商标识 */
+  provider_code: string
+}
+
+/** 团队维度的模型启用配置 */
+export interface TeamModelConfig {
+  model_id: string
+  is_active: boolean
+}
