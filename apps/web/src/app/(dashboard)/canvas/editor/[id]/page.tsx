@@ -13,6 +13,26 @@ import type { AppNode, AppEdge } from '@/lib/canvas/types'
 
 type SidePanel = 'agent' | 'history' | null
 
+function normalizeCanvasStructure(raw: unknown): { nodes: AppNode[]; edges: AppEdge[] } {
+  let value = raw
+
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return { nodes: [], edges: [] }
+    }
+  }
+
+  if (!value || typeof value !== 'object') return { nodes: [], edges: [] }
+
+  const structure = value as { nodes?: unknown; edges?: unknown }
+  return {
+    nodes: Array.isArray(structure.nodes) ? structure.nodes as AppNode[] : [],
+    edges: Array.isArray(structure.edges) ? structure.edges as AppEdge[] : [],
+  }
+}
+
 function CanvasNameEditor({
   name,
   canvasId,
@@ -108,8 +128,8 @@ export default function CanvasEditorPage() {
       })
       .then((canvas) => {
         setCanvasName(canvas.name)
-        const sd = canvas.structure_data ?? { nodes: [], edges: [] }
-        initCanvas(id, sd.nodes as AppNode[], sd.edges as AppEdge[], canvas.version ?? 1, canvas.workspace_id)
+        const sd = normalizeCanvasStructure(canvas.structure_data)
+        initCanvas(id, sd.nodes, sd.edges, canvas.version ?? 1, canvas.workspace_id)
       })
       .catch((err: Error & { status?: number; name?: string }) => {
         if (err.name === 'AbortError') return

@@ -9,6 +9,19 @@ info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
+stop_web_for_build() {
+  if pm2 describe aigc-test-web >/dev/null 2>&1; then
+    info "Stopping web service before rebuilding .next..."
+    pm2 stop aigc-test-web || warn "Failed to stop aigc-test-web; continuing build"
+  fi
+}
+
+restart_pm2_services() {
+  info "Restarting PM2 services..."
+  pm2 startOrRestart ecosystem.config.cjs --update-env
+  pm2 save
+}
+
 [ -f "$APP_DIR/.env" ] || error ".env is missing. Copy .env.example to .env and fill in deployment values."
 [ -f "$APP_DIR/prompts.env" ] || error "prompts.env is missing. Copy prompts.env.example to prompts.env and fill in private prompt values."
 
@@ -19,6 +32,7 @@ info "Installing dependencies..."
 pnpm install --frozen-lockfile
 
 info "Building packages..."
+stop_web_for_build
 pnpm --filter @aigc/db build
 pnpm --filter @aigc/types build
 pnpm --filter @aigc/web build
@@ -34,8 +48,6 @@ info "Seeding database..."
 pnpm --filter @aigc/db exec tsx scripts/seed.ts
 pnpm --filter @aigc/db exec tsx scripts/seed-volcengine.ts
 
-info "Restarting PM2 services..."
-pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs --update-env
-pm2 save
+restart_pm2_services
 
 info "Deployment complete."
