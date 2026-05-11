@@ -18,6 +18,7 @@ import { fetchWithAuth } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { createSeriesEpisodes } from '@/lib/video-studio-api'
 import type { WizardState, EpisodeState } from '@/hooks/video-studio/use-wizard-state'
+import { generateUUID } from '@/lib/utils'
 import type { AppNode, AppEdge, CanvasNodeType } from '@/lib/canvas/types'
 
 function makeNode(id: string, type: CanvasNodeType, position: { x: number; y: number }, config: Record<string, unknown>): AppNode {
@@ -49,7 +50,7 @@ function WizardContent() {
   const [projectId] = useState(() => {
     const existing = searchParams.get('id')
     if (existing) return existing
-    return crypto.randomUUID()
+    return generateUUID()
   })
 
   useEffect(() => {

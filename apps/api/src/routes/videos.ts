@@ -47,6 +47,7 @@ interface VideoGenerateBody {
   idempotency_key?: string
   canvas_id?: string
   canvas_node_id?: string
+  video_studio_project_id?: string
   model?: string
   images?: string[]            // 首尾帧（首尾帧 Tab）
   reference_images?: string[]  // 参考图（参考生视频 Tab / multimodal Tab，Seedance 2.0 专用）

@@ -1,0 +1,27 @@
+name: aigc-worker
+
+# ============================================================
+# Worker 服务器：BullMQ 后台任务处理
+# 依赖基础设施服务器，通过 INFRA_HOST 访问
+# ============================================================
+
+services:
+  worker:
+    image: aigc-worker:latest
+    container_name: aigc-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aigc}:${POSTGRES_PASSWORD}@${INFRA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-aigc_dev}
+      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}${INFRA_HOST}:${REDIS_PORT:-6379}
+      STORAGE_ENDPOINT: http://${INFRA_HOST}:${MINIO_API_PORT:-9000}
+      STORAGE_PUBLIC_URL: http://${INFRA_HOST}:${MINIO_API_PORT:-9000}/${STORAGE_BUCKET:-aigc-assets}
+      NODE_ENV: production
+    healthcheck:
+      # worker 无 HTTP 端口，检查进程是否存活
+      test: ["CMD-SHELL", "pgrep -f 'node apps/worker' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

@@ -4,7 +4,7 @@ import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
 import { healthzRoutes } from './routes/healthz.js'
 import { generateRoutes } from './routes/generate.js'
@@ -43,6 +43,7 @@ export async function buildApp() {
 
   // CORS — restrict to allowed origins
   const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(',').map(s => s.trim())
+  
   await app.register(cors, {
     origin: allowedOrigins,
     credentials: true,

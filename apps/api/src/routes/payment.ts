@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
 import { createLifeOrder, createLifeSubscriptionOrder, buildPaySign } from '../lib/life-service.js'
 import { TOPUP_PACKAGES, TOPUP_PACKAGE_MAP, ONETIME_PACKAGES, MONTHLY_PACKAGES } from '../lib/topup-packages.js'
@@ -180,15 +181,11 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
     const order = await db
       .insertInto('payment_orders')
       .values({
-        order_no: String(lifeOrder.orderid),
-        provider: 'life',
-        type: 'topup',
         life_order_id: String(lifeOrder.orderid),
         user_id: userId,
         team_id: team_id ?? null,
         credit_account_id: creditAccountId,
         amount_fen: pkg.amount_fen,
-        credits: pkg.credits,
         credits_to_grant: pkg.credits,
         status: 'pending',
         order_type: 'topup',
