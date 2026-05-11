@@ -47,6 +47,14 @@ COPY --from=builder /app/deploy ./
 COPY --from=builder /repo/packages/db/dist ./node_modules/@aigc/db/dist
 COPY --from=builder /repo/packages/types/dist ./node_modules/@aigc/types/dist
 
+# 复制迁移脚本、seed 脚本和迁移文件（供 docker exec 手动执行）
+COPY --from=builder /repo/packages/db/scripts ./migrate/scripts
+COPY --from=builder /repo/packages/db/migrations ./migrate/migrations
+COPY --from=builder /repo/packages/db/triggers.sql ./migrate/triggers.sql
+COPY --from=builder /repo/packages/db/src ./migrate/src
+# 安装 tsx 用于在容器内直接运行 TS 脚本
+RUN npm install -g tsx
+
 RUN addgroup -S aigc && adduser -S aigc -G aigc
 USER aigc
 
