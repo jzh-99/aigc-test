@@ -19,7 +19,6 @@ const VIDEO_MIME: Record<string, string> = {
 }
 const SAFE_ID = /^[\w-]+\.(mp4|mov|webm)$/
 
-const ACTION_REQ_KEY = 'jimeng_dreamactor_m20_gen_video'
 const ACTION_API_VERSION = '2022-08-31'
 const CREDITS_PER_SECOND = 20
 
@@ -99,6 +98,19 @@ export async function actionImitationRoutes(app: FastifyInstance): Promise<void>
     const { workspace_id: workspaceId, image_base64, image_mime, video_url, video_duration } = request.body
     const userId = request.user.id
     const db = getDb()
+
+    // 从 DB 动态查询当前激活的动作模仿模型 code
+    const actionModel = await db
+      .selectFrom('provider_models')
+      .select(['code'])
+      .where('module', '=', 'action_imitation')
+      .where('is_active', '=', true)
+      .executeTakeFirst()
+
+    if (!actionModel) {
+      return reply.status(503).send({ error: 'No active action imitation model configured' })
+    }
+    const ACTION_REQ_KEY = actionModel.code
 
     // Verify workspace membership
     const wsMember = await db

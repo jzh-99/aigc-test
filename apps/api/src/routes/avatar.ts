@@ -24,7 +24,6 @@ const AUDIO_MIME: Record<string, string> = {
 }
 const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|mp3|wav|m4a|aac)$/
 
-const OMNI_REQ_KEY = 'jimeng_realman_avatar_picture_omni_v15'
 const OMNI_API_VERSION = '2022-08-31'
 const CREDITS_PER_SECOND = 50
 
@@ -111,6 +110,19 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
     const { workspace_id: workspaceId, image_url, audio_url, audio_duration, prompt, resolution } = request.body
     const userId = request.user.id
     const db = getDb()
+
+    // 从数据库动态查询当前激活的 avatar 模型 code
+    const avatarModel = await db
+      .selectFrom('provider_models')
+      .select(['code'])
+      .where('module', '=', 'avatar')
+      .where('is_active', '=', true)
+      .executeTakeFirst()
+
+    if (!avatarModel) {
+      return reply.status(503).send({ error: 'No active avatar model configured' })
+    }
+    const OMNI_REQ_KEY = avatarModel.code
 
     // Verify workspace membership
     const wsMember = await db
