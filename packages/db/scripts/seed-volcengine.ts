@@ -191,6 +191,43 @@ async function main() {
     .execute()
   console.log('  provider_models upserted (seedance-1.5-pro, 100 credits/s)')
 
+  // 4. Upsert avatar and action_imitation models (single-model, no selector shown)
+  const singleModels = [
+    {
+      code: 'jimeng_realman_avatar_picture_omni_v15',
+      name: '数字人生成',
+      module: 'avatar' as const,
+    },
+    {
+      code: 'jimeng_dreamactor_m20_gen_video',
+      name: '动作模仿',
+      module: 'action_imitation' as const,
+    },
+  ]
+
+  for (const m of singleModels) {
+    await db
+      .insertInto('provider_models')
+      .values({
+        provider_id: provider.id,
+        code: m.code,
+        name: m.name,
+        module: m.module,
+        credit_cost: 0,
+        params_pricing: JSON.stringify({}),
+        params_schema: JSON.stringify({}),
+        is_active: true,
+      })
+      .onConflict((oc: any) =>
+        oc.columns(['provider_id', 'code']).doUpdateSet({
+          name: m.name,
+          is_active: true,
+        })
+      )
+      .execute()
+    console.log(`  provider_models upserted (${m.code})`)
+  }
+
   await closeDb()
   console.log('  Volcengine seed complete.')
 }
