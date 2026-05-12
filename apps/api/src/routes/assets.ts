@@ -144,7 +144,7 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
         .limit(limit + 1)
 
       if (type) {
-        query = query.where('a.type', '=', type)
+        query = query.where('a.type', '=', type as 'image' | 'video' | 'audio')
       }
 
       // Filter by local date (YYYY-MM-DD) using UTC date of created_at

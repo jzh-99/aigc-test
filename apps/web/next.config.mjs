@@ -7,6 +7,8 @@ const storageHost = process.env.NEXT_PUBLIC_STORAGE_HOST ?? 'localhost'
 const storagePort = process.env.NEXT_PUBLIC_STORAGE_PORT ?? '9000'
 
 const nextConfig = {
+  // standalone 模式：将所有依赖打包进 .next/standalone，减小镜像体积
+  output: 'standalone',
   pageExtensions: ['ts', 'tsx', 'md', 'mdx'],
   transpilePackages: ['@aigc/types'],
   async rewrites() {

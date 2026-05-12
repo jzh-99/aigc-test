@@ -8,6 +8,7 @@ import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
+import { resolveUnitPrice } from '../lib/pricing.js'
 
 const UPLOAD_DIR = '/tmp/avatar-uploads'
 const MAX_FILE_AGE_MS = 20 * 60 * 1000 // 20 minutes — enough for generation
@@ -24,9 +25,7 @@ const AUDIO_MIME: Record<string, string> = {
 }
 const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|mp3|wav|m4a|aac)$/
 
-const OMNI_REQ_KEY = 'jimeng_realman_avatar_picture_omni_v15'
 const OMNI_API_VERSION = '2022-08-31'
-const CREDITS_PER_SECOND = 50
 
 export async function avatarRoutes(app: FastifyInstance): Promise<void> {
   await mkdir(UPLOAD_DIR, { recursive: true })
@@ -112,6 +111,19 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
     const userId = request.user.id
     const db = getDb()
 
+    // 从数据库动态查询当前激活的 avatar 模型 code 及计费配置
+    const avatarModel = await db
+      .selectFrom('provider_models')
+      .select(['code', 'credit_cost', 'params_pricing'])
+      .where('module', '=', 'avatar')
+      .where('is_active', '=', true)
+      .executeTakeFirst()
+
+    if (!avatarModel) {
+      return reply.status(503).send({ error: 'No active avatar model configured' })
+    }
+    const OMNI_REQ_KEY = avatarModel.code
+
     // Verify workspace membership
     const wsMember = await db
       .selectFrom('workspace_members')
@@ -164,8 +176,10 @@ export async function avatarRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Calculate credits based on audio duration
+    // params_pricing 有规则时按分辨率匹配单价，否则回退 credit_cost（每秒积分）
+    const { unitPrice } = resolveUnitPrice(avatarModel.params_pricing, undefined, avatarModel.credit_cost)
     const estimatedSeconds = Math.ceil(audio_duration)
-    const estimatedCredits = estimatedSeconds * CREDITS_PER_SECOND
+    const estimatedCredits = estimatedSeconds * unitPrice
 
     // Freeze credits
     let creditAccountId: string

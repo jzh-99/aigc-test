@@ -111,7 +111,7 @@ function normalizeContentForUpstream(
 export async function canvasAgentRoutes(app: FastifyInstance): Promise<void> {
   const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
   const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
-  const AI_MODEL = process.env.GEMINI_MODEL ?? ''
+  const AI_MODEL = process.env.NANO_BANANA_MODEL ?? ''
   const AI_SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_AGENT ?? ''
 
   app.post<{

@@ -8,6 +8,7 @@ import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
+import { resolveUnitPrice } from '../lib/pricing.js'
 
 const UPLOAD_DIR = '/tmp/action-imitation-uploads'
 const MAX_FILE_AGE_MS = 40 * 60 * 1000 // 40 minutes — covers upload + up to 35-min generation
@@ -19,9 +20,7 @@ const VIDEO_MIME: Record<string, string> = {
 }
 const SAFE_ID = /^[\w-]+\.(mp4|mov|webm)$/
 
-const ACTION_REQ_KEY = 'jimeng_dreamactor_m20_gen_video'
 const ACTION_API_VERSION = '2022-08-31'
-const CREDITS_PER_SECOND = 20
 
 export async function actionImitationRoutes(app: FastifyInstance): Promise<void> {
   await mkdir(UPLOAD_DIR, { recursive: true })
@@ -100,6 +99,19 @@ export async function actionImitationRoutes(app: FastifyInstance): Promise<void>
     const userId = request.user.id
     const db = getDb()
 
+    // 从 DB 动态查询当前激活的动作模仿模型 code 及计费配置
+    const actionModel = await db
+      .selectFrom('provider_models')
+      .select(['code', 'credit_cost', 'params_pricing'])
+      .where('module', '=', 'action_imitation')
+      .where('is_active', '=', true)
+      .executeTakeFirst()
+
+    if (!actionModel) {
+      return reply.status(503).send({ error: 'No active action imitation model configured' })
+    }
+    const ACTION_REQ_KEY = actionModel.code
+
     // Verify workspace membership
     const wsMember = await db
       .selectFrom('workspace_members')
@@ -152,8 +164,10 @@ export async function actionImitationRoutes(app: FastifyInstance): Promise<void>
     }
 
     // Calculate credits based on video duration
+    // params_pricing 有规则时按分辨率匹配单价，否则回退 credit_cost（每秒积分）
+    const { unitPrice } = resolveUnitPrice(actionModel.params_pricing, undefined, actionModel.credit_cost)
     const estimatedSeconds = Math.ceil(video_duration)
-    const estimatedCredits = estimatedSeconds * CREDITS_PER_SECOND
+    const estimatedCredits = estimatedSeconds * unitPrice
 
     // Freeze credits
     let creditAccountId: string

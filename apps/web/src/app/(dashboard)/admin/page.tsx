@@ -6,6 +6,7 @@ import { TeamTable } from '@/components/admin/team-table'
 import { CreateTeamForm } from '@/components/admin/create-team-form'
 import { UserTable } from '@/components/admin/user-table'
 import { ErrorDashboard } from '@/components/admin/error-dashboard'
+import { ModelTable } from '@/components/admin/model-table'
 import { cn } from '@/lib/utils'
 
 const tabs = [
@@ -13,6 +14,7 @@ const tabs = [
   { key: 'create', label: '创建团队' },
   { key: 'users', label: '用户列表' },
   { key: 'errors', label: '错误诊断' },
+  { key: 'models', label: '模型管理' },
 ] as const
 
 type TabKey = typeof tabs[number]['key']
@@ -53,6 +55,7 @@ export default function AdminPage() {
       {activeTab === 'create' && <CreateTeamForm onCreated={() => setActiveTab('teams')} />}
       {activeTab === 'users' && <UserTable />}
       {activeTab === 'errors' && <ErrorDashboard />}
+      {activeTab === 'models' && <ModelTable />}
     </div>
   )
 }

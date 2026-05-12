@@ -1362,4 +1362,132 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   )
+
+  // ─── 全局模型管理 ───────────────────────────────────────────────
+
+  // GET /admin/models — 查询所有模型，支持按 module 过滤
+  app.get<{ Querystring: { module?: string } }>('/admin/models', async (req) => {
+    const db = getDb()
+    let query = db
+      .selectFrom('provider_models as pm')
+      .innerJoin('providers as p', 'p.id', 'pm.provider_id')
+      .select([
+        'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
+        'pm.credit_cost', 'pm.params_pricing', 'pm.params_schema', 'pm.resolution', 'pm.is_active',
+        'p.code as provider_code',
+      ])
+      .orderBy('pm.module', 'asc')
+      .orderBy('pm.name', 'asc')
+
+    if (req.query.module) {
+      query = query.where('pm.module', '=', req.query.module as any)
+    }
+    return query.execute()
+  })
+
+  // GET /admin/models/:id — 查询单个模型详情
+  app.get<{ Params: { id: string } }>('/admin/models/:id', async (req, reply) => {
+    const db = getDb()
+    const model = await db
+      .selectFrom('provider_models as pm')
+      .innerJoin('providers as p', 'p.id', 'pm.provider_id')
+      .select([
+        'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
+        'pm.credit_cost', 'pm.params_pricing', 'pm.params_schema', 'pm.resolution', 'pm.is_active',
+        'p.code as provider_code',
+      ])
+      .where('pm.id', '=', req.params.id)
+      .executeTakeFirst()
+
+    if (!model) return reply.status(404).send({ error: 'Model not found' })
+    return model
+  })
+
+  // PATCH /admin/models/:id — 更新模型字段（name/credit_cost/params_pricing/params_schema/resolution/is_active）
+  app.patch<{
+    Params: { id: string }
+    Body: { name?: string; description?: string | null; credit_cost?: number; params_pricing?: unknown; params_schema?: unknown; resolution?: string | null; is_active?: boolean }
+  }>('/admin/models/:id', async (req, reply) => {
+    const db = getDb()
+    const { name, description, credit_cost, params_pricing, params_schema, resolution, is_active } = req.body
+    const updates: Record<string, unknown> = {}
+    if (name !== undefined) updates.name = name
+    if (description !== undefined) updates.description = description
+    if (credit_cost !== undefined) updates.credit_cost = credit_cost
+    if (params_pricing !== undefined) updates.params_pricing = JSON.stringify(params_pricing)
+    if (params_schema !== undefined) updates.params_schema = JSON.stringify(params_schema)
+    if (resolution !== undefined) updates.resolution = resolution
+    if (is_active !== undefined) updates.is_active = is_active
+
+    if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No fields to update' })
+
+    const updated = await db
+      .updateTable('provider_models')
+      .set(updates as any)
+      .where('id', '=', req.params.id)
+      .returningAll()
+      .executeTakeFirst()
+
+    if (!updated) return reply.status(404).send({ error: 'Model not found' })
+    return updated
+  })
+
+  // ─── 团队模型配置 ───────────────────────────────────────────────
+
+  // GET /admin/teams/:id/model-configs — 查询团队所有模型的启用状态（含全局默认与团队覆盖）
+  app.get<{ Params: { id: string } }>('/admin/teams/:id/model-configs', async (req) => {
+    const db = getDb()
+    const rows = await db
+      .selectFrom('provider_models as pm')
+      .innerJoin('providers as p', 'p.id', 'pm.provider_id')
+      .leftJoin('team_model_configs as tmc', (join) =>
+        join.onRef('tmc.model_id', '=', 'pm.id').on('tmc.team_id', '=', req.params.id)
+      )
+      .select([
+        'pm.id', 'pm.code', 'pm.name', 'pm.module',
+        'pm.credit_cost', 'pm.is_active as global_is_active',
+        'p.code as provider_code',
+        'tmc.is_active as team_is_active',
+      ])
+      .orderBy('pm.module', 'asc')
+      .orderBy('pm.name', 'asc')
+      .execute()
+
+    // effective_is_active：团队有覆盖配置时取团队值，否则取全局值
+    return rows.map((r) => ({
+      ...r,
+      effective_is_active: r.team_is_active !== null ? r.team_is_active : r.global_is_active,
+      has_override: r.team_is_active !== null,
+    }))
+  })
+
+  // PUT /admin/teams/:id/model-configs/:modelId — 设置团队对某模型的启用状态（upsert）
+  app.put<{
+    Params: { id: string; modelId: string }
+    Body: { is_active: boolean }
+  }>('/admin/teams/:id/model-configs/:modelId', async (req) => {
+    const db = getDb()
+    await db
+      .insertInto('team_model_configs')
+      .values({ team_id: req.params.id, model_id: req.params.modelId, is_active: req.body.is_active })
+      .onConflict((oc: any) =>
+        oc.columns(['team_id', 'model_id']).doUpdateSet({ is_active: req.body.is_active })
+      )
+      .execute()
+    return { ok: true }
+  })
+
+  // DELETE /admin/teams/:id/model-configs/:modelId — 删除团队对某模型的覆盖配置（恢复全局默认）
+  app.delete<{ Params: { id: string; modelId: string } }>(
+    '/admin/teams/:id/model-configs/:modelId',
+    async (req) => {
+      const db = getDb()
+      await db
+        .deleteFrom('team_model_configs')
+        .where('team_id', '=', req.params.id)
+        .where('model_id', '=', req.params.modelId)
+        .execute()
+      return { ok: true }
+    }
+  )
 }
