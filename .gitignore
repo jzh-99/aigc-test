@@ -18,6 +18,9 @@ apps/docs/out/
 logs/
 .pnpm-build-approvals.json
 
+# Local docs
+docs/
+
 # Editor/notebook checkpoints
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
