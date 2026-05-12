@@ -6,9 +6,14 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
-import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig } from '@/lib/canvas/types'
+import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig, isVideoStitchConfig } from '@/lib/canvas/types'
 import { callCanvasAgent } from '@/lib/canvas/agent-api'
 import { generateUUID } from '@/lib/utils'
+import {
+  fetchCanvasAgentSession,
+  upsertCanvasAgentSession,
+  deleteCanvasAgentSession,
+} from '@/lib/canvas/agent-session-api'
 import {
   parseAgentResponse,
   type AgentPhase,
@@ -23,12 +28,16 @@ import {
   loadCanvasAgentSession,
   saveCanvasAgentSession,
   clearCanvasAgentSession,
+  prepareCanvasAgentSession,
+  migrateCanvasAgentSessionToServer,
 } from './use-canvas-agent-history'
 import {
   executeCanvasNode,
   executeVideoNode,
   executeScriptWriterNode,
   executeStoryboardSplitterNode,
+  startVideoConcatExport,
+  getVideoConcatExport,
   CanvasApiError,
 } from '@/lib/canvas/canvas-api'
 import {
@@ -46,6 +55,9 @@ function summarizeConfig(type: string, config: any): string {
   if (type === 'image_gen') return `model:${config.modelType}, prompt:"${config.prompt?.slice(0, 40) ?? ''}"`
   if (type === 'video_gen') return `model:${config.model}, mode:${config.videoMode}`
   if (type === 'asset') return `file:${config.name ?? config.url?.split('/').pop() ?? ''}, mime:${config.mimeType ?? ''}`
+  if (type === 'script_writer') return `style:${config.style ?? ''}, duration:${config.duration ?? ''}, desc:"${config.description?.slice(0, 40) ?? ''}"`
+  if (type === 'storyboard_splitter') return `shots:${config.shotCount ?? 0}`
+  if (type === 'video_stitch') return `inputOrder:${Array.isArray(config.inputOrder) ? config.inputOrder.length : 0}`
   return ''
 }
 
@@ -113,12 +125,20 @@ function buildUserContent(
       } else {
         parts.push({ type: 'text', text: `[剧本节点「${label}」：尚未生成]` })
       }
-    } else if (node.type === 'video_gen') {
+    } else if (node.type === 'storyboard_splitter') {
+      const shots = (execNodes[nodeId]?.outputs[0]?.paramsSnapshot as { shots?: Array<{ label?: string; content?: string }> } | undefined)?.shots
+      if (shots?.length) {
+        const shotText = shots.map((shot, index) => `${index + 1}. ${shot.label ?? '分镜'}：${shot.content ?? ''}`).join('\n')
+        parts.push({ type: 'text', text: `[分镜节点「${label}」：\n${shotText.slice(0, 400)}${shotText.length > 400 ? '…' : ''}]` })
+      } else {
+        parts.push({ type: 'text', text: `[分镜节点「${label}」：尚未生成]` })
+      }
+    } else if (node.type === 'video_gen' || node.type === 'video_stitch') {
       const execState = execNodes[nodeId]
-      const output = execState?.outputs.find((o) => o.id === execState.selectedOutputId)
+      const output = execState?.outputs.find((o) => o.id === execState.selectedOutputId) ?? execState?.outputs.find((o) => o.type === 'video')
       if (output?.url) {
         parts.push({ type: 'image_url', image_url: { url: output.url } })
-        parts.push({ type: 'text', text: `[视频节点「${label}」]` })
+        parts.push({ type: 'text', text: `[${node.type === 'video_stitch' ? '视频拼接' : '视频'}节点「${label}」]` })
         hasMedia = true
       }
     }
@@ -155,7 +175,7 @@ export function estimateStepCredits(step: AgentStep, params: StepParams): number
       const credits = IMAGE_MODEL_CREDITS[params.modelType ?? 'gemini'] ?? 5
       return total + credits
     }
-    if (node.type === 'video_gen') {
+    if (node.type === 'video_gen' || node.type === 'video_stitch') {
       const model = params.videoModel ?? 'seedance-2.0'
       const perSec = VIDEO_PER_SECOND_CREDITS[model]
       if (perSec !== undefined) return total + perSec * (params.duration ?? 5)
@@ -339,6 +359,64 @@ async function executeNode(
         paramsSnapshot: { shots: result.shots },
       })
       execStore.setNodeStatus(nodeId, 'completed', { progress: 100 })
+    } else if (node.type === 'video_stitch' && isVideoStitchConfig(node.data.config)) {
+      const upstreamEdges = edges.filter((e) => e.target === nodeId && (!e.targetHandle || e.targetHandle === 'video-in'))
+      const order = node.data.config.inputOrder ?? []
+      const orderIndex = new Map(order.map((edgeId, index) => [edgeId, index]))
+      const orderedEdges = [...upstreamEdges].sort((a, b) => {
+        const ai = orderIndex.get(a.id)
+        const bi = orderIndex.get(b.id)
+        if (ai !== undefined && bi !== undefined) return ai - bi
+        if (ai !== undefined) return -1
+        if (bi !== undefined) return 1
+        return upstreamEdges.findIndex((e) => e.id === a.id) - upstreamEdges.findIndex((e) => e.id === b.id)
+      })
+
+      const segments = orderedEdges.flatMap((edge) => {
+        const srcNode = nodes.find((n) => n.id === edge.source)
+        if (!srcNode) return []
+        if (srcNode.type === 'asset' && isAssetConfig(srcNode.data.config) && srcNode.data.config.mimeType?.startsWith('video') && srcNode.data.config.url) {
+          const duration = srcNode.data.config.duration
+          return [{ url: srcNode.data.config.url, inPoint: 0, outPoint: typeof duration === 'number' && duration > 0 ? duration : 0 }]
+        }
+        if (srcNode.type === 'video_gen' || srcNode.type === 'video_stitch') {
+          const state = execStore.nodes[srcNode.id]
+          const output = state?.outputs.find((o) => o.id === state.selectedOutputId) ?? state?.outputs.find((o) => o.type === 'video')
+          if (output?.url && output.type === 'video') {
+            const snapshot = output.paramsSnapshot as { duration?: number; segments?: Array<{ outPoint?: number; inPoint?: number }> } | undefined
+            const duration = snapshot?.duration ?? snapshot?.segments?.reduce((sum, seg) => sum + Math.max(0, (seg.outPoint ?? 0) - (seg.inPoint ?? 0)), 0)
+            return [{ url: output.url, inPoint: 0, outPoint: typeof duration === 'number' && duration > 0 ? duration : 0 }]
+          }
+        }
+        return []
+      })
+
+      if (segments.length < 2) throw new Error('视频拼接节点至少需要 2 个可用视频')
+      if (segments.some((segment) => segment.outPoint <= segment.inPoint)) throw new Error('视频时长未就绪，请先在视频拼接参数栏生成拼接结果')
+
+      const { jobId } = await startVideoConcatExport({ segments, projectName: `canvas_${canvasId}_${nodeId}` })
+      execStore.setNodeStatus(nodeId, 'processing', { progress: 5 })
+
+      for (let i = 0; i < 120; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+        const result = await getVideoConcatExport(jobId)
+        execStore.setNodeStatus(nodeId, 'processing', { progress: Math.min(95, 5 + ((i + 1) / 120) * 90) })
+
+        if (result.status === 'done' && result.resultUrl) {
+          execStore.addNodeOutput(nodeId, {
+            id: jobId,
+            url: result.resultUrl,
+            type: 'video',
+            paramsSnapshot: { inputOrder: orderedEdges.map((edge) => edge.id), segments },
+          })
+          execStore.setNodeStatus(nodeId, 'completed', { progress: 100 })
+          return
+        }
+
+        if (result.status === 'failed') throw new Error(result.error ?? '视频拼接失败')
+      }
+
+      throw new Error('视频拼接超时')
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : '执行失败'
@@ -365,12 +443,47 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
   const [implicitNodeId, setImplicitNodeId] = useState<string | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!token) return
+
+    async function hydrateSession() {
+      await migrateCanvasAgentSessionToServer(canvasId, token)
+      const serverSession = await fetchCanvasAgentSession(canvasId, token)
+      if (cancelled || !serverSession) return
+      setMessages((current) => {
+        if (current.length > 0) return current
+        setActiveWorkflow(serverSession.activeWorkflow)
+        setCurrentStepIndex(serverSession.currentStepIndex)
+        return serverSession.messages
+      })
+    }
+
+    hydrateSession().catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [canvasId, token])
 
   // Persist session whenever messages or workflow state changes
   useEffect(() => {
     if (messages.length === 0 && !activeWorkflow) return
-    saveCanvasAgentSession(canvasId, { messages, activeWorkflow, currentStepIndex })
-  }, [canvasId, messages, activeWorkflow, currentStepIndex])
+    const session = prepareCanvasAgentSession({ messages, activeWorkflow, currentStepIndex })
+    saveCanvasAgentSession(canvasId, session)
+
+    if (!token) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      upsertCanvasAgentSession(canvasId, session, token).catch(() => {})
+      saveTimerRef.current = null
+    }, 2500)
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [canvasId, messages, activeWorkflow, currentStepIndex, token])
 
   const appendChunk = useCallback((msgId: string, chunk: string) => {
     setMessages((prev) =>
@@ -616,6 +729,7 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
 
   const reset = useCallback(() => {
     abortRef.current?.abort()
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setPhase('idle')
     setMessages([])
     setActiveWorkflow(null)
@@ -623,8 +737,9 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
     setStepParams({})
     setImplicitNodeId(null)
     clearCanvasAgentSession(canvasId)
+    if (token) deleteCanvasAgentSession(canvasId, token).catch(() => {})
     useCanvasExecutionStore.getState().setHighlightedNodes(new Set())
-  }, [canvasId])
+  }, [canvasId, token])
 
   // Keep ref in sync so sendMessage can call it without circular dep
   autoRunRef.current = autoRunAllSteps

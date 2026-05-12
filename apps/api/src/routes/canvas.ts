@@ -11,6 +11,7 @@ import { pipeline } from 'node:stream/promises'
 
 const CANVAS_UPLOAD_DIR = '/tmp/canvas-uploads'
 const CANVAS_UPLOAD_MAX_AGE_MS = 10 * 60 * 1000 // 10 min — enough for external storage to fetch
+const CANVAS_ENABLED_TEAM_TYPES = ['standard', 'avatar_enabled'] as const
 const SAFE_CANVAS_ID = /^[\w-]+\.(jpg|jpeg|png|webp|gif|mp4|mov|webm)$/
 
 async function assertCanvasEnabledForWorkspace(db: ReturnType<typeof getDb>, workspaceId: string) {
@@ -21,7 +22,7 @@ async function assertCanvasEnabledForWorkspace(db: ReturnType<typeof getDb>, wor
     .where('workspaces.id', '=', workspaceId)
     .executeTakeFirst()
 
-  if (!workspace || workspace.team_type !== 'avatar_enabled') {
+  if (!workspace || !CANVAS_ENABLED_TEAM_TYPES.includes(workspace.team_type as any)) {
     throw new Error('CANVAS_DISABLED')
   }
 }
@@ -37,7 +38,7 @@ async function resolveCanvasWorkspaceForUser(
     .innerJoin('teams', 'teams.id', 'workspaces.team_id')
     .select('workspace_members.workspace_id')
     .where('workspace_members.user_id', '=', userId)
-    .where('teams.team_type', '=', 'avatar_enabled')
+    .where('teams.team_type', 'in', CANVAS_ENABLED_TEAM_TYPES)
     .orderBy('workspace_members.created_at', 'asc')
     .limit(1) as any
 
@@ -136,7 +137,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin('teams', 'teams.id', 'workspaces.team_id')
       .select('workspace_members.workspace_id')
       .where('workspace_members.user_id', '=', userId)
-      .where('teams.team_type', '=', 'avatar_enabled')
+      .where('teams.team_type', 'in', CANVAS_ENABLED_TEAM_TYPES)
       .execute()
 
     const wsIds = memberships.map((m: any) => m.workspace_id)
@@ -150,25 +151,20 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
     const canvases = await db
       .selectFrom('canvases')
-      .select(['id', 'name', 'thumbnail_url', 'created_at', 'updated_at'])
+      .select(['id', 'name', 'created_at', 'updated_at'])
       .where('workspace_id', 'in', targetWsIds)
       .where('is_deleted', '=', false)
       .orderBy('updated_at', 'desc')
       .execute()
 
-    // For canvases with a thumbnail_url, use it directly.
-    // Only query canvas_node_outputs for canvases that have no thumbnail yet.
-    const canvasesWithThumb = canvases.filter((c) => c.thumbnail_url)
-    const canvasesNeedPreview = canvases.filter((c) => !c.thumbnail_url)
-
     const previewMap: Record<string, string[]> = {}
 
-    if (canvasesNeedPreview.length > 0) {
-      const needIds = canvasesNeedPreview.map((c) => c.id)
+    if (canvases.length > 0) {
+      const canvasIds = canvases.map((c) => c.id)
       const rows = await db
         .selectFrom('canvas_node_outputs')
         .select(['canvas_id', 'output_urls'])
-        .where('canvas_id', 'in', needIds)
+        .where('canvas_id', 'in', canvasIds)
         .orderBy('created_at', 'desc')
         .execute()
 
@@ -183,19 +179,38 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
 
         previewMap[cid].push(url)
       }
+
+      const canvasIdsNeedAssetPreview = canvasIds.filter((id) => !previewMap[id]?.length)
+      if (canvasIdsNeedAssetPreview.length > 0) {
+        const structureRows = await db
+          .selectFrom('canvases')
+          .select(['id', 'structure_data'])
+          .where('id', 'in', canvasIdsNeedAssetPreview)
+          .execute()
+
+        for (const row of structureRows) {
+          const structureData = row.structure_data as { nodes?: Array<{ type?: string; data?: { config?: { url?: string; mimeType?: string } } }> } | null
+          const urls: string[] = []
+          for (const node of structureData?.nodes ?? []) {
+            if (node.type !== 'asset') continue
+            const url = node.data?.config?.url
+            if (!url) continue
+            const mimeType = node.data?.config?.mimeType ?? ''
+            if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) continue
+            if (/\.(mp4|mov|webm)(\?|$)/i.test(url)) continue
+            urls.push(url)
+            if (urls.length >= 2) break
+          }
+          if (urls.length > 0) previewMap[row.id] = urls
+        }
+      }
     }
 
-    // Sign all URLs in parallel
-    await Promise.all([
-      ...canvasesWithThumb.map((c) =>
-        signAssetUrls([c.thumbnail_url!]).then((signed) => { previewMap[c.id] = signed })
+    await Promise.all(
+      Object.keys(previewMap).map((cid) =>
+        signAssetUrls(previewMap[cid]).then((signed) => { previewMap[cid] = signed })
       ),
-      ...Object.keys(previewMap)
-        .filter((cid) => !canvasesWithThumb.find((c) => c.id === cid))
-        .map((cid) =>
-          signAssetUrls(previewMap[cid]).then((signed) => { previewMap[cid] = signed })
-        ),
-    ])
+    )
 
     return reply.send(canvases.map((c) => ({ ...c, preview_urls: previewMap[c.id] ?? [] })))
   })
@@ -366,7 +381,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin('teams', 'teams.id', 'workspaces.team_id')
       .select(['workspace_members.workspace_id', 'workspace_members.role'])
       .where('workspace_members.user_id', '=', userId)
-      .where('teams.team_type', '=', 'avatar_enabled')
+      .where('teams.team_type', 'in', CANVAS_ENABLED_TEAM_TYPES)
       .execute()
 
     const targetWsIds = memberships.map((m) => m.workspace_id).filter((id) => !filterWsId || id === filterWsId)
@@ -967,7 +982,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin('teams', 'teams.id', 'workspaces.team_id')
       .select('workspace_members.workspace_id')
       .where('workspace_members.user_id', '=', userId)
-      .where('teams.team_type', '=', 'avatar_enabled')
+      .where('teams.team_type', 'in', CANVAS_ENABLED_TEAM_TYPES)
       .limit(1)
       .execute()
 

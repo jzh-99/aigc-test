@@ -46,6 +46,7 @@ function WizardContent() {
   const projectType = (searchParams.get('type') ?? 'single') as 'single' | 'series'
   const episodeCount = Number(searchParams.get('episodes') ?? '1')
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const token = useAuthStore((s) => s.accessToken)
 
   const [projectId] = useState(() => {
     const existing = searchParams.get('id')
@@ -208,7 +209,7 @@ function WizardContent() {
         characterImages: wizard.characterImages,
         sceneImages: wizard.sceneImages,
         assetStyle: wizard.assetStyle ?? wizard.describeData.style,
-      })
+      }, token ?? undefined)
       toast.success('分集项目已创建', { id: 'series-episodes' })
       wizard.completeStep('characters')
       router.push(`/video-studio/series/${projectId}`)

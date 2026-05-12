@@ -3,6 +3,7 @@
  * 不依赖任何 UI State 或 Zustand，纯函数
  */
 
+import { apiGet, apiPost } from '@/lib/api-client'
 import type {
   ImageGenConfig,
   TaskBatchStatus,
@@ -61,6 +62,23 @@ export interface ExecuteVideoNodeParams {
   // keyframe mode: first and last frame
   frameStart?: string
   frameEnd?: string
+}
+
+export interface VideoConcatSegment {
+  url: string
+  inPoint: number
+  outPoint: number
+}
+
+export interface StartVideoConcatExportParams {
+  segments: VideoConcatSegment[]
+  projectName?: string
+}
+
+export interface VideoConcatExportStatus {
+  status: 'processing' | 'done' | 'failed'
+  resultUrl?: string
+  error?: string
 }
 
 export interface CanvasHistoryItem {
@@ -211,6 +229,14 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
   }
 
   return await res.json()
+}
+
+export async function startVideoConcatExport(params: StartVideoConcatExportParams): Promise<{ jobId: string }> {
+  return apiPost<{ jobId: string }>('/videos/concat-export', params)
+}
+
+export async function getVideoConcatExport(jobId: string): Promise<VideoConcatExportStatus> {
+  return apiGet<VideoConcatExportStatus>(`/videos/concat-export/${jobId}`)
 }
 
 /**
@@ -488,3 +514,4 @@ export async function executeStoryboardSplitterNode(params: {
 
   return await res.json()
 }
+

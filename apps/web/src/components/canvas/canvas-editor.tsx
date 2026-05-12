@@ -29,6 +29,151 @@ import { generateUUID } from '@/lib/utils'
 
 const nodeTypes = nodeRegistry.getReactFlowTypesMapping()
 
+
+type NodeMenuCategory = {
+  id: 'text' | 'image' | 'video' | 'asset'
+  label: string
+  baseType: string
+  baseLabel: string
+  colorClass: string
+  testId: string
+  items: Array<{ type: string; label: string; testId: string }>
+}
+
+const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
+  {
+    id: 'text',
+    label: '文本',
+    baseType: 'text_input',
+    baseLabel: '文本',
+    colorClass: 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 border border-zinc-200',
+    testId: 'canvas-add-node-text',
+    items: [
+      { type: 'script_writer', label: '剧本', testId: 'canvas-add-node-script' },
+      { type: 'storyboard_splitter', label: '分镜', testId: 'canvas-add-node-storyboard' },
+    ],
+  },
+  {
+    id: 'image',
+    label: '生图',
+    baseType: 'image_gen',
+    baseLabel: '生图',
+    colorClass: 'bg-blue-600 hover:bg-blue-500 text-white shadow',
+    testId: 'canvas-add-node-image',
+    items: [],
+  },
+  {
+    id: 'video',
+    label: '视频',
+    baseType: 'video_gen',
+    baseLabel: '视频',
+    colorClass: 'bg-violet-600 hover:bg-violet-500 text-white shadow',
+    testId: 'canvas-add-node-video',
+    items: [
+      { type: 'video_stitch', label: '视频拼接', testId: 'canvas-add-node-video-stitch' },
+    ],
+  },
+  {
+    id: 'asset',
+    label: '资产',
+    baseType: 'asset',
+    baseLabel: '资产',
+    colorClass: 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 border border-zinc-200',
+    testId: 'canvas-add-node-asset',
+    items: [],
+  },
+]
+
+function AddNodePanel({ onSelect }: { onSelect: (type: string) => void }) {
+  return (
+    <div className="group relative bg-white/90 backdrop-blur-md p-2 rounded-xl border border-zinc-200 shadow-md flex gap-2">
+      {NODE_MENU_CATEGORIES.map((category) => (
+        <button
+          key={category.id}
+          data-testid={category.testId}
+          onClick={() => onSelect(category.baseType)}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${category.colorClass}`}
+        >
+          + {category.baseLabel}
+        </button>
+      ))}
+      <div className="pointer-events-none absolute left-0 top-full mt-2 w-[360px] opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+        <div className="grid grid-cols-4 gap-2 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-xl backdrop-blur-md">
+          {NODE_MENU_CATEGORIES.map((category) => (
+            <div key={category.id} className="min-w-0">
+              <div className="mb-1.5 text-[11px] font-semibold text-zinc-500">{category.label}</div>
+              <div className="space-y-1">
+                {category.items.length === 0 ? (
+                  <div className="rounded-md px-2 py-1.5 text-[11px] text-zinc-400">暂无</div>
+                ) : category.items.map((item) => (
+                  <button
+                    key={item.type}
+                    data-testid={item.testId}
+                    onClick={() => onSelect(item.type)}
+                    className="w-full rounded-md px-2 py-1.5 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100"
+                  >
+                    + {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ContextNodeMenu({
+  x,
+  y,
+  title,
+  onSelect,
+  onClose,
+}: {
+  x: number
+  y: number
+  title?: string
+  onSelect: (type: string) => void
+  onClose: () => void
+}) {
+  return createPortal(
+    <div
+      className="fixed z-50 min-w-[150px] rounded-xl border border-zinc-200 bg-white py-1 shadow-xl"
+      style={{ top: y, left: x }}
+      onMouseLeave={onClose}
+    >
+      {title && <div className="px-3 py-1.5 text-[11px] font-medium text-zinc-400">{title}</div>}
+      {NODE_MENU_CATEGORIES.map((category) => (
+        <div key={category.id} className="group/item relative">
+          <button
+            onClick={() => onSelect(category.baseType)}
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-50"
+          >
+            <span>+ {category.baseLabel}</span>
+            <span className="text-zinc-300">›</span>
+          </button>
+          <div className="pointer-events-none absolute left-full top-0 ml-1 min-w-[140px] rounded-xl border border-zinc-200 bg-white py-1 opacity-0 shadow-xl group-hover/item:pointer-events-auto group-hover/item:opacity-100">
+            <div className="px-3 py-1.5 text-[11px] font-medium text-zinc-400">{category.label}</div>
+            {category.items.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-zinc-400">暂无</div>
+            ) : category.items.map((item) => (
+              <button
+                key={item.type}
+                onClick={() => onSelect(item.type)}
+                className="w-full px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-50"
+              >
+                + {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>,
+    document.body
+  )
+}
+
 const NODE_CANVAS_H: Record<string, number> = {
   image_gen: 260,
   text_input: 130,
@@ -36,6 +181,7 @@ const NODE_CANVAS_H: Record<string, number> = {
   video_gen: 220,
   script_writer: 100,
   storyboard_splitter: 100,
+  video_stitch: 220,
 }
 
 function FloatingParamPanel({
@@ -117,6 +263,8 @@ function Flow({
   const flushHistory = useCanvasStructureStore((s) => s.flushHistory)
   const addNode = useCanvasStructureStore((s) => s.addNode)
   const addNodeWithConfig = useCanvasStructureStore((s) => s.addNodeWithConfig)
+  const addNodeAndConnect = useCanvasStructureStore((s) => s.addNodeAndConnect)
+  const addNodesWithEdges = useCanvasStructureStore((s) => s.addNodesWithEdges)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const generatingNodeIds = useCanvasExecutionStore((s) => s.generatingNodeIds)
   const setHighlightedNodes = useCanvasExecutionStore((s) => s.setHighlightedNodes)
@@ -182,25 +330,65 @@ function Flow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kickPoll])
 
-  // Right-click context menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number; mode: 'add' | 'downstream'; sourceNodeIds: string[] } | null>(null)
+
+  const getActiveSourceNodeIds = useCallback(() => (
+    selectedNodeIds.length > 1 ? selectedNodeIds : selectedNodeId ? [selectedNodeId] : []
+  ), [selectedNodeId, selectedNodeIds])
 
   const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const rect = wrapperRef.current?.getBoundingClientRect()
     if (!rect) return
     const canvasPos = project({ x: e.clientX - rect.left, y: e.clientY - rect.top })
-    setContextMenu({ x: e.clientX, y: e.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y })
-  }, [project])
+    const sourceNodeIds = getActiveSourceNodeIds()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      canvasX: canvasPos.x,
+      canvasY: canvasPos.y,
+      mode: sourceNodeIds.length > 0 ? 'downstream' : 'add',
+      sourceNodeIds,
+    })
+  }, [project, getActiveSourceNodeIds])
+
+  const handleNodeContextMenu = useCallback((e: React.MouseEvent, node: AppNode) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const sourceNodeIds = selectedNodeIds.includes(node.id)
+      ? selectedNodeIds
+      : selectedNodeId === node.id
+      ? [node.id]
+      : [node.id]
+    const sourceNodes = nodes.filter((n) => sourceNodeIds.includes(n.id))
+    const maxX = Math.max(...sourceNodes.map((n) => n.position.x))
+    const avgY = sourceNodes.reduce((sum, n) => sum + n.position.y, 0) / sourceNodes.length
+    setSelectedEdgeId(null)
+    if (sourceNodeIds.length > 1) setSelectedNodeIds(sourceNodeIds)
+    else setSelectedNodeId(node.id)
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      canvasX: maxX + 340,
+      canvasY: avgY,
+      mode: 'downstream',
+      sourceNodeIds,
+    })
+  }, [nodes, selectedNodeId, selectedNodeIds])
 
   const handleContextMenuAdd = useCallback((type: string) => {
     if (!contextMenu) return
-    addNode(type, { x: contextMenu.canvasX, y: contextMenu.canvasY })
+    if (contextMenu.mode === 'downstream') {
+      const errors = addNodeAndConnect(contextMenu.sourceNodeIds, type, { x: contextMenu.canvasX, y: contextMenu.canvasY })
+      errors.forEach((err) => toast.error(err))
+    } else {
+      addNode(type, { x: contextMenu.canvasX, y: contextMenu.canvasY })
+    }
     setContextMenu(null)
-  }, [contextMenu, addNode])
+  }, [contextMenu, addNode, addNodeAndConnect])
 
   const [showShortcuts, setShowShortcuts] = useState(false)
-  const copiedNodeRef = useRef<AppNode | null>(null)
+  const clipboardRef = useRef<{ nodes: AppNode[]; edges: AppEdge[] } | null>(null)
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const trackingMouseRef = useRef(false)
   const trackMouse = useCallback((e: MouseEvent) => { mousePosRef.current = { x: e.clientX, y: e.clientY } }, [])
@@ -231,10 +419,14 @@ function Flow({
         return
       }
 
-      if (isMod && e.key === 'c' && selectedNodeId) {
-        const node = nodes.find((n) => n.id === selectedNodeId)
-        if (node) {
-          copiedNodeRef.current = node
+      if (isMod && e.key === 'c') {
+        const sourceIds = selectedNodeIds.length > 1 ? selectedNodeIds : selectedNodeId ? [selectedNodeId] : []
+        const selected = nodes.filter((n) => sourceIds.includes(n.id))
+        if (selected.length > 0) {
+          clipboardRef.current = {
+            nodes: selected,
+            edges: edges.filter((edge) => sourceIds.includes(edge.source) || sourceIds.includes(edge.target)),
+          }
           if (!trackingMouseRef.current) {
             trackingMouseRef.current = true
             window.addEventListener('mousemove', trackMouse, { passive: true })
@@ -243,20 +435,45 @@ function Flow({
         return
       }
 
-      if (isMod && e.key === 'v' && copiedNodeRef.current) {
+      if (isMod && e.key === 'v' && clipboardRef.current) {
         const rect = wrapperRef.current?.getBoundingClientRect()
         if (!rect) return
         const pos = project({
           x: mousePosRef.current.x - rect.left,
           y: mousePosRef.current.y - rect.top,
         })
-        const newId = `node_${generateUUID()}`
-        addNodeWithConfig(
-          copiedNodeRef.current.type!,
-          { x: pos.x + 20, y: pos.y + 20 },
-          { ...copiedNodeRef.current.data.config },
-          newId,
-        )
+        const copiedNodes = clipboardRef.current.nodes
+        const idMap = new Map(copiedNodes.map((node) => [node.id, `node_${crypto.randomUUID()}`]))
+        const minX = Math.min(...copiedNodes.map((node) => node.position.x))
+        const minY = Math.min(...copiedNodes.map((node) => node.position.y))
+        const newNodes = copiedNodes.map((node) => ({
+          ...node,
+          id: idMap.get(node.id)!,
+          selected: false,
+          position: {
+            x: pos.x + (node.position.x - minX) + 20,
+            y: pos.y + (node.position.y - minY) + 20,
+          },
+          data: {
+            ...node.data,
+            config: JSON.parse(JSON.stringify(node.data.config)),
+          },
+        }))
+        const newEdges = clipboardRef.current.edges.map((edge) => {
+          const source = idMap.get(edge.source) ?? edge.source
+          const target = idMap.get(edge.target) ?? edge.target
+          return {
+            ...edge,
+            id: `edge_${source}_${edge.sourceHandle ?? 'source'}_${target}_${edge.targetHandle ?? 'target'}_${crypto.randomUUID()}`,
+            source,
+            target,
+            selected: false,
+          }
+        })
+        const errors = addNodesWithEdges(newNodes, newEdges)
+        errors.forEach((err) => toast.error(err))
+        setSelectedNodeId(newNodes.length === 1 ? newNodes[0].id : null)
+        setSelectedNodeIds(newNodes.length > 1 ? newNodes.map((node) => node.id) : [])
         window.removeEventListener('mousemove', trackMouse)
         trackingMouseRef.current = false
       }
@@ -269,7 +486,7 @@ function Flow({
         trackingMouseRef.current = false
       }
     }
-  }, [selectedNodeId, nodes, addNodeWithConfig, project, trackMouse, flushHistory, onSave])
+  }, [selectedNodeId, selectedNodeIds, nodes, edges, addNodesWithEdges, project, trackMouse, flushHistory, onSave])
 
   const handleAddNode = useCallback((type: string) => {
     const rect = wrapperRef.current?.getBoundingClientRect()
@@ -478,6 +695,7 @@ function Flow({
         onEdgeClick={handleEdgeClick as any}
         onPaneClick={handlePaneClick}
         onPaneContextMenu={handlePaneContextMenu as any}
+        onNodeContextMenu={handleNodeContextMenu as any}
         onSelectionChange={handleSelectionChange as any}
         fitView
         minZoom={0.1}
@@ -501,44 +719,17 @@ function Flow({
             if (node.type === 'video_gen') return '#7c3aed'
             if (node.type === 'text_input') return '#6b7280'
             if (node.type === 'asset') return '#10b981'
+            if (node.type === 'script_writer') return '#f59e0b'
+            if (node.type === 'storyboard_splitter') return '#0d9488'
+            if (node.type === 'video_stitch') return '#ef4444'
             return '#d4d4d8'
           }}
           maskColor="rgba(250,250,250,0.7)"
           className="!bg-white/90 !border-zinc-200 !rounded-xl"
           style={{ width: 140, height: 90 }}
         />
-        <Panel
-          position="top-left"
-          className="bg-white/90 backdrop-blur-md p-2 rounded-xl border border-zinc-200 shadow-md flex gap-2"
-        >
-          <button
-            data-testid="canvas-add-node-text"
-            onClick={() => handleAddNode('text_input')}
-            className="px-3 py-1.5 text-xs font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors"
-          >
-            + 纯文本
-          </button>
-          <button
-            data-testid="canvas-add-node-image"
-            onClick={() => handleAddNode('image_gen')}
-            className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow transition-colors"
-          >
-            + AI生图
-          </button>
-          <button
-            data-testid="canvas-add-node-asset"
-            onClick={() => handleAddNode('asset')}
-            className="px-3 py-1.5 text-xs font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors"
-          >
-            + 素材
-          </button>
-          <button
-            data-testid="canvas-add-node-video"
-            onClick={() => handleAddNode('video_gen')}
-            className="px-3 py-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white rounded-lg shadow transition-colors"
-          >
-            + AI视频
-          </button>
+        <Panel position="top-left" className="!m-0">
+          <AddNodePanel onSelect={handleAddNode} />
         </Panel>
         <Panel position="top-right" className="flex gap-1.5">
           <button
@@ -616,39 +807,14 @@ function Flow({
         />
       )}
 
-      {/* Right-click context menu */}
-      {contextMenu && createPortal(
-        <div
-          className="fixed z-50 bg-white border border-zinc-200 rounded-xl shadow-xl py-1 min-w-[140px]"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          onMouseLeave={() => setContextMenu(null)}
-        >
-          <button
-            onClick={() => handleContextMenuAdd('text_input')}
-            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-          >
-            + 纯文本节点
-          </button>
-          <button
-            onClick={() => handleContextMenuAdd('image_gen')}
-            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-          >
-            + AI 生图节点
-          </button>
-          <button
-            onClick={() => handleContextMenuAdd('asset')}
-            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-          >
-            + 素材节点
-          </button>
-          <button
-            onClick={() => handleContextMenuAdd('video_gen')}
-            className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-          >
-            + AI 视频节点
-          </button>
-        </div>,
-        document.body
+      {contextMenu && (
+        <ContextNodeMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          title={contextMenu.mode === 'downstream' ? '创建下游节点' : undefined}
+          onSelect={handleContextMenuAdd}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   )

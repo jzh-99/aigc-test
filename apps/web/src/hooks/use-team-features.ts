@@ -10,7 +10,8 @@ export function useTeamFeatures() {
     showVideoTab: !isCompanyA,
     showAvatarTab: teamType === 'standard' || teamType === 'avatar_enabled',
     showActionImitationTab: teamType === 'standard' || teamType === 'avatar_enabled',
-    showCanvasTab: teamType === 'avatar_enabled',
+    showCanvasTab: teamType === 'standard' || teamType === 'avatar_enabled',
+    showCanvasAgent: teamType === 'avatar_enabled',
     showVideoStudioTab: teamType === 'avatar_enabled',
   }
 }
