@@ -41,9 +41,25 @@ export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
     }),
   })
 
-  const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
-  const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
-  const AI_MODEL = process.env.GEMINI_MODEL ?? ''
+  // 通过 AI_CHAT_PROVIDER 切换：doubao（默认）| nano_banana
+  const provider = process.env.AI_CHAT_PROVIDER ?? 'doubao'
+  const AI_API_URL =
+    provider === 'nano_banana'
+      ? (process.env.NANO_BANANA_API_URL ?? '')
+      : (process.env.DOUBAO_API_URL ?? 'https://ark.cn-beijing.volces.com/api/v3')
+  const AI_API_KEY =
+    provider === 'nano_banana'
+      ? (process.env.NANO_BANANA_API_KEY ?? '')
+      : (process.env.DOUBAO_API_KEY ?? '')
+  const AI_MODEL =
+    provider === 'nano_banana'
+      ? (process.env.NANO_BANANA_MODEL ?? '')
+      : (process.env.DOUBAO_MODEL ?? 'doubao-seed-2.0-lite')
+  // nano_banana 的 endpoint 带 /v1 前缀，doubao 不带
+  const chatEndpoint =
+    provider === 'nano_banana'
+      ? `${AI_API_URL}/v1/chat/completions`
+      : `${AI_API_URL}/chat/completions`
   const SYSTEM_PROMPT = process.env.AI_PROMPT_ASSISTANT ?? ''
   const BASE_URL = process.env.AI_UPLOAD_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? ''
 
@@ -188,13 +204,13 @@ export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
 
       messages.push({ role: 'user', content: userContent })
 
-      // Call Gemini via comfly (OpenAI-compatible)
+      // 调用豆包（OpenAI 兼容接口）
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 300_000) // 5 minutes
 
-      let geminiRes: Response
+      let doubaoRes: Response
       try {
-        geminiRes = await fetch(`${AI_API_URL}/v1/chat/completions`, {
+        doubaoRes = await fetch(chatEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -208,12 +224,12 @@ export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
         clearTimeout(timer)
       }
 
-      if (!geminiRes.ok) {
-        const errText = await geminiRes.text()
-        app.log.error({ status: geminiRes.status, body: errText }, 'Gemini API error')
+      if (!doubaoRes.ok) {
+        const errText = await doubaoRes.text()
+        app.log.error({ status: doubaoRes.status, body: errText }, 'Doubao API error')
         getDb().insertInto('ai_assistant_errors').values({
           user_id: request.user.id,
-          http_status: geminiRes.status,
+          http_status: doubaoRes.status,
           error_detail: errText.slice(0, 2000),
         }).execute().catch(() => {})
         return reply.status(502).send({
@@ -228,7 +244,7 @@ export async function aiAssistantRoutes(app: FastifyInstance): Promise<void> {
       reply.raw.setHeader('Connection', 'keep-alive')
       reply.raw.setHeader('X-Accel-Buffering', 'no')
 
-      const reader = geminiRes.body!.getReader()
+      const reader = doubaoRes.body!.getReader()
       const decoder = new TextDecoder()
       try {
         while (true) {

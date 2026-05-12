@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import sensible from '@fastify/sensible'
+import { buildLogger, buildAccessLogger } from './logger.js'
 import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
@@ -31,11 +32,24 @@ import { paymentRoutes } from './routes/payment.js'
 import { modelRoutes } from './routes/models.js'
 
 export async function buildApp() {
+  const logger = buildLogger()
+  const accessLogger = buildAccessLogger()
+
   const app = Fastify({
-    logger: {
-      level: process.env.LOG_LEVEL ?? 'info',
-    },
+    logger,
     bodyLimit: 100 * 1024 * 1024, // 100 MB — supports up to 10 reference images at 20 MB each (base64 overhead ~33%)
+  })
+
+  // HTTP 请求日志单独写 access 文件
+  app.addHook('onResponse', (request, reply, done) => {
+    accessLogger.info({
+      method: request.method,
+      url: request.url,
+      statusCode: reply.statusCode,
+      responseTime: Math.round(reply.elapsedTime),
+      reqId: request.id,
+    })
+    done()
   })
 
   await app.register(sensible)

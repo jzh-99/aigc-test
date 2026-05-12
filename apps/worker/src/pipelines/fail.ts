@@ -11,8 +11,18 @@ export async function failPipeline(
   const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = jobData
 
   await db.transaction().execute(async (trx: any) => {
-    // Idempotency: only process if task is not already terminal
-    const taskUpdate = await trx
+    // 先对 task 行加行锁，防止 timeout-guardian 与正常失败流程并发执行时
+    // 两者同时读到旧状态，导致 frozen_credits 被重复扣减
+    const taskLock = await sql<{ status: string }>`
+      SELECT status FROM tasks WHERE id = ${taskId} FOR UPDATE
+    `.execute(trx)
+
+    const currentStatus = (taskLock.rows as Array<{ status: string }>)[0]?.status
+    if (currentStatus === 'completed' || currentStatus === 'failed') {
+      return
+    }
+
+    await trx
       .updateTable('tasks')
       .set({
         status: 'failed',
@@ -20,20 +30,15 @@ export async function failPipeline(
         completed_at: new Date().toISOString(),
       })
       .where('id', '=', taskId)
-      .where('status', '!=', 'completed')
-      .where('status', '!=', 'failed')
       .execute()
 
-    // If no rows updated, task already processed — skip refund
-    if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 0) === 0) {
-      return
-    }
-
-    // 1. Refund credits: frozen -= cost, balance stays (was never deducted from balance)
+    // 1. 退还冻结积分：frozen -= estimatedCredits，balance 不变（从未从 balance 扣除）
+    // 用 GREATEST 兜底：防止积分从未被冻结（或冻结步骤失败）时 frozen 变为负数
+    // 若 frozen < estimatedCredits，只退实际有的部分，避免约束报错导致事务回滚死循环
     await trx
       .updateTable('credit_accounts')
       .set({
-        frozen_credits: sql`frozen_credits - ${estimatedCredits}`,
+        frozen_credits: sql`GREATEST(frozen_credits - ${estimatedCredits}, 0)`,
       })
       .where('id', '=', creditAccountId)
       .execute()

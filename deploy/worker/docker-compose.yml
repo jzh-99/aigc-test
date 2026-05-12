@@ -18,6 +18,9 @@ services:
       STORAGE_ENDPOINT: http://${INFRA_HOST}:${MINIO_API_PORT:-9000}
       STORAGE_PUBLIC_URL: http://${INFRA_HOST}:${MINIO_API_PORT:-9000}/${STORAGE_BUCKET:-aigc-assets}
       NODE_ENV: production
+      LOG_DIR: /app/logs/worker
+    volumes:
+      - ./logs:/app/logs/worker   # 日志持久化到宿主机 deploy/worker/logs/
     healthcheck:
       # worker 无 HTTP 端口，检查进程是否存活
       test: ["CMD-SHELL", "pgrep -f 'node apps/worker' || exit 1"]

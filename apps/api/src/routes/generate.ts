@@ -461,9 +461,10 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
         return { batch: batchResult, tasks }
       })
 
-      // Enqueue BullMQ jobs
-      for (const task of batch.tasks) {
-        await getImageQueue().add('generate', {
+      // 先构建所有 job payload，再批量入队，避免部分入队导致积分状态不一致
+      const jobPayloads = batch.tasks.map((task: any) => ({
+        name: 'generate',
+        data: {
           taskId: task.id,
           batchId: batch.batch.id,
           userId,
@@ -475,10 +476,12 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
           params,
           estimatedCredits: unitPrice,
           ...(canvas_id ? { canvasId: canvas_id, canvasNodeId: canvas_node_id ?? undefined } : {}),
-        }, { priority: jobPriority })
-      }
+        },
+        opts: { priority: jobPriority },
+      }))
+      await getImageQueue().addBulk(jobPayloads)
     } catch (err) {
-      // DB or queue error after freeze — refund to prevent orphan frozen credits
+      // DB 创建或批量入队失败 — 退还全部冻结积分
       app.log.error({ err }, 'Failed to create batch/tasks after freeze, refunding credits')
       logGenerateSubmissionError(app, {
         userId,

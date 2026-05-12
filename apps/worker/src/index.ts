@@ -7,7 +7,7 @@ config({ path: path.resolve(__dirname, '../../../.env') })
 config({ path: path.resolve(__dirname, '../../../prompts.env'), override: false })
 
 import { Worker, Queue } from 'bullmq'
-import pino_ from 'pino'
+import { buildLogger } from './logger.js'
 import type { GenerationJobData, TransferJobData } from '@aigc/types'
 import { getDb } from '@aigc/db'
 import { getAdapter } from './adapters/factory.js'
@@ -22,8 +22,7 @@ import { startVideoPoller } from './pollers/video-poller.js'
 import { startAvatarPoller } from './pollers/avatar-poller.js'
 import { startActionImitationPoller } from './pollers/action-imitation-poller.js'
 
-const pino = pino_ as any
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+const logger = buildLogger()
 
 // ─── Image Worker ────────────────────────────────────────────────────────────
 

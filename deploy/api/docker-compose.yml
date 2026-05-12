@@ -21,6 +21,9 @@ services:
       API_PORT: "7001"
       API_HOST: "0.0.0.0"
       NODE_ENV: production
+      LOG_DIR: /app/logs/api
+    volumes:
+      - ./logs:/app/logs/api      # 日志持久化到宿主机 deploy/api/logs/
     ports:
       - "${API_PORT:-7001}:7001"
     healthcheck:
