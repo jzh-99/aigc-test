@@ -11,6 +11,7 @@ import { pipeline } from 'node:stream/promises'
 
 const CANVAS_UPLOAD_DIR = '/tmp/canvas-uploads'
 const CANVAS_UPLOAD_MAX_AGE_MS = 10 * 60 * 1000 // 10 min — enough for external storage to fetch
+const CANVAS_ENABLED_TEAM_TYPES = ['standard', 'avatar_enabled'] as const
 const SAFE_CANVAS_ID = /^[\w-]+\.(jpg|jpeg|png|webp|gif|mp4|mov|webm)$/
 
 async function assertCanvasEnabledForWorkspace(db: ReturnType<typeof getDb>, workspaceId: string) {
@@ -21,7 +22,7 @@ async function assertCanvasEnabledForWorkspace(db: ReturnType<typeof getDb>, wor
     .where('workspaces.id', '=', workspaceId)
     .executeTakeFirst()
 
-  if (!workspace || workspace.team_type !== 'avatar_enabled') {
+  if (!workspace || !CANVAS_ENABLED_TEAM_TYPES.includes(workspace.team_type as any)) {
     throw new Error('CANVAS_DISABLED')
   }
 }
@@ -37,7 +38,7 @@ async function resolveCanvasWorkspaceForUser(
     .innerJoin('teams', 'teams.id', 'workspaces.team_id')
     .select('workspace_members.workspace_id')
     .where('workspace_members.user_id', '=', userId)
-    .where('teams.team_type', '=', 'avatar_enabled')
+    .where('teams.team_type', 'in', CANVAS_ENABLED_TEAM_TYPES)
     .orderBy('workspace_members.created_at', 'asc')
     .limit(1) as any
 
@@ -136,7 +137,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin('teams', 'teams.id', 'workspaces.team_id')
       .select('workspace_members.workspace_id')
       .where('workspace_members.user_id', '=', userId)
-      .where('teams.team_type', '=', 'avatar_enabled')
+      .where('teams.team_type', 'in', CANVAS_ENABLED_TEAM_TYPES)
       .execute()
 
     const wsIds = memberships.map((m: any) => m.workspace_id)
@@ -380,7 +381,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin('teams', 'teams.id', 'workspaces.team_id')
       .select(['workspace_members.workspace_id', 'workspace_members.role'])
       .where('workspace_members.user_id', '=', userId)
-      .where('teams.team_type', '=', 'avatar_enabled')
+      .where('teams.team_type', 'in', CANVAS_ENABLED_TEAM_TYPES)
       .execute()
 
     const targetWsIds = memberships.map((m) => m.workspace_id).filter((id) => !filterWsId || id === filterWsId)
@@ -981,7 +982,7 @@ export async function canvasRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin('teams', 'teams.id', 'workspaces.team_id')
       .select('workspace_members.workspace_id')
       .where('workspace_members.user_id', '=', userId)
-      .where('teams.team_type', '=', 'avatar_enabled')
+      .where('teams.team_type', 'in', CANVAS_ENABLED_TEAM_TYPES)
       .limit(1)
       .execute()
 
