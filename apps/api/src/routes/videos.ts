@@ -7,9 +7,9 @@ import { pipeline } from 'node:stream/promises'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { freezeCredits, refundCredits } from '../services/credit.js'
-import { VIDEO_CREDITS_MAP } from '../lib/credits.js'
 import { encryptProxyUrl } from '../lib/storage.js'
 import { runConcatExport, type ConcatJobStore } from '../services/concat-export.js'
+import { resolveUnitPrice } from '../lib/pricing.js'
 
 // ── Temp upload config ────────────────────────────────────────────────────────
 const UPLOAD_DIR = '/tmp/video-uploads'
@@ -290,15 +290,35 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Calculate credits: seedance uses per-second pricing, others use flat rate
-    const CREDITS_PER_SECOND = VIDEO_CREDITS_MAP[model] ?? 5
     const videoDuration = isSeedance ? (duration ?? 5) : undefined
-    const VIDEO_CREDITS = isSeedance
-      ? (videoDuration === -1 ? 15 : videoDuration!) * CREDITS_PER_SECOND
-      : VIDEO_CREDITS_MAP[model] ?? 10
 
     const userId = request.user.id
     const db = getDb()
+
+    // 从 DB 读取模型积分配置（credit_cost 含义：Seedance 系列为每秒积分，Veo 系列为固定积分）
+    const modelRecord = await db
+      .selectFrom('provider_models')
+      .select(['id', 'credit_cost', 'params_pricing'])
+      .where('code', '=', model)
+      .where('is_active', '=', true)
+      .executeTakeFirst()
+
+    if (!modelRecord) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'UNKNOWN_MODEL', message: `未知或已停用的模型：${model}` },
+      })
+    }
+
+    // params_pricing 有规则时按分辨率匹配，否则回退 credit_cost
+    // const resolution = (request.body as Record<string, unknown>).resolution as string | undefined
+    const { unitPrice, resolvedModel } = resolveUnitPrice(modelRecord.params_pricing, resolution, modelRecord.credit_cost)
+    const actualModel = resolvedModel ?? model
+
+    // 计算本次生成所需积分：Seedance 按秒计费，Veo 按次计费
+    const VIDEO_CREDITS = isSeedance
+      ? (videoDuration === -1 ? 15 : videoDuration!) * unitPrice
+      : unitPrice
 
     // Check pending batch limit
     const pendingCount = await db
@@ -363,6 +383,21 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(403).send({
         success: false,
         error: { code: 'FORBIDDEN', message: '必须是团队成员才能生成视频' },
+      })
+    }
+
+    // 检查团队级别的模型权限（team_model_configs.is_active 优先于全局配置）
+    const teamModelConfig = await db
+      .selectFrom('team_model_configs')
+      .select('is_active')
+      .where('team_id', '=', teamId)
+      .where('model_id', '=', modelRecord.id)
+      .executeTakeFirst()
+
+    if (teamModelConfig && !teamModelConfig.is_active) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'MODEL_DISABLED', message: `模型 "${model}" 在当前团队中已被禁用` },
       })
     }
 
@@ -529,7 +564,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
       const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
 
       const volcengineBody: Record<string, unknown> = {
-        model: VOLCENGINE_MODEL_ID[model] ?? model,
+        model: VOLCENGINE_MODEL_ID[actualModel] ?? actualModel,
         content: [{ type: 'text', text: prompt }],
         duration: videoDuration,
         generate_audio: generate_audio ?? true,
@@ -658,7 +693,7 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
 
       const veoBody: Record<string, unknown> = {
         prompt,
-        model,
+        model: actualModel,
         enhance_prompt: true,
       }
       if (images && images.length > 0) veoBody.images = images

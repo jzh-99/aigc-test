@@ -1,0 +1,12 @@
+# Claude 自动生成的缓存目录，必须屏蔽
+.claude/
+.superpowers/
+
+# 常规忽略项（按需添加）
+node_modules/
+dist/
+build/
+*.log
+*.tmp
+.vscode/
+.idea/

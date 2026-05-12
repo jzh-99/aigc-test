@@ -5,6 +5,7 @@ import { checkPrompt } from '../services/prompt-filter.js'
 import { freezeCredits, refundCredits } from '../services/credit.js'
 import { getImageQueue } from '../lib/queue.js'
 import { decryptProxyUrl } from '../lib/storage.js'
+import { resolveUnitPrice } from '../lib/pricing.js'
 import rateLimit from '@fastify/rate-limit'
 
 // Max pending/processing batches per user
@@ -342,6 +343,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       .select([
         'provider_models.id as modelId',
         'provider_models.credit_cost',
+        'provider_models.params_pricing',
         'providers.code as providerCode',
         'providers.id as providerId',
       ])
@@ -365,7 +367,34 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    const totalCost = providerModel.credit_cost * quantity
+    // 检查团队级别的模型权限（team_model_configs.is_active 优先于全局配置）
+    const teamModelConfig = await db
+      .selectFrom('team_model_configs')
+      .select('is_active')
+      .where('team_id', '=', teamId)
+      .where('model_id', '=', providerModel.modelId)
+      .executeTakeFirst()
+
+    if (teamModelConfig && !teamModelConfig.is_active) {
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'MODEL_DISABLED',
+        httpStatus: 403,
+        detail: 'team_model_disabled',
+        model,
+        canvasId: canvas_id,
+      })
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'MODEL_DISABLED', message: `模型 "${model}" 在当前团队中已被禁用` },
+      })
+    }
+
+    const resolution = (params as Record<string, unknown> | undefined)?.resolution as string | undefined
+    const { unitPrice, resolvedModel } = resolveUnitPrice(providerModel.params_pricing, resolution, providerModel.credit_cost)
+    // params_pricing 命中时用底层模型 code 替换请求中的 model
+    const actualModel = resolvedModel ?? model
+    const totalCost = unitPrice * quantity
 
     // Freeze credits
     let creditAccountId: string
@@ -432,24 +461,27 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
         return { batch: batchResult, tasks }
       })
 
-      // Enqueue BullMQ jobs
-      for (const task of batch.tasks) {
-        await getImageQueue().add('generate', {
+      // 先构建所有 job payload，再批量入队，避免部分入队导致积分状态不一致
+      const jobPayloads = batch.tasks.map((task: any) => ({
+        name: 'generate',
+        data: {
           taskId: task.id,
           batchId: batch.batch.id,
           userId,
           teamId,
           creditAccountId,
           provider: providerModel.providerCode,
-          model,
+          model: actualModel,
           prompt,
           params,
-          estimatedCredits: providerModel.credit_cost,
+          estimatedCredits: unitPrice,
           ...(canvas_id ? { canvasId: canvas_id, canvasNodeId: canvas_node_id ?? undefined } : {}),
-        }, { priority: jobPriority })
-      }
+        },
+        opts: { priority: jobPriority },
+      }))
+      await getImageQueue().addBulk(jobPayloads)
     } catch (err) {
-      // DB or queue error after freeze — refund to prevent orphan frozen credits
+      // DB 创建或批量入队失败 — 退还全部冻结积分
       app.log.error({ err }, 'Failed to create batch/tasks after freeze, refunding credits')
       logGenerateSubmissionError(app, {
         userId,

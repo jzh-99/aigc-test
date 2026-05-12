@@ -266,11 +266,23 @@ export interface ProviderModelsTable {
   provider_id: string
   code: string
   name: string
+  description: string | null
   module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
+  video_categories: ColumnType<unknown, string, string> | null
   credit_cost: number
   params_pricing: ColumnType<unknown, string, string>
   params_schema: ColumnType<unknown, string, string>
+  resolution: string | null
   is_active: Generated<boolean>
+}
+
+export interface TeamModelConfigsTable {
+  id: Generated<string>
+  team_id: string
+  model_id: string
+  is_active: Generated<boolean>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
 }
 
 export interface VoiceProfilesTable {
@@ -386,6 +398,7 @@ export interface Database {
   payment_orders: PaymentOrdersTable
   providers: ProvidersTable
   provider_models: ProviderModelsTable
+  team_model_configs: TeamModelConfigsTable
   voice_profiles: VoiceProfilesTable
   prompt_filter_rules: PromptFilterRulesTable
   canvases: CanvasesTable
