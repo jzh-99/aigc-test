@@ -8,6 +8,7 @@ import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { CanvasApiError, executeScriptWriterNode } from '@/lib/canvas/canvas-api'
 import type { ScriptWriterConfig } from '@/lib/canvas/types'
+import { generateUUID } from '@/lib/utils'
 
 const STYLE_OPTIONS = ['现代都市', '古装', '科幻', '动漫', '纪录片', '悬疑', '奇幻']
 
@@ -50,7 +51,7 @@ export function ScriptWriterPanel({ nodeId, canvasId, config, onExecuted }: Prop
         token ?? undefined,
       )
       addNodeOutput(nodeId, {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         url: '',
         type: 'text',
         paramsSnapshot: { script: result.script, characters: result.characters, scenes: result.scenes },

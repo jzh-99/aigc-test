@@ -180,6 +180,14 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   })
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return fetchWithAuth<T>(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   return fetchWithAuth<T>(path, { method: 'DELETE' })
 }
@@ -191,6 +199,14 @@ export type ClientSubmissionErrorCode =
   | 'TIMEOUT'
   | 'PARSE_ERROR'
   | 'CLIENT_ERROR'
+
+export function classifyRequestError(err: unknown): ClientSubmissionErrorCode {
+  if (err instanceof DOMException && err.name === 'AbortError') return 'TIMEOUT'
+  const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
+  if (/failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(raw)) return 'NETWORK_ERROR'
+  if (err instanceof SyntaxError) return 'PARSE_ERROR'
+  return 'CLIENT_ERROR'
+}
 
 export async function reportClientSubmissionError(payload: {
   error_code: ClientSubmissionErrorCode

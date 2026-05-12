@@ -22,7 +22,7 @@ const MODEL_REVERSE_MAP: Record<string, { modelType: 'gemini' | 'gpt-image-2' | 
   'seedream-4.0':      { modelType: 'seedream-4.0', resolution: '2k' },
 }
 
-interface VideoParams {
+export interface VideoParams {
   videoPrompt: string
   videoModel: string
   videoAspectRatio: string
@@ -31,6 +31,7 @@ interface VideoParams {
   videoDuration?: number
   videoGenerateAudio?: boolean
   videoCameraFixed?: boolean
+  videoMode?: string
 }
 
 interface UserDefaults {

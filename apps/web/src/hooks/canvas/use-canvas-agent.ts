@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig, isVideoStitchConfig } from '@/lib/canvas/types'
 import { callCanvasAgent } from '@/lib/canvas/agent-api'
+import { generateUUID } from '@/lib/utils'
 import {
   fetchCanvasAgentSession,
   upsertCanvasAgentSession,
@@ -324,7 +325,7 @@ async function executeNode(
         token ?? undefined,
       )
       execStore.addNodeOutput(nodeId, {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         url: '',
         type: 'text',
         paramsSnapshot: { script: result.script, characters: result.characters, scenes: result.scenes },
@@ -352,7 +353,7 @@ async function executeNode(
         token ?? undefined,
       )
       execStore.addNodeOutput(nodeId, {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         url: '',
         type: 'text',
         paramsSnapshot: { shots: result.shots },
@@ -509,14 +510,14 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
       abortRef.current = new AbortController()
 
       const userMsg: AgentMessage = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         role: 'user',
         content: rawText,
         implicitNodeId: implicitNodeId ?? undefined,
         status: 'done',
       }
 
-      const assistantMsgId = crypto.randomUUID()
+      const assistantMsgId = generateUUID()
       const assistantMsg: AgentMessage = {
         id: assistantMsgId,
         role: 'assistant',
@@ -669,7 +670,7 @@ export function useCanvasAgent(canvasId: string, kickPoll: () => void) {
             if (outputs.length > 0) {
               setMessages((prev) => [
                 ...prev,
-                { id: crypto.randomUUID(), role: 'result' as const, nodeId, nodeLabel: node.data.label, outputs },
+                { id: generateUUID(), role: 'result' as const, nodeId, nodeLabel: node.data.label, outputs },
               ])
             }
           }

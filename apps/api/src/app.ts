@@ -1,10 +1,11 @@
 import Fastify from 'fastify'
 import sensible from '@fastify/sensible'
+import { buildLogger, buildAccessLogger } from './logger.js'
 import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
 import { healthzRoutes } from './routes/healthz.js'
 import { generateRoutes } from './routes/generate.js'
@@ -28,13 +29,27 @@ import { videoStudioRoutes } from './routes/video-studio.js'
 import { companyARoutes } from './routes/company-a.js'
 import { clientErrorsRoutes } from './routes/client-errors.js'
 import { paymentRoutes } from './routes/payment.js'
+import { modelRoutes } from './routes/models.js'
 
 export async function buildApp() {
+  const logger = buildLogger()
+  const accessLogger = buildAccessLogger()
+
   const app = Fastify({
-    logger: {
-      level: process.env.LOG_LEVEL ?? 'info',
-    },
+    logger,
     bodyLimit: 100 * 1024 * 1024, // 100 MB — supports up to 10 reference images at 20 MB each (base64 overhead ~33%)
+  })
+
+  // HTTP 请求日志单独写 access 文件
+  app.addHook('onResponse', (request, reply, done) => {
+    accessLogger.info({
+      method: request.method,
+      url: request.url,
+      statusCode: reply.statusCode,
+      responseTime: Math.round(reply.elapsedTime),
+      reqId: request.id,
+    })
+    done()
   })
 
   await app.register(sensible)
@@ -43,6 +58,7 @@ export async function buildApp() {
 
   // CORS — restrict to allowed origins
   const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(',').map(s => s.trim())
+  
   await app.register(cors, {
     origin: allowedOrigins,
     credentials: true,
@@ -116,6 +132,7 @@ export async function buildApp() {
       await v1.register(companyARoutes)
       await v1.register(clientErrorsRoutes)
       await v1.register(paymentRoutes)
+      await v1.register(modelRoutes)
     },
     { prefix: '/api/v1' },
   )

@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 
 let _connection: Redis | null = null
 function getConnection(): Redis {

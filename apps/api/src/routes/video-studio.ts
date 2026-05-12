@@ -7,7 +7,7 @@ import { purgeVideoStudioProject, restoreProjectAssets, softDeleteProjectAssets 
 export async function videoStudioRoutes(app: FastifyInstance) {
   const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
   const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
-  const AI_MODEL = process.env.GEMINI_MODEL ?? ''
+  const AI_MODEL = process.env.NANO_BANANA_MODEL ?? ''
   const SCRIPT_SYSTEM_PROMPT = process.env.AI_PROMPT_STUDIO_SCRIPT ?? ''
   const STORYBOARD_SYSTEM_PROMPT = process.env.AI_PROMPT_STUDIO_STORYBOARD ?? ''
   const ASSET_PROMPT_SYSTEM_PROMPT = process.env.AI_PROMPT_STUDIO_ASSET ?? ''

@@ -5,6 +5,7 @@ import { Loader2, GripVertical, Plus, Trash2, ArrowRight, RefreshCw } from 'luci
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { executeStoryboardSplitterNode } from '@/lib/canvas/canvas-api'
+import { generateUUID } from '@/lib/utils'
 
 interface Shot { id: string; label: string; content: string }
 
@@ -41,7 +42,7 @@ export function StepStoryboard({ script, storyboardData, onComplete }: Props) {
     setShots((prev) => prev.filter((s) => s.id !== id))
 
   const addShot = () =>
-    setShots((prev) => [...prev, { id: crypto.randomUUID(), label: `镜头${prev.length + 1}`, content: '' }])
+    setShots((prev) => [...prev, { id: generateUUID(), label: `镜头${prev.length + 1}`, content: '' }])
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">

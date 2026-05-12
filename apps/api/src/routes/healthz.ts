@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 
 export async function healthzRoutes(app: FastifyInstance): Promise<void> {
   app.get('/healthz', async (_request, reply) => {
