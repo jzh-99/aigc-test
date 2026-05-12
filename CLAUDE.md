@@ -215,3 +215,11 @@ DATABASE_URL=postgresql://aigc:<password>@<INFRA_IP>:5432/aigc_dev pnpm db:migra
 - **`sharp` 原生模块**：Windows 本机编译的二进制无法在 Linux 容器运行，Dockerfile 已在 Alpine 环境重新安装，无需手动处理。
 - **`output: 'standalone'`**：`apps/web/next.config.mjs` 已开启，web Dockerfile 依赖此配置生成 `server.js`，不可移除。
 - **worker 无 HTTP 端口**：healthcheck 通过 `pgrep` 检查进程存活，不是 HTTP 探针。
+
+### superpowers 执行复杂长任务、长思考重构时，严格遵守以下规则
+- 不要一次性全部思考完再动手，必须【分步思考、分步落地】
+- 每完成一轮长考、需求拆解、方案设计、技术选型，立刻把完整思考过程、推理逻辑、取舍- 理由 追加写入 .claude/task-log.md
+- 拆分出的子任务、执行步骤实时更新到 .claude/task-plan.md，用待完成/进行中/已完成标记
+- 每做完一个子步骤，先写日志、更新计划，再进入下一步，不累积超长上下文
+- 任何时候如果会话中断、重启，优先读取 .claude/task-log.md 和 .claude/task-plan.md，从上次中断的思考节点继续，禁止从头重新长考
+- 大代码修改必须拆分成小文件、小模块分步做，每步写完记录存档

@@ -1372,7 +1372,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('provider_models as pm')
       .innerJoin('providers as p', 'p.id', 'pm.provider_id')
       .select([
-        'pm.id', 'pm.code', 'pm.name', 'pm.module',
+        'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
         'pm.credit_cost', 'pm.params_pricing', 'pm.params_schema', 'pm.is_active',
         'p.code as provider_code',
       ])
@@ -1392,7 +1392,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       .selectFrom('provider_models as pm')
       .innerJoin('providers as p', 'p.id', 'pm.provider_id')
       .select([
-        'pm.id', 'pm.code', 'pm.name', 'pm.module',
+        'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
         'pm.credit_cost', 'pm.params_pricing', 'pm.params_schema', 'pm.is_active',
         'p.code as provider_code',
       ])
@@ -1406,12 +1406,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // PATCH /admin/models/:id — 更新模型字段（name/credit_cost/params_pricing/params_schema/is_active）
   app.patch<{
     Params: { id: string }
-    Body: { name?: string; credit_cost?: number; params_pricing?: unknown; params_schema?: unknown; is_active?: boolean }
+    Body: { name?: string; description?: string | null; credit_cost?: number; params_pricing?: unknown; params_schema?: unknown; is_active?: boolean }
   }>('/admin/models/:id', async (req, reply) => {
     const db = getDb()
-    const { name, credit_cost, params_pricing, params_schema, is_active } = req.body
+    const { name, description, credit_cost, params_pricing, params_schema, is_active } = req.body
     const updates: Record<string, unknown> = {}
     if (name !== undefined) updates.name = name
+    if (description !== undefined) updates.description = description
     if (credit_cost !== undefined) updates.credit_cost = credit_cost
     if (params_pricing !== undefined) updates.params_pricing = JSON.stringify(params_pricing)
     if (params_schema !== undefined) updates.params_schema = JSON.stringify(params_schema)

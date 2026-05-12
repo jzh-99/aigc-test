@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { TopupDialog } from './topup-dialog'
 import { AdminPasswordDialog } from './admin-password-dialog'
 import { TrashDrawer } from './trash-drawer'
+import { TeamModelConfig } from './team-model-config'
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ import {
 import {
   Coins, ChevronDown, ChevronRight, Users, FolderOpen,
   Image as ImageIcon, Loader2, Trash2, KeyRound, Trash,
-  Edit2, RotateCcw, Check, X,
+  Edit2, RotateCcw, Check, X, Settings2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiPatch, apiPost, apiDelete, ApiError } from '@/lib/api-client'
@@ -97,6 +98,7 @@ export function TeamTable() {
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null)
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null)
   const [trashOpen, setTrashOpen] = useState(false)
+  const [modelConfigTeamId, setModelConfigTeamId] = useState<string | null>(null)
 
   async function handleChangeType(team: Team, newType: 'standard' | 'company_a' | 'avatar_enabled') {
     if (newType === team.team_type) return
@@ -227,6 +229,15 @@ export function TeamTable() {
                 <Button
                   size="icon"
                   variant="ghost"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  title="模型配置"
+                  onClick={(e) => { e.stopPropagation(); setModelConfigTeamId(team.id) }}
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
                   title="删除团队"
                   disabled={deletingTeamId === team.id}
@@ -255,6 +266,15 @@ export function TeamTable() {
         <Trash className="h-4 w-4" />
         回收站
       </Button>
+
+      <Dialog open={!!modelConfigTeamId} onOpenChange={(open) => !open && setModelConfigTeamId(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>模型配置</DialogTitle>
+          </DialogHeader>
+          {modelConfigTeamId && <TeamModelConfig teamId={modelConfigTeamId} />}
+        </DialogContent>
+      </Dialog>
 
       <TopupDialog
         teamId={topupTeam?.id ?? null}

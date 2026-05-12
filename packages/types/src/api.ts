@@ -180,6 +180,7 @@ export interface ModelItem {
   id: string
   code: string
   name: string
+  description: string | null
   module: AigcModule
   credit_cost: number
   params_pricing: unknown // structure varies per model
