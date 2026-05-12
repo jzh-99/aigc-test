@@ -9,9 +9,8 @@ import { useTeamFeatures } from '@/hooks/use-team-features'
 export default function CanvasLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const isInitialized = useAuthStore((s) => s.isInitialized)
-  const activeTeam = useAuthStore((s) => s.activeTeam())
   const { showCanvasTab } = useTeamFeatures()
-  const canUseCanvas = showCanvasTab && activeTeam?.team_type === 'avatar_enabled'
+  const canUseCanvas = showCanvasTab
 
   useEffect(() => {
     if (!isInitialized) return
