@@ -36,7 +36,7 @@ export async function buildApp() {
   const accessLogger = buildAccessLogger()
 
   const app = Fastify({
-    logger,
+    logger: logger as unknown as boolean,
     bodyLimit: 100 * 1024 * 1024, // 100 MB — supports up to 10 reference images at 20 MB each (base64 overhead ~33%)
   })
 

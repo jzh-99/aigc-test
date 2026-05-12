@@ -13,13 +13,21 @@ export async function up(db: Kysely<any>): Promise<void> {
       )
   `.execute(db)
 
-  await db.schema
-    .alterTable('canvas_agent_sessions')
-    .dropColumn('user_id')
-    .execute()
+  // only drop user_id if it exists (table may have been created without it)
+  await sql`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'canvas_agent_sessions' AND column_name = 'user_id'
+      ) THEN
+        ALTER TABLE canvas_agent_sessions DROP COLUMN user_id;
+      END IF;
+    END $$
+  `.execute(db)
 
   await db.schema
     .createIndex('idx_canvas_agent_sessions_lookup')
+    .ifNotExists()
     .on('canvas_agent_sessions')
     .column('canvas_id')
     .unique()
