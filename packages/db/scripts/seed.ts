@@ -355,85 +355,103 @@ async function main() {
     // },
     {
       code: 'gemini-3.1-flash-image-preview',
-      name: '全能图片2 1K',
+      name: '全能图片2',
       description: '快速生成，适合日常使用',
-      credit_cost: 5,
-    },
-    {
-      code: 'gemini-3.1-flash-image-preview-2k',
-      name: '全能图片2 2K',
-      description: '快速生成，适合日常使用',
-      credit_cost: 5,
-    },
-    {
-      code: 'gemini-3.1-flash-image-preview-4k',
-      name: '全能图片2 4K',
-      description: '快速生成，适合日常使用',
-      credit_cost: 5,
+      credit_cost: 1,
+      params_pricing: [
+        { resolution: '1k', model: 'gemini-3.1-flash-image-preview', unit_price: 1 },
+        { resolution: '2k', model: 'gemini-3.1-flash-image-preview-2k', unit_price: 1 },
+        { resolution: '4k', model: 'gemini-3.1-flash-image-preview-4k', unit_price: 1 },
+      ],
+      params_schema: {
+        resolution: ['1k', '2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
     {
       code: 'gpt-image-2',
       name: '超能图片2',
       description: '文字渲染准确，UI截图逼真，照片级真实感',
-      credit_cost: 5,
+      credit_cost: 2,
+      params_pricing: [
+        { resolution: '2k', model: 'gpt-image-2', unit_price: 2 },
+      ],
+      params_schema: {
+        resolution: ['2k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
     {
       code: 'nano-banana-2',
-      name: '全能图片Pro 1K',
+      name: '全能图片Pro',
       description: '高质量输出，细节丰富',
-      credit_cost: 10,
-    },
-    {
-      code: 'nano-banana-2',
-      name: '全能图片Pro 2K',
-      description: '高质量输出，细节丰富',
-      credit_cost: 10,
-    },
-    {
-      code: 'nano-banana-2-4k',
-      name: '全能图片Pro 4K',
-      description: '高质量输出，细节丰富',
-      credit_cost: 10,
+      credit_cost: 4,
+      params_pricing: [
+        { resolution: '1k', model: 'nano-banana-2', unit_price: 4 },
+        { resolution: '2k', model: 'nano-banana-2-2k', unit_price: 4 },
+        { resolution: '4k', model: 'nano-banana-2-4k', unit_price: 4 },
+      ],
+      params_schema: {
+        resolution: ['1k', '2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
     {
       code: 'seedream-5.0-lite',
       name: 'Seedream 5.0',
       description: '最新火山引擎模型，联网搜索增强',
       credit_cost: 10,
-    },
-    {
-      code: 'seedream-5.0-lite',
-      name: 'Seedream 5.0',
-      description: '最新火山引擎模型，联网搜索增强',
-      credit_cost: 10,
+      params_pricing: [
+        { resolution: '2k', model: 'seedream-5.0-lite', unit_price: 4 },
+        { resolution: '3k', model: 'seedream-5.0-lite', unit_price: 4 },
+      ],
+      params_schema: {
+        resolution: ['2k', '3k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
     {
       code: 'seedream-4.5',
       name: 'Seedream 4.5',
       description: '高分辨率图像生成',
       credit_cost: 10,
+      params_pricing: [
+        { resolution: '2k', model: 'seedream-4.5', unit_price: 4 },
+        { resolution: '4k', model: 'seedream-4.5', unit_price: 4 },
+      ],
+      params_schema: {
+        resolution: ['2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
     {
       code: 'seedream-4.0',
       name: 'Seedream 4.0',
       description: '多分辨率图像生成',
       credit_cost: 10,
+      params_pricing: [
+        { resolution: '1k', model: 'seedream-4.0', unit_price: 3 },
+        { resolution: '2k', model: 'seedream-4.0', unit_price: 3 },
+        { resolution: '4k', model: 'seedream-4.0', unit_price: 3 },
+      ],
+      params_schema: {
+        resolution: ['1k', '2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
   ]
 
-  const imageModelsParamsSchema = JSON.stringify({
-    type: 'object',
-    properties: {
-      aspect_ratio: {
-        type: 'string',
-        enum: ['1:1', '16:9', '9:16', '4:3', '3:4', '2:3', '3:2', '4:5', '5:4', '21:9'],
-      },
-      image: {
-        type: 'array',
-        items: { type: 'string' },
-      },
-    },
-  })
+  // const imageModelsParamsSchema = JSON.stringify({
+  //   resolution: ['480p', '720p', '1080p'],
+  //   aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+  //   image: [],
+  // })
 
   for (const m of imageModels) {
     await db
@@ -445,8 +463,8 @@ async function main() {
         description: m.description,
         module: 'image',
         credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify({}),
-        params_schema: imageModelsParamsSchema,
+        params_pricing: JSON.stringify((m.params_pricing ?? [])),
+        params_schema: JSON.stringify(m.params_schema),
         is_active: true,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
@@ -454,8 +472,8 @@ async function main() {
         description: m.description,
         module: 'image',
         credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify({}),
-        params_schema: imageModelsParamsSchema,
+        params_pricing: JSON.stringify(m.params_pricing ?? []),
+        params_schema: JSON.stringify(m.params_schema),
         is_active: true,
       }))
       .execute()
@@ -463,6 +481,22 @@ async function main() {
   }
 
   // 10b. veo3.1 视频模型 — 挂在 nano-banana provider 下
+  const aspectRatioDefaultArr = [{label: '自适应', value : 'adaptive'}, '16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
+  const timeDefaultArr = [
+    { label: '自动', value: -1 },
+    { label: '4秒', value: 4 },
+    { label: '5秒', value: 4 },
+    { label: '6秒', value: 4 },
+    { label: '7秒', value: 4 },
+    { label: '8秒', value: 4 },
+    { label: '10秒', value: 4 },
+    { label: '12秒', value: 4 },
+    { label: '15秒', value: 4 },
+  ]
+  const videoVoiceDefaultArr = [
+    { label: '有声', value: true, default: true },
+    { label: '无声', value: false, default: true },
+  ]
   const veoVideoModels = [
     {
       code: 'veo3.1-fast',
@@ -470,11 +504,16 @@ async function main() {
       description: '快速高质量视频生成',
       credit_cost: 10,
       video_categories: ['frames'],
+      params_pricing: [
+        { resolution: '720p', model: 'veo3.1-fast', unit_price: 4 },
+        { resolution: '1080p', model: 'veo3.1-fast', unit_price: 4 },
+      ],
       params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1'] },
-        },
+        aspect_ratio: aspectRatioDefaultArr,
+        resolution: ['720p', '1080p'],
+        time_length: timeDefaultArr,
+        video_voice: videoVoiceDefaultArr,
+        image: [],
       }),
     },
     // {
@@ -497,12 +536,17 @@ async function main() {
       description: '有声视频生成，支持首尾帧',
       credit_cost: 15,
       video_categories: ['frames'],
+      params_pricing: [
+        { resolution: '480p', model: 'seedance-1.5-pro', unit_price: 5 },
+        { resolution: '720p', model: 'seedance-1.5-pro', unit_price: 10 },
+        { resolution: '1080p', model: 'seedance-1.5-pro', unit_price: 20 },
+      ],
       params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1'] },
-          image: { type: 'array', items: { type: 'string' } },
-        },
+        aspect_ratio: aspectRatioDefaultArr,
+        resolution: ['480p', '720p', '1080p'],
+        time_length: timeDefaultArr,
+        video_voice: videoVoiceDefaultArr,
+        image: [],
       }),
     },
     {
@@ -511,12 +555,17 @@ async function main() {
       description: '新一代有声视频，支持首尾帧',
       credit_cost: 15,
       video_categories: ['multimodal', 'frames', 'components'],
+      params_pricing: [
+        { resolution: '480p', model: 'seedance-2.0', unit_price: 7 },
+        { resolution: '720p', model: 'seedance-2.0', unit_price: 15 },
+        { resolution: '1080p', model: 'seedance-2.0', unit_price: 35 },
+      ],
       params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1'] },
-          image: { type: 'array', items: { type: 'string' } },
-        },
+        aspect_ratio: aspectRatioDefaultArr,
+        resolution: ['480p', '720p', '1080p'],
+        time_length: timeDefaultArr,
+        video_voice: videoVoiceDefaultArr,
+        image: [],
       }),
     },
     {
@@ -525,12 +574,16 @@ async function main() {
       description: '新一代有声视频，支持首尾帧',
       credit_cost: 15,
       video_categories: ['multimodal', 'frames', 'components'],
+      params_pricing: [
+        { resolution: '480p', model: 'seedance-2.0-fast', unit_price: 5 },
+        { resolution: '720p', model: 'seedance-2.0-fast', unit_price: 12 },
+      ],
       params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1'] },
-          image: { type: 'array', items: { type: 'string' } },
-        },
+        aspect_ratio: aspectRatioDefaultArr,
+        resolution: ['480p', '720p'],
+        time_length: timeDefaultArr,
+        video_voice: videoVoiceDefaultArr,
+        image: [],
       }),
     },
   ]
@@ -546,7 +599,7 @@ async function main() {
         module: 'video',
         video_categories: JSON.stringify(m.video_categories),
         credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify({}),
+        params_pricing: JSON.stringify(m.params_pricing ?? []),
         params_schema: m.params_schema,
         is_active: true,
       })
@@ -555,7 +608,7 @@ async function main() {
         description: m.description,
         video_categories: JSON.stringify(m.video_categories),
         credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify({}),
+        params_pricing: JSON.stringify(m.params_pricing ?? []),
         params_schema: m.params_schema,
         is_active: true,
       }))

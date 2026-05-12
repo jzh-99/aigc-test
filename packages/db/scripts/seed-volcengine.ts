@@ -49,6 +49,8 @@ async function main() {
       name: 'Seedream 5.0',
       description: '最新火山引擎模型，联网搜索增强',
       credit_cost: 10,
+      // 图片模型暂不区分分辨率定价，params_pricing 为空数组，回退 credit_cost
+      params_pricing: JSON.stringify([]),
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -70,6 +72,7 @@ async function main() {
       name: 'Seedream 4.5',
       description: '高分辨率图像生成',
       credit_cost: 10,
+      params_pricing: JSON.stringify([]),
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -91,6 +94,7 @@ async function main() {
       name: 'Seedream 4.0',
       description: '多分辨率图像生成',
       credit_cost: 10,
+      params_pricing: JSON.stringify([]),
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -119,7 +123,7 @@ async function main() {
         description: m.description,
         module: 'image',
         credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify({}),
+        params_pricing: m.params_pricing,
         params_schema: m.params_schema,
         is_active: true,
       })
@@ -129,7 +133,7 @@ async function main() {
           description: m.description,
           module: 'image',
           credit_cost: m.credit_cost,
-          params_pricing: JSON.stringify({}),
+          params_pricing: m.params_pricing,
           params_schema: m.params_schema,
           is_active: true,
         })
@@ -138,7 +142,7 @@ async function main() {
     console.log(`  provider_models upserted (${m.code})`)
   }
 
-  // 3. Upsert video models（按秒计费，credit_cost 存每秒单价）
+  // 3. Upsert video models（按秒计费，credit_cost 存每秒单价兜底，params_pricing 按分辨率差异化定价）
   const videoModels = [
     {
       code: 'seedance-1.5-pro',
@@ -146,6 +150,11 @@ async function main() {
       description: '有声视频生成，支持首尾帧',
       credit_cost: 100,
       video_categories: ['frames', 'components'],
+      // 720p/1080p 对应不同底层模型 ID 和每秒单价
+      params_pricing: JSON.stringify([
+        { model: 'doubao-seedance-1-5-pro-251215', resolution: '720p',  unit_price: 80  },
+        { model: 'doubao-seedance-1-5-pro-251215', resolution: '1080p', unit_price: 100 },
+      ]),
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -166,6 +175,10 @@ async function main() {
       description: '高级有声视频生成，支持多模态',
       credit_cost: 5,
       video_categories: ['multimodal', 'frames', 'components'],
+      params_pricing: JSON.stringify([
+        { model: 'doubao-seedance-2-0-260128', resolution: '720p',  unit_price: 4 },
+        { model: 'doubao-seedance-2-0-260128', resolution: '1080p', unit_price: 5 },
+      ]),
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -186,6 +199,10 @@ async function main() {
       description: '快速有声视频生成，支持多模态',
       credit_cost: 5,
       video_categories: ['multimodal', 'frames', 'components'],
+      params_pricing: JSON.stringify([
+        { model: 'doubao-seedance-2-0-fast-260128', resolution: '720p',  unit_price: 3 },
+        { model: 'doubao-seedance-2-0-fast-260128', resolution: '1080p', unit_price: 5 },
+      ]),
       params_schema: JSON.stringify({
         type: 'object',
         properties: {
@@ -213,7 +230,7 @@ async function main() {
         module: 'video',
         video_categories: JSON.stringify(m.video_categories),
         credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify({}),
+        params_pricing: m.params_pricing,
         params_schema: m.params_schema,
         is_active: true,
       })
@@ -223,7 +240,7 @@ async function main() {
           description: m.description,
           video_categories: JSON.stringify(m.video_categories),
           credit_cost: m.credit_cost,
-          params_pricing: JSON.stringify({}),
+          params_pricing: m.params_pricing,
           params_schema: m.params_schema,
           is_active: true,
         })
@@ -238,11 +255,15 @@ async function main() {
       code: 'jimeng_realman_avatar_picture_omni_v15',
       name: '数字人生成',
       module: 'avatar' as const,
+      // 按秒计费，每秒 50 积分
+      credit_cost: 50,
     },
     {
       code: 'jimeng_dreamactor_m20_gen_video',
       name: '动作模仿',
       module: 'action_imitation' as const,
+      // 按秒计费，每秒 20 积分
+      credit_cost: 20,
     },
   ]
 
@@ -254,14 +275,15 @@ async function main() {
         code: m.code,
         name: m.name,
         module: m.module,
-        credit_cost: 0,
-        params_pricing: JSON.stringify({}),
+        credit_cost: m.credit_cost,
+        params_pricing: JSON.stringify([]),
         params_schema: JSON.stringify({}),
         is_active: true,
       })
       .onConflict((oc: any) =>
         oc.columns(['provider_id', 'code']).doUpdateSet({
           name: m.name,
+          credit_cost: m.credit_cost,
           is_active: true,
         })
       )

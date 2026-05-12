@@ -37,6 +37,8 @@ docker-compose up -d --build --force-recreate
 pnpm build          # 全量构建
 pnpm lint           # 全量 lint
 pnpm --filter @aigc/web build     # 单独构建前端
+
+pnpm --filter @aigc/types build # 单独构建types 包
 ```
 
 ### 数据库

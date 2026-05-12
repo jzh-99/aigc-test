@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useGenerationStore } from '@/stores/generation-store'
+import { useAuthStore } from '@/stores/auth-store'
 import { useGenerate } from '@/hooks/use-generate'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { ImagePlus, Image as ImageIcon, Search, Trash2 } from 'lucide-react'
@@ -17,6 +18,7 @@ import Image from 'next/image'
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
 import { MAX_REF_IMAGES } from '../shared/constants'
+import { useModels } from '@/hooks/use-models'
 
 interface ImagePanelProps {
   onBatchCreated: (batch: BatchResponse) => void
@@ -38,6 +40,17 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
 
   const { save: saveDefaults } = useGenerationDefaults()
   const { generate } = useGenerate()
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
+
+  // 模型列表加载完成后，若当前选中的模型不在可用列表中，自动切换到第一个可用模型
+  useEffect(() => {
+    if (!imageModelsReady || imageModels.length === 0) return
+    const isValid = imageModels.some((m) => m.code === modelType)
+    if (!isValid) {
+      setModelType(imageModels[0].code as any)
+    }
+  }, [imageModelsReady, imageModels, modelType, setModelType])
 
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
@@ -212,6 +225,8 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
       </div>
 
       <ImageParams
+        models={imageModels}
+        modelsReady={imageModelsReady}
         modelType={modelType}
         resolution={resolution}
         aspectRatio={aspectRatio}

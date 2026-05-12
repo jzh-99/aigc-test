@@ -176,15 +176,24 @@ export interface CreateWorkspaceRequest {
 
 export type AigcModule = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
 
+/** 参数定价规则：不同分辨率对应不同底层模型和积分单价 */
+export interface ParamsPricingRule {
+  model: string       // 实际调用的底层模型 code
+  resolution: string  // 分辨率标识，如 "720p"、"1080p"、"4k"
+  unit_price: number  // 积分单价
+}
+
 export interface ModelItem {
   id: string
   code: string
   name: string
   description: string | null
   module: AigcModule
+  video_categories: unknown  // 视频模型支持的模式列表，如 ['frames', 'multimodal']
   credit_cost: number
-  params_pricing: unknown // structure varies per model
+  params_pricing: ParamsPricingRule[]
   params_schema: unknown  // JSON Schema for frontend dynamic form rendering
+  resolution: string | null
   is_active: boolean
   provider_code: string
 }

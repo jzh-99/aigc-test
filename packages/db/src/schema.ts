@@ -272,6 +272,7 @@ export interface ProviderModelsTable {
   credit_cost: number
   params_pricing: ColumnType<unknown, string, string>
   params_schema: ColumnType<unknown, string, string>
+  resolution: string | null
   is_active: Generated<boolean>
 }
 

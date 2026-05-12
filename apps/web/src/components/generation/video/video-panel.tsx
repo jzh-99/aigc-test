@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -18,6 +18,7 @@ import type { MultimodalVideo, MultimodalAudio } from './video-multimodal-zone'
 import { VideoParams as VideoParamsPanel } from './video-params'
 import type { FrameImage } from '../shared/types'
 import { readFrameFile, isValidImageFile, fetchAssetFile, getDraggedAsset } from '../shared/file-utils'
+import { useModels } from '@/hooks/use-models'
 
 type VideoMode = 'frames' | 'components' | 'multimodal'
 
@@ -32,10 +33,18 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { save: saveDefaults } = useGenerationDefaults()
   const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
+  const { models: videoModels, isReady: videoModelsReady } = useModels('video', activeWorkspaceId)
 
   // 视频模式与参数
   const [videoMode, setVideoMode] = useState<VideoMode>((initialParams?.videoMode as VideoMode) ?? 'multimodal')
   const [videoModel, setVideoModel] = useState(initialParams?.videoModel ?? 'seedance-2.0')
+
+  // 模型列表加载完成后，若当前选中的模型不在可用列表中，自动切换到第一个可用模型
+  useEffect(() => {
+    if (!videoModelsReady || videoModels.length === 0) return
+    const isValid = videoModels.some((m) => m.code === videoModel)
+    if (!isValid) setVideoModel(videoModels[0].code)
+  }, [videoModelsReady, videoModels, videoModel])
   const [videoAspectRatio, setVideoAspectRatio] = useState(initialParams?.videoAspectRatio ?? 'adaptive')
   const [videoUpsample, setVideoUpsample] = useState(initialParams?.videoUpsample ?? false)
   const [videoDuration, setVideoDuration] = useState(initialParams?.videoDuration ?? -1)
@@ -252,6 +261,8 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
       </div>
 
       <VideoParamsPanel
+        models={videoModels}
+        modelsReady={videoModelsReady}
         videoMode={videoMode} videoModel={videoModel} videoAspectRatio={videoAspectRatio}
         videoUpsample={videoUpsample} videoDuration={videoDuration}
         videoGenerateAudio={videoGenerateAudio} videoCameraFixed={videoCameraFixed}
