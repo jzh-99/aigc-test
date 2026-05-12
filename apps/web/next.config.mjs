@@ -9,6 +9,8 @@ const storagePort = process.env.NEXT_PUBLIC_STORAGE_PORT ?? '9000'
 const nextConfig = {
   // standalone 模式：将所有依赖打包进 .next/standalone，减小镜像体积
   output: 'standalone',
+  // 禁用构建时从 Google Fonts 下载字体（国内网络不可达）
+  optimizeFonts: false,
   pageExtensions: ['ts', 'tsx', 'md', 'mdx'],
   transpilePackages: ['@aigc/types'],
   async rewrites() {
