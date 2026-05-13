@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import pino from 'pino'
+import { pino } from 'pino'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 // 默认落到 monorepo 根目录的 logs/worker/，可通过 LOG_DIR 覆盖

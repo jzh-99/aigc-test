@@ -9,9 +9,30 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { CanvasEditor } from '@/components/canvas/canvas-editor'
 import { CanvasHistorySidebar } from '@/components/canvas/canvas-history-sidebar'
 import { CanvasAgentPanel } from '@/components/canvas/canvas-agent-panel'
+import { useTeamFeatures } from '@/hooks/use-team-features'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
 
 type SidePanel = 'agent' | 'history' | null
+
+function normalizeCanvasStructure(raw: unknown): { nodes: AppNode[]; edges: AppEdge[] } {
+  let value = raw
+
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return { nodes: [], edges: [] }
+    }
+  }
+
+  if (!value || typeof value !== 'object') return { nodes: [], edges: [] }
+
+  const structure = value as { nodes?: unknown; edges?: unknown }
+  return {
+    nodes: Array.isArray(structure.nodes) ? structure.nodes as AppNode[] : [],
+    edges: Array.isArray(structure.edges) ? structure.edges as AppEdge[] : [],
+  }
+}
 
 function CanvasNameEditor({
   name,
@@ -79,6 +100,7 @@ export default function CanvasEditorPage() {
   const user = useAuthStore((s) => s.user)
   const isInitialized = useAuthStore((s) => s.isInitialized)
   const initCanvas = useCanvasStructureStore((s) => s.initCanvas)
+  const { showCanvasAgent } = useTeamFeatures()
   const [canvasName, setCanvasName] = useState('未命名画布')
   const [loading, setLoading] = useState(true)
   const [sidePanel, setSidePanel] = useState<SidePanel>(null)
@@ -108,8 +130,8 @@ export default function CanvasEditorPage() {
       })
       .then((canvas) => {
         setCanvasName(canvas.name)
-        const sd = canvas.structure_data ?? { nodes: [], edges: [] }
-        initCanvas(id, sd.nodes as AppNode[], sd.edges as AppEdge[], canvas.version ?? 1, canvas.workspace_id)
+        const sd = normalizeCanvasStructure(canvas.structure_data)
+        initCanvas(id, sd.nodes, sd.edges, canvas.version ?? 1, canvas.workspace_id)
       })
       .catch((err: Error & { status?: number; name?: string }) => {
         if (err.name === 'AbortError') return
@@ -143,17 +165,19 @@ export default function CanvasEditorPage() {
 
         {/* Right controls */}
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => togglePanel('agent')}
-            className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
-              sidePanel === 'agent'
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            助手
-          </button>
+          {showCanvasAgent && (
+            <button
+              onClick={() => togglePanel('agent')}
+              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
+                sidePanel === 'agent'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              助手
+            </button>
+          )}
           <button
             data-testid="canvas-toggle-history"
             onClick={() => togglePanel('history')}
@@ -175,18 +199,20 @@ export default function CanvasEditorPage() {
           <CanvasEditor
             canvasId={id}
             onKickPollReady={(fn) => { kickPollRef.current = fn }}
-            onNodeSelected={(nodeId) => onNodeSelectedRef.current?.(nodeId) ?? false}
+            onNodeSelected={showCanvasAgent ? (nodeId) => onNodeSelectedRef.current?.(nodeId) ?? false : undefined}
             onStoryboardExpandedRef={onStoryboardExpandedRef}
           />
         </div>
-        <CanvasAgentPanel
-          canvasId={id}
-          kickPoll={() => kickPollRef.current?.()}
-          onClose={() => setSidePanel(null)}
-          onNodeSelectedRef={onNodeSelectedRef}
-          onStoryboardExpandedRef={onStoryboardExpandedRef}
-          hidden={sidePanel !== 'agent'}
-        />
+        {showCanvasAgent && (
+          <CanvasAgentPanel
+            canvasId={id}
+            kickPoll={() => kickPollRef.current?.()}
+            onClose={() => setSidePanel(null)}
+            onNodeSelectedRef={onNodeSelectedRef}
+            onStoryboardExpandedRef={onStoryboardExpandedRef}
+            hidden={sidePanel !== 'agent'}
+          />
+        )}
         {sidePanel === 'history' && (
           <CanvasHistorySidebar canvasId={id} onClose={() => setSidePanel(null)} />
         )}

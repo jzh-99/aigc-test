@@ -6,6 +6,7 @@ import { AssetNode } from '@/components/canvas/nodes/asset-node'
 import { VideoGenNode } from '@/components/canvas/nodes/video-gen-node'
 import { ScriptWriterNode } from '@/components/canvas/nodes/script-writer-node'
 import { StoryboardSplitterNode } from '@/components/canvas/nodes/storyboard-splitter-node'
+import { VideoStitchNode } from '@/components/canvas/nodes/video-stitch-node'
 
 export class NodeRegistry {
   private static instance: NodeRegistry
@@ -82,6 +83,15 @@ export class NodeRegistry {
       inputs: [{ id: 'any-in', type: 'any', position: 'left' }],
       outputs: [{ id: 'text-out', type: 'text', position: 'right' }],
       defaultConfig: { shotCount: 0 },
+    })
+
+    this.register({
+      type: 'video_stitch',
+      label: '视频拼接',
+      CanvasComponent: VideoStitchNode as any,
+      inputs: [{ id: 'video-in', type: 'video', position: 'left', isList: true }],
+      outputs: [{ id: 'video-out', type: 'video', position: 'right' }],
+      defaultConfig: { inputOrder: [] },
     })
   }
 

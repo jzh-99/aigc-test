@@ -16,6 +16,7 @@ import type {
   ImageGenConfig,
   TextInputConfig,
   VideoGenConfig,
+  VideoStitchConfig,
   ScriptWriterConfig,
   StoryboardSplitterConfig,
 } from '@/lib/canvas/types'
@@ -24,6 +25,7 @@ import {
   isImageGenConfig,
   isTextInputConfig,
   isVideoGenConfig,
+  isVideoStitchConfig,
   isScriptWriterConfig,
   isStoryboardSplitterConfig,
 } from '@/lib/canvas/types'
@@ -42,6 +44,7 @@ import { useNodeTopology } from './panels/use-node-topology'
 import { VideoGenPanel } from './panels/video-gen-panel'
 import { ScriptWriterPanel } from './panels/script-writer-panel'
 import { StoryboardSplitterPanel } from './panels/storyboard-splitter-panel'
+import { VideoStitchPanel } from './panels/video-stitch-panel'
 
 interface Props {
   node: AppNode
@@ -75,6 +78,7 @@ const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '' }
 const DEFAULT_ASSET_CONFIG: AssetConfig = { url: '', name: '', mimeType: 'image/jpeg' }
 const DEFAULT_SCRIPT_WRITER_CONFIG: ScriptWriterConfig = { description: '', style: '现代都市', duration: 60 }
 const DEFAULT_STORYBOARD_SPLITTER_CONFIG: StoryboardSplitterConfig = { shotCount: 0 }
+const DEFAULT_VIDEO_STITCH_CONFIG: VideoStitchConfig = { inputOrder: [] }
 
 function normalizeImageConfig(config: unknown): ImageGenConfig {
   const raw = (config && typeof config === 'object' ? config : {}) as Partial<ImageGenConfig>
@@ -117,6 +121,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const isTextInput = node.type === 'text_input'
   const isAsset = node.type === 'asset'
   const isVideoGen = node.type === 'video_gen'
+  const isVideoStitch = node.type === 'video_stitch'
   const isScriptWriter = node.type === 'script_writer'
   const isStoryboardSplitter = node.type === 'storyboard_splitter'
 
@@ -138,6 +143,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const storyboardSplitterCfg = isStoryboardSplitter && isStoryboardSplitterConfig(node.data.config)
     ? node.data.config
     : DEFAULT_STORYBOARD_SPLITTER_CONFIG
+  const videoStitchCfg = isVideoStitch && isVideoStitchConfig(node.data.config)
+    ? node.data.config
+    : DEFAULT_VIDEO_STITCH_CONFIG
 
   const {
     upstreamTexts,
@@ -449,6 +457,16 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           onVideoModeChange={handleVideoModeChange}
           onUpdateCfg={updateCfg}
           onExecute={handleExecuteVideo}
+        />
+      )}
+
+      {isVideoStitch && (
+        <VideoStitchPanel
+          nodeId={node.id}
+          canvasId={canvasId}
+          config={videoStitchCfg}
+          onUpdateCfg={updateCfg}
+          onExecuted={onExecuted}
         />
       )}
 

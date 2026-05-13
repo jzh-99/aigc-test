@@ -40,6 +40,8 @@ interface CanvasStructureState {
 
   addNode: (type: string, position: { x: number; y: number }) => void
   addNodeWithConfig: (type: string, position: { x: number; y: number }, config: Record<string, unknown>, id?: string) => void
+  addNodeAndConnect: (sourceNodeIds: string[], type: string, position: { x: number; y: number }) => string[]
+  addNodesWithEdges: (newNodes: AppNode[], newEdges: AppEdge[]) => string[]
   removeNodes: (nodeIds: string[]) => void
   removeEdgesByTarget: (nodeId: string, handleIds: string[]) => void
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
@@ -120,6 +122,94 @@ function createNodeFromAgentNode(agentNode: AppNode): AppNode {
   }
 }
 
+function createEdgeWithId(connection: Connection): AppEdge {
+  return {
+    id: `edge_${connection.source}_${connection.sourceHandle ?? 'source'}_${connection.target}_${connection.targetHandle ?? 'target'}_${crypto.randomUUID()}`,
+    source: connection.source!,
+    sourceHandle: connection.sourceHandle ?? null,
+    target: connection.target!,
+    targetHandle: connection.targetHandle ?? null,
+  }
+}
+
+function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Connection): string | null {
+  if (!connection.source || !connection.target || connection.source === connection.target) return null
+
+  const sourceNode = nodes.find((n) => n.id === connection.source)
+  const targetNode = nodes.find((n) => n.id === connection.target)
+
+  const getNodeMimeType = (node: AppNode | undefined): string | undefined => {
+    if (!node || node.type !== 'asset' || !isAssetConfig(node.data.config)) return undefined
+    return node.data.config.mimeType
+  }
+
+  const sourceMime = getNodeMimeType(sourceNode)
+
+  if (targetNode?.type === 'video_stitch') {
+    const isVideoSource = sourceNode?.type === 'video_gen'
+      || sourceNode?.type === 'video_stitch'
+      || (sourceNode?.type === 'asset' && !!sourceMime?.startsWith('video'))
+    if (!isVideoSource) return '视频拼接节点只能连接 AI 视频、拼接视频或视频素材'
+  }
+
+  if (targetNode?.type === 'image_gen' && sourceMime && (sourceMime.startsWith('video') || sourceMime.startsWith('audio'))) {
+    return '视频/音频素材不能连接到 AI 生图节点'
+  }
+
+  if (connection.targetHandle === 'any-in' || !connection.targetHandle) {
+    if (targetNode?.type === 'video_gen') {
+      const mimeType = sourceMime
+      const videoMode: VideoMode = isVideoGenConfig(targetNode.data.config)
+        ? targetNode.data.config.videoMode
+        : 'multiref'
+      const existingAnyIn = edges.filter((e) => e.target === connection.target && (!e.targetHandle || e.targetHandle === 'any-in'))
+
+      if (videoMode === 'keyframe') {
+        if (sourceNode?.type !== 'text_input') {
+          const existingImages = existingAnyIn.filter((e) => {
+            const src = nodes.find((n) => n.id === e.source)
+            return src?.type !== 'text_input'
+          }).length
+          if (existingImages >= 2) return '首尾帧最多连接 2 张图片'
+          if (mimeType && !mimeType.startsWith('image')) return '首尾帧模式只接受图片素材'
+        }
+      } else {
+        const existingImages = existingAnyIn.filter((e) => {
+          const src = nodes.find((n) => n.id === e.source)
+          const mt = getNodeMimeType(src)
+          return !mt || mt.startsWith('image')
+        }).length
+        const existingVideos = existingAnyIn.filter((e) => {
+          const src = nodes.find((n) => n.id === e.source)
+          const mt = getNodeMimeType(src)
+          return mt?.startsWith('video')
+        }).length
+        const existingAudios = existingAnyIn.filter((e) => {
+          const src = nodes.find((n) => n.id === e.source)
+          const mt = getNodeMimeType(src)
+          return mt?.startsWith('audio')
+        }).length
+
+        const isVideo = mimeType?.startsWith('video')
+        const isAudio = mimeType?.startsWith('audio')
+        const isImage = !isVideo && !isAudio
+
+        if (isImage && existingImages >= 9) return '参考图最多 9 张'
+        if (isVideo && existingVideos >= 3) return '参考视频最多 3 个'
+        if (isAudio && existingAudios >= 3) return '参考音频最多 3 个'
+      }
+    }
+  }
+
+  const simulatedEdges = addEdge(connection, edges) as AppEdge[]
+  if (hasCycle(nodes, simulatedEdges)) {
+    console.warn('[Canvas] 禁止产生循环依赖连线')
+    return '禁止产生循环依赖连线'
+  }
+
+  return null
+}
+
 export const useCanvasStructureStore = create<CanvasStructureState>((set, get) => ({
   canvasId: null,
   workspaceId: null,
@@ -192,72 +282,12 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
 
   onConnect: (connection) => {
     const { nodes, edges } = get()
-    if (connection.source === connection.target) return null
-
-    const sourceNode = nodes.find((n) => n.id === connection.source)
-    const targetNode = nodes.find((n) => n.id === connection.target)
-
-    const getNodeMimeType = (node: AppNode | undefined): string | undefined => {
-      if (!node || node.type !== 'asset' || !isAssetConfig(node.data.config)) return undefined
-      return node.data.config.mimeType
-    }
-
-    const sourceMime = getNodeMimeType(sourceNode)
-
-    if (targetNode?.type === 'image_gen' && sourceMime && (sourceMime.startsWith('video') || sourceMime.startsWith('audio'))) {
-      return '视频/音频素材不能连接到 AI 生图节点'
-    }
-
-    if (connection.targetHandle === 'any-in' || !connection.targetHandle) {
-      if (targetNode?.type === 'video_gen') {
-        const mimeType = sourceMime
-        const videoMode: VideoMode = isVideoGenConfig(targetNode.data.config)
-          ? targetNode.data.config.videoMode
-          : 'multiref'
-        const existingAnyIn = edges.filter((e) => e.target === connection.target && (!e.targetHandle || e.targetHandle === 'any-in'))
-
-        if (videoMode === 'keyframe') {
-          if (sourceNode?.type !== 'text_input') {
-            const existingImages = existingAnyIn.filter((e) => {
-              const src = nodes.find((n) => n.id === e.source)
-              return src?.type !== 'text_input'
-            }).length
-            if (existingImages >= 2) return '首尾帧最多连接 2 张图片'
-            if (mimeType && !mimeType.startsWith('image')) return '首尾帧模式只接受图片素材'
-          }
-        } else {
-          const existingImages = existingAnyIn.filter((e) => {
-            const src = nodes.find((n) => n.id === e.source)
-            const mt = getNodeMimeType(src)
-            return !mt || mt.startsWith('image')
-          }).length
-          const existingVideos = existingAnyIn.filter((e) => {
-            const src = nodes.find((n) => n.id === e.source)
-            const mt = getNodeMimeType(src)
-            return mt?.startsWith('video')
-          }).length
-          const existingAudios = existingAnyIn.filter((e) => {
-            const src = nodes.find((n) => n.id === e.source)
-            const mt = getNodeMimeType(src)
-            return mt?.startsWith('audio')
-          }).length
-
-          const isVideo = mimeType?.startsWith('video')
-          const isAudio = mimeType?.startsWith('audio')
-          const isImage = !isVideo && !isAudio
-
-          if (isImage && existingImages >= 9) return '参考图最多 9 张'
-          if (isVideo && existingVideos >= 3) return '参考视频最多 3 个'
-          if (isAudio && existingAudios >= 3) return '参考音频最多 3 个'
-        }
-      }
-    }
+    const err = validateConnection(nodes, edges, connection)
+    if (err) return err
+    if (!connection.source || !connection.target || connection.source === connection.target) return null
 
     const simulatedEdges = addEdge(connection, edges) as AppEdge[]
-    if (hasCycle(nodes, simulatedEdges)) {
-      console.warn('[Canvas] 禁止产生循环依赖连线')
-      return null
-    }
+    if (simulatedEdges === edges) return null
 
     pushSnapshot(get, set, { nodes, edges }, true)
     set({ edges: simulatedEdges })
@@ -277,6 +307,64 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
     newNode.data.config = { ...newNode.data.config, ...config } as CanvasNodeConfig
     pushSnapshot(get, set, { nodes, edges }, true)
     set({ nodes: nodes.concat(newNode) })
+  },
+
+  addNodeAndConnect: (sourceNodeIds, type, position) => {
+    const { nodes, edges } = get()
+    const newNode = nodeRegistry.createNodeInstance(type, position)
+    let nextEdges = edges
+    const errors: string[] = []
+
+    for (const sourceNodeId of sourceNodeIds) {
+      const connection: Connection = {
+        source: sourceNodeId,
+        sourceHandle: null,
+        target: newNode.id,
+        targetHandle: type === 'video_stitch' ? 'video-in' : 'any-in',
+      }
+      const err = validateConnection([...nodes, newNode], nextEdges, connection)
+      if (err) {
+        errors.push(err)
+        continue
+      }
+      if (!connection.source || !connection.target || connection.source === connection.target) continue
+      const edge = createEdgeWithId(connection)
+      if (hasCycle([...nodes, newNode], [...nextEdges, edge])) continue
+      nextEdges = nextEdges.concat(edge)
+    }
+
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({ nodes: nodes.concat(newNode), edges: nextEdges })
+    return errors
+  },
+
+  addNodesWithEdges: (newNodes, newEdges) => {
+    const { nodes, edges } = get()
+    let nextEdges = edges
+    const allNodes = [...nodes, ...newNodes]
+    const errors: string[] = []
+
+    for (const edge of newEdges) {
+      const connection: Connection = {
+        source: edge.source,
+        sourceHandle: edge.sourceHandle ?? null,
+        target: edge.target,
+        targetHandle: edge.targetHandle ?? null,
+      }
+      const err = validateConnection(allNodes, nextEdges, connection)
+      if (err) {
+        errors.push(err)
+        continue
+      }
+      if (!connection.source || !connection.target || connection.source === connection.target) continue
+      const nextEdge = { ...edge, id: edge.id || `edge_${crypto.randomUUID()}` }
+      if (hasCycle(allNodes, [...nextEdges, nextEdge])) continue
+      nextEdges = nextEdges.concat(nextEdge)
+    }
+
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({ nodes: [...nodes, ...newNodes], edges: nextEdges })
+    return errors
   },
 
   removeNodes: (nodeIds) => {
