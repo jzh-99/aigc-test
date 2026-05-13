@@ -8,13 +8,7 @@ import rateLimit from '@fastify/rate-limit'
 import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
 import { adminRoutes } from './routes/admin.js'
-import { videoRoutes } from './routes/videos.js'
 import multipart from '@fastify/multipart'
-import { aiAssistantRoutes } from './routes/ai-assistant.js'
-import { avatarRoutes } from './routes/avatar.js'
-import { actionImitationRoutes } from './routes/action-imitation.js'
-import { videoStudioRoutes } from './routes/video-studio.js'
-import { companyARoutes } from './routes/company-a.js'
 import autoload from '@fastify/autoload'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -142,12 +136,6 @@ export async function buildApp() {
   await app.register(
     async (v1) => {
       await v1.register(adminRoutes)
-      await v1.register(videoRoutes)
-      await v1.register(aiAssistantRoutes)
-      await v1.register(avatarRoutes)
-      await v1.register(actionImitationRoutes)
-      await v1.register(videoStudioRoutes)
-      await v1.register(companyARoutes)
     },
     { prefix: '/api/v1' },
   )
