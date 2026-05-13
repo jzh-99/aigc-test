@@ -118,6 +118,7 @@ export async function buildApp() {
     prefix: '/api/v1',
     autoHooks: true,
     cascadeHooks: false,
+    ignorePattern: /^_/, // 排除 _shared.ts 等辅助文件，autoload v5 不会自动忽略下划线前缀文件
   })
 
   return app
