@@ -6,23 +6,13 @@ import crypto from 'node:crypto'
 import { sql } from 'kysely'
 import type { LoginRequest, AcceptInviteRequest } from '@aigc/types'
 import { buildUserProfile } from '../services/user-profile.js'
+import { signAccessToken, signRefreshToken } from '../lib/auth-tokens.js'
 
 const MAX_LOGIN_ATTEMPTS = 5
 const LOCKOUT_WINDOW = 10 * 60 // 10 minutes in seconds
 const LOCKOUT_DURATION = 15 * 60 // 15 minutes in seconds
 const BCRYPT_ROUNDS = 12
 const MAX_PASSWORD_LENGTH = 72 // bcrypt truncates at 72 bytes
-
-function signAccessToken(user: { id: string; account: string; role: string }): string {
-  const secret = process.env.JWT_SECRET
-  if (!secret) throw new Error('JWT_SECRET is not set')
-  const expiresIn = (process.env.JWT_ACCESS_EXPIRES_IN ?? '15m') as jwt.SignOptions['expiresIn']
-  return jwt.sign({ sub: user.id, email: user.account, role: user.role }, secret, { expiresIn })
-}
-
-function signRefreshToken(): string {
-  return crypto.randomBytes(32).toString('hex')
-}
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
 
