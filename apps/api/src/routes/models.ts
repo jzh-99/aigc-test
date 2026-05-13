@@ -78,7 +78,7 @@ export async function modelRoutes(app: FastifyInstance): Promise<void> {
         module: r.module,
         video_categories: r.video_categories,
         credit_cost: r.credit_cost,
-        params_pricing: r.params_pricing,
+        params_pricing: Array.isArray(r.params_pricing) ? r.params_pricing : [],
         params_schema: r.params_schema,
         resolution: r.resolution,
         is_active: true,

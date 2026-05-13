@@ -159,7 +159,7 @@ export function VideoParams({
                     const isDbModel = 'code' in m
                     if (isDbModel) {
                       const dbM = m as ModelItem
-                      const minPrice = dbM.params_pricing.length > 0
+                      const minPrice = Array.isArray(dbM.params_pricing) && dbM.params_pricing.length > 0
                         ? Math.min(...dbM.params_pricing.map((r) => r.unit_price))
                         : dbM.credit_cost
                       const isModelSeedance = dbM.code.startsWith('seedance-')

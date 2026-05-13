@@ -102,7 +102,7 @@ export function ImageParams({
                 {useDbModels
                   ? (models ?? []).map((m) => {
                       // 从 params_pricing 取最低单价展示
-                      const minPrice = m.params_pricing.length > 0
+                      const minPrice = Array.isArray(m.params_pricing) && m.params_pricing.length > 0
                         ? Math.min(...m.params_pricing.map((r) => r.unit_price))
                         : m.credit_cost
                       return (

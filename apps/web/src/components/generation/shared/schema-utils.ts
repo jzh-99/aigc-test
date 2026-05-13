@@ -28,6 +28,7 @@ export function isSeedanceModel(model: ModelItem): boolean {
  * 找不到时返回 fallback 值
  */
 export function getPriceByResolution(model: ModelItem, resolution: string, fallback: number): number {
-  const rule = model.params_pricing.find((r) => r.resolution === resolution)
+  const pricing = Array.isArray(model.params_pricing) ? model.params_pricing : []
+  const rule = pricing.find((r) => r.resolution === resolution)
   return rule ? rule.unit_price : fallback
 }

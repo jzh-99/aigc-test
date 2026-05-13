@@ -40,7 +40,7 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
       setDescription(model.description ?? '')
       setIsActive(model.is_active)
       // 深拷贝，避免直接修改原始数据
-      setPricingRules(model.params_pricing.map((r) => ({ ...r })))
+      setPricingRules((Array.isArray(model.params_pricing) ? model.params_pricing : []).map((r) => ({ ...r })))
     }
   }, [model])
 
