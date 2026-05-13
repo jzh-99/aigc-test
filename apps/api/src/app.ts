@@ -110,16 +110,18 @@ export async function buildApp() {
     })
   }
 
-  // autoload 自动扫描 routes/ 子目录，每个文件 export default FastifyPluginAsync
-  await app.register(autoload, {
-    dir: join(__dirname, 'routes'),
-    dirNameRoutePrefix: false,
-    forceESM: true,
-    prefix: '/api/v1',
-    autoHooks: true,
-    cascadeHooks: false,
-    ignorePattern: /^_/, // 排除 _shared.ts 等辅助文件，autoload v5 不会自动忽略下划线前缀文件
-  })
+  // 用 Fastify 原生 scoped plugin 挂载 /api/v1 前缀
+  // autoload v5 的 prefix 选项与 dirNameRoutePrefix:false 组合时不生效，改用此方式
+  await app.register(async (instance) => {
+    await instance.register(autoload, {
+      dir: join(__dirname, 'routes'),
+      dirNameRoutePrefix: false,
+      forceESM: true,
+      autoHooks: true,
+      cascadeHooks: false,
+      ignorePattern: /^_/,
+    })
+  }, { prefix: '/api/v1' })
 
   return app
 }
