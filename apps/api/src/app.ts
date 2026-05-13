@@ -7,29 +7,12 @@ import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
-import { healthzRoutes } from './routes/healthz.js'
-import { generateRoutes } from './routes/generate.js'
-import { sseRoutes } from './routes/sse.js'
-import { batchRoutes } from './routes/batches.js'
-import { authRoutes } from './routes/auth.js'
-import { userRoutes } from './routes/users.js'
-import { teamRoutes } from './routes/teams.js'
-import { workspaceRoutes } from './routes/workspaces.js'
-import { adminRoutes } from './routes/admin.js'
-import { proxyRoutes } from './routes/proxy.js'
-import { assetRoutes } from './routes/assets.js'
-import { videoRoutes } from './routes/videos.js'
 import multipart from '@fastify/multipart'
-import { aiAssistantRoutes } from './routes/ai-assistant.js'
-import { avatarRoutes } from './routes/avatar.js'
-import { actionImitationRoutes } from './routes/action-imitation.js'
-import { canvasRoutes } from './routes/canvas.js'
-import { canvasAgentRoutes } from './routes/canvas-agent.js'
-import { videoStudioRoutes } from './routes/video-studio.js'
-import { companyARoutes } from './routes/company-a.js'
-import { clientErrorsRoutes } from './routes/client-errors.js'
-import { paymentRoutes } from './routes/payment.js'
-import { modelRoutes } from './routes/models.js'
+import autoload from '@fastify/autoload'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export async function buildApp() {
   const logger = buildLogger()
@@ -113,34 +96,37 @@ export async function buildApp() {
   // Plugins
   await app.register(jwtAuthPlugin)
 
-  // Routes — all prefixed with /api/v1
-  await app.register(
-    async (v1) => {
-      await v1.register(authRoutes)
-      await v1.register(userRoutes)
-      await v1.register(healthzRoutes)
-      await v1.register(generateRoutes)
-      await v1.register(sseRoutes)
-      await v1.register(batchRoutes)
-      await v1.register(teamRoutes)
-      await v1.register(workspaceRoutes)
-      await v1.register(adminRoutes)
-      await v1.register(proxyRoutes)
-      await v1.register(assetRoutes)
-      await v1.register(videoRoutes)
-      await v1.register(aiAssistantRoutes)
-      await v1.register(avatarRoutes)
-      await v1.register(actionImitationRoutes)
-      await v1.register(canvasRoutes)
-      await v1.register(canvasAgentRoutes)
-      await v1.register(videoStudioRoutes)
-      await v1.register(companyARoutes)
-      await v1.register(clientErrorsRoutes)
-      await v1.register(paymentRoutes)
-      await v1.register(modelRoutes)
-    },
-    { prefix: '/api/v1' },
-  )
+  // Swagger UI（仅开发环境，必须在 autoload 之前注册）
+  if (process.env.NODE_ENV !== 'production') {
+    await app.register(import('@fastify/swagger'), {
+      openapi: {
+        info: { title: 'AIGC API', version: '1.0.0', description: 'AIGC 创作平台 API 文档' },
+        components: {
+          securitySchemes: {
+            bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+          },
+        },
+        security: [{ bearerAuth: [] }],
+      },
+    })
+    await app.register(import('@fastify/swagger-ui'), {
+      routePrefix: '/docs',
+      uiConfig: { docExpansion: 'list', deepLinking: false },
+    })
+  }
+
+  // 用 Fastify 原生 scoped plugin 挂载 /api/v1 前缀
+  // autoload v5 的 prefix 选项与 dirNameRoutePrefix:false 组合时不生效，改用此方式
+  await app.register(async (instance) => {
+    await instance.register(autoload, {
+      dir: join(__dirname, 'routes'),
+      dirNameRoutePrefix: false,
+      forceESM: true,
+      autoHooks: true,
+      cascadeHooks: false,
+      ignorePattern: /^_/,
+    })
+  }, { prefix: '/api/v1' })
 
   return app
 }
