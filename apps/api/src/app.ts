@@ -71,12 +71,17 @@ export async function buildApp() {
     contentSecurityPolicy: false, // managed by Next.js for frontend
   })
 
-  // Attach Redis client
+  // Attach Redis client（普通命令）
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379')
   app.decorate('redis', redis)
 
+  // 专用 Pub/Sub 订阅连接：subscribe 模式下连接不能复用做普通命令，单独维护
+  const redisSub = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379')
+  app.decorate('redisSub', redisSub)
+
   app.addHook('onClose', async () => {
     await redis.quit()
+    await redisSub.quit()
   })
 
   // Global rate limit: 1200 requests per minute per client identity.

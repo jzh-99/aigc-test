@@ -66,3 +66,30 @@
   视频任务不走 image-queue，API 直接调用 AI 服务提交任务后把 task_id
    存库，然后由 video-poller 每 15 秒轮询状态。轮询器还有年龄自适应
   跳过逻辑——任务越老，轮询频率越低，减少 API 调用压力。
+
+
+API 端感知任务最终状态的完整链路
+
+推送方（Worker）→ 接收方（API SSE），走的是 Redis Pub/Sub。
+
+1. Worker 完成/失败时发布事件
+
+completePipeline 和 failPipeline 事务提交后，都会执行：
+
+await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event:
+'batch_update' }))
+
+2. API SSE 路由订阅并推送给前端
+
+前端调用 GET /sse/batches/:id 建立 SSE 长连接，API 做三件事：
+
+1. 立即推送一次快照（getBatchSnapshot）— 前端刷新页面时能立刻看到当前状态
+2. 订阅 Redis channel sse:batch:{batchId}
+3. 收到 Worker 的 publish 消息 → 再查一次数据库取最新快照 → 通过 SSE 推给前端
+
+状态是 completed / failed / partial_complete 时，SSE 连接自动关闭（isTerminal 判断）。
+
+3. 超时任务的感知
+
+timeout-guardian 调用 failPipeline，failPipeline 里同样会
+publish，所以超时退款后前端也能实时收到推送，和正常失败路径完全一致。

@@ -30,7 +30,8 @@ declare module 'fastify' {
     user: AuthUser
   }
   interface FastifyInstance {
-    redis: import('ioredis').default
+    redis: import('ioredis').Redis
+    redisSub: import('ioredis').Redis  // 专用 Pub/Sub 订阅连接
   }
 }
 

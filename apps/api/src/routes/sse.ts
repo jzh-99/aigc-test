@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import { Redis } from 'ioredis'
 import { signAssetUrl } from '../lib/storage.js'
 
 async function getBatchSnapshot(batchId: string) {
@@ -145,14 +144,14 @@ export async function sseRoutes(app: FastifyInstance): Promise<void> {
       return reply.hijack()
     }
 
-    // Subscribe to Redis Pub/Sub
-    const sub = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379')
-    sub.on('error', () => {}) // prevent unhandled EPIPE from crashing the process on client disconnect
+    // 复用 app 级共享订阅连接，避免每个 SSE 请求创建新 Redis 连接
+    const sub = app.redisSub
     const channel = `sse:batch:${batchId}`
 
     await sub.subscribe(channel)
 
     sub.on('message', async (_ch: string, _msg: string) => {
+      if (_ch !== channel) return
       try {
         const fresh = await getBatchSnapshot(batchId)
         if (fresh) {
@@ -173,7 +172,6 @@ export async function sseRoutes(app: FastifyInstance): Promise<void> {
     const cleanup = () => {
       clearInterval(heartbeat)
       sub.unsubscribe(channel).catch(() => {})
-      sub.quit().catch(() => {})
       raw.end()
     }
 
