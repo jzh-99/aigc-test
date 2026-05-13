@@ -7,7 +7,6 @@ import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
-import { healthzRoutes } from './routes/healthz.js'
 import { generateRoutes } from './routes/generate.js'
 import { sseRoutes } from './routes/sse.js'
 import { batchRoutes } from './routes/batches.js'
@@ -16,7 +15,6 @@ import { userRoutes } from './routes/users.js'
 import { teamRoutes } from './routes/teams.js'
 import { workspaceRoutes } from './routes/workspaces.js'
 import { adminRoutes } from './routes/admin.js'
-import { proxyRoutes } from './routes/proxy.js'
 import { assetRoutes } from './routes/assets.js'
 import { videoRoutes } from './routes/videos.js'
 import multipart from '@fastify/multipart'
@@ -27,9 +25,12 @@ import { canvasRoutes } from './routes/canvas.js'
 import { canvasAgentRoutes } from './routes/canvas-agent.js'
 import { videoStudioRoutes } from './routes/video-studio.js'
 import { companyARoutes } from './routes/company-a.js'
-import { clientErrorsRoutes } from './routes/client-errors.js'
 import { paymentRoutes } from './routes/payment.js'
-import { modelRoutes } from './routes/models.js'
+import autoload from '@fastify/autoload'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export async function buildApp() {
   const logger = buildLogger()
@@ -108,19 +109,57 @@ export async function buildApp() {
   // Plugins
   await app.register(jwtAuthPlugin)
 
-  // Routes — all prefixed with /api/v1
+  // Swagger UI（仅开发环境，必须在 autoload 之前注册）
+  if (process.env.NODE_ENV !== 'production') {
+    await app.register(import('@fastify/swagger'), {
+      openapi: {
+        info: { title: 'AIGC API', version: '1.0.0', description: 'AIGC 创作平台 API 文档' },
+        components: {
+          securitySchemes: {
+            bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+          },
+        },
+        security: [{ bearerAuth: [] }],
+      },
+    })
+    await app.register(import('@fastify/swagger-ui'), {
+      routePrefix: '/docs',
+      uiConfig: { docExpansion: 'list', deepLinking: false },
+    })
+  }
+
+  // autoload 自动扫描 routes/ 子目录，加载已迁移为单文件格式的路由
+  // ignoreFilter 排除 routes/ 根目录下的旧单文件（如 auth.ts），只加载子目录中的文件（如 healthz/get.ts）
+  await app.register(autoload, {
+    dir: join(__dirname, 'routes'),
+    dirNameRoutePrefix: false,
+    forceESM: true,
+    prefix: '/api/v1',
+    autoHooks: true,
+    cascadeHooks: false,
+    ignoreFilter: (filePath: string) => {
+      // 将路径统一为正斜杠，取相对于 routes/ 目录的部分
+      const normalized = filePath.replace(/\\/g, '/')
+      const routesDir = join(__dirname, 'routes').replace(/\\/g, '/')
+      const relative = normalized.startsWith(routesDir)
+        ? normalized.slice(routesDir.length + 1)
+        : normalized
+      // 排除 routes/ 根目录下的文件（路径中不含 /，即直接子文件）
+      return !relative.includes('/')
+    },
+  })
+
+  // Routes — all prefixed with /api/v1（旧格式路由，待逐步迁移）
   await app.register(
     async (v1) => {
       await v1.register(authRoutes)
       await v1.register(userRoutes)
-      await v1.register(healthzRoutes)
       await v1.register(generateRoutes)
       await v1.register(sseRoutes)
       await v1.register(batchRoutes)
       await v1.register(teamRoutes)
       await v1.register(workspaceRoutes)
       await v1.register(adminRoutes)
-      await v1.register(proxyRoutes)
       await v1.register(assetRoutes)
       await v1.register(videoRoutes)
       await v1.register(aiAssistantRoutes)
@@ -130,9 +169,7 @@ export async function buildApp() {
       await v1.register(canvasAgentRoutes)
       await v1.register(videoStudioRoutes)
       await v1.register(companyARoutes)
-      await v1.register(clientErrorsRoutes)
       await v1.register(paymentRoutes)
-      await v1.register(modelRoutes)
     },
     { prefix: '/api/v1' },
   )
