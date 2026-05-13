@@ -8,11 +8,7 @@ import rateLimit from '@fastify/rate-limit'
 import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
 import { generateRoutes } from './routes/generate.js'
-import { batchRoutes } from './routes/batches.js'
-import { teamRoutes } from './routes/teams.js'
-import { workspaceRoutes } from './routes/workspaces.js'
 import { adminRoutes } from './routes/admin.js'
-import { assetRoutes } from './routes/assets.js'
 import { videoRoutes } from './routes/videos.js'
 import multipart from '@fastify/multipart'
 import { aiAssistantRoutes } from './routes/ai-assistant.js'
@@ -22,7 +18,6 @@ import { canvasRoutes } from './routes/canvas.js'
 import { canvasAgentRoutes } from './routes/canvas-agent.js'
 import { videoStudioRoutes } from './routes/video-studio.js'
 import { companyARoutes } from './routes/company-a.js'
-import { paymentRoutes } from './routes/payment.js'
 import autoload from '@fastify/autoload'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -150,11 +145,7 @@ export async function buildApp() {
   await app.register(
     async (v1) => {
       await v1.register(generateRoutes)
-      await v1.register(batchRoutes)
-      await v1.register(teamRoutes)
-      await v1.register(workspaceRoutes)
       await v1.register(adminRoutes)
-      await v1.register(assetRoutes)
       await v1.register(videoRoutes)
       await v1.register(aiAssistantRoutes)
       await v1.register(avatarRoutes)
@@ -163,7 +154,6 @@ export async function buildApp() {
       await v1.register(canvasAgentRoutes)
       await v1.register(videoStudioRoutes)
       await v1.register(companyARoutes)
-      await v1.register(paymentRoutes)
     },
     { prefix: '/api/v1' },
   )
