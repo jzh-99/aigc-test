@@ -40,8 +40,8 @@ importers:
         specifier: ^3.1003.0
         version: 3.1019.0
       '@fastify/autoload':
-        specifier: ^6.3.1
-        version: 6.3.1
+        specifier: ^5.10.0
+        version: 5.10.0
       '@fastify/cookie':
         specifier: ^9.4.0
         version: 9.4.0
@@ -723,8 +723,8 @@ packages:
   '@fastify/ajv-compiler@4.0.5':
     resolution: {integrity: sha512-KoWKW+MhvfTRWL4qrhUwAAZoaChluo0m0vbiJlGMt2GXvL4LVPQEjt8kSpHI3IBq5Rez8fg+XeH3cneztq+C7A==}
 
-  '@fastify/autoload@6.3.1':
-    resolution: {integrity: sha512-0fsG+lO3m5yEZVjXKpltCe+2eHhM6rfAPQhvlGUgLUFTw/N2wA9WqPTObMtrF3oUCUrxbSDv60HlUIoh+aFM1A==}
+  '@fastify/autoload@5.10.0':
+    resolution: {integrity: sha512-4A6s86qMbjcpWHmJL7cErtjIxOPuW8c67DLiuO8HoJQxuK97vaptoUnK5BTOwRg1ntYqfc3tjwerTTo5NQ3fEQ==}
 
   '@fastify/busboy@3.2.0':
     resolution: {integrity: sha512-m9FVDXU3GT2ITSe0UaMA5rU3QkfC/UXtCU8y0gSN/GugTqtVldOBWIB5V6V3sbmenVZUIpU6f+mPEO2+m5iTaA==}
@@ -5510,7 +5510,7 @@ snapshots:
       ajv-formats: 3.0.1(ajv@8.18.0)
       fast-uri: 3.1.0
 
-  '@fastify/autoload@6.3.1': {}
+  '@fastify/autoload@5.10.0': {}
 
   '@fastify/busboy@3.2.0': {}
 
