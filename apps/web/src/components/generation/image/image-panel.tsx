@@ -36,6 +36,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
     referenceImages, addReferenceImage, clearReferenceImages,
     watermark, isGenerating,
     saveAsDefaults, videoDefaults, avatarDefaults, userDefaults,
+    setImageModels,
   } = useGenerationStore()
 
   const { save: saveDefaults } = useGenerationDefaults()
@@ -43,12 +44,19 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
 
+  // 模型列表加载完成后缓存到 store，供 use-generate 查 params_pricing
+  useEffect(() => {
+    if (imageModelsReady && imageModels.length > 0) {
+      setImageModels(imageModels)
+    }
+  }, [imageModelsReady, imageModels, setImageModels])
+
   // 模型列表加载完成后，若当前选中的模型不在可用列表中，自动切换到第一个可用模型
   useEffect(() => {
     if (!imageModelsReady || imageModels.length === 0) return
     const isValid = imageModels.some((m) => m.code === modelType)
     if (!isValid) {
-      setModelType(imageModels[0].code as any)
+      setModelType(imageModels[0].code)
     }
   }, [imageModelsReady, imageModels, modelType, setModelType])
 
@@ -233,7 +241,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
         quantity={quantity}
         isGenerating={isGenerating}
         disabled={disabled}
-        onModelChange={(v) => setModelType(v as typeof modelType)}
+        onModelChange={(v) => setModelType(v)}
         onResolutionChange={(v) => setResolution(v as typeof resolution)}
         onAspectRatioChange={setAspectRatio}
         onQuantityChange={setQuantity}

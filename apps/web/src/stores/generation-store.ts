@@ -1,25 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { BatchResponse } from '@aigc/types'
+import type { BatchResponse, ModelItem } from '@aigc/types'
 
 interface ReferenceImage {
   id: string
   file?: File
   previewUrl: string
   dataUrl?: string
-}
-
-const MODEL_REVERSE_MAP: Record<string, { modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'; resolution: '1k' | '2k' | '4k' }> = {
-  'gemini-3.1-flash-image-preview':    { modelType: 'gemini', resolution: '1k' },
-  'gemini-3.1-flash-image-preview-2k': { modelType: 'gemini', resolution: '2k' },
-  'gemini-3.1-flash-image-preview-4k': { modelType: 'gemini', resolution: '4k' },
-  'gpt-image-2':                       { modelType: 'gpt-image-2', resolution: '2k' },
-  'nano-banana-2':     { modelType: 'nano-banana-pro', resolution: '1k' },
-  'nano-banana-2-2k':  { modelType: 'nano-banana-pro', resolution: '2k' },
-  'nano-banana-2-4k':  { modelType: 'nano-banana-pro', resolution: '4k' },
-  'seedream-5.0-lite': { modelType: 'seedream-5.0-lite', resolution: '2k' },
-  'seedream-4.5':      { modelType: 'seedream-4.5', resolution: '2k' },
-  'seedream-4.0':      { modelType: 'seedream-4.0', resolution: '2k' },
 }
 
 export interface VideoParams {
@@ -35,7 +22,7 @@ export interface VideoParams {
 }
 
 interface UserDefaults {
-  modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
+  modelType: string
   resolution: '1k' | '2k' | '3k' | '4k'
   quantity: number
   aspectRatio: string
@@ -58,7 +45,7 @@ interface AvatarDefaults {
 interface GenerationState {
   // Image generation state
   prompt: string
-  modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
+  modelType: string
   resolution: '1k' | '2k' | '3k' | '4k'
   quantity: number
   aspectRatio: string
@@ -66,6 +53,9 @@ interface GenerationState {
   watermark: boolean
   isGenerating: boolean
   activeBatchId: string | null
+
+  // 缓存从 API 拉取的模型列表，供 use-generate 查 params_pricing
+  imageModels: ModelItem[]
 
   // Video generation state
   videoParams: VideoParams | null
@@ -80,7 +70,7 @@ interface GenerationState {
 
   // Image generation actions
   setPrompt: (prompt: string) => void
-  setModelType: (modelType: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0') => void
+  setModelType: (modelType: string) => void
   setResolution: (resolution: '1k' | '2k' | '3k' | '4k') => void
   setQuantity: (quantity: number) => void
   setAspectRatio: (ratio: string) => void
@@ -90,6 +80,7 @@ interface GenerationState {
   setWatermark: (v: boolean) => void
   setIsGenerating: (v: boolean) => void
   setActiveBatchId: (id: string | null) => void
+  setImageModels: (models: ModelItem[]) => void
   saveAsDefaults: () => void
   saveVideoDefaults: (d: VideoDefaults) => void
   saveAvatarDefaults: (d: AvatarDefaults) => void
@@ -106,7 +97,7 @@ interface GenerationState {
 
 const defaults = {
   prompt: '',
-  modelType: 'gemini' as const,
+  modelType: 'gemini-3.1-flash-image-preview' as string,
   resolution: '2k' as const,
   quantity: 1,
   aspectRatio: '1:1',
@@ -114,6 +105,7 @@ const defaults = {
   watermark: false,
   isGenerating: false,
   activeBatchId: null,
+  imageModels: [] as ModelItem[],
   videoParams: null as VideoParams | null,
   pendingModule: null as string | null,
   userDefaults: null as UserDefaults | null,
@@ -138,6 +130,7 @@ export const useGenerationStore = create<GenerationState>()(
   setWatermark: (watermark) => set({ watermark }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   setActiveBatchId: (activeBatchId) => set({ activeBatchId }),
+  setImageModels: (imageModels) => set({ imageModels }),
   saveAsDefaults: () => set((s) => ({
     userDefaults: {
       modelType: s.modelType,
@@ -188,14 +181,14 @@ export const useGenerationStore = create<GenerationState>()(
       // Avatar / action imitation — signal module and carry the prompt; no image params
       set({ pendingModule: module, prompt: batch.prompt ?? '', videoParams: null })
     } else {
-      // Apply image parameters
-      const modelConfig = MODEL_REVERSE_MAP[batch.model]
+      // 图片任务：直接用 batch.model（DB code）还原模型和分辨率，无需硬编码映射
       const params = batch.params as Record<string, unknown> | null
       set({
         pendingModule: 'image',
         prompt: batch.prompt,
         quantity: batch.quantity,
-        ...(modelConfig ? { modelType: modelConfig.modelType, resolution: modelConfig.resolution } : {}),
+        modelType: batch.model,
+        ...(params?.resolution ? { resolution: params.resolution as '1k' | '2k' | '3k' | '4k' } : {}),
         ...(params?.aspect_ratio ? { aspectRatio: params.aspect_ratio as string } : {}),
         videoParams: null,
       })
