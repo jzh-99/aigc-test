@@ -3,7 +3,7 @@ import pino_ from 'pino'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import type { TransferJobData } from '@aigc/types'
-import { getRedis } from '../lib/redis.js'
+import { getBullMQConnection } from '../lib/redis.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -180,7 +180,7 @@ export const transferWorker = new Worker<TransferJobData>(
     }
   },
   {
-    connection: getRedis(),
+    connection: getBullMQConnection(),
     concurrency: 5,
   },
 )

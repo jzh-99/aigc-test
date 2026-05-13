@@ -1,7 +1,7 @@
 import pino_ from 'pino'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { getPubRedis, getRedis } from '../lib/redis.js'
+import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { Queue } from 'bullmq'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
 
@@ -11,7 +11,7 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
   if (!_transferQueue) {
-    _transferQueue = new Queue('transfer-queue', { connection: getRedis() })
+    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection() })
   }
   return _transferQueue
 }
