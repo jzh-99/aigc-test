@@ -8,10 +8,7 @@ import rateLimit from '@fastify/rate-limit'
 import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
 import { generateRoutes } from './routes/generate.js'
-import { sseRoutes } from './routes/sse.js'
 import { batchRoutes } from './routes/batches.js'
-import { authRoutes } from './routes/auth.js'
-import { userRoutes } from './routes/users.js'
 import { teamRoutes } from './routes/teams.js'
 import { workspaceRoutes } from './routes/workspaces.js'
 import { adminRoutes } from './routes/admin.js'
@@ -152,10 +149,7 @@ export async function buildApp() {
   // Routes — all prefixed with /api/v1（旧格式路由，待逐步迁移）
   await app.register(
     async (v1) => {
-      await v1.register(authRoutes)
-      await v1.register(userRoutes)
       await v1.register(generateRoutes)
-      await v1.register(sseRoutes)
       await v1.register(batchRoutes)
       await v1.register(teamRoutes)
       await v1.register(workspaceRoutes)
