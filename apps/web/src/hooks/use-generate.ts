@@ -7,35 +7,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { generateUUID } from '@/lib/utils'
 import type { BatchResponse, GenerateImageRequest } from '@aigc/types'
 
-const MODEL_CODE_MAP = {
-  gemini: {
-    '1k': 'gemini-3.1-flash-image-preview',
-    '2k': 'gemini-3.1-flash-image-preview-2k',
-    '4k': 'gemini-3.1-flash-image-preview-4k',
-  },
-  'gpt-image-2': {
-    '2k': 'gpt-image-2',
-  },
-  'nano-banana-pro': {
-    '1k': 'nano-banana-2',
-    '2k': 'nano-banana-2-2k',
-    '4k': 'nano-banana-2-4k',
-  },
-  'seedream-5.0-lite': {
-    '2k': 'seedream-5.0-lite',
-    '3k': 'seedream-5.0-lite',
-  },
-  'seedream-4.5': {
-    '2k': 'seedream-4.5',
-    '4k': 'seedream-4.5',
-  },
-  'seedream-4.0': {
-    '1k': 'seedream-4.0',
-    '2k': 'seedream-4.0',
-    '4k': 'seedream-4.0',
-  },
-} as const
-
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -62,10 +33,9 @@ export function useGenerate() {
     let resolvedModel: string | undefined
     setIsGenerating(true)
     try {
-      const modelMap = MODEL_CODE_MAP[modelType] as Record<string, string> | undefined
-      if (!modelMap) throw new Error(`Unknown model type: ${modelType}`)
-      const model = modelMap[resolution]
-      if (!model) throw new Error(`Unknown resolution for ${modelType}: ${resolution}`)
+      // 直接用 modelType（DB code）作为 model 发给后端
+      // API 侧会根据 params.resolution 从 params_pricing 查实际调用的底层 model code
+      const model = modelType
       resolvedModel = model
 
       const params: Record<string, unknown> = {
