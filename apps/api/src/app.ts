@@ -110,8 +110,7 @@ export async function buildApp() {
     })
   }
 
-  // autoload 自动扫描 routes/ 子目录，加载已迁移为单文件格式的路由
-  // ignoreFilter 排除 routes/ 根目录下的旧单文件（如 auth.ts），只加载子目录中的文件（如 healthz/get.ts）
+  // autoload 自动扫描 routes/ 子目录，每个文件 export default FastifyPluginAsync
   await app.register(autoload, {
     dir: join(__dirname, 'routes'),
     dirNameRoutePrefix: false,
@@ -119,16 +118,6 @@ export async function buildApp() {
     prefix: '/api/v1',
     autoHooks: true,
     cascadeHooks: false,
-    ignoreFilter: (filePath: string) => {
-      // 将路径统一为正斜杠，取相对于 routes/ 目录的部分
-      const normalized = filePath.replace(/\\/g, '/')
-      const routesDir = join(__dirname, 'routes').replace(/\\/g, '/')
-      const relative = normalized.startsWith(routesDir)
-        ? normalized.slice(routesDir.length + 1)
-        : normalized
-      // 排除 routes/ 根目录下的文件（路径中不含 /，即直接子文件）
-      return !relative.includes('/')
-    },
   })
 
   return app
