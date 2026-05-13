@@ -14,6 +14,10 @@ import { dirname, join } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+// autoload v5 通过 process._preload_modules 检测 tsx，但 tsx v4+ 不再使用 --require 预加载
+// 手动设置此环境变量告知 autoload 当前运行时支持 TypeScript
+process.env.FASTIFY_AUTOLOAD_TYPESCRIPT = '1'
+
 export async function buildApp() {
   const logger = buildLogger()
   const accessLogger = buildAccessLogger()
