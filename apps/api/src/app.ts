@@ -7,7 +7,6 @@ import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
-import { adminRoutes } from './routes/admin.js'
 import multipart from '@fastify/multipart'
 import autoload from '@fastify/autoload'
 import { fileURLToPath } from 'node:url'
@@ -131,14 +130,6 @@ export async function buildApp() {
       return !relative.includes('/')
     },
   })
-
-  // Routes — all prefixed with /api/v1（旧格式路由，待逐步迁移）
-  await app.register(
-    async (v1) => {
-      await v1.register(adminRoutes)
-    },
-    { prefix: '/api/v1' },
-  )
 
   return app
 }
