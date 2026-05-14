@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { pipeline } from 'node:stream/promises'
 import ffmpeg from 'fluent-ffmpeg'
-import { uploadToS3 } from '../lib/storage.js'
+import { uploadToTos } from '../lib/storage.js'
 
 // Use system ffmpeg if available, otherwise fall back to the installer package
 try {
@@ -104,7 +104,7 @@ export async function runConcatExport(
 
     const buf = await readFile(outputPath)
     const key = `concat-exports/${jobId}/${projectName.replace(/[^a-zA-Z0-9_-]/g, '_')}_final.mp4`
-    const resultUrl = await uploadToS3(key, buf, 'video/mp4')
+    const resultUrl = await uploadToTos(key, buf, 'video/mp4')
 
     await updateJob({ status: 'done', resultUrl })
   } catch (err) {

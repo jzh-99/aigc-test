@@ -11,8 +11,6 @@
   "dependencies": {
     "@aigc/db": "workspace:*",
     "@aigc/types": "workspace:*",
-    "@aws-sdk/client-s3": "^3.1000.0",
-    "@aws-sdk/s3-request-presigner": "^3.1003.0",
     "@fastify/autoload": "^5.10.0",
     "@fastify/cookie": "^9.4.0",
     "@fastify/cors": "^9.0.1",
@@ -23,6 +21,7 @@
     "@fastify/swagger": "^8.15.0",
     "@fastify/swagger-ui": "^4.2.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@volcengine/tos-sdk": "^2.9.1",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.0.0",
     "dotenv": "^16.0.0",

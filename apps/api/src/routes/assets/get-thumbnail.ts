@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { getS3ObjectBuffer, signThumbnailUrl, verifyThumbnailSig } from '../../lib/storage.js'
+import { getTosObjectBuffer, signThumbnailUrl, verifyThumbnailSig } from '../../lib/storage.js'
 
 // 模块级缩略图缓存：key = "storageKey:width"，value = WebP Buffer
 const thumbnailCache = new Map<string, { data: Buffer; createdAt: number }>()
@@ -43,7 +43,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       let rawBuffer: Buffer
       try {
-        rawBuffer = await getS3ObjectBuffer(key)
+        rawBuffer = await getTosObjectBuffer(key)
       } catch (err) {
         app.log.warn({ err, key }, 'Failed to fetch asset from S3 for thumbnail')
         return reply.code(502).send({ error: 'Failed to fetch asset' })

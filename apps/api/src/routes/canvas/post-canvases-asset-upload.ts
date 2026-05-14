@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
-import { signAssetUrl, uploadToS3 } from '../../lib/storage.js'
+import { signAssetUrl, uploadToTos } from '../../lib/storage.js'
 import {
   CANVAS_UPLOAD_DIR,
   CANVAS_ENABLED_TEAM_TYPES,
@@ -66,7 +66,7 @@ const route: FastifyPluginAsync = async (app) => {
         const key = `canvas-assets/${fileId}`
         try {
           const buf = await import('node:fs/promises').then((m) => m.readFile(filePath))
-          storageUrl = await uploadToS3(key, buf, mimeType)
+          storageUrl = await uploadToTos(key, buf, mimeType)
         } catch (err: any) {
           app.log.warn({ err: err?.message ?? String(err) }, 'S3 upload failed, fallback to external storage')
           storageUrl = await uploadViaLocalTemp(fileId, mimeType)

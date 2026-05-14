@@ -62,7 +62,8 @@ export async function getBatchSnapshot(batchId: string) {
               id: asset.id,
               type: asset.type,
               original_url: asset.original_url,
-              storage_url: await signAssetUrl(asset.storage_url),
+              // storage_url 为空（transfer 未完成）时用 original_url 兜底，确保前端能立即展示图片
+              storage_url: (await signAssetUrl(asset.storage_url)) ?? asset.original_url ?? null,
               transfer_status: asset.transfer_status,
               file_size: asset.file_size,
               width: asset.width,

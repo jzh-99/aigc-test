@@ -16,8 +16,12 @@ services:
       # 覆盖为基础设施服务器的真实地址
       DATABASE_URL: postgresql://${POSTGRES_USER:-aigc}:${POSTGRES_PASSWORD}@${INFRA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-aigc_dev}
       REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}${INFRA_HOST}:${REDIS_PORT:-6379}
-      STORAGE_ENDPOINT: http://${INFRA_HOST}:${MINIO_API_PORT:-9000}
-      STORAGE_PUBLIC_URL: http://${INFRA_HOST}:${MINIO_API_PORT:-9000}/${STORAGE_BUCKET:-aigc-assets}
+      TOS_ACCESS_KEY_ID: ${TOS_ACCESS_KEY_ID}
+      TOS_SECRET_ACCESS_KEY: ${TOS_SECRET_ACCESS_KEY}
+      TOS_REGION: ${TOS_REGION:-cn-shanghai}
+      TOS_ENDPOINT: ${TOS_ENDPOINT:-tos-cn-shanghai.volces.com}
+      TOS_BUCKET: ${TOS_BUCKET:-toby-ai-prod}
+      TOS_PUBLIC_URL: ${TOS_PUBLIC_URL}
       API_PORT: "7001"
       API_HOST: "0.0.0.0"
       NODE_ENV: production
