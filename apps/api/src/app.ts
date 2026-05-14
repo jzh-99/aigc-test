@@ -98,6 +98,41 @@ export async function buildApp() {
 
   // Swagger UI（仅开发环境，必须在 autoload 之前注册）
   if (process.env.NODE_ENV !== 'production') {
+    // tag 中文映射表
+    const TAG_LABELS: Record<string, string> = {
+      auth: '认证',
+      users: '用户',
+      teams: '团队',
+      workspaces: '工作区',
+      models: '模型',
+      generate: '图片生成',
+      batches: '任务批次',
+      assets: '素材',
+      canvas: '画布',
+      'canvas-agent': '画布 AI 助手',
+      'ai-assistant': 'AI 助手',
+      avatar: '头像生成',
+      'action-imitation': '动作模仿',
+      'video-studio': '视频工作室',
+      videos: '视频',
+      payment: '支付',
+      sse: 'SSE 推送',
+      admin: '管理后台',
+      'company-a': '外部图库',
+      proxy: '资源代理',
+      healthz: '健康检查',
+      'client-errors': '客户端错误上报',
+    }
+
+    // HTTP 方法 → 操作动词
+    const METHOD_VERB: Record<string, string> = {
+      GET: '查询',
+      POST: '创建',
+      PUT: '替换',
+      PATCH: '更新',
+      DELETE: '删除',
+    }
+
     await app.register(import('@fastify/swagger'), {
       openapi: {
         info: { title: 'AIGC API', version: '1.0.0', description: 'AIGC 创作平台 API 文档' },
@@ -107,6 +142,40 @@ export async function buildApp() {
           },
         },
         security: [{ bearerAuth: [] }],
+      },
+      // 自动为没有 schema.tags/summary 的路由补全分组和摘要
+      transform({ schema, url, route }) {
+        // /docs 内部路由没有 schema，直接透传
+        if (!schema) return { schema, url }
+        const s = schema as Record<string, unknown>
+
+        // 非 /api/v1 路由（如 /docs 内部路由）不处理
+        if (!url.startsWith('/api/v1/')) return { schema, url }
+
+        // 从 /api/v1/<module>/... 提取模块名
+        const match = url.match(/^\/api\/v1\/([^/]+)/)
+        const module = match?.[1] ?? 'other'
+        const tagLabel = TAG_LABELS[module] ?? module
+
+        const tags: string[] = Array.isArray(s.tags) && s.tags.length > 0
+          ? (s.tags as string[])
+          : [tagLabel]
+
+        // 没有 summary 时自动生成：「操作动词 + 路径末段」
+        const autoSummary = (() => {
+          const method = (route.method as string | string[])
+          const verb = METHOD_VERB[(Array.isArray(method) ? method[0] : method).toUpperCase()] ?? method
+          // 取路径最后一段（去掉 :param 前缀的冒号）
+          const lastSeg = url.split('/').filter(Boolean).pop() ?? ''
+          const label = lastSeg.startsWith(':') ? lastSeg.slice(1) : lastSeg
+          return `${verb} ${label}`
+        })()
+
+        const summary = typeof s.summary === 'string' && s.summary.length > 0
+          ? s.summary
+          : autoSummary
+
+        return { schema: { ...s, tags, summary }, url }
       },
     })
     await app.register(import('@fastify/swagger-ui'), {

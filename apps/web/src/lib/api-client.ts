@@ -160,6 +160,15 @@ export async function fetchWithAuth<T>(
   return handleResponse<T>(res)
 }
 
+export async function apiGetBlob(path: string): Promise<Blob> {
+  const headers = getHeaders()
+  const res = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' })
+  if (!res.ok) {
+    throw new ApiError(res.status, 'FETCH_FAILED', `Failed to fetch ${path}`)
+  }
+  return res.blob()
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   return fetchWithAuth<T>(path)
 }

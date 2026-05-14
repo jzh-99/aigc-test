@@ -1,25 +1,54 @@
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { hostname } from 'node:os'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 import { Worker, Queue } from 'bullmq'
 import { buildLogger } from './logger.js'
-import type { GenerationJobData, TransferJobData } from '@aigc/types'
+import type { GenerationJobData } from '@aigc/types'
 import { getDb } from '@aigc/db'
 import { getAdapter } from './adapters/factory.js'
 import { completePipeline } from './pipelines/complete.js'
 import { failPipeline } from './pipelines/fail.js'
-import { runTimeoutGuardian } from './jobs/timeout-guardian.js'
-import { runPurgeOldRecords } from './jobs/purge-old-records.js'
-import { runPurgeDeletedProjects } from './jobs/purge-deleted-projects.js'
 import { transferWorker } from './workers/transfer.js'
-import { getRedis, getPubRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
+import { cronWorker, scheduleCronJobs } from './workers/cron-worker.js'
+import { getRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
 import { startVideoPoller } from './pollers/video-poller.js'
 import { startAvatarPoller } from './pollers/avatar-poller.js'
 import { startActionImitationPoller } from './pollers/action-imitation-poller.js'
 
 const logger = buildLogger()
+
+// ─── 单实例锁：防止同一台机器上多个 worker 进程同时运行 ──────────────────────
+// key 包含主机名，不同机器互不干扰，支持多机水平扩展
+const WORKER_LOCK_KEY = `worker:singleton:lock:${hostname()}`
+const LOCK_TTL_MS = 10_000 // 10 秒，心跳续期间隔的 2 倍
+const LOCK_VALUE = String(process.pid)
+
+async function acquireSingletonLock(): Promise<boolean> {
+  const redis = getRedis()
+  // SET NX EX：只有不存在时才设置，原子操作
+  const result = await redis.set(WORKER_LOCK_KEY, LOCK_VALUE, 'PX', LOCK_TTL_MS, 'NX')
+  return result === 'OK'
+}
+
+const lockAcquired = await acquireSingletonLock()
+if (!lockAcquired) {
+  const redis = getRedis()
+  const existingPid = await redis.get(WORKER_LOCK_KEY)
+  logger.error({ existingPid }, '另一个 worker 实例正在运行，当前进程退出。请先停止旧进程再重启。')
+  process.exit(1)
+}
+
+// 心跳续期：每 5 秒续期一次，防止锁过期被其他进程抢占
+const lockHeartbeat = setInterval(async () => {
+  const redis = getRedis()
+  const current = await redis.get(WORKER_LOCK_KEY)
+  if (current === LOCK_VALUE) {
+    await redis.pexpire(WORKER_LOCK_KEY, LOCK_TTL_MS)
+  }
+}, 5_000)
 
 // ─── Image Worker ────────────────────────────────────────────────────────────
 
@@ -114,31 +143,10 @@ imageWorker.on('error', (err) => {
 logger.info('Worker service started — listening on image-queue')
 logger.info('Transfer worker started — listening on transfer-queue')
 
-// ─── Timeout Guardian ──────────────────────────────────────────────────────────
-
-const GUARDIAN_INTERVAL = 5 * 60 * 1000 // 5 minutes
-// Delay first run by 1 minute to let workers warm up
-setTimeout(() => {
-  runTimeoutGuardian().catch((err) => logger.error({ err }, 'Timeout guardian error'))
-}, 60_000)
-const guardianTimer = setInterval(() => {
-  runTimeoutGuardian().catch((err) => logger.error({ err }, 'Timeout guardian error'))
-}, GUARDIAN_INTERVAL)
-
-logger.info('Timeout guardian scheduled (every 5 minutes)')
-
-// ─── Purge Old Records ────────────────────────────────────────────────────────
-
-const PURGE_INTERVAL = 24 * 60 * 60 * 1000 // once a day
-// Delay first run by 5 minutes
-setTimeout(() => {
-  runPurgeOldRecords().catch((err) => logger.error({ err }, 'Purge old records error'))
-  runPurgeDeletedProjects().catch((err) => logger.error({ err }, 'Purge deleted projects error'))
-}, 5 * 60 * 1000)
-const purgeTimer = setInterval(() => {
-  runPurgeOldRecords().catch((err) => logger.error({ err }, 'Purge old records error'))
-  runPurgeDeletedProjects().catch((err) => logger.error({ err }, 'Purge deleted projects error'))
-}, PURGE_INTERVAL)
+// ─── Cron Jobs（BullMQ repeat）────────────────────────────────────────────────
+// upsertJobScheduler 是幂等的，多台机器同时调用也只会存在一个调度
+await scheduleCronJobs()
+logger.info('Cron worker started — listening on cron-queue')
 
 // ─── Video Poller ─────────────────────────────────────────────────────────────
 
@@ -156,13 +164,16 @@ const actionImitationPollerTimer = startActionImitationPoller()
 
 const shutdown = async () => {
   logger.info('Shutting down workers...')
-  clearInterval(guardianTimer)
-  clearInterval(purgeTimer)
+  clearInterval(lockHeartbeat)
   clearInterval(videoPollerTimer)
   clearInterval(avatarPollerTimer)
   clearInterval(actionImitationPollerTimer)
-  await imageWorker.close()
-  await transferWorker.close()
+  // 释放单实例锁，让新进程可以立即启动
+  const redis = getRedis()
+  const current = await redis.get(WORKER_LOCK_KEY)
+  if (current === LOCK_VALUE) await redis.del(WORKER_LOCK_KEY)
+  // 并行等待所有 worker 完成当前 job，避免串行等待导致后续 worker 锁超时
+  await Promise.all([imageWorker.close(), transferWorker.close(), cronWorker.close()])
   await closeRedis()
   process.exit(0)
 }

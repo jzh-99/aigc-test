@@ -195,6 +195,9 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
       assetId: assetRow.id,
       originalUrl: videoUrl,
       assetType: 'video',
+    }, {
+      attempts: 10,
+      backoff: { type: 'exponential', delay: 30_000 }, // 30s → 1m → 2m → ... 最大约 30m，总覆盖 ~2.5h
     })
   }
 

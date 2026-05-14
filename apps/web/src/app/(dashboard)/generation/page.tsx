@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge'
 import { GenerationPanel } from '@/components/generation/generation-panel'
 import { BatchList, type BatchListHandle } from '@/components/history/batch-list'
 import { BatchDetail } from '@/components/history/batch-detail'
-import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { AlertTriangle, FolderX, EyeOff } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
@@ -69,7 +68,6 @@ export default function ImagePage() {
   const { batches: hiddenBatches } = useHiddenBatches(true)
   const hasHidden = hiddenBatches.length > 0
 
-  const resetGeneration = useGenerationStore((s) => s.reset)
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -77,10 +75,6 @@ export default function ImagePage() {
   const activeTeamIdRef = useRef(activeTeamId)
   useEffect(() => { activeTeamIdRef.current = activeTeamId }, [activeTeamId])
   const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
-
-  useEffect(() => {
-    return () => { resetGeneration() }
-  }, [resetGeneration])
 
   // 切换工作区时清空所有活跃订阅
   useEffect(() => {

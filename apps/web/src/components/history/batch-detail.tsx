@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import type { BatchResponse } from '@aigc/types'
+
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet'
@@ -24,6 +25,7 @@ interface BatchDetailProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onApplied?: () => void
+  onReferenceAdded?: () => void
 }
 
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
@@ -48,7 +50,7 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
   failed: { label: '失败', variant: 'destructive' },
 }
 
-export function BatchDetail({ batchId, open, onOpenChange, onApplied }: BatchDetailProps) {
+export function BatchDetail({ batchId, open, onOpenChange, onApplied, onReferenceAdded }: BatchDetailProps) {
   const { data: batch, isLoading, mutate } = useBatch(open ? batchId : null)
 
   return (
@@ -76,14 +78,14 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied }: BatchDet
             </div>
           </div>
         ) : (
-          <BatchDetailContent batch={batch} onClose={() => onOpenChange(false)} onApplied={onApplied} onCancelled={() => mutate()} />
+          <BatchDetailContent batch={batch} onClose={() => onOpenChange(false)} onApplied={onApplied} onReferenceAdded={onReferenceAdded} onCancelled={() => mutate()} />
         )}
       </SheetContent>
     </Sheet>
   )
 }
 
-function BatchDetailContent({ batch, onClose, onApplied, onCancelled }: { batch: BatchResponse; onClose: () => void; onApplied?: () => void; onCancelled?: () => void }) {
+function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCancelled }: { batch: BatchResponse; onClose: () => void; onApplied?: () => void; onReferenceAdded?: () => void; onCancelled?: () => void }) {
   const applyBatch = useGenerationStore((s) => s.applyBatch)
   const addReferenceImage = useGenerationStore((s) => s.addReferenceImage)
   const referenceCount = useGenerationStore((s) => s.referenceImages.length)
@@ -117,27 +119,28 @@ function BatchDetailContent({ batch, onClose, onApplied, onCancelled }: { batch:
     }
   }
 
-  async function handleSendToReference(url: string, showSuccess = true) {
+  async function handleSendToReference(previewUrl: string, showSuccess = true) {
     if (referenceCount >= 10) {
       toast.error('最多添加 10 张参考图')
       return
     }
-    setSendingUrl(url)
+    setSendingUrl(previewUrl)
     try {
       addReferenceImage({
         id: generateUUID(),
-        previewUrl: url,
+        previewUrl,
       })
-      if (showSuccess) toast.success('已发送至参考区')
-    } catch {
-      toast.error('发送至参考失败')
+      if (showSuccess) {
+        toast.success('已发送至参考区')
+        onReferenceAdded?.()
+      }
     } finally {
       setSendingUrl(null)
     }
   }
 
   async function handleSendAllToReference() {
-    if (completedUrls.length === 0) return
+    if (completedAssets.length === 0) return
     if (referenceCount >= 10) {
       toast.error('最多添加 10 张参考图')
       return
@@ -145,25 +148,24 @@ function BatchDetailContent({ batch, onClose, onApplied, onCancelled }: { batch:
     setSendingAll(true)
     try {
       const availableSlots = 10 - referenceCount
-      completedUrls.slice(0, availableSlots).forEach((url) => {
-        addReferenceImage({
-          id: generateUUID(),
-          previewUrl: url,
-        })
-      })
+      const toAdd = completedAssets.slice(0, availableSlots)
+      for (const url of toAdd) {
+        addReferenceImage({ id: generateUUID(), previewUrl: url })
+      }
       toast.success('已发送至参考区')
-      if (completedUrls.length > availableSlots) {
+      if (completedAssets.length > availableSlots) {
         toast.info(`参考区最多 10 张，已添加前 ${availableSlots} 张`)
       }
+      onReferenceAdded?.()
     } finally {
       setSendingAll(false)
     }
   }
 
-  // Collect completed tasks that have a URL
-  const completedUrls = batch.tasks
+  const completedAssets = batch.tasks
     .filter((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))
     .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
+  const completedUrls = completedAssets
 
   const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
   const canCancelSeedance = (batch.status === 'pending' || batch.status === 'processing') && batch.provider === 'volcengine' && /^seedance-/i.test(batch.model)

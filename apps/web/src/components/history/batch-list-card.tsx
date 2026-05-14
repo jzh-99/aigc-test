@@ -108,7 +108,6 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
   const time = new Date(batch.created_at)
 
   const showLoading = thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing')
-  console.log('[BatchListCard]', batch.id, 'status:', batch.status, 'thumbnails:', thumbnails.length, 'showLoading:', showLoading)
 
   // First error message: prefer batch-level field (set by list API), fall back to tasks array
   const firstError: string | null =

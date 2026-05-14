@@ -23,7 +23,21 @@ const logger = buildLogger()
  * 下载远程 URL 为 Buffer（AI 提供商 CDN 地址）
  */
 async function downloadToBuffer(url: string): Promise<Buffer> {
-  const res = await fetch(url)
+  let res: Response
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000) // 30s 超时
+    try {
+      res = await fetch(url, { signal: controller.signal })
+    } finally {
+      clearTimeout(timer)
+    }
+  } catch (err) {
+    const cause = err instanceof Error && (err as NodeJS.ErrnoException).cause
+      ? ` cause=${String((err as NodeJS.ErrnoException).cause)}`
+      : ''
+    throw new Error(`下载网络错误: ${err instanceof Error ? err.message : String(err)}${cause} url=${url}`)
+  }
   if (!res.ok) throw new Error(`下载失败: ${res.status} ${res.statusText} url=${url}`)
   return Buffer.from(await res.arrayBuffer())
 }
@@ -119,8 +133,12 @@ export const transferWorker = new Worker<TransferJobData>(
 
       logger.info({ jobId: job.id, taskId, storageUrl }, 'Transfer 完成')
     } catch (err) {
+      // Node.js fetch 错误的根因藏在 cause 里，必须一起打印
       const msg = err instanceof Error ? err.message : String(err)
-      logger.error({ jobId: job.id, taskId, err: msg }, 'Transfer 失败')
+      const cause = err instanceof Error && (err as NodeJS.ErrnoException).cause
+        ? String((err as NodeJS.ErrnoException).cause)
+        : undefined
+      logger.error({ jobId: job.id, taskId, assetId, originalUrl, err: msg, cause }, 'Transfer 失败')
 
       const db = getDb()
       await db
@@ -135,6 +153,9 @@ export const transferWorker = new Worker<TransferJobData>(
   {
     connection: getBullMQConnection(),
     concurrency: 5,
+    // 下载 AI 文件 + 上传 TOS + ffmpeg 提取缩略图，整个流程最长可达 3 分钟
+    // 不设置会用默认 30s，进程重启时 job 容易被误判为 stalled 并丢失
+    lockDuration: 300_000, // 5 分钟
   },
 )
 

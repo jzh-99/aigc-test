@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --import ./src/bootstrap.ts src/index.ts",
+    "dev": "tsx --import ./src/bootstrap.ts src/index.ts",
     "build": "tsc",
     "start": "node --import ./dist/bootstrap.js dist/index.js"
   },

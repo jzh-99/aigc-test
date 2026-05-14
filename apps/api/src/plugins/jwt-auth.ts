@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 
 // Public routes that skip auth
 const PUBLIC_ROUTES = [
+  '/docs',
   '/api/v1/healthz',
   '/api/v1/auth/login',
   '/api/v1/auth/refresh',

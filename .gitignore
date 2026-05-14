@@ -8,7 +8,10 @@ dist/
 !.env.*.example
 .worktrees/
 
+.vscode/
+
 # Local Claude/session state
+.claude
 .claude/settings.local.json
 .claude/worktrees/
 
