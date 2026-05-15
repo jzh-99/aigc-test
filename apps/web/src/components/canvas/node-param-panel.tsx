@@ -10,6 +10,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { CanvasApiError, executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
+import { useModels } from '@/hooks/use-models'
+import { getModelResolutions } from '@/components/generation/shared/schema-utils'
 import type {
   AppNode,
   AssetConfig,
@@ -112,10 +114,15 @@ function normalizeVideoConfig(config: unknown): VideoGenConfig {
 export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboardExpandedRef }: Props) {
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
   const token = useAuthStore((s) => s.accessToken)
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const setNodeStatus = useCanvasExecutionStore((s) => s.setNodeStatus)
   const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
   const [executing, setExecuting] = useState(false)
   const globalWatermark = useGenerationStore((s) => s.watermark)
+
+  // 动态模型列表，与创作生成板块共用同一 API
+  const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
+  const { models: videoModels, isReady: videoModelsReady } = useModels('video', activeWorkspaceId)
 
   const isImageGen = node.type === 'image_gen'
   const isTextInput = node.type === 'text_input'
@@ -197,14 +204,22 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const videoWatermark = globalWatermark
 
   const handleModelChange = useCallback((val: ModelType) => {
-    const model = IMAGE_MODEL_OPTIONS.find((m) => m.value === val)
-    if (!model) return
-    const nextResolution = model.resolutions.includes(resolution) ? resolution : model.resolutions[0]
+    // 优先从 DB 模型列表获取新模型的首个可用分辨率
+    const nextResolutions = getModelResolutions(val, imageModels)
+    const nextResolution = nextResolutions.includes(resolution) ? resolution : (nextResolutions[0] ?? resolution)
     updateCfg({ modelType: val, resolution: nextResolution })
-  }, [resolution, updateCfg])
+  }, [resolution, updateCfg, imageModels])
 
   const handleExecuteImage = useCallback(async () => {
-    const modelCode = MODEL_CODE_MAP[modelType]?.[resolution]
+    // 优先从 DB 模型的 params_pricing 获取实际 model code，fallback 到静态 MODEL_CODE_MAP
+    const dbModel = imageModels.find((m) => m.code === modelType)
+    const modelCode = (() => {
+      if (dbModel && dbModel.params_pricing.length > 0) {
+        const rule = dbModel.params_pricing.find((r) => r.resolution === resolution)
+        if (rule?.model) return rule.model
+      }
+      return MODEL_CODE_MAP[modelType as keyof typeof MODEL_CODE_MAP]?.[resolution as Resolution]
+    })()
     if (!modelCode) {
       toast.error('模型配置错误')
       return
@@ -271,6 +286,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [
     aspectRatio,
     canvasId,
+    imageModels,
     modelType,
     node.id,
     onExecuted,
@@ -287,13 +303,17 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   ])
 
   const handleVideoModelChange = useCallback((val: string) => {
-    const model = VIDEO_MODEL_OPTIONS.find((o) => o.value === val)
-    if (!model) return
+    // 优先从 DB 模型判断 isSeedance 和 supportsMultiref
+    const dbModel = videoModels.find((m) => m.code === val)
+    const isSeedanceModel = val.startsWith('seedance-')
+    const supportsMultiref = dbModel
+      ? (Array.isArray(dbModel.video_categories) ? (dbModel.video_categories as string[]).includes('multimodal') : true)
+      : (VIDEO_MODEL_OPTIONS.find((o) => o.value === val)?.supportsMultiref ?? true)
 
-    const newMode = videoMode === 'multiref' && !model.supportsMultiref ? 'keyframe' : videoMode
-    const newAspect = model.isSeedance ? (videoAspect || 'adaptive') : ''
+    const newMode = videoMode === 'multiref' && !supportsMultiref ? 'keyframe' : videoMode
+    const newAspect = isSeedanceModel ? (videoAspect || 'adaptive') : ''
     updateCfg({ model: val, videoMode: newMode, aspectRatio: newAspect })
-  }, [updateCfg, videoAspect, videoMode])
+  }, [updateCfg, videoAspect, videoMode, videoModels])
 
   const handleVideoModeChange = useCallback((newMode: VideoGenConfig['videoMode']) => {
     if (newMode === videoMode) return
@@ -425,6 +445,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           quantity={quantity}
           executing={executing}
           hasPrompt={!!hasImagePrompt}
+          models={imageModels}
+          modelsReady={imageModelsReady}
           onModelChange={handleModelChange}
           onUpdateCfg={updateCfg}
           onExecute={handleExecuteImage}
@@ -453,6 +475,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           cameraFixed={cameraFixed}
           executing={executing}
           hasPrompt={!!hasVideoPrompt}
+          models={videoModels}
+          modelsReady={videoModelsReady}
           onVideoModelChange={handleVideoModelChange}
           onVideoModeChange={handleVideoModeChange}
           onUpdateCfg={updateCfg}

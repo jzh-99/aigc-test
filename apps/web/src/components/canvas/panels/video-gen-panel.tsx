@@ -8,6 +8,14 @@ import {
   VIDEO_CREDITS_PER_SEC,
   VIDEO_MODEL_OPTIONS,
 } from './panel-constants'
+import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
+import type { ModelItem } from '@aigc/types'
+
+// canvas videoMode 到 DB video_categories 的映射
+const VIDEO_MODE_TO_CATEGORY: Record<VideoMode, string> = {
+  multiref: 'multimodal',
+  keyframe: 'frames',
+}
 
 interface VideoGenPanelProps {
   promptDraft: string
@@ -30,6 +38,9 @@ interface VideoGenPanelProps {
   cameraFixed: boolean
   executing: boolean
   hasPrompt: boolean
+  /** 动态模型列表，来自 /models?module=video */
+  models?: ModelItem[]
+  modelsReady?: boolean
   onVideoModelChange: (value: string) => void
   onVideoModeChange: (value: VideoMode) => void
   onUpdateCfg: (patch: Record<string, unknown>) => void
@@ -56,16 +67,74 @@ export function VideoGenPanel({
   cameraFixed,
   executing,
   hasPrompt,
+  models,
+  modelsReady,
   onVideoModelChange,
   onVideoModeChange,
   onUpdateCfg,
   onExecute,
 }: VideoGenPanelProps) {
-  const currentVideoModel = VIDEO_MODEL_OPTIONS.find((m) => m.value === videoModel) ?? VIDEO_MODEL_OPTIONS[0]
-  const isSeedance = currentVideoModel.isSeedance
-  const videoCredits = isSeedance
-    ? (VIDEO_CREDITS_PER_SEC[videoModel] ?? 3) * (videoDuration === -1 ? 15 : videoDuration)
-    : (VIDEO_CREDITS_PER_SEC[videoModel] ?? 10)
+  const useDbModels = modelsReady && models && models.length > 0
+  const currentDbModel = useDbModels ? models!.find((m) => m.code === videoModel) : undefined
+  const currentStaticModel = VIDEO_MODEL_OPTIONS.find((m) => m.value === videoModel) ?? VIDEO_MODEL_OPTIONS[0]
+
+  // isSeedance：优先从 DB 模型 code 判断，fallback 到静态常量
+  const isSeedance = currentDbModel ? currentDbModel.code.startsWith('seedance-') : currentStaticModel.isSeedance
+
+  // supportsMultiref：DB 模型通过 video_categories 判断，fallback 到静态常量
+  const getSupportsMultiref = (m: ModelItem) => {
+    const cats = Array.isArray(m.video_categories) ? (m.video_categories as string[]) : []
+    return cats.length === 0 || cats.includes('multimodal')
+  }
+
+  // 过滤当前 videoMode 可用的模型列表
+  const filteredModels = useDbModels
+    ? models!.filter((m) => {
+        const cats = Array.isArray(m.video_categories) ? (m.video_categories as string[]) : []
+        const targetCategory = VIDEO_MODE_TO_CATEGORY[videoMode]
+        // video_categories 为空时不过滤（兼容未配置的模型）
+        return cats.length === 0 || cats.includes(targetCategory)
+      })
+    : VIDEO_MODEL_OPTIONS.filter((m) => videoMode === 'multiref' ? m.supportsMultiref : m.supportsKeyframe)
+
+  // 比例选项：优先从 DB 模型 params_schema 提取
+  const aspectRatioOptions: Array<{ value: string; label: string }> = (() => {
+    if (currentDbModel) {
+      const enums = extractSchemaEnums(currentDbModel.params_schema, 'aspect_ratio')
+      if (enums.length > 0) return enums.map((v) => ({ value: v, label: v }))
+    }
+    return [...(isSeedance ? VIDEO_ASPECT_RATIOS_SEEDANCE : VIDEO_ASPECT_RATIOS_VEO)]
+  })()
+
+  // 时长选项：优先从 DB 模型 params_schema 提取
+  const durationOptions: Array<{ value: number; label: string }> = (() => {
+    if (currentDbModel) {
+      const enums = extractSchemaEnums(currentDbModel.params_schema, 'time_length')
+      if (enums.length > 0) {
+        return enums.map((v) => {
+          const num = Number(v)
+          return { value: num, label: num === -1 ? '自动' : `${num}s` }
+        })
+      }
+    }
+    return [...SEEDANCE_DURATION_OPTIONS]
+  })()
+
+  // 积分计算：优先从 DB 模型 params_pricing 获取
+  const videoCredits = (() => {
+    if (currentDbModel) {
+      const fallback = (VIDEO_CREDITS_PER_SEC[videoModel] ?? 3) * (videoDuration === -1 ? 15 : videoDuration)
+      return getPriceByResolution(currentDbModel, String(videoDuration), fallback)
+    }
+    return isSeedance
+      ? (VIDEO_CREDITS_PER_SEC[videoModel] ?? 3) * (videoDuration === -1 ? 15 : videoDuration)
+      : (VIDEO_CREDITS_PER_SEC[videoModel] ?? 10)
+  })()
+
+  // 当前模型是否支持 multiref（用于禁用按钮）
+  const currentSupportsMultiref = currentDbModel
+    ? getSupportsMultiref(currentDbModel)
+    : currentStaticModel.supportsMultiref
 
   return (
     <div className="flex gap-0 divide-x divide-border">
@@ -74,7 +143,7 @@ export function VideoGenPanel({
           <button
             data-testid="video-mode-multiref"
             onClick={() => onVideoModeChange('multiref')}
-            disabled={!currentVideoModel.supportsMultiref}
+            disabled={!currentSupportsMultiref}
             className={cn(
               'flex-1 py-1 transition-colors',
               videoMode === 'multiref'
@@ -221,22 +290,39 @@ export function VideoGenPanel({
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">模型</label>
           <div className="flex flex-col gap-1">
-            {VIDEO_MODEL_OPTIONS.filter((m) => videoMode === 'multiref' ? m.supportsMultiref : m.supportsKeyframe).map((m) => {
-              const isActive = videoModel === m.value
-              return (
-                <button
-                  key={m.value}
-                  onClick={() => onVideoModelChange(m.value)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
-                    isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
-                  )}
-                >
-                  <Film className="w-3 h-3 shrink-0" />
-                  <span className="flex-1 truncate text-[10px]">{m.label}</span>
-                </button>
-              )
-            })}
+            {useDbModels
+              ? (filteredModels as ModelItem[]).map((m) => {
+                  const isActive = videoModel === m.code
+                  return (
+                    <button
+                      key={m.code}
+                      onClick={() => onVideoModelChange(m.code)}
+                      className={cn(
+                        'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
+                        isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
+                      )}
+                    >
+                      <Film className="w-3 h-3 shrink-0" />
+                      <span className="flex-1 truncate text-[10px]">{m.name}</span>
+                    </button>
+                  )
+                })
+              : (filteredModels as typeof VIDEO_MODEL_OPTIONS).map((m) => {
+                  const isActive = videoModel === m.value
+                  return (
+                    <button
+                      key={m.value}
+                      onClick={() => onVideoModelChange(m.value)}
+                      className={cn(
+                        'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
+                        isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
+                      )}
+                    >
+                      <Film className="w-3 h-3 shrink-0" />
+                      <span className="flex-1 truncate text-[10px]">{m.label}</span>
+                    </button>
+                  )
+                })}
           </div>
         </div>
 
@@ -247,7 +333,7 @@ export function VideoGenPanel({
             onChange={(e) => onUpdateCfg({ aspectRatio: e.target.value })}
             className="w-full h-7 px-2 text-[11px] bg-muted/60 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            {(isSeedance ? VIDEO_ASPECT_RATIOS_SEEDANCE : VIDEO_ASPECT_RATIOS_VEO).map((ar) => (
+            {aspectRatioOptions.map((ar) => (
               <option key={ar.value} value={ar.value}>{ar.label}</option>
             ))}
           </select>
@@ -261,7 +347,7 @@ export function VideoGenPanel({
               onChange={(e) => onUpdateCfg({ duration: Number(e.target.value) })}
               className="w-full h-7 px-2 text-[11px] bg-muted/60 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              {SEEDANCE_DURATION_OPTIONS.map((opt) => (
+              {durationOptions.map((opt) => (
                 <option key={opt.value} value={String(opt.value)}>{opt.label}</option>
               ))}
             </select>

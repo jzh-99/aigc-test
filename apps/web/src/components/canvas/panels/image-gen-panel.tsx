@@ -7,6 +7,8 @@ import {
   type ModelType,
   type Resolution,
 } from './panel-constants'
+import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
+import type { ModelItem } from '@aigc/types'
 
 interface OrderedImageRef {
   url: string
@@ -24,6 +26,9 @@ interface ImageGenPanelProps {
   quantity: number
   executing: boolean
   hasPrompt: boolean
+  /** 动态模型列表，来自 /models?module=image */
+  models?: ModelItem[]
+  modelsReady?: boolean
   onModelChange: (value: ModelType) => void
   onUpdateCfg: (patch: Record<string, unknown>) => void
   onExecute: () => void
@@ -41,13 +46,44 @@ export function ImageGenPanel({
   quantity,
   executing,
   hasPrompt,
+  models,
+  modelsReady,
   onModelChange,
   onUpdateCfg,
   onExecute,
 }: ImageGenPanelProps) {
-  const currentModel = IMAGE_MODEL_OPTIONS.find((m) => m.value === modelType) ?? IMAGE_MODEL_OPTIONS[0]
+  // 优先使用 DB 模型数据，fallback 到静态常量
+  const useDbModels = modelsReady && models && models.length > 0
+  const currentDbModel = useDbModels ? models!.find((m) => m.code === modelType) : undefined
+  const currentStaticModel = IMAGE_MODEL_OPTIONS.find((m) => m.value === modelType) ?? IMAGE_MODEL_OPTIONS[0]
+
+  // 分辨率列表：优先从 DB 模型的 params_schema 提取
+  const resolutions: string[] = (() => {
+    if (currentDbModel) {
+      const enums = extractSchemaEnums(currentDbModel.params_schema, 'resolution')
+      if (enums.length > 0) return enums
+    }
+    return currentStaticModel.resolutions
+  })()
+
+  // 宽高比列表：优先从 DB 模型的 params_schema 提取
+  const aspectRatios: string[] = (() => {
+    if (currentDbModel) {
+      const enums = extractSchemaEnums(currentDbModel.params_schema, 'aspect_ratio')
+      if (enums.length > 0) return enums
+    }
+    return [...ASPECT_RATIOS_IMAGE]
+  })()
+
+  // 积分：优先从 DB 模型的 params_pricing 计算
+  const credits = (() => {
+    if (currentDbModel) {
+      return getPriceByResolution(currentDbModel, resolution, IMAGE_MODEL_CREDITS[modelType] ?? 5)
+    }
+    return IMAGE_MODEL_CREDITS[modelType] ?? 5
+  })()
+
   const showQualitySelector = modelType !== 'gpt-image-2'
-  const credits = IMAGE_MODEL_CREDITS[modelType] ?? 5
 
   return (
     <div className="flex gap-0 divide-x divide-border">
@@ -87,26 +123,47 @@ export function ImageGenPanel({
       <div className="p-3 flex flex-col gap-1" style={{ width: 160 }}>
         <label className="text-[11px] font-medium text-muted-foreground">模型</label>
         <div className="flex flex-col gap-1">
-          {IMAGE_MODEL_OPTIONS.map((m) => {
-            const Icon = m.icon
-            const isActive = modelType === m.value
-            return (
-              <button
-                key={m.value}
-                onClick={() => onModelChange(m.value)}
-                className={cn(
-                  'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
-                  isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
-                )}
-              >
-                <Icon className="w-3 h-3 shrink-0" />
-                <span className="flex-1 truncate">{m.label}</span>
-                <span className={cn('text-[10px]', isActive ? 'text-primary/70' : 'text-muted-foreground')}>
-                  {IMAGE_MODEL_CREDITS[m.value]}
-                </span>
-              </button>
-            )
-          })}
+          {useDbModels
+            ? models!.map((m) => {
+                const isActive = modelType === m.code
+                // DB 模型的默认积分取第一条 params_pricing
+                const modelCredits = m.params_pricing[0]?.unit_price ?? IMAGE_MODEL_CREDITS[m.code] ?? 5
+                return (
+                  <button
+                    key={m.code}
+                    onClick={() => onModelChange(m.code as ModelType)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
+                      isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
+                    )}
+                  >
+                    <span className="flex-1 truncate">{m.name}</span>
+                    <span className={cn('text-[10px]', isActive ? 'text-primary/70' : 'text-muted-foreground')}>
+                      {modelCredits}
+                    </span>
+                  </button>
+                )
+              })
+            : IMAGE_MODEL_OPTIONS.map((m) => {
+                const Icon = m.icon
+                const isActive = modelType === m.value
+                return (
+                  <button
+                    key={m.value}
+                    onClick={() => onModelChange(m.value)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
+                      isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
+                    )}
+                  >
+                    <Icon className="w-3 h-3 shrink-0" />
+                    <span className="flex-1 truncate">{m.label}</span>
+                    <span className={cn('text-[10px]', isActive ? 'text-primary/70' : 'text-muted-foreground')}>
+                      {IMAGE_MODEL_CREDITS[m.value]}
+                    </span>
+                  </button>
+                )
+              })}
         </div>
       </div>
 
@@ -115,7 +172,7 @@ export function ImageGenPanel({
           <div className="space-y-1">
             <label className="text-[11px] font-medium text-muted-foreground">分辨率</label>
             <div className="flex flex-wrap gap-1">
-              {currentModel.resolutions.map((r) => (
+              {resolutions.map((r) => (
                 <button
                   key={r}
                   onClick={() => onUpdateCfg({ resolution: r })}
@@ -133,7 +190,7 @@ export function ImageGenPanel({
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">宽高比</label>
           <div className="flex flex-wrap gap-1">
-            {ASPECT_RATIOS_IMAGE.map((r) => (
+            {aspectRatios.map((r) => (
               <button
                 key={r}
                 onClick={() => onUpdateCfg({ aspectRatio: r })}

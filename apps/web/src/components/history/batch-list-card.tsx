@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check, Video, Play, X, EyeOff } from 'lucide-react'
+import { User, Loader2, RotateCcw, Check, Video, Play, X, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +33,123 @@ export function parseAspectRatio(ratio?: string): string {
   const [w, h] = ratio.split(':')
   if (!w || !h || isNaN(Number(w)) || isNaN(Number(h))) return '1 / 1'
   return `${w} / ${h}`
+}
+
+/** 视频预览：16:9 固定比例，进入视野自动静音播放 */
+function VideoPreview({ url }: { url: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          video.play().catch(() => {})
+        } else {
+          video.pause()
+        }
+      },
+      { threshold: 0.4 },
+    )
+    observer.observe(video)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div className="relative w-full aspect-video rounded-md overflow-hidden bg-black">
+      <video
+        ref={videoRef}
+        src={url}
+        className="absolute inset-0 w-full h-full object-cover"
+        muted
+        loop
+        playsInline
+        preload="metadata"
+      />
+      <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5 pointer-events-none">
+        <Play className="h-2 w-2 text-white fill-white" />
+        <span className="text-[9px] text-white font-medium leading-none">视频</span>
+      </div>
+    </div>
+  )
+}
+
+/** 图片轮播：宽度填满高度按比例，多图时显示左右翻页箭头 */
+function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: string }) {
+  const [index, setIndex] = useState(0)
+  const isMulti = urls.length > 1
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndex((i) => Math.max(0, i - 1))
+  }
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndex((i) => Math.min(urls.length - 1, i + 1))
+  }
+
+  return (
+    <div className="group relative w-full rounded-md overflow-hidden bg-muted">
+      <Image
+        src={urls[index]}
+        alt=""
+        width={0}
+        height={0}
+        sizes="100vw"
+        className="w-full h-auto block"
+        style={{ aspectRatio }}
+        unoptimized
+      />
+      {isMulti && (
+        <>
+          <button
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
+              flex items-center justify-center
+              bg-white/20 backdrop-blur-sm border border-white/30
+              text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
+              opacity-0 group-hover:opacity-100 transition-all duration-200
+              hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
+              hover:border-transparent hover:scale-110
+              disabled:opacity-0 disabled:pointer-events-none"
+            onClick={handlePrev}
+            disabled={index === 0}
+          >
+            <ChevronLeft className="h-5 w-5 drop-shadow" />
+          </button>
+          <button
+            className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
+              flex items-center justify-center
+              bg-white/20 backdrop-blur-sm border border-white/30
+              text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
+              opacity-0 group-hover:opacity-100 transition-all duration-200
+              hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
+              hover:border-transparent hover:scale-110
+              disabled:opacity-0 disabled:pointer-events-none"
+            onClick={handleNext}
+            disabled={index === urls.length - 1}
+          >
+            <ChevronRight className="h-5 w-5 drop-shadow" />
+          </button>
+          {/* 底部指示点：当前项用渐变色拉伸，其余为半透明白点 */}
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1">
+            {urls.map((_, i) => (
+              <span
+                key={i}
+                className="block h-1 rounded-full transition-all duration-300"
+                style={{
+                  width: i === index ? 16 : 4,
+                  background: i === index
+                    ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                    : 'rgba(255,255,255,0.45)',
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 function formatElapsed(ms: number) {
@@ -116,8 +233,6 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
   const time = new Date(batch.created_at)
   const thumbnailAspect = parseAspectRatio((batch as any).params?.aspect_ratio)
 
-  const showLoading = thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing')
-
   // First error message: prefer batch-level field (set by list API), fall back to tasks array
   const firstError: string | null =
     (batch as any).error_message
@@ -181,21 +296,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
         {/* Thumbnail grid / video preview */}
         {isVideo ? (
           videoUrl ? (
-            <div className="flex gap-2 overflow-hidden">
-              <div className="relative h-auto w-full shrink-0 rounded-md overflow-hidden bg-muted [transform:translateZ(0)]">
-                <video
-                  src={videoUrl}
-                  className="h-full w-full object-contain"
-                  muted
-                  preload="metadata"
-                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.001 }}
-                />
-                <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5">
-                  <Play className="h-2 w-2 text-white fill-white" />
-                  <span className="text-[9px] text-white font-medium leading-none">视频</span>
-                </div>
-              </div>
-            </div>
+            <VideoPreview url={videoUrl} />
           ) : (batch.status === 'pending' || batch.status === 'processing') ? (
             <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -214,22 +315,9 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
           )
         ) : (
           <>
-            {/* Image thumbnails */}
+            {/* Image thumbnails — 宽度填满按比例，多图轮播 */}
             {thumbnails.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto scrollbar-none pb-0.5">
-                {thumbnails.map((url, i) => (
-                  <div key={i} className="relative shrink-0 overflow-hidden rounded-md bg-muted" style={{ width: 64, aspectRatio: thumbnailAspect }}>
-                    <Image
-                      src={url}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      sizes="64px"
-                      unoptimized
-                    />
-                  </div>
-                ))}
-              </div>
+              <ImageCarousel urls={thumbnails} aspectRatio={thumbnailAspect} />
             )}
 
             {/* Loading animation for pending/processing */}

@@ -13,15 +13,9 @@ export type HandleRole =
 export type CanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'asset' | 'script_writer' | 'storyboard_splitter' | 'video_stitch'
 export type VideoMode = 'multiref' | 'keyframe'
 
-export type ImageModelType =
-  | 'gemini'
-  | 'gpt-image-2'
-  | 'nano-banana-pro'
-  | 'seedream-5.0-lite'
-  | 'seedream-4.5'
-  | 'seedream-4.0'
-
-export type ImageResolution = '1k' | '2k' | '3k' | '4k'
+// 保留 union 类型供静态 fallback 使用，实际存储和运行时用 string
+export type ImageModelType = string
+export type ImageResolution = string
 
 export interface TextInputConfig {
   text: string
