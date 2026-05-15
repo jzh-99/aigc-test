@@ -18,6 +18,7 @@ import Image from 'next/image'
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
 import { MAX_REF_IMAGES } from '../shared/constants'
+import { getModelResolutions } from '../shared/schema-utils'
 import { useModels } from '@/hooks/use-models'
 
 interface ImagePanelProps {
@@ -56,9 +57,19 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
     if (!imageModelsReady || imageModels.length === 0) return
     const isValid = imageModels.some((m) => m.code === modelType)
     if (!isValid) {
-      setModelType(imageModels[0].code)
+      const firstModel = imageModels[0].code
+      setModelType(firstModel)
+      // 同步重置为新模型的首个分辨率
+      const resolutions = getModelResolutions(firstModel, imageModels)
+      if (resolutions.length > 0) setResolution(resolutions[0] as typeof resolution)
+    } else {
+      // 模型有效，但当前 resolution 可能不在该模型支持列表中，自动修正
+      const resolutions = getModelResolutions(modelType, imageModels)
+      if (resolutions.length > 0 && !resolutions.includes(resolution)) {
+        setResolution(resolutions[0] as typeof resolution)
+      }
     }
-  }, [imageModelsReady, imageModels, modelType, setModelType])
+  }, [imageModelsReady, imageModels, modelType, resolution, setModelType, setResolution])
 
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
@@ -241,7 +252,14 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
         quantity={quantity}
         isGenerating={isGenerating}
         disabled={disabled}
-        onModelChange={(v) => setModelType(v)}
+        onModelChange={(v) => {
+            setModelType(v)
+            // 切换模型时自动选中新模型的首个可用分辨率
+            const resolutions = getModelResolutions(v, imageModels)
+            if (resolutions.length > 0) {
+              setResolution(resolutions[0] as typeof resolution)
+            }
+          }}
         onResolutionChange={(v) => setResolution(v as typeof resolution)}
         onAspectRatioChange={setAspectRatio}
         onQuantityChange={setQuantity}

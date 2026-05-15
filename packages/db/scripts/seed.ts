@@ -319,8 +319,8 @@ async function main() {
   const providerResult = await db
     .insertInto('providers')
     .values({
-      code: 'nano-banana',
-      name: 'Nano Banana',
+      code: 'comfly',
+      name: 'Comfly',
       region: 'global',
       modules: JSON.stringify(['image']),
       is_active: true,
@@ -330,7 +330,7 @@ async function main() {
       }),
     })
     .onConflict((oc: any) => oc.column('code').doUpdateSet({
-      name: 'Nano Banana',
+      name: 'Comfly',
       region: 'global',
       modules: JSON.stringify(['image']),
       is_active: true,
@@ -343,9 +343,9 @@ async function main() {
     .execute()
 
   const provider = providerResult[0]
-  console.log('  providers seeded (nano-banana)')
+  console.log('  providers seeded (comfly)')
 
-  // 10. Provider models: nano-banana 图片模型 — upsert by code
+  // 10. Provider models: comfly 图片模型 — upsert by code
   const imageModels = [
     // {
     //   code: 'nano-banana-2-2k',
@@ -392,52 +392,6 @@ async function main() {
         { resolution: '1k', model: 'nano-banana-2', unit_price: 4 },
         { resolution: '2k', model: 'nano-banana-2-2k', unit_price: 4 },
         { resolution: '4k', model: 'nano-banana-2-4k', unit_price: 4 },
-      ],
-      params_schema: {
-        resolution: ['1k', '2k', '4k'],
-        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
-        image: [],
-      },
-    },
-    {
-      code: 'seedream-5.0-lite',
-      name: 'Seedream 5.0',
-      description: '最新火山引擎模型，联网搜索增强',
-      credit_cost: 10,
-      params_pricing: [
-        { resolution: '2k', model: 'seedream-5.0-lite', unit_price: 4 },
-        { resolution: '3k', model: 'seedream-5.0-lite', unit_price: 4 },
-      ],
-      params_schema: {
-        resolution: ['2k', '3k'],
-        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
-        image: [],
-      },
-    },
-    {
-      code: 'seedream-4.5',
-      name: 'Seedream 4.5',
-      description: '高分辨率图像生成',
-      credit_cost: 10,
-      params_pricing: [
-        { resolution: '2k', model: 'seedream-4.5', unit_price: 4 },
-        { resolution: '4k', model: 'seedream-4.5', unit_price: 4 },
-      ],
-      params_schema: {
-        resolution: ['2k', '4k'],
-        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
-        image: [],
-      },
-    },
-    {
-      code: 'seedream-4.0',
-      name: 'Seedream 4.0',
-      description: '多分辨率图像生成',
-      credit_cost: 10,
-      params_pricing: [
-        { resolution: '1k', model: 'seedream-4.0', unit_price: 3 },
-        { resolution: '2k', model: 'seedream-4.0', unit_price: 3 },
-        { resolution: '4k', model: 'seedream-4.0', unit_price: 3 },
       ],
       params_schema: {
         resolution: ['1k', '2k', '4k'],
@@ -530,62 +484,6 @@ async function main() {
     //     },
     //   }),
     // },
-    {
-      code: 'seedance-1.5-pro',
-      name: 'Seedance 1.5 Pro',
-      description: '有声视频生成，支持首尾帧',
-      credit_cost: 15,
-      video_categories: ['frames'],
-      params_pricing: [
-        { resolution: '480p', model: 'seedance-1.5-pro', unit_price: 5 },
-        { resolution: '720p', model: 'seedance-1.5-pro', unit_price: 10 },
-        { resolution: '1080p', model: 'seedance-1.5-pro', unit_price: 20 },
-      ],
-      params_schema: JSON.stringify({
-        aspect_ratio: aspectRatioDefaultArr,
-        resolution: ['480p', '720p', '1080p'],
-        time_length: timeDefaultArr,
-        video_voice: videoVoiceDefaultArr,
-        image: [],
-      }),
-    },
-    {
-      code: 'seedance-2.0',
-      name: 'Seedance 2.0',
-      description: '新一代有声视频，支持首尾帧',
-      credit_cost: 15,
-      video_categories: ['multimodal', 'frames', 'components'],
-      params_pricing: [
-        { resolution: '480p', model: 'seedance-2.0', unit_price: 7 },
-        { resolution: '720p', model: 'seedance-2.0', unit_price: 15 },
-        { resolution: '1080p', model: 'seedance-2.0', unit_price: 35 },
-      ],
-      params_schema: JSON.stringify({
-        aspect_ratio: aspectRatioDefaultArr,
-        resolution: ['480p', '720p', '1080p'],
-        time_length: timeDefaultArr,
-        video_voice: videoVoiceDefaultArr,
-        image: [],
-      }),
-    },
-    {
-      code: 'seedance-2.0-fast',
-      name: 'Seedance 2.0 Fast',
-      description: '新一代有声视频，支持首尾帧',
-      credit_cost: 15,
-      video_categories: ['multimodal', 'frames', 'components'],
-      params_pricing: [
-        { resolution: '480p', model: 'seedance-2.0-fast', unit_price: 5 },
-        { resolution: '720p', model: 'seedance-2.0-fast', unit_price: 12 },
-      ],
-      params_schema: JSON.stringify({
-        aspect_ratio: aspectRatioDefaultArr,
-        resolution: ['480p', '720p'],
-        time_length: timeDefaultArr,
-        video_voice: videoVoiceDefaultArr,
-        image: [],
-      }),
-    },
   ]
 
   for (const m of veoVideoModels) {

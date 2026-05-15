@@ -49,67 +49,47 @@ async function main() {
       name: 'Seedream 5.0',
       description: '最新火山引擎模型，联网搜索增强',
       credit_cost: 10,
-      // 图片模型暂不区分分辨率定价，params_pricing 为空数组，回退 credit_cost
-      params_pricing: JSON.stringify([]),
-      params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: {
-            type: 'string',
-            enum: ['1:1', '16:9', '9:16', '4:3', '3:4'],
-          },
-          resolution: {
-            type: 'string',
-            enum: ['1k', '2k', '4k'],
-          },
-          image: { type: 'array', items: { type: 'string' } },
-          watermark: { type: 'boolean' },
-        },
-      }),
+      params_pricing: [
+        { resolution: '2k', model: 'seedream-5.0-lite', unit_price: 4 },
+        { resolution: '3k', model: 'seedream-5.0-lite', unit_price: 4 },
+        { resolution: '4k', model: 'seedream-5.0-lite', unit_price: 4 },
+      ],
+      params_schema: {
+        resolution: ['2k', '3k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
     {
       code: 'seedream-4.5',
       name: 'Seedream 4.5',
       description: '高分辨率图像生成',
       credit_cost: 10,
-      params_pricing: JSON.stringify([]),
-      params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: {
-            type: 'string',
-            enum: ['1:1', '16:9', '9:16', '4:3', '3:4'],
-          },
-          resolution: {
-            type: 'string',
-            enum: ['2k', '4k'],
-          },
-          image: { type: 'array', items: { type: 'string' } },
-          watermark: { type: 'boolean' },
-        },
-      }),
+      params_pricing: [
+        { resolution: '2k', model: 'seedream-4.5', unit_price: 4 },
+        { resolution: '4k', model: 'seedream-4.5', unit_price: 4 },
+      ],
+      params_schema: {
+        resolution: ['2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
     {
       code: 'seedream-4.0',
       name: 'Seedream 4.0',
       description: '多分辨率图像生成',
       credit_cost: 10,
-      params_pricing: JSON.stringify([]),
-      params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: {
-            type: 'string',
-            enum: ['1:1', '16:9', '9:16', '4:3', '3:4'],
-          },
-          resolution: {
-            type: 'string',
-            enum: ['2k', '4k'],
-          },
-          image: { type: 'array', items: { type: 'string' } },
-          watermark: { type: 'boolean' },
-        },
-      }),
+      params_pricing: [
+        { resolution: '1k', model: 'seedream-4.0', unit_price: 3 },
+        { resolution: '2k', model: 'seedream-4.0', unit_price: 3 },
+        { resolution: '4k', model: 'seedream-4.0', unit_price: 3 },
+      ],
+      params_schema: {
+        resolution: ['1k', '2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      },
     },
   ]
 
@@ -123,8 +103,8 @@ async function main() {
         description: m.description,
         module: 'image',
         credit_cost: m.credit_cost,
-        params_pricing: m.params_pricing,
-        params_schema: m.params_schema,
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: JSON.stringify(m.params_schema),
         is_active: true,
       })
       .onConflict((oc: any) =>
@@ -133,8 +113,8 @@ async function main() {
           description: m.description,
           module: 'image',
           credit_cost: m.credit_cost,
-          params_pricing: m.params_pricing,
-          params_schema: m.params_schema,
+          params_pricing: JSON.stringify(m.params_pricing),
+          params_schema: JSON.stringify(m.params_schema),
           is_active: true,
         })
       )
@@ -143,78 +123,77 @@ async function main() {
   }
 
   // 3. Upsert video models（按秒计费，credit_cost 存每秒单价兜底，params_pricing 按分辨率差异化定价）
+  const aspectRatioDefaultArr = [{label: '自适应', value : 'adaptive'}, '16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
+  const timeDefaultArr = [
+    { label: '自动', value: -1 },
+    { label: '4秒', value: 4 },
+    { label: '5秒', value: 4 },
+    { label: '6秒', value: 4 },
+    { label: '7秒', value: 4 },
+    { label: '8秒', value: 4 },
+    { label: '10秒', value: 4 },
+    { label: '12秒', value: 4 },
+    { label: '15秒', value: 4 },
+  ]
+  const videoVoiceDefaultArr = [
+    { label: '有声', value: true, default: true },
+    { label: '无声', value: false, default: true },
+  ]
   const videoModels = [
     {
       code: 'seedance-1.5-pro',
       name: 'Seedance 1.5 Pro',
       description: '有声视频生成，支持首尾帧',
-      credit_cost: 100,
-      video_categories: ['frames', 'components'],
-      // 720p/1080p 对应不同底层模型 ID 和每秒单价
-      params_pricing: JSON.stringify([
-        { model: 'doubao-seedance-1-5-pro-251215', resolution: '720p',  unit_price: 80  },
-        { model: 'doubao-seedance-1-5-pro-251215', resolution: '1080p', unit_price: 100 },
-      ]),
+      credit_cost: 15,
+      video_categories: ['frames'],
+      params_pricing: [
+        { resolution: '480p', model: 'seedance-1.5-pro', unit_price: 5 },
+        { resolution: '720p', model: 'seedance-1.5-pro', unit_price: 10 },
+        { resolution: '1080p', model: 'seedance-1.5-pro', unit_price: 20 },
+      ],
       params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: {
-            type: 'string',
-            enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'],
-          },
-          resolution: { type: 'string', enum: ['720p', '1080p'] },
-          duration: { type: 'integer' },
-          generate_audio: { type: 'boolean' },
-          camera_fixed: { type: 'boolean' },
-        },
+        aspect_ratio: aspectRatioDefaultArr,
+        resolution: ['480p', '720p', '1080p'],
+        time_length: timeDefaultArr,
+        video_voice: videoVoiceDefaultArr,
+        image: [],
       }),
     },
     {
       code: 'seedance-2.0',
       name: 'Seedance 2.0',
-      description: '高级有声视频生成，支持多模态',
-      credit_cost: 5,
+      description: '新一代有声视频，支持首尾帧',
+      credit_cost: 15,
       video_categories: ['multimodal', 'frames', 'components'],
-      params_pricing: JSON.stringify([
-        { model: 'doubao-seedance-2-0-260128', resolution: '720p',  unit_price: 4 },
-        { model: 'doubao-seedance-2-0-260128', resolution: '1080p', unit_price: 5 },
-      ]),
+      params_pricing: [
+        { resolution: '480p', model: 'seedance-2.0', unit_price: 7 },
+        { resolution: '720p', model: 'seedance-2.0', unit_price: 15 },
+        { resolution: '1080p', model: 'seedance-2.0', unit_price: 35 },
+      ],
       params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: {
-            type: 'string',
-            enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'],
-          },
-          resolution: { type: 'string', enum: ['720p', '1080p'] },
-          duration: { type: 'integer' },
-          generate_audio: { type: 'boolean' },
-          camera_fixed: { type: 'boolean' },
-        },
+        aspect_ratio: aspectRatioDefaultArr,
+        resolution: ['480p', '720p', '1080p'],
+        time_length: timeDefaultArr,
+        video_voice: videoVoiceDefaultArr,
+        image: [],
       }),
     },
     {
       code: 'seedance-2.0-fast',
       name: 'Seedance 2.0 Fast',
-      description: '快速有声视频生成，支持多模态',
-      credit_cost: 5,
+      description: '新一代有声视频，支持首尾帧',
+      credit_cost: 15,
       video_categories: ['multimodal', 'frames', 'components'],
-      params_pricing: JSON.stringify([
-        { model: 'doubao-seedance-2-0-fast-260128', resolution: '720p',  unit_price: 3 },
-        { model: 'doubao-seedance-2-0-fast-260128', resolution: '1080p', unit_price: 5 },
-      ]),
+      params_pricing: [
+        { resolution: '480p', model: 'seedance-2.0-fast', unit_price: 5 },
+        { resolution: '720p', model: 'seedance-2.0-fast', unit_price: 12 },
+      ],
       params_schema: JSON.stringify({
-        type: 'object',
-        properties: {
-          aspect_ratio: {
-            type: 'string',
-            enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'],
-          },
-          resolution: { type: 'string', enum: ['720p', '1080p'] },
-          duration: { type: 'integer' },
-          generate_audio: { type: 'boolean' },
-          camera_fixed: { type: 'boolean' },
-        },
+        aspect_ratio: aspectRatioDefaultArr,
+        resolution: ['480p', '720p'],
+        time_length: timeDefaultArr,
+        video_voice: videoVoiceDefaultArr,
+        image: [],
       }),
     },
   ]
@@ -230,7 +209,7 @@ async function main() {
         module: 'video',
         video_categories: JSON.stringify(m.video_categories),
         credit_cost: m.credit_cost,
-        params_pricing: m.params_pricing,
+        params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,
         is_active: true,
       })
@@ -240,7 +219,7 @@ async function main() {
           description: m.description,
           video_categories: JSON.stringify(m.video_categories),
           credit_cost: m.credit_cost,
-          params_pricing: m.params_pricing,
+          params_pricing: JSON.stringify(m.params_pricing),
           params_schema: m.params_schema,
           is_active: true,
         })
