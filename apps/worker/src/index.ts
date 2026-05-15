@@ -12,6 +12,7 @@ import { getAdapter } from './adapters/factory.js'
 import { completePipeline } from './pipelines/complete.js'
 import { failPipeline } from './pipelines/fail.js'
 import { transferWorker } from './workers/transfer.js'
+import { videoSubmitWorker } from './workers/video-submit.js'
 import { cronWorker, scheduleCronJobs } from './workers/cron-worker.js'
 import { getRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
 import { startVideoPoller } from './pollers/video-poller.js'
@@ -142,6 +143,7 @@ imageWorker.on('error', (err) => {
 
 logger.info('Worker service started — listening on image-queue')
 logger.info('Transfer worker started — listening on transfer-queue')
+logger.info('Video submit worker started — listening on video-queue')
 
 // ─── Cron Jobs（BullMQ repeat）────────────────────────────────────────────────
 // upsertJobScheduler 是幂等的，多台机器同时调用也只会存在一个调度
@@ -173,7 +175,7 @@ const shutdown = async () => {
   const current = await redis.get(WORKER_LOCK_KEY)
   if (current === LOCK_VALUE) await redis.del(WORKER_LOCK_KEY)
   // 并行等待所有 worker 完成当前 job，避免串行等待导致后续 worker 锁超时
-  await Promise.all([imageWorker.close(), transferWorker.close(), cronWorker.close()])
+  await Promise.all([imageWorker.close(), transferWorker.close(), videoSubmitWorker.close(), cronWorker.close()])
   await closeRedis()
   process.exit(0)
 }

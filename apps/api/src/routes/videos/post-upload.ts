@@ -1,21 +1,13 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { createWriteStream } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { pipeline } from 'node:stream/promises'
+import { uploadToTos } from '../../lib/storage.js'
 import {
-  UPLOAD_DIR, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE, MAX_AUDIO_SIZE,
-  IMAGE_EXTS, VIDEO_EXTS, AUDIO_EXTS, ALL_EXTS,
+  MAX_IMAGE_SIZE, MAX_VIDEO_SIZE, MAX_AUDIO_SIZE,
+  IMAGE_EXTS, VIDEO_EXTS, AUDIO_EXTS, ALL_EXTS, MIME_MAP,
 } from './_shared.js'
 
-// 确保上传目录存在
-await mkdir(UPLOAD_DIR, { recursive: true })
-
-const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
-
 const route: FastifyPluginAsync = async (app) => {
-  // POST /videos/upload — 上传图片/视频/音频，返回公网 URL 供 Seedance 多模态使用
+  // POST /videos/upload — 上传图片/视频/音频到 TOS，返回公网 URL 供 Seedance 多模态使用
   app.post('/videos/upload', async (request, reply) => {
     const maxSize = Math.max(MAX_IMAGE_SIZE, MAX_VIDEO_SIZE, MAX_AUDIO_SIZE)
     const data = await (request as any).file({ limits: { fileSize: maxSize } })
@@ -27,7 +19,6 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.badRequest(`不支持的文件格式「.${ext}」，请上传 ${allowed} 格式的文件`)
     }
 
-    // 按文件类型校验大小
     const isImage = IMAGE_EXTS.includes(ext)
     const isVideo = VIDEO_EXTS.includes(ext)
     const isAudio = AUDIO_EXTS.includes(ext)
@@ -38,11 +29,18 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.badRequest(`${typeLabel}文件过大，最大支持 ${mb} MB，请压缩后重新上传`)
     }
 
-    const id = `${randomUUID()}.${ext}`
-    const filePath = join(UPLOAD_DIR, id)
-    await pipeline(data.file, createWriteStream(filePath))
+    // 读取文件流为 Buffer，上传到 TOS
+    const chunks: Buffer[] = []
+    for await (const chunk of data.file) {
+      chunks.push(chunk as Buffer)
+    }
+    const buffer = Buffer.concat(chunks)
 
-    return { url: `${BASE_URL}/api/v1/videos/uploads/${id}` }
+    const contentType = MIME_MAP[ext] ?? 'application/octet-stream'
+    const key = `uploads/videos/${randomUUID()}.${ext}`
+    const url = await uploadToTos(key, buffer, contentType)
+
+    return { url }
   })
 }
 

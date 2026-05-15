@@ -32,7 +32,7 @@ RUN pnpm --filter @aigc/worker --prod deploy --legacy /app/deploy
 # ============================================================
 FROM node:20-alpine AS runner
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat ffmpeg
 
 WORKDIR /app
 

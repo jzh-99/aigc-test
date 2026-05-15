@@ -10,7 +10,7 @@ export function getAdapter(providerCode: string): ImageGenerationAdapter {
 
   let adapter: ImageGenerationAdapter
   switch (providerCode) {
-    case 'nano-banana':
+    case 'comfly':
       adapter = new NanoBananaAdapter()
       break
     case 'volcengine':

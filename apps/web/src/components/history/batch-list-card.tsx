@@ -27,6 +27,14 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
   failed: { label: '失败', variant: 'destructive' },
 }
 
+/** 将 "16:9" 格式的宽高比转为 CSS aspect-ratio 值 "16 / 9" */
+export function parseAspectRatio(ratio?: string): string {
+  if (!ratio) return '1 / 1'
+  const [w, h] = ratio.split(':')
+  if (!w || !h || isNaN(Number(w)) || isNaN(Number(h))) return '1 / 1'
+  return `${w} / ${h}`
+}
+
 function formatElapsed(ms: number) {
   const seconds = Math.max(0, Math.floor(ms / 1000))
   const minutes = Math.floor(seconds / 60)
@@ -106,6 +114,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
         .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
 
   const time = new Date(batch.created_at)
+  const thumbnailAspect = parseAspectRatio((batch as any).params?.aspect_ratio)
 
   const showLoading = thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing')
 
@@ -173,7 +182,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
         {isVideo ? (
           videoUrl ? (
             <div className="flex gap-2 overflow-hidden">
-              <div className="relative h-16 w-16 shrink-0 rounded-md overflow-hidden bg-muted [transform:translateZ(0)]">
+              <div className="relative h-auto w-full shrink-0 rounded-md overflow-hidden bg-muted [transform:translateZ(0)]">
                 <video
                   src={videoUrl}
                   className="h-full w-full object-contain"
@@ -207,9 +216,9 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
           <>
             {/* Image thumbnails */}
             {thumbnails.length > 0 && (
-              <div className="flex gap-2 overflow-hidden">
-                {thumbnails.slice(0, 5).map((url, i) => (
-                  <div key={i} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
+              <div className="flex gap-2 overflow-x-auto scrollbar-none pb-0.5">
+                {thumbnails.map((url, i) => (
+                  <div key={i} className="relative shrink-0 overflow-hidden rounded-md bg-muted" style={{ width: 64, aspectRatio: thumbnailAspect }}>
                     <Image
                       src={url}
                       alt=""
@@ -220,11 +229,6 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
                     />
                   </div>
                 ))}
-                {thumbnails.length > 5 && (
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                    +{thumbnails.length - 5}
-                  </div>
-                )}
               </div>
             )}
 

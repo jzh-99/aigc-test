@@ -46,7 +46,6 @@ pnpm --filter @aigc/db migrate
 
 info "Seeding database..."
 pnpm --filter @aigc/db exec tsx scripts/seed.ts
-pnpm --filter @aigc/db exec tsx scripts/seed-volcengine.ts
 
 restart_pm2_services
 

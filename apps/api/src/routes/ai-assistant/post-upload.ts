@@ -1,16 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { mkdir } from 'node:fs/promises'
-import { createWriteStream } from 'node:fs'
-import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { pipeline } from 'node:stream/promises'
 import rateLimit from '@fastify/rate-limit'
-import { UPLOAD_DIR, MAX_VIDEO_SIZE, VIDEO_EXTS, BASE_URL } from './_shared.js'
+import { uploadToTos } from '../../lib/storage.js'
+import { MAX_VIDEO_SIZE, VIDEO_EXTS, VIDEO_MIME } from './_shared.js'
 
-// POST /ai-assistant/upload — 上传视频文件，返回 temp_id + 公开 URL 供 Gemini 拉取
+// POST /ai-assistant/upload — 上传视频到 TOS，返回公网 URL 供豆包/Gemini 拉取
 const route: FastifyPluginAsync = async (app) => {
-  await mkdir(UPLOAD_DIR, { recursive: true })
-
   // AI assistant 限流：每用户每小时 50 次
   await app.register(rateLimit, {
     max: 50,
@@ -39,12 +34,18 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.badRequest('Only video files are supported (mp4, mov, webm, avi)')
     }
 
-    const id = `${randomUUID()}.${ext}`
-    const filePath = join(UPLOAD_DIR, id)
+    const chunks: Buffer[] = []
+    for await (const chunk of data.file) {
+      chunks.push(chunk as Buffer)
+    }
+    const buffer = Buffer.concat(chunks)
 
-    await pipeline(data.file, createWriteStream(filePath))
+    const contentType = VIDEO_MIME[ext] ?? 'video/mp4'
+    const key = `uploads/ai-assistant/${randomUUID()}.${ext}`
+    const url = await uploadToTos(key, buffer, contentType)
 
-    return { temp_id: id, url: `${BASE_URL}/api/v1/ai-assistant/uploads/${id}` }
+    // 返回 url 供 post-chat 直接使用，temp_id 保留兼容旧字段名
+    return { temp_id: key, url }
   })
 }
 

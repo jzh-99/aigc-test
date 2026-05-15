@@ -1,8 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { unlink } from 'node:fs/promises'
-import { join } from 'node:path'
 import { getDb } from '@aigc/db'
-import { UPLOAD_DIR, SAFE_ID, chatEndpoint, AI_API_KEY, AI_MODEL, SYSTEM_PROMPT, BASE_URL } from './_shared.js'
+import { chatEndpoint, AI_API_KEY, AI_MODEL, SYSTEM_PROMPT } from './_shared.js'
 
 // POST /ai-assistant/chat — 流式对话（支持文本、图片 base64、视频 URL）
 const route: FastifyPluginAsync = async (app) => {
@@ -12,7 +10,7 @@ const route: FastifyPluginAsync = async (app) => {
       tab: 'chat' | 'image' | 'video'
       image_base64?: string | null
       image_type?: string | null
-      video_temp_id?: string | null
+      video_url?: string | null
       history?: { role: 'user' | 'assistant'; content: string }[]
     }
   }>(
@@ -27,7 +25,7 @@ const route: FastifyPluginAsync = async (app) => {
             tab: { type: 'string', enum: ['chat', 'image', 'video'] },
             image_base64: { type: ['string', 'null'], maxLength: 20_000_000 },
             image_type: { type: ['string', 'null'], maxLength: 100 },
-            video_temp_id: { type: ['string', 'null'], maxLength: 200 },
+            video_url: { type: ['string', 'null'], maxLength: 2000 },
             history: {
               type: 'array',
               maxItems: 6,
@@ -46,7 +44,7 @@ const route: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const { message = '', tab, image_base64, image_type, video_temp_id, history = [] } = request.body
+      const { message = '', tab, image_base64, image_type, video_url, history = [] } = request.body
       const userId = request.user?.id
 
       // 记录 AI 助手使用日志，便于监控
@@ -54,7 +52,7 @@ const route: FastifyPluginAsync = async (app) => {
         userId,
         tab,
         hasImage: !!image_base64,
-        hasVideo: !!video_temp_id,
+        hasVideo: !!video_url,
         messageLength: message?.length || 0,
         historyLength: history.length,
       }, 'AI assistant request')
@@ -81,16 +79,15 @@ const route: FastifyPluginAsync = async (app) => {
           },
           { type: 'text', text: defaultPrompt },
         ]
-      } else if (video_temp_id) {
-        // 视频附件 — 以公开 URL 发送
-        if (!SAFE_ID.test(video_temp_id)) return reply.badRequest('Invalid video_temp_id')
-        const videoUrl = `${BASE_URL}/api/v1/ai-assistant/uploads/${video_temp_id}`
+      } else if (video_url) {
+        // 视频附件 — 直接使用 TOS 公网 URL
+        if (!/^https?:\/\/.+/.test(video_url)) return reply.badRequest('Invalid video_url')
         const defaultPrompt =
           tab === 'video'
             ? '请详细分析这个视频的视觉风格、场景构成和画面语言，生成可参考复刻的AI视频生成提示词（中英双语）。'
             : message || '请分析这个视频。'
         userContent = [
-          { type: 'image_url', image_url: { url: videoUrl } },
+          { type: 'image_url', image_url: { url: video_url } },
           { type: 'text', text: defaultPrompt },
         ]
       } else {
@@ -151,10 +148,6 @@ const route: FastifyPluginAsync = async (app) => {
         }
       } finally {
         reply.raw.end()
-        // 分析完成后删除临时视频文件
-        if (video_temp_id && SAFE_ID.test(video_temp_id)) {
-          await unlink(join(UPLOAD_DIR, video_temp_id)).catch(() => {})
-        }
       }
     },
   )

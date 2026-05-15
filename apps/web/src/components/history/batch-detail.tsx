@@ -19,6 +19,7 @@ import { translateTaskError } from '@/lib/error-messages'
 import { useGenerationStore } from '@/stores/generation-store'
 import { generateUUID } from '@/lib/utils'
 import { toast } from 'sonner'
+import { parseAspectRatio } from './batch-list-card'
 
 interface BatchDetailProps {
   batchId: string | null
@@ -170,6 +171,8 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
   const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
   const canCancelSeedance = (batch.status === 'pending' || batch.status === 'processing') && batch.provider === 'volcengine' && /^seedance-/i.test(batch.model)
 
+  const thumbnailAspect = parseAspectRatio((batch as any).params?.aspect_ratio)
+
   return (
     <div className="mt-6 space-y-4">
       {/* Meta info */}
@@ -297,6 +300,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
                   <div
                     key={task.id}
                     className="group relative aspect-square rounded-lg overflow-hidden border cursor-pointer"
+                    style={{ aspectRatio: thumbnailAspect }}
                     onClick={() => setLightboxIndex(urlIndex)}
                   >
                     <Image
