@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check, Video, Play, X, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react'
+import { User, Loader2, RotateCcw, Check, Video, X, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -66,19 +66,28 @@ function VideoPreview({ url }: { url: string }) {
         loop
         playsInline
         preload="metadata"
+        controls
       />
-      <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5 pointer-events-none">
-        <Play className="h-2 w-2 text-white fill-white" />
-        <span className="text-[9px] text-white font-medium leading-none">视频</span>
-      </div>
     </div>
   )
 }
 
-/** 图片轮播：宽度填满高度按比例，多图时显示左右翻页箭头 */
+/** 判断是否为竖向比例（高 > 宽） */
+function isPortraitRatio(ratio: string): boolean {
+  const [w, h] = ratio.split(':').map(Number)
+  return !!w && !!h && h > w
+}
+
+/** 图片轮播：
+ *  - 横图（16:9 / 4:3 / 1:1）：固定高度 280px，宽度按比例，一次一张，左右翻页
+ *  - 竖图（9:16 / 3:4）：瀑布流展示所有图，左下角页签点击滚动定位
+ */
 function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: string }) {
   const [index, setIndex] = useState(0)
+  const isPortrait = isPortraitRatio(aspectRatio)
   const isMulti = urls.length > 1
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([])
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -89,64 +98,146 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
     setIndex((i) => Math.min(urls.length - 1, i + 1))
   }
 
+  // 竖图：点击页签滚动到对应图片
+  const handleTabClick = (e: React.MouseEvent, i: number) => {
+    e.stopPropagation()
+    setIndex(i)
+    itemRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+
+  // 横图模式
+  if (!isPortrait) {
+    return (
+      <div className="group relative w-full rounded-md overflow-hidden bg-muted flex justify-center">
+        <div className="relative" style={{ height: 400, aspectRatio }}>
+          <Image
+            src={urls[index]}
+            alt=""
+            fill
+            className="object-cover"
+            sizes="600px"
+            unoptimized
+          />
+        </div>
+        {isMulti && (
+          <>
+            <button
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
+                flex items-center justify-center
+                bg-white/20 backdrop-blur-sm border border-white/30
+                text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
+                opacity-0 group-hover:opacity-100 transition-all duration-200
+                hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
+                hover:border-transparent hover:scale-110
+                disabled:opacity-0 disabled:pointer-events-none"
+              onClick={handlePrev}
+              disabled={index === 0}
+            >
+              <ChevronLeft className="h-5 w-5 drop-shadow" />
+            </button>
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
+                flex items-center justify-center
+                bg-white/20 backdrop-blur-sm border border-white/30
+                text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
+                opacity-0 group-hover:opacity-100 transition-all duration-200
+                hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
+                hover:border-transparent hover:scale-110
+                disabled:opacity-0 disabled:pointer-events-none"
+              onClick={handleNext}
+              disabled={index === urls.length - 1}
+            >
+              <ChevronRight className="h-5 w-5 drop-shadow" />
+            </button>
+            {/* 左下角页码 */}
+            <div className="absolute bottom-2 left-3 flex items-center gap-1">
+              {urls.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => { e.stopPropagation(); setIndex(i) }}
+                  className="h-5 min-w-[20px] px-1.5 rounded text-[10px] font-medium transition-all duration-200 leading-none"
+                  style={{
+                    background: i === index
+                      ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                      : 'rgba(0,0,0,0.45)',
+                    backdropFilter: 'blur(6px)',
+                    color: i === index ? 'white' : 'rgba(255,255,255,0.85)',
+                    border: i === index ? 'none' : '1px solid rgba(255,255,255,0.5)',
+                  }}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            {/* 底部居中指示点 */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1">
+              {urls.map((_, i) => (
+                <span
+                  key={i}
+                  className="block h-1 rounded-full transition-all duration-300"
+                  style={{
+                    width: i === index ? 16 : 4,
+                    background: i === index
+                      ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                      : 'rgba(255,255,255,0.45)',
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // 竖图模式：瀑布流 + 左下角页签
   return (
-    <div className="group relative w-full rounded-md overflow-hidden bg-muted">
-      <Image
-        src={urls[index]}
-        alt=""
-        width={0}
-        height={0}
-        sizes="100vw"
-        className="w-full h-auto block"
-        style={{ aspectRatio }}
-        unoptimized
-      />
-      {isMulti && (
-        <>
-          <button
-            className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
-              flex items-center justify-center
-              bg-white/20 backdrop-blur-sm border border-white/30
-              text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
-              opacity-0 group-hover:opacity-100 transition-all duration-200
-              hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
-              hover:border-transparent hover:scale-110
-              disabled:opacity-0 disabled:pointer-events-none"
-            onClick={handlePrev}
-            disabled={index === 0}
+    <div className="relative w-full rounded-md overflow-hidden bg-muted">
+      <div
+        ref={containerRef}
+        className="columns-2 gap-1.5"
+        style={{ columnFill: 'balance' }}
+      >
+        {urls.map((url, i) => (
+          <div
+            key={i}
+            ref={(el) => { itemRefs.current[i] = el }}
+            className="break-inside-avoid mb-1.5 overflow-hidden rounded-sm"
           >
-            <ChevronLeft className="h-5 w-5 drop-shadow" />
-          </button>
-          <button
-            className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
-              flex items-center justify-center
-              bg-white/20 backdrop-blur-sm border border-white/30
-              text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
-              opacity-0 group-hover:opacity-100 transition-all duration-200
-              hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
-              hover:border-transparent hover:scale-110
-              disabled:opacity-0 disabled:pointer-events-none"
-            onClick={handleNext}
-            disabled={index === urls.length - 1}
-          >
-            <ChevronRight className="h-5 w-5 drop-shadow" />
-          </button>
-          {/* 底部指示点：当前项用渐变色拉伸，其余为半透明白点 */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1">
-            {urls.map((_, i) => (
-              <span
-                key={i}
-                className="block h-1 rounded-full transition-all duration-300"
-                style={{
-                  width: i === index ? 16 : 4,
-                  background: i === index
-                    ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
-                    : 'rgba(255,255,255,0.45)',
-                }}
-              />
-            ))}
+            <Image
+              src={url}
+              alt=""
+              width={0}
+              height={0}
+              sizes="50vw"
+              className="w-full h-auto block"
+              style={{ aspectRatio }}
+              unoptimized
+            />
           </div>
-        </>
+        ))}
+      </div>
+      {/* 左下角页签 */}
+      {isMulti && (
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 flex-wrap max-w-[60%]">
+          {urls.map((_, i) => (
+            <button
+              key={i}
+              onClick={(e) => handleTabClick(e, i)}
+              className="h-5 min-w-[20px] px-1.5 rounded text-[10px] font-medium transition-all duration-200 leading-none"
+              style={{
+                background: i === index
+                  ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                  : 'rgba(255,255,255,0.25)',
+                backdropFilter: 'blur(4px)',
+                color: 'white',
+                border: i === index ? 'none' : '1px solid rgba(255,255,255,0.3)',
+              }}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )
