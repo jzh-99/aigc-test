@@ -78,7 +78,7 @@ export function CreditsBadge({ collapsed }: CreditsBadgeProps) {
       >
         <Coins className="h-4 w-4 text-accent-orange shrink-0" />
         <div className="flex flex-col flex-1 min-w-0">
-          <span className="text-xs text-muted-foreground">团队积分</span>
+          <span className="text-xs text-muted-foreground">A豆</span>
           <span className="text-sm font-medium">{displayValue.toLocaleString()}</span>
           {hasQuota && (
             <span className="text-[10px] text-muted-foreground">

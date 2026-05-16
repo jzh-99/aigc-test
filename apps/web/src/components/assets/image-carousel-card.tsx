@@ -55,14 +55,15 @@ export function ImageCarouselCard({
 
   return (
     <div
-      className="group relative w-full rounded-[10px] overflow-hidden border border-border bg-muted cursor-pointer"
+      className="group relative w-full rounded-[10px] overflow-hidden border border-border bg-muted cursor-pointer flex items-center justify-center"
+      style={{ height: '300px' }}
       onClick={() => onImageClick(current.id)}
     >
       {/* 图片：宽度填满，高度按比例自适应 */}
       <img
         src={thumbUrl!}
         alt={current.batch.prompt}
-        className="w-full h-auto block max-h-[480px] min-h-[80px] object-contain"
+        className="h-full w-full object-contain"
         loading="lazy"
       />
 

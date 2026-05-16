@@ -4,7 +4,7 @@ import { sql } from 'kysely'
 import { stripHtml } from '../../lib/sanitize.js'
 import type { TopUpCreditsRequest } from '@aigc/types'
 
-// POST /admin/teams/:id/credits — 调整团队积分（正数充值，负数扣减）
+// POST /admin/teams/:id/credits — 调整A豆（正数充值，负数扣减）
 const route: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string }; Body: TopUpCreditsRequest }>('/admin/teams/:id/credits', {
     schema: {

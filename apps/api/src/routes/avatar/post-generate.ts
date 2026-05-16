@@ -184,6 +184,7 @@ const route: FastifyPluginAsync = async (app) => {
     let lastError = ''
     try {
       const { url, headers, body: signedBody } = buildSignedRequest('CVSubmitTask', OMNI_API_VERSION, volcBody)
+      app.log.info({ taskId, batchId, url, body: signedBody }, 'Submitting avatar generation task to Volcengine API')
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 30_000)
       let res: Response
@@ -193,9 +194,17 @@ const route: FastifyPluginAsync = async (app) => {
         clearTimeout(timer)
       }
 
-      const json = (await res.json()) as { code: number; data?: { task_id?: string }; message?: string }
-      if (json.code !== 10000 || !json.data?.task_id) {
-        throw new Error(`Volcengine Avatar API error ${json.code}: ${json.message ?? 'unknown'}`)
+      // 火山引擎视觉 API 返回 ResponseMetadata 结构，成功时有 data.task_id，失败时有 ResponseMetadata.Error
+      const json = (await res.json()) as {
+        ResponseMetadata?: { Error?: { Code?: string; CodeN?: number; Message?: string } }
+        data?: { task_id?: string }
+      }
+      const apiError = json.ResponseMetadata?.Error
+      if (apiError || !json.data?.task_id) {
+        const errCode = apiError?.Code ?? 'UNKNOWN'
+        const errMsg = apiError?.Message ?? 'unknown error'
+        app.log.error({ taskId, batchId, response: json }, 'Volcengine API returned error')
+        throw new Error(`Volcengine Avatar API error ${errCode}: ${errMsg}`)
       }
       externalTaskId = json.data.task_id
     } catch (err) {

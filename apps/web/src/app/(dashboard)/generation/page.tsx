@@ -155,7 +155,7 @@ export default function ImagePage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               {isOwnerOrAdmin
-                ? '团队积分余额不足，请充值后再继续生成。'
+                ? 'A豆余额不足，请充值后再继续生成。'
                 : '你的可用积分已耗尽，请联系团队负责人增加你的积分配额。'
               }
             </AlertDescription>
