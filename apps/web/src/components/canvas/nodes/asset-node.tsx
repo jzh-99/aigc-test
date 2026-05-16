@@ -89,7 +89,7 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
     <div
       className={cn(
         'group relative flex flex-col rounded-xl shadow-md border transition-all duration-200',
-        'bg-white border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
+        'bg-card border-border hover:border-border/60 hover:shadow-lg',
         isUpstream && 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
       )}
@@ -98,38 +98,38 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
       {/* Delete */}
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
-        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-white text-zinc-400 hover:text-red-500 border-zinc-200"
+        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-red-500 border-border"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <X size={11} />
       </button>
 
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50 flex items-center gap-1.5">
-        <TypeIcon className="w-3 h-3 text-zinc-400 shrink-0" />
-        <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase truncate cursor-text select-none" />
+      <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-muted flex items-center gap-1.5">
+        <TypeIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+        <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase truncate cursor-text select-none" />
       </div>
 
       {/* Preview / Upload area */}
-      <div className="p-2 bg-white rounded-b-xl">
+      <div className="p-2 bg-card rounded-b-xl">
         {uploading ? (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-lg bg-zinc-50" style={{ aspectRatio: '4/3' }}>
-            <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
-            <span className="text-[10px] text-zinc-400">上传中…</span>
+          <div className="flex flex-col items-center justify-center gap-2 rounded-lg bg-muted" style={{ aspectRatio: '4/3' }}>
+            <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+            <span className="text-[10px] text-muted-foreground">上传中…</span>
           </div>
         ) : cfg.url ? (
           isAudio ? (
             <div className="flex flex-col gap-1">
               <div
-                className="flex items-center justify-center gap-2 rounded-lg bg-zinc-50 cursor-pointer hover:bg-zinc-100 transition-colors"
+                className="flex items-center justify-center gap-2 rounded-lg bg-muted cursor-pointer hover:bg-accent transition-colors"
                 style={{ aspectRatio: '4/3' }}
                 onClick={togglePlay}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                <div className="w-10 h-10 rounded-full bg-white border border-zinc-200 shadow flex items-center justify-center">
-                  {playing ? <Pause className="w-4 h-4 text-zinc-700" /> : <Play className="w-4 h-4 text-zinc-700 ml-0.5" />}
+                <div className="w-10 h-10 rounded-full bg-card border border-border shadow flex items-center justify-center">
+                {playing ? <Pause className="w-4 h-4 text-foreground" /> : <Play className="w-4 h-4 text-foreground ml-0.5" />}
                 </div>
-                <Music className="w-5 h-5 text-zinc-300" />
+                <Music className="w-5 h-5 text-muted-foreground/40" />
               </div>
               <audio
                 ref={audioRef}
@@ -165,7 +165,7 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
                 )}
               >
                 <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
-                  {playing ? <Pause className="w-4 h-4 text-zinc-800" /> : <Play className="w-4 h-4 text-zinc-800 ml-0.5" />}
+                {playing ? <Pause className="w-4 h-4 text-foreground" /> : <Play className="w-4 h-4 text-foreground ml-0.5" />}
                 </div>
               </button>
             </div>
@@ -181,12 +181,12 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
           <button
             onClick={handleClickUpload}
             onMouseDown={(e) => e.stopPropagation()}
-            className="w-full flex flex-col items-center justify-center gap-2 rounded-lg bg-zinc-50 hover:bg-zinc-100 border-2 border-dashed border-zinc-200 hover:border-zinc-300 transition-colors cursor-pointer"
+            className="w-full flex flex-col items-center justify-center gap-2 rounded-lg bg-muted hover:bg-accent border-2 border-dashed border-border hover:border-border/60 transition-colors cursor-pointer"
             style={{ aspectRatio: '4/3' }}
           >
-            <Upload className="w-5 h-5 text-zinc-300" />
-            <span className="text-[10px] text-zinc-400">点击上传</span>
-            <span className="text-[9px] text-zinc-300">图片 / 视频 / 音频</span>
+            <Upload className="w-5 h-5 text-muted-foreground/40" />
+            <span className="text-[10px] text-muted-foreground">点击上传</span>
+            <span className="text-[9px] text-muted-foreground/60">图片 / 视频 / 音频</span>
           </button>
         )}
 
@@ -194,14 +194,14 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
           <button
             onClick={handleClickUpload}
             onMouseDown={(e) => e.stopPropagation()}
-            className="mt-1 w-full text-[10px] text-zinc-400 hover:text-zinc-600 text-center transition-colors opacity-0 group-hover:opacity-100"
+            className="mt-1 w-full text-[10px] text-muted-foreground hover:text-foreground text-center transition-colors opacity-0 group-hover:opacity-100"
           >
             重新上传
           </button>
         )}
 
         {cfg.name && cfg.url && (
-          <p className="mt-0.5 text-[10px] text-zinc-400 truncate text-center">{cfg.name}</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground truncate text-center">{cfg.name}</p>
         )}
       </div>
 
@@ -218,7 +218,7 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
         type="source"
         position={Position.Right}
         id="image-out"
-        className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all"
+        className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all"
       />
     </div>
   )

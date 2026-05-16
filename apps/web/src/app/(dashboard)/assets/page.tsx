@@ -2,12 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
-import { Loader2, Download, Trash2, ImageIcon, VideoIcon, CalendarSearch, X, Play, RotateCcw } from 'lucide-react'
+import { Loader2, Download, Trash2, ImageIcon, VideoIcon, CalendarSearch, X, RotateCcw } from 'lucide-react'
 import { useAssets, deleteAsset } from '@/hooks/use-assets'
 import type { AssetItem } from '@/hooks/use-assets'
 import { useTeamFeatures } from '@/hooks/use-team-features'
@@ -21,6 +20,8 @@ import {
   DialogContent,
 } from '@/components/ui/dialog'
 import { AssetTrashDrawer } from '@/components/assets/asset-trash-drawer'
+import { ImageCarouselCard } from '@/components/assets/image-carousel-card'
+import { VideoCard } from '@/components/assets/video-card'
 
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'gemini-3.1-flash-image-preview':    '全能图片2 1K',
@@ -34,6 +35,11 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'veo3.1-components':                 '全能视频3.1',
   'jimeng_realman_avatar_picture_omni_v15': 'OmniHuman 1.5 数字人',
   'jimeng_dreamactor_m20_gen_video': '动作模仿2.0',
+}
+
+interface BatchGroup {
+  batchId: string
+  images: AssetItem[]
 }
 
 function groupByDate(assets: AssetItem[]): { date: string; items: AssetItem[] }[] {
@@ -50,89 +56,17 @@ function groupByDate(assets: AssetItem[]): { date: string; items: AssetItem[] }[
   return Array.from(map.entries()).map(([date, items]) => ({ date, items }))
 }
 
-interface AssetCardProps {
-  asset: AssetItem
-  onEnlarge: (asset: AssetItem) => void
-  onDelete: (id: string) => void
-  onReuse: (asset: AssetItem) => void
-  isReusing?: boolean
-}
-
-function AssetCard({ asset, onEnlarge, onDelete, onReuse, isReusing }: AssetCardProps) {
-  const url = asset.storage_url ?? asset.original_url
-  if (!url) return null
-  const thumbUrl = asset.thumbnail_url ?? url
-  const isVideo = asset.type === 'video'
-
-  return (
-    <div
-      className="group relative aspect-square rounded-lg overflow-hidden border bg-muted cursor-pointer"
-      onClick={() => onEnlarge(asset)}
-    >
-      {isVideo ? (
-        <div className="absolute inset-0 bg-black flex items-center justify-center">
-          <video
-            src={url}
-            className="absolute inset-0 w-full h-full object-cover opacity-60"
-            muted
-            preload="metadata"
-          />
-          <Play className="relative z-10 h-8 w-8 text-white drop-shadow-lg" />
-        </div>
-      ) : (
-        <Image
-          src={thumbUrl}
-          alt={asset.batch.prompt}
-          fill
-          className="object-cover transition-transform group-hover:scale-105"
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-          unoptimized
-        />
-      )}
-      {/* Hover overlay */}
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors">
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
-          {/* Prompt tooltip at top */}
-          <p className="text-[11px] text-white/90 line-clamp-2 leading-snug drop-shadow">
-            {asset.batch.prompt}
-          </p>
-          {/* Action buttons at bottom */}
-          <div className="flex justify-end gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 bg-black/50 hover:bg-black/70 text-white border-0"
-              onClick={(e) => { e.stopPropagation(); onReuse(asset) }}
-              title="复用"
-              disabled={isReusing}
-            >
-              {isReusing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RotateCcw className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 bg-black/50 hover:bg-black/70 text-white border-0"
-              onClick={(e) => { e.stopPropagation(); downloadImage(url, isVideo ? 'video' : 'image') }}
-            >
-              <Download className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 bg-black/50 hover:bg-red-600/80 text-white border-0"
-              onClick={(e) => { e.stopPropagation(); onDelete(asset.id) }}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+/** 将同一 batch 的图片聚合为轮播组，保持原始顺序 */
+function groupByBatch(items: AssetItem[]): BatchGroup[] {
+  const map = new Map<string, AssetItem[]>()
+  for (const item of items) {
+    if (!map.has(item.batch.id)) map.set(item.batch.id, [])
+    map.get(item.batch.id)!.push(item)
+  }
+  return Array.from(map.values()).map((images) => ({
+    batchId: images[0].batch.id,
+    images,
+  }))
 }
 
 export default function AssetsPage() {
@@ -188,6 +122,11 @@ export default function AssetsPage() {
     }
     const idx = viewableAssets.findIndex((a) => a.id === asset.id)
     if (idx !== -1) setLightboxIndex(idx)
+  }
+
+  const handleEnlargeById = (assetId: string) => {
+    const asset = viewableAssets.find((a) => a.id === assetId)
+    if (asset) handleEnlarge(asset)
   }
 
   const handleReuse = async (asset: AssetItem) => {
@@ -283,9 +222,9 @@ export default function AssetsPage() {
       </div>
 
       {isLoadingInitial && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {Array.from({ length: 15 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-square rounded-lg" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Skeleton key={i} className={assetType === 'video' ? 'aspect-video rounded-[10px]' : 'aspect-[4/3] rounded-[10px]'} />
           ))}
         </div>
       )}
@@ -315,38 +254,53 @@ export default function AssetsPage() {
         </div>
       )}
 
-      {grouped.map(({ date, items }) => (
+      {grouped.map(({ date, items }) => {
+        const batchGroups = assetType === 'image' ? groupByBatch(items) : null
+        return (
         <section key={date}>
           <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
             <span>{date}</span>
             <span className="text-xs opacity-60">({items.length} 个)</span>
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {items.map((asset) =>
-              deletingId === asset.id ? (
-                <div key={asset.id} className="aspect-square rounded-lg border bg-muted flex items-center justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <AssetCard
-                  key={asset.id}
-                  asset={asset}
-                  onEnlarge={handleEnlarge}
-                  onDelete={handleDelete}
-                  onReuse={handleReuse}
-                  isReusing={reusingId === asset.id}
-                />
-              )
-            )}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+            {assetType === 'image' && batchGroups
+              ? batchGroups.map((group) => (
+                  <ImageCarouselCard
+                    key={group.batchId}
+                    images={group.images}
+                    onImageClick={handleEnlargeById}
+                    onDelete={handleDelete}
+                    onReuse={handleReuse}
+                    isReusing={group.images.some((img) => reusingId === img.id)}
+                    deletingId={deletingId}
+                  />
+                ))
+              : items.map((asset) =>
+                  deletingId === asset.id ? (
+                    <div key={asset.id} className="aspect-video rounded-[10px] border bg-muted flex items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <VideoCard
+                      key={asset.id}
+                      asset={asset}
+                      onPlay={handleEnlarge}
+                      onDelete={handleDelete}
+                      onReuse={handleReuse}
+                      isReusing={reusingId === asset.id}
+                    />
+                  )
+                )}
           </div>
         </section>
-      ))}
+        )
+      })}
 
       {/* Skeleton placeholders shown while next page loads */}
       {isLoadingMore && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-square rounded-lg" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className={assetType === 'video' ? 'aspect-video rounded-[10px]' : 'aspect-[4/3] rounded-[10px]'} />
           ))}
         </div>
       )}

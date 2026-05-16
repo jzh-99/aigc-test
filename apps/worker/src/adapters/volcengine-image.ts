@@ -72,6 +72,9 @@ function resolveSize(aspectRatio: string, resolution: string): string {
   return SIZE_MAP[res][ar]
 }
 
+// 参考图片下载超时：30 秒，防止慢速/挂起连接卡死整个 job
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000
+
 /** Download a URL or decode a data URI, returning raw buffer + detected mime type. */
 async function fetchImageBuffer(urlOrDataUri: string, index: number): Promise<{ buffer: Buffer; mimeType: string }> {
   if (urlOrDataUri.startsWith('data:')) {
@@ -81,7 +84,14 @@ async function fetchImageBuffer(urlOrDataUri: string, index: number): Promise<{ 
     const buffer = Buffer.from(urlOrDataUri.slice(commaIdx + 1), 'base64')
     return { buffer, mimeType }
   }
-  const res = await fetch(urlOrDataUri)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), IMAGE_DOWNLOAD_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(urlOrDataUri, { signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
   if (!res.ok) throw new Error(`Failed to fetch reference image ${index + 1}: HTTP ${res.status}`)
   const buffer = Buffer.from(await res.arrayBuffer())
   const ct = res.headers.get('content-type') ?? ''
@@ -185,12 +195,14 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     const rawImages = extraParams.image
     if (Array.isArray(rawImages) && rawImages.length > 0) {
       const capped = (rawImages as string[]).slice(0, VOLCENGINE_MAX_IMAGES)
+      console.log(`[volcengine-image] 开始下载并准备 ${capped.length} 张参考图片`)
       try {
         const prepared = await Promise.all(capped.map((url, i) => prepareVolcengineImage(url, i)))
         body.image = prepared.length === 1 ? prepared[0] : prepared
+        console.log(`[volcengine-image] 参考图片准备完毕`)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`[volcengine-image] Failed to prepare reference images: ${msg}`)
+        console.error(`[volcengine-image] 参考图片准备失败: ${msg}`)
         return { success: false, errorMessage: msg }
       }
     }
@@ -199,7 +211,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
 
     try {
-      console.log(`[volcengine-image] Calling model=${volcengineModel} size=${body.size}`)
+      console.log(`[volcengine-image] 发起 HTTP 请求 model=${volcengineModel} size=${body.size}`)
       const res = await fetch(`${VOLCENGINE_API_URL}/images/generations`, {
         method:  'POST',
         headers: {
@@ -209,11 +221,11 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
         body:   JSON.stringify(body),
         signal: controller.signal,
       })
-
+      console.log(`[volcengine-image] 收到响应 status=${res.status}`)
       return await this.parseResponse(res, model)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[volcengine-image] Request failed: ${msg}`)
+      console.error(`[volcengine-image] 请求异常: ${msg}`)
       return { success: false, errorMessage: msg }
     } finally {
       clearTimeout(timeout)
@@ -224,7 +236,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     const text = await res.text()
 
     if (!res.ok) {
-      console.error(`[volcengine-image] API error ${res.status}: ${text.slice(0, 500)}`)
+      console.error(`[volcengine-image] API 错误 ${res.status}: ${text.slice(0, 500)}`)
       return { success: false, errorMessage: `Volcengine API ${res.status}: ${text.slice(0, 500)}` }
     }
 
@@ -240,6 +252,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
 
     // Top-level error
     if (json.error) {
+      console.error(`[volcengine-image] 顶层错误 ${json.error.code}: ${json.error.message}`)
       return { success: false, errorMessage: `Volcengine error ${json.error.code}: ${json.error.message}` }
     }
 
@@ -247,7 +260,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     // Response has `data` array with items, each item can have `url` or `error`
     const items = json.data ?? []
     if (items.length === 0) {
-      console.error(`[volcengine-image] Empty data array in response`)
+      console.error(`[volcengine-image] 响应 data 数组为空`)
       return { success: false, errorMessage: 'No images in Volcengine response' }
     }
 
@@ -259,11 +272,11 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
       const errMsg = firstErr?.error
         ? `${firstErr.error.code}: ${firstErr.error.message}`
         : 'No image URL in Volcengine response'
-      console.error(`[volcengine-image] ${errMsg}`)
+      console.error(`[volcengine-image] 图片生成失败: ${errMsg}`)
       return { success: false, errorMessage: errMsg }
     }
 
-    console.log(`[volcengine-image] Success model=${model} url=${successItem.url.slice(0, 80)}...`)
+    console.log(`[volcengine-image] 生成成功 model=${model} url=${successItem.url.slice(0, 80)}...`)
     return { success: true, outputUrl: successItem.url }
   }
 }

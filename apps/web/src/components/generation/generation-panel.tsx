@@ -27,9 +27,10 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const { isCompanyA, showVideoTab, showAvatarTab, showActionImitationTab } = useTeamFeatures()
 
   const [mode, setMode] = useState<Mode>(initialMode)
-  // key 变化时强制 VideoPanel 重新 mount，以便 initialParams 生效
+  // key 变化时强制 VideoPanel/AvatarPanel 重新 mount，以便 initialParams 生效
   const [videoPanelKey, setVideoPanelKey] = useState(0)
   const [videoPanelInitialParams, setVideoPanelInitialParams] = useState<VideoParams | null>(null)
+  const [avatarPanelKey, setAvatarPanelKey] = useState(0)
 
   // 加载服务端默认参数，写入 store（VideoPanel/AvatarPanel 从 store 读取初始值）
   useEffect(() => {
@@ -65,6 +66,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       setVideoPanelKey(k => k + 1)
       setMode('video')
     } else if (pendingModule === 'avatar') {
+      setAvatarPanelKey(k => k + 1)
       setMode('avatar')
     } else if (pendingModule === 'action_imitation') {
       setMode('action_imitation')
@@ -122,7 +124,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
           <VideoPanel key={videoPanelKey} onBatchCreated={onBatchCreated} disabled={disabled} initialParams={videoPanelInitialParams} />
         )}
         {mode === 'avatar' && (
-          <AvatarPanel onBatchCreated={onBatchCreated} disabled={disabled} />
+          <AvatarPanel key={avatarPanelKey} onBatchCreated={onBatchCreated} disabled={disabled} />
         )}
         {mode === 'action_imitation' && (
           <ActionImitationPanel onBatchCreated={onBatchCreated} disabled={disabled} />

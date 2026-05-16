@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useBatches } from '@/hooks/use-batches'
 import { BatchListCard } from '@/components/history/batch-list-card'
 import { BatchDetail } from '@/components/history/batch-detail'
@@ -10,6 +11,7 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 
 export function RecentBatches() {
+  const router = useRouter()
   const { batches, isLoadingInitial } = useBatches()
   const recent = batches.slice(0, 5)
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
@@ -61,6 +63,8 @@ export function RecentBatches() {
         batchId={selectedBatchId}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onApplied={() => router.push('/generation')}
+        onReferenceAdded={() => router.push('/generation')}
       />
     </>
   )

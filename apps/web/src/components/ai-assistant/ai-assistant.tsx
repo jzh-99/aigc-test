@@ -18,7 +18,7 @@ type Tab = 'chat' | 'image' // | 'video'
 
 const TAB_CONFIG: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat', label: '对话助手', icon: <MessageSquare className="h-3.5 w-3.5" /> },
-  { id: 'image', label: '图片解析', icon: <ImageIcon className="h-3.5 w-3.5" /> },
+  // { id: 'image', label: '图片解析', icon: <ImageIcon className="h-3.5 w-3.5" /> },
   // { id: 'video', label: '视频解析', icon: <Video className="h-3.5 w-3.5" /> },
 ]
 
@@ -314,12 +314,12 @@ export function AiAssistant() {
     tab: Tab
     image_base64?: string | null
     image_type?: string | null
-    video_temp_id?: string | null
+    video_url?: string | null
     userLabel?: string
     imagePreview?: string
     mediaLabel?: string
   }) => {
-    const { message = '', tab: sendTab, image_base64, image_type, video_temp_id, userLabel, imagePreview, mediaLabel } = opts
+    const { message = '', tab: sendTab, image_base64, image_type, video_url, userLabel, imagePreview, mediaLabel } = opts
 
     const userMsg: AiChatMessage = {
       id: generateUUID(),
@@ -357,7 +357,7 @@ export function AiAssistant() {
           tab: sendTab,
           image_base64: image_base64 ?? null,
           image_type: image_type ?? null,
-          video_temp_id: video_temp_id ?? null,
+          video_url: video_url ?? null,
           history,
         }),
       })

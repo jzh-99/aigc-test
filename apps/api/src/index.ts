@@ -14,6 +14,15 @@ async function main() {
   const host = process.env.API_HOST ?? '0.0.0.0'
   const port = parseInt(process.env.API_PORT ?? '3001', 10)
 
+  const shutdown = async (signal: string) => {
+    app.log.info(`收到 ${signal}，开始优雅关闭...`)
+    await app.close() // 触发 onClose 钩子，关闭 Redis 连接
+    process.exit(0)
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
+
   await app.listen({ host, port })
 }
 

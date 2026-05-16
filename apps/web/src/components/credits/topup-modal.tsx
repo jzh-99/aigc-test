@@ -60,7 +60,7 @@ export function TopupModal({ open, onClose, teamId }: TopupModalProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Coins className="h-5 w-5 text-accent-orange" />
-            {teamId ? '充值团队积分' : '充值个人积分'}
+            {teamId ? '充值A豆' : '充值个人积分'}
           </DialogTitle>
         </DialogHeader>
 

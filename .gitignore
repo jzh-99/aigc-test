@@ -8,7 +8,10 @@ dist/
 !.env.*.example
 .worktrees/
 
+.vscode/
+
 # Local Claude/session state
+.claude
 .claude/settings.local.json
 .claude/worktrees/
 
@@ -20,6 +23,7 @@ logs/
 
 # Local docs
 docs/
+!apps/web/src/app/docs/*
 
 # Editor/notebook checkpoints
 .ipynb_checkpoints/
@@ -68,6 +72,5 @@ packages/db/scripts/*.js
 packages/db/scripts/*.d.ts
 packages/db/scripts/*.map
 
-docs
 CLAUDE.md
 **/CLAUDE.md

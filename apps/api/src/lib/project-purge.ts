@@ -1,6 +1,6 @@
 import type { Kysely } from 'kysely'
 import { sql } from 'kysely'
-import { deleteS3Object, extractStorageKey } from './storage.js'
+import { deleteTosObject, extractStorageKey } from './storage.js'
 
 async function deleteStoredUrls(urls: Array<string | null | undefined>) {
   const keys = Array.from(new Set(urls.flatMap((url) => {
@@ -9,7 +9,7 @@ async function deleteStoredUrls(urls: Array<string | null | undefined>) {
     return key ? [key] : []
   })))
 
-  await Promise.all(keys.map((key) => deleteS3Object(key)))
+  await Promise.all(keys.map((key) => deleteTosObject(key)))
 }
 
 export async function purgeCanvasProject(db: Kysely<any>, canvasId: string) {

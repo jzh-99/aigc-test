@@ -98,14 +98,14 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
     <div
       className={cn(
         'group relative flex flex-col rounded-xl shadow-md border transition-all duration-200',
-        'bg-white',
+        'bg-card',
         isGenerating
           ? 'border-blue-400 shadow-blue-200 ring-1 ring-blue-400'
           : isFailed
           ? 'border-red-400 shadow-red-100 ring-1 ring-red-300'
           : isUpstream
           ? 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100'
-          : 'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
+          : 'border-border hover:border-border/60 hover:shadow-lg',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
         '[contain:layout_style] [will-change:transform]',
         '[-webkit-font-smoothing:antialiased]',
@@ -115,14 +115,14 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
       {/* Delete button */}
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
-        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-white text-zinc-400 hover:text-red-500 border-zinc-200"
+        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-red-500 border-border"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <X size={11} />
       </button>
 
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50 flex items-center justify-between">
+      <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-muted flex items-center justify-between">
         <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
         {isGenerating && (
           <div className="flex items-center gap-1">
@@ -133,7 +133,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
       </div>
 
       {/* Preview */}
-      <div className="p-2 bg-white">
+      <div className="p-2 bg-card">
         {currentImageUrl ? (
           <img
             src={currentImageUrl}
@@ -147,14 +147,14 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           />
         ) : (
           <div
-            className="flex flex-col items-center justify-center gap-2 text-zinc-400 rounded-lg bg-zinc-50"
+            className="flex flex-col items-center justify-center gap-2 text-muted-foreground rounded-lg bg-muted"
             style={{ aspectRatio: '4/3' }}
           >
             {isGenerating ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span className="font-mono text-[10px] tracking-widest uppercase">
-                  {Math.round(progress)}<span className="text-zinc-300 ml-0.5">%</span>
+                  {Math.round(progress)}<span className="text-muted-foreground/50 ml-0.5">%</span>
                 </span>
               </>
             ) : (
@@ -181,22 +181,22 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
 
       {/* History pager */}
       {outputs.length > 1 && (
-        <div className="border-t border-zinc-100 px-3 py-1 flex items-center justify-between bg-zinc-50 rounded-b-xl">
+        <div className="border-t border-border px-3 py-1 flex items-center justify-between bg-muted rounded-b-xl">
           <button
             onClick={handlePrev}
             disabled={currentIndex <= 0}
-            className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded transition-colors"
+            className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5 rounded transition-colors"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] text-zinc-400">
+            <span className="font-mono text-[10px] text-muted-foreground">
               {currentIndex + 1} / {outputs.length}
             </span>
             <button
               onClick={handleConfirmSelect}
               disabled={!token || !canvasId || !selectedOutputId || confirming}
-              className="px-1.5 py-0.5 text-[10px] rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 flex items-center gap-1"
+              className="px-1.5 py-0.5 text-[10px] rounded border border-border text-foreground hover:bg-muted disabled:opacity-40 flex items-center gap-1"
             >
               {confirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               设为定稿
@@ -205,7 +205,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           <button
             onClick={handleNext}
             disabled={currentIndex >= outputs.length - 1}
-            className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded transition-colors"
+            className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5 rounded transition-colors"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
@@ -218,7 +218,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           className="absolute flex items-center pointer-events-none"
           style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
         >
-          <span className="text-[9px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+          <span className="text-[9px] font-medium text-muted-foreground bg-card border border-border rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
             参×{incomingCount}
           </span>
         </div>
@@ -238,13 +238,13 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
         position={Position.Left}
         id="any-in"
         style={{ top: '50%' }}
-        className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
+        className="!w-2.5 !h-2.5 !bg-border !border !border-border/80 hover:!bg-blue-400 transition-colors"
       />
       <Handle
         type="source"
         position={Position.Right}
         id="image-out"
-        className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all"
+        className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all"
       />
     </div>
   )

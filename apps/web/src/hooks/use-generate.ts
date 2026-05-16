@@ -7,35 +7,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { generateUUID } from '@/lib/utils'
 import type { BatchResponse, GenerateImageRequest } from '@aigc/types'
 
-const MODEL_CODE_MAP = {
-  gemini: {
-    '1k': 'gemini-3.1-flash-image-preview',
-    '2k': 'gemini-3.1-flash-image-preview-2k',
-    '4k': 'gemini-3.1-flash-image-preview-4k',
-  },
-  'gpt-image-2': {
-    '2k': 'gpt-image-2',
-  },
-  'nano-banana-pro': {
-    '1k': 'nano-banana-2',
-    '2k': 'nano-banana-2-2k',
-    '4k': 'nano-banana-2-4k',
-  },
-  'seedream-5.0-lite': {
-    '2k': 'seedream-5.0-lite',
-    '3k': 'seedream-5.0-lite',
-  },
-  'seedream-4.5': {
-    '2k': 'seedream-4.5',
-    '4k': 'seedream-4.5',
-  },
-  'seedream-4.0': {
-    '1k': 'seedream-4.0',
-    '2k': 'seedream-4.0',
-    '4k': 'seedream-4.0',
-  },
-} as const
-
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -45,8 +16,35 @@ async function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
+/**
+ * 将图片 URL 转为 base64 data URL。
+ * TOS 预签名 URL 是第三方域名，浏览器直接 fetch 会触发 CORS，
+ * 改为通过后端 /assets/fetch 接口代理读取（服务端直接走 TOS SDK，无跨域问题）。
+ */
 async function imageUrlToDataUrl(url: string): Promise<string> {
-  const resp = await fetch(url)
+  // 判断是否为同源 URL（相对路径或同域），同源直接 fetch
+  const isSameOrigin = url.startsWith('/') || url.startsWith(window.location.origin)
+  let fetchUrl = url
+
+  if (!isSameOrigin) {
+    // 尝试从 TOS 预签名 URL 提取 storageKey，走后端代理绕过 CORS
+    // TOS 预签名 URL 格式：https://<bucket>.tos-<region>.volces.com/<key>?X-Tos-...
+    try {
+      const parsed = new URL(url)
+      if (parsed.hostname.includes('.volces.com') || parsed.hostname.includes('.volccdn.com')) {
+        const key = parsed.pathname.replace(/^\//, '')
+        if (key) {
+          fetchUrl = `/api/v1/assets/fetch?key=${encodeURIComponent(key)}`
+        }
+      }
+    } catch {
+      // URL 解析失败，保持原 URL
+    }
+  }
+
+  const token = useAuthStore.getState().accessToken
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+  const resp = await fetch(fetchUrl, { headers })
   if (!resp.ok) throw new Error('reference image fetch failed')
   const blob = await resp.blob()
   return fileToDataUrl(new File([blob], 'reference', { type: blob.type || 'image/jpeg' }))
@@ -62,10 +60,9 @@ export function useGenerate() {
     let resolvedModel: string | undefined
     setIsGenerating(true)
     try {
-      const modelMap = MODEL_CODE_MAP[modelType] as Record<string, string> | undefined
-      if (!modelMap) throw new Error(`Unknown model type: ${modelType}`)
-      const model = modelMap[resolution]
-      if (!model) throw new Error(`Unknown resolution for ${modelType}: ${resolution}`)
+      // 直接用 modelType（DB code）作为 model 发给后端
+      // API 侧会根据 params.resolution 从 params_pricing 查实际调用的底层 model code
+      const model = modelType
       resolvedModel = model
 
       const params: Record<string, unknown> = {

@@ -46,8 +46,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     label: '文本',
     baseType: 'text_input',
     baseLabel: '文本',
-    colorClass: 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 border border-zinc-200',
-    testId: 'canvas-add-node-text',
+    colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
     items: [
       { type: 'script_writer', label: '剧本', testId: 'canvas-add-node-script' },
       { type: 'storyboard_splitter', label: '分镜', testId: 'canvas-add-node-storyboard' },
@@ -78,7 +77,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     label: '资产',
     baseType: 'asset',
     baseLabel: '资产',
-    colorClass: 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 border border-zinc-200',
+    colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
     testId: 'canvas-add-node-asset',
     items: [],
   },
@@ -86,7 +85,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
 
 function AddNodePanel({ onSelect }: { onSelect: (type: string) => void }) {
   return (
-    <div className="group relative bg-white/90 backdrop-blur-md p-2 rounded-xl border border-zinc-200 shadow-md flex gap-2">
+    <div className="group relative bg-background/90 backdrop-blur-md p-2 rounded-xl border border-border shadow-md flex gap-2">
       {NODE_MENU_CATEGORIES.map((category) => (
         <button
           key={category.id}
@@ -98,19 +97,19 @@ function AddNodePanel({ onSelect }: { onSelect: (type: string) => void }) {
         </button>
       ))}
       <div className="pointer-events-none absolute left-0 top-full mt-2 w-[360px] opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-        <div className="grid grid-cols-4 gap-2 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-xl backdrop-blur-md">
+        <div className="grid grid-cols-4 gap-2 rounded-xl border border-border bg-background/95 p-3 shadow-xl backdrop-blur-md">
           {NODE_MENU_CATEGORIES.map((category) => (
             <div key={category.id} className="min-w-0">
-              <div className="mb-1.5 text-[11px] font-semibold text-zinc-500">{category.label}</div>
+              <div className="mb-1.5 text-[11px] font-semibold text-muted-foreground">{category.label}</div>
               <div className="space-y-1">
                 {category.items.length === 0 ? (
-                  <div className="rounded-md px-2 py-1.5 text-[11px] text-zinc-400">暂无</div>
+                  <div className="rounded-md px-2 py-1.5 text-[11px] text-muted-foreground">暂无</div>
                 ) : category.items.map((item) => (
                   <button
                     key={item.type}
                     data-testid={item.testId}
                     onClick={() => onSelect(item.type)}
-                    className="w-full rounded-md px-2 py-1.5 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100"
+                    className="w-full rounded-md px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-muted"
                   >
                     + {item.label}
                   </button>
@@ -139,29 +138,29 @@ function ContextNodeMenu({
 }) {
   return createPortal(
     <div
-      className="fixed z-50 min-w-[150px] rounded-xl border border-zinc-200 bg-white py-1 shadow-xl"
+      className="fixed z-50 min-w-[150px] rounded-xl border border-border bg-background py-1 shadow-xl"
       style={{ top: y, left: x }}
       onMouseLeave={onClose}
     >
-      {title && <div className="px-3 py-1.5 text-[11px] font-medium text-zinc-400">{title}</div>}
+      {title && <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground">{title}</div>}
       {NODE_MENU_CATEGORIES.map((category) => (
         <div key={category.id} className="group/item relative">
           <button
             onClick={() => onSelect(category.baseType)}
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-50"
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
           >
             <span>+ {category.baseLabel}</span>
-            <span className="text-zinc-300">›</span>
+            <span className="text-border">›</span>
           </button>
-          <div className="pointer-events-none absolute left-full top-0 ml-1 min-w-[140px] rounded-xl border border-zinc-200 bg-white py-1 opacity-0 shadow-xl group-hover/item:pointer-events-auto group-hover/item:opacity-100">
-            <div className="px-3 py-1.5 text-[11px] font-medium text-zinc-400">{category.label}</div>
+          <div className="pointer-events-none absolute left-full top-0 ml-1 min-w-[140px] rounded-xl border border-border bg-background py-1 opacity-0 shadow-xl group-hover/item:pointer-events-auto group-hover/item:opacity-100">
+            <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground">{category.label}</div>
             {category.items.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-zinc-400">暂无</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground">暂无</div>
             ) : category.items.map((item) => (
               <button
                 key={item.type}
                 onClick={() => onSelect(item.type)}
-                className="w-full px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-50"
+                className="w-full px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
               >
                 + {item.label}
               </button>
@@ -639,7 +638,7 @@ function Flow({
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       style={{
-        background: '#fafafa',
+        background: 'hsl(var(--background))',
         transform: 'translateZ(0)',
         backfaceVisibility: 'hidden',
         WebkitFontSmoothing: 'antialiased',
@@ -647,19 +646,19 @@ function Flow({
     >
       {uploading && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/20 pointer-events-none">
-          <div className="bg-white rounded-xl px-4 py-2 shadow-lg text-sm font-medium text-zinc-700">上传中…</div>
+          <div className="bg-card rounded-xl px-4 py-2 shadow-lg text-sm font-medium text-foreground">上传中…</div>
         </div>
       )}
 
       {/* Empty state */}
       {nodes.length === 0 && (
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center gap-3 text-zinc-400">
-            <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-zinc-300 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-border flex items-center justify-center">
               <span className="text-2xl">✦</span>
             </div>
-            <p className="text-sm font-medium text-zinc-500">右键画布或点击顶部按钮添加节点</p>
-            <p className="text-xs text-zinc-400">拖拽图片/视频/音频到画布可快速创建素材节点</p>
+            <p className="text-sm font-medium text-muted-foreground">右键画布或点击顶部按钮添加节点</p>
+            <p className="text-xs text-muted-foreground/70">拖拽图片/视频/音频到画布可快速创建素材节点</p>
           </div>
         </div>
       )}
@@ -667,7 +666,7 @@ function Flow({
       {/* Selected edge delete hint */}
       {selectedEdgeId && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="bg-zinc-800/90 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg">
+          <div className="bg-foreground/90 text-background text-xs px-3 py-1.5 rounded-lg shadow-lg">
             按 Delete 删除连线
           </div>
         </div>
@@ -676,7 +675,7 @@ function Flow({
       {/* Multi-select hint */}
       {selectedNodeIds.length > 1 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="bg-zinc-800/90 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg">
+          <div className="bg-foreground/90 text-background text-xs px-3 py-1.5 rounded-lg shadow-lg">
             已选中 {selectedNodeIds.length} 个节点 · 按 Delete 批量删除
           </div>
         </div>
@@ -701,7 +700,7 @@ function Flow({
         minZoom={0.1}
         maxZoom={4}
         proOptions={{ hideAttribution: true }}
-        style={{ background: '#fafafa' }}
+        style={{ background: 'hsl(var(--background))' }}
         deleteKeyCode={null}
         panOnDrag
         panOnScroll
@@ -711,7 +710,7 @@ function Flow({
         multiSelectionKeyCode="Shift"
       >
         <Controls
-          className="!bg-white !border-zinc-200 [&>button]:!bg-white [&>button]:!border-zinc-200 [&>button]:!text-zinc-500 [&>button:hover]:!bg-zinc-100 [&>button:hover]:!text-zinc-800"
+          className="!bg-card !border-border [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-muted-foreground [&>button:hover]:!bg-muted [&>button:hover]:!text-foreground"
         />
         <MiniMap
           nodeColor={(node) => {
@@ -724,8 +723,8 @@ function Flow({
             if (node.type === 'video_stitch') return '#ef4444'
             return '#d4d4d8'
           }}
-          maskColor="rgba(250,250,250,0.7)"
-          className="!bg-white/90 !border-zinc-200 !rounded-xl"
+          maskColor="rgba(0,0,0,0.06)"
+          className="!bg-card/90 !border-border !rounded-xl"
           style={{ width: 140, height: 90 }}
         />
         <Panel position="top-left" className="!m-0">
@@ -739,7 +738,7 @@ function Flow({
               setHighlightedNodes(new Set())
               void onSave()
             }}
-            className="px-2 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors"
+            className="px-2 py-1.5 text-xs font-medium bg-card hover:bg-muted text-muted-foreground rounded-lg border border-border shadow-sm transition-colors"
             title="撤销 (Ctrl+Z)"
           >
             ↩
@@ -751,7 +750,7 @@ function Flow({
               setHighlightedNodes(new Set())
               void onSave()
             }}
-            className="px-2 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors"
+            className="px-2 py-1.5 text-xs font-medium bg-card hover:bg-muted text-muted-foreground rounded-lg border border-border shadow-sm transition-colors"
             title="重做 (Ctrl+Shift+Z)"
           >
             ↪
@@ -759,14 +758,14 @@ function Flow({
           <button
             onClick={onSave}
             disabled={saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-500 rounded-lg border border-zinc-200 shadow-sm transition-colors disabled:opacity-60 min-w-[80px] justify-center"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-card hover:bg-muted text-muted-foreground rounded-lg border border-border shadow-sm transition-colors disabled:opacity-60 min-w-[80px] justify-center"
           >
             {saving && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />}
             {saveLabel}
           </button>
           <button
             onClick={() => setShowShortcuts((v) => !v)}
-            className={`px-2 py-1.5 text-xs font-medium rounded-lg border shadow-sm transition-colors ${showShortcuts ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-white hover:bg-zinc-50 text-zinc-500 border-zinc-200'}`}
+            className={`px-2 py-1.5 text-xs font-medium rounded-lg border shadow-sm transition-colors ${showShortcuts ? 'bg-foreground text-background border-foreground' : 'bg-card hover:bg-muted text-muted-foreground border-border'}`}
             title="快捷键"
           >
             ?
@@ -775,8 +774,8 @@ function Flow({
 
         {showShortcuts && (
           <Panel position="top-right" className="mt-10">
-            <div className="bg-zinc-900/95 text-white text-xs rounded-xl shadow-2xl p-4 w-56 space-y-2.5">
-              <div className="font-semibold text-zinc-300 mb-1">快捷键</div>
+            <div className="bg-card/95 backdrop-blur-sm text-foreground text-xs rounded-xl shadow-2xl border border-border p-4 w-56 space-y-2.5">
+              <div className="font-semibold text-muted-foreground mb-1">快捷键</div>
               {[
                 ['Ctrl+Z', '撤销'],
                 ['Ctrl+Shift+Z', '重做'],
@@ -787,8 +786,8 @@ function Flow({
                 ['Shift+拖拽', '多选节点'],
               ].map(([key, desc]) => (
                 <div key={key} className="flex items-center justify-between gap-3">
-                  <kbd className="bg-zinc-700 text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-mono whitespace-nowrap">{key}</kbd>
-                  <span className="text-zinc-400 text-right">{desc}</span>
+                  <kbd className="bg-muted text-foreground px-1.5 py-0.5 rounded text-[10px] font-mono whitespace-nowrap border border-border">{key}</kbd>
+                  <span className="text-muted-foreground text-right">{desc}</span>
                 </div>
               ))}
             </div>

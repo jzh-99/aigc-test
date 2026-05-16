@@ -53,7 +53,7 @@ export function TeamCreditsSettings({ teamId }: { teamId: string }) {
       {/* Integrated credits panel */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle>团队积分设置</CardTitle>
+          <CardTitle>A豆设置</CardTitle>
           <CardDescription>统一管理团队余额、充值入口和成员充值权限</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -69,7 +69,7 @@ export function TeamCreditsSettings({ teamId }: { teamId: string }) {
                 <span>冻结 {frozen.toLocaleString()}</span>
               </div>
             </div>
-            <Button onClick={() => setTopupOpen(true)}>充值团队积分</Button>
+            <Button onClick={() => setTopupOpen(true)}>充值A豆</Button>
           </div>
 
           <div className="h-px bg-border" />
@@ -78,7 +78,7 @@ export function TeamCreditsSettings({ teamId }: { teamId: string }) {
             <div className="space-y-0.5">
               <Label htmlFor="member-topup-switch">成员充值权限</Label>
               <p className="text-xs text-muted-foreground">
-                开启后，editor 成员可充值个人积分账户（独立于团队积分池）
+                开启后，editor 成员可充值个人积分账户（独立于A豆池）
               </p>
             </div>
             <Switch

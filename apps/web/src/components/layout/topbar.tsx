@@ -1,6 +1,6 @@
 'use client'
 
-import { Menu, Settings, LogOut, Coins } from 'lucide-react'
+import { Menu, Settings, LogOut, Coins, Sun, Moon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import {
@@ -17,6 +17,7 @@ import { useMemo } from 'react'
 import { apiPost } from '@/lib/api-client'
 import { useRouter } from 'next/navigation'
 import { MobileSidebar } from './mobile-sidebar'
+import { useTheme } from '@/context/theme-provider'
 import Link from 'next/link'
 
 interface TopbarProps {
@@ -30,6 +31,7 @@ export function Topbar({ title }: TopbarProps) {
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const resetGeneration = useGenerationStore((s) => s.reset)
   const router = useRouter()
+  const { theme, toggleTheme } = useTheme()
 
   const canViewCredits = useMemo(() => {
     if (!activeTeam) return true
@@ -47,7 +49,6 @@ export function Topbar({ title }: TopbarProps) {
 
   return (
     <header className="relative z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6">
-      {/* Mobile menu button */}
       <Button
         variant="ghost"
         size="icon"
@@ -58,13 +59,26 @@ export function Topbar({ title }: TopbarProps) {
         <span className="sr-only">菜单</span>
       </Button>
 
-      {/* Page title */}
       {title && (
         <h1 className="text-lg font-semibold">{title}</h1>
       )}
 
-      {/* Right side - user dropdown */}
       <div className="ml-auto flex items-center gap-2">
+        {/* 主题切换按钮 */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          className="rounded-full text-muted-foreground hover:text-foreground"
+          aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
+        >
+          {theme === 'dark' ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
+        </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
@@ -106,7 +120,6 @@ export function Topbar({ title }: TopbarProps) {
         </DropdownMenu>
       </div>
 
-      {/* Mobile sidebar sheet */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="p-0 w-60">
           <SheetTitle className="sr-only">导航菜单</SheetTitle>

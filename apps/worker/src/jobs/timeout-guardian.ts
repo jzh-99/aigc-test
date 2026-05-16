@@ -4,7 +4,7 @@ import pino_ from 'pino'
 import { sql } from 'kysely'
 import type { GenerationJobData } from '@aigc/types'
 import { failPipeline } from '../pipelines/fail.js'
-import { getRedis } from '../lib/redis.js'
+import { getRedis, getBullMQConnection } from '../lib/redis.js'
 
 const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
@@ -12,7 +12,7 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 let _imageQueue: Queue | null = null
 function getImageQueue(): Queue {
   if (!_imageQueue) {
-    _imageQueue = new Queue('image-queue', { connection: getRedis() })
+    _imageQueue = new Queue('image-queue', { connection: getBullMQConnection() })
   }
   return _imageQueue
 }
@@ -52,9 +52,13 @@ export async function runTimeoutGuardian(): Promise<void> {
           eb('task_batches.created_at', '<', cutoff),
         ]),
         // Processing tasks: use processing_started_at
+        // processing_started_at 为 null 说明 Worker 在写入前崩溃，同样视为卡死
         eb.and([
           eb('tasks.status', '=', 'processing'),
-          eb('tasks.processing_started_at', '<', cutoff),
+          eb.or([
+            eb('tasks.processing_started_at', '<', cutoff),
+            eb('tasks.processing_started_at', 'is', null),
+          ]),
         ]),
       ]),
     )

@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check, Video, Play, X, EyeOff } from 'lucide-react'
+import { User, Loader2, RotateCcw, Check, Video, X, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -25,6 +25,222 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
   completed: { label: '已完成', variant: 'success' },
   partial_complete: { label: '部分完成', variant: 'warning' },
   failed: { label: '失败', variant: 'destructive' },
+}
+
+/** 将 "16:9" 格式的宽高比转为 CSS aspect-ratio 值 "16 / 9" */
+export function parseAspectRatio(ratio?: string): string {
+  if (!ratio) return '1 / 1'
+  const [w, h] = ratio.split(':')
+  if (!w || !h || isNaN(Number(w)) || isNaN(Number(h))) return '1 / 1'
+  return `${w} / ${h}`
+}
+
+/** 视频预览：16:9 固定比例，进入视野自动静音播放 */
+function VideoPreview({ url }: { url: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          video.play().catch(() => {})
+        } else {
+          video.pause()
+        }
+      },
+      { threshold: 0.4 },
+    )
+    observer.observe(video)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div className="relative w-full aspect-video rounded-md overflow-hidden bg-black">
+      <video
+        ref={videoRef}
+        src={url}
+        className="absolute inset-0 w-full h-full object-cover"
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        controls
+      />
+    </div>
+  )
+}
+
+/** 判断是否为竖向比例（高 > 宽） */
+function isPortraitRatio(ratio: string): boolean {
+  const [w, h] = ratio.split(':').map(Number)
+  return !!w && !!h && h > w
+}
+
+/** 图片轮播：
+ *  - 横图（16:9 / 4:3 / 1:1）：固定高度 280px，宽度按比例，一次一张，左右翻页
+ *  - 竖图（9:16 / 3:4）：瀑布流展示所有图，左下角页签点击滚动定位
+ */
+function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: string }) {
+  const [index, setIndex] = useState(0)
+  const isPortrait = isPortraitRatio(aspectRatio)
+  const isMulti = urls.length > 1
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([])
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndex((i) => Math.max(0, i - 1))
+  }
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndex((i) => Math.min(urls.length - 1, i + 1))
+  }
+
+  // 竖图：点击页签滚动到对应图片
+  const handleTabClick = (e: React.MouseEvent, i: number) => {
+    e.stopPropagation()
+    setIndex(i)
+    itemRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+
+  // 横图模式
+  if (!isPortrait) {
+    return (
+      <div className="group relative w-full rounded-md overflow-hidden bg-muted flex justify-center">
+        <div className="relative" style={{ height: 400, aspectRatio }}>
+          <Image
+            src={urls[index]}
+            alt=""
+            fill
+            className="object-cover"
+            sizes="600px"
+            unoptimized
+          />
+        </div>
+        {isMulti && (
+          <>
+            <button
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
+                flex items-center justify-center
+                bg-white/20 backdrop-blur-sm border border-white/30
+                text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
+                opacity-0 group-hover:opacity-100 transition-all duration-200
+                hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
+                hover:border-transparent hover:scale-110
+                disabled:opacity-0 disabled:pointer-events-none"
+              onClick={handlePrev}
+              disabled={index === 0}
+            >
+              <ChevronLeft className="h-5 w-5 drop-shadow" />
+            </button>
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
+                flex items-center justify-center
+                bg-white/20 backdrop-blur-sm border border-white/30
+                text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
+                opacity-0 group-hover:opacity-100 transition-all duration-200
+                hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
+                hover:border-transparent hover:scale-110
+                disabled:opacity-0 disabled:pointer-events-none"
+              onClick={handleNext}
+              disabled={index === urls.length - 1}
+            >
+              <ChevronRight className="h-5 w-5 drop-shadow" />
+            </button>
+            {/* 左下角页码 */}
+            <div className="absolute bottom-2 left-3 flex items-center gap-1">
+              {urls.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => { e.stopPropagation(); setIndex(i) }}
+                  className="h-5 min-w-[20px] px-1.5 rounded text-[10px] font-medium transition-all duration-200 leading-none"
+                  style={{
+                    background: i === index
+                      ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                      : 'rgba(0,0,0,0.45)',
+                    backdropFilter: 'blur(6px)',
+                    color: i === index ? 'white' : 'rgba(255,255,255,0.85)',
+                    border: i === index ? 'none' : '1px solid rgba(255,255,255,0.5)',
+                  }}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            {/* 底部居中指示点 */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1">
+              {urls.map((_, i) => (
+                <span
+                  key={i}
+                  className="block h-1 rounded-full transition-all duration-300"
+                  style={{
+                    width: i === index ? 16 : 4,
+                    background: i === index
+                      ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                      : 'rgba(255,255,255,0.45)',
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // 竖图模式：瀑布流 + 左下角页签
+  return (
+    <div className="relative w-full rounded-md overflow-hidden bg-muted">
+      <div
+        ref={containerRef}
+        className="columns-2 gap-1.5"
+        style={{ columnFill: 'balance' }}
+      >
+        {urls.map((url, i) => (
+          <div
+            key={i}
+            ref={(el) => { itemRefs.current[i] = el }}
+            className="break-inside-avoid mb-1.5 overflow-hidden rounded-sm"
+          >
+            <Image
+              src={url}
+              alt=""
+              width={0}
+              height={0}
+              sizes="50vw"
+              className="w-full h-auto block"
+              style={{ aspectRatio }}
+              unoptimized
+            />
+          </div>
+        ))}
+      </div>
+      {/* 左下角页签 */}
+      {isMulti && (
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 flex-wrap max-w-[60%]">
+          {urls.map((_, i) => (
+            <button
+              key={i}
+              onClick={(e) => handleTabClick(e, i)}
+              className="h-5 min-w-[20px] px-1.5 rounded text-[10px] font-medium transition-all duration-200 leading-none"
+              style={{
+                background: i === index
+                  ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                  : 'rgba(255,255,255,0.25)',
+                backdropFilter: 'blur(4px)',
+                color: 'white',
+                border: i === index ? 'none' : '1px solid rgba(255,255,255,0.3)',
+              }}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function formatElapsed(ms: number) {
@@ -106,9 +322,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
         .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
 
   const time = new Date(batch.created_at)
-
-  const showLoading = thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing')
-  console.log('[BatchListCard]', batch.id, 'status:', batch.status, 'thumbnails:', thumbnails.length, 'showLoading:', showLoading)
+  const thumbnailAspect = parseAspectRatio((batch as any).params?.aspect_ratio)
 
   // First error message: prefer batch-level field (set by list API), fall back to tasks array
   const firstError: string | null =
@@ -173,21 +387,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
         {/* Thumbnail grid / video preview */}
         {isVideo ? (
           videoUrl ? (
-            <div className="flex gap-2 overflow-hidden">
-              <div className="relative h-16 w-16 shrink-0 rounded-md overflow-hidden bg-muted [transform:translateZ(0)]">
-                <video
-                  src={videoUrl}
-                  className="h-full w-full object-contain"
-                  muted
-                  preload="metadata"
-                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.001 }}
-                />
-                <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5">
-                  <Play className="h-2 w-2 text-white fill-white" />
-                  <span className="text-[9px] text-white font-medium leading-none">视频</span>
-                </div>
-              </div>
-            </div>
+            <VideoPreview url={videoUrl} />
           ) : (batch.status === 'pending' || batch.status === 'processing') ? (
             <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -206,27 +406,9 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
           )
         ) : (
           <>
-            {/* Image thumbnails */}
+            {/* Image thumbnails — 宽度填满按比例，多图轮播 */}
             {thumbnails.length > 0 && (
-              <div className="flex gap-2 overflow-hidden">
-                {thumbnails.slice(0, 5).map((url, i) => (
-                  <div key={i} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
-                    <Image
-                      src={url}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      sizes="64px"
-                      unoptimized
-                    />
-                  </div>
-                ))}
-                {thumbnails.length > 5 && (
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                    +{thumbnails.length - 5}
-                  </div>
-                )}
-              </div>
+              <ImageCarousel urls={thumbnails} aspectRatio={thumbnailAspect} />
             )}
 
             {/* Loading animation for pending/processing */}

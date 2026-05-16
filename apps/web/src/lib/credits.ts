@@ -8,16 +8,18 @@
  */
 
 // ─── 图片模型积分（每张）───────────────────────────────────────────────────
-export const IMAGE_MODEL_CREDITS: Record<
-  'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0',
-  number
-> = {
-  'gemini':            5,
+// 此 map 仅供旧组件兜底使用，新流程从 ModelItem.credit_cost 或 params_pricing 读取
+export const IMAGE_MODEL_CREDITS: Record<string, number> = {
+  'gemini-3.1-flash-image-preview':    1,
+  'gemini-3.1-flash-image-preview-2k': 2,
+  'gemini-3.1-flash-image-preview-4k': 3,
   'gpt-image-2':       5,
-  'nano-banana-pro':  10,
-  'seedream-5.0-lite': 10,
-  'seedream-4.5':     10,
-  'seedream-4.0':     10,
+  'nano-banana-2':     1,
+  'nano-banana-2-2k':  2,
+  'nano-banana-2-4k':  4,
+  'seedream-5.0-lite': 4,
+  'seedream-4.5':      4,
+  'seedream-4.0':      3,
 }
 
 // ─── 视频模型积分 ──────────────────────────────────────────────────────────

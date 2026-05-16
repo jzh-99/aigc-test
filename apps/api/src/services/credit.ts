@@ -32,11 +32,11 @@ export async function freezeCredits(
 
     const row = account.rows[0]
     if (!row) {
-      throw new Error('未找到团队积分账户')
+      throw new Error('未找到A豆账户')
     }
 
     if (row.balance - row.frozen_credits < amount) {
-      throw new Error('团队积分余额不足')
+      throw new Error('A豆余额不足')
     }
 
     // 2. Lock and check member quota (after team lock to prevent race)

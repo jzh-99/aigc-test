@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { X, Loader2, ChevronDown, ImageIcon, Film } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { BatchDetail } from '@/components/history/batch-detail'
@@ -23,6 +24,7 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
 }
 
 export function VideoStudioSidebar({ projectId, onClose }: Props) {
+  const router = useRouter()
   const token = useAuthStore((s) => s.accessToken)
   const [tab, setTab] = useState<Tab>('history')
   const [detailBatchId, setDetailBatchId] = useState<string | null>(null)
@@ -146,6 +148,8 @@ export function VideoStudioSidebar({ projectId, onClose }: Props) {
         onOpenChange={(open) => {
           if (!open) setDetailBatchId(null)
         }}
+        onApplied={() => router.push('/generation')}
+        onReferenceAdded={() => router.push('/generation')}
       />
 
       {/* Lightbox for asset preview */}

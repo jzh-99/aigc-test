@@ -28,7 +28,6 @@ export interface AssetResponse {
   type: AssetType
   original_url: string | null
   storage_url: string | null
-  raw_storage_url: string | null
   transfer_status: TransferStatus
   file_size: number | null
   width: number | null

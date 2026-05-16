@@ -1,9 +1,4 @@
-/**
- * Volcengine Visual API request signing (AWS Signature V4 style).
- * Used for OmniHuman digital human generation via visual.volcengineapi.com.
- *
- * Reference: https://www.volcengine.com/docs/6369/67269
- */
+import { log } from 'node:console'
 import crypto from 'node:crypto'
 
 const REGION = 'cn-north-1'
@@ -18,12 +13,6 @@ function sha256Hex(data: string): string {
   return crypto.createHash('sha256').update(data, 'utf8').digest('hex')
 }
 
-/**
- * Build a signed fetch request for the Volcengine Visual API.
- * @param action  e.g. "CVSubmitTask" or "CVGetResult"
- * @param version e.g. "2022-08-31"
- * @param body    JSON body as plain object
- */
 export function buildSignedRequest(
   action: string,
   version: string,
@@ -33,61 +22,59 @@ export function buildSignedRequest(
   const sk = process.env.VOLCENGINE_SECRET_KEY ?? ''
 
   const now = new Date()
-  const datestamp = now.toISOString().slice(0, 10).replace(/-/g, '') // e.g. 20240101
-  const timestamp = now.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z' // e.g. 20240101T120000Z
+
+  // 1. 日期：纯数字 20260516
+  const datestamp = now.toISOString().split('T')[0].replace(/-/g, '')
+
+  // 2. ✅ 关键：强制去掉毫秒！！！火山唯一认可格式
+  const fullIsoTime = now.toISOString().split('.')[0] + 'Z' // 2026-05-16T08:10:52Z
+
+  log('datestamp:', datestamp)
+  log('fullIsoTime:', fullIsoTime)
 
   const bodyStr = JSON.stringify(body)
   const payloadHash = sha256Hex(bodyStr)
+  const queryString = `Action=${action}&Version=${version}`
 
-  // Query string: Action + Version
-  const queryString = `Action=${encodeURIComponent(action)}&Version=${encodeURIComponent(version)}`
-
-  // Canonical headers (must be sorted)
   const canonicalHeaders =
     `content-type:application/json\n` +
     `host:${HOST}\n` +
     `x-content-sha256:${payloadHash}\n` +
-    `x-date:${timestamp}\n`
+    `x-date:${fullIsoTime}\n`
+
   const signedHeaders = 'content-type;host;x-content-sha256;x-date'
 
   const canonicalRequest = [
-    'POST',
-    '/',
-    queryString,
+    'POST', '/', '',
     canonicalHeaders,
     signedHeaders,
-    payloadHash,
+    payloadHash
   ].join('\n')
 
   const credentialScope = `${datestamp}/${REGION}/${SERVICE}/request`
   const stringToSign = [
     'HMAC-SHA256',
-    timestamp,
+    fullIsoTime,
     credentialScope,
-    sha256Hex(canonicalRequest),
+    sha256Hex(canonicalRequest)
   ].join('\n')
 
-  // Derive signing key
   const kDate = hmac(sk, datestamp)
   const kRegion = hmac(kDate, REGION)
   const kService = hmac(kRegion, SERVICE)
   const kSigning = hmac(kService, 'request')
   const signature = hmac(kSigning, stringToSign).toString('hex')
 
-  const authorization =
-    `HMAC-SHA256 Credential=${ak}/${credentialScope}, ` +
-    `SignedHeaders=${signedHeaders}, ` +
-    `Signature=${signature}`
+  const authorization = `HMAC-SHA256 Credential=${ak}/${credentialScope},SignedHeaders=${signedHeaders},Signature=${signature}`
 
   return {
     url: `https://${HOST}/?${queryString}`,
     headers: {
       'Content-Type': 'application/json',
-      Host: HOST,
-      'X-Date': timestamp,
+      'X-Date': fullIsoTime,
       'X-Content-Sha256': payloadHash,
-      Authorization: authorization,
+      Authorization: authorization
     },
-    body: bodyStr,
+    body: bodyStr
   }
 }

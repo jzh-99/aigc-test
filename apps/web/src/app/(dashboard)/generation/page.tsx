@@ -8,16 +8,15 @@ import { Badge } from '@/components/ui/badge'
 import { GenerationPanel } from '@/components/generation/generation-panel'
 import { BatchList, type BatchListHandle } from '@/components/history/batch-list'
 import { BatchDetail } from '@/components/history/batch-detail'
-import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { apiGet } from '@/lib/api-client'
-import { ApiError } from '@/lib/api-client'
 import { AlertTriangle, FolderX, EyeOff } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 import type { BatchResponse } from '@aigc/types'
 import { useHiddenBatches } from '@/hooks/use-batches'
+import { useBatchSSE } from '@/hooks/use-batch-sse'
 import { Button } from '@/components/ui/button'
 import { AssetsLibraryTab } from '@/components/generation/assets-library-tab'
+import { cn } from '@/lib/utils'
 
 interface TeamMember {
   user_id: string
@@ -30,19 +29,30 @@ interface TeamInfo {
   members: TeamMember[]
 }
 
-const POLL_INTERVAL_MS = 3000
-const VIDEO_POLL_INTERVAL_MS = 5000 // Videos take minutes; 5s polling is sufficient
-
-function isTerminalStatus(status: string) {
+function isTerminalStatus(status: string): boolean {
   return status === 'completed' || status === 'failed' || status === 'partial_complete'
 }
 
-function hasExpectedOutputs(batch: BatchResponse) {
-  if (batch.status === 'failed') return true
-  if (batch.completed_count === 0) return true
-  const completedTasks = batch.tasks?.filter((task) => task.status === 'completed') ?? []
-  if (completedTasks.length < batch.completed_count) return false
-  return completedTasks.every((task) => Boolean(task.asset?.storage_url || task.asset?.original_url))
+/** 单个 batch 的 SSE 订阅组件，hooks 不能在循环里调用，用组件隔离 */
+interface BatchSSEWatcherProps {
+  batchId: string
+  onUpdate: (batch: BatchResponse) => void
+  onTerminal: (batchId: string, batch: BatchResponse) => void
+}
+
+function BatchSSEWatcher({ batchId, onUpdate, onTerminal }: BatchSSEWatcherProps) {
+  const onTerminalRef = useRef(onTerminal)
+  onTerminalRef.current = onTerminal
+
+  const handleUpdate = useCallback((batch: BatchResponse) => {
+    onUpdate(batch)
+    if (isTerminalStatus(batch.status)) {
+      onTerminalRef.current(batchId, batch)
+    }
+  }, [batchId, onUpdate])
+
+  useBatchSSE({ batchId, onUpdate: handleUpdate })
+  return null
 }
 
 export default function ImagePage() {
@@ -51,17 +61,14 @@ export default function ImagePage() {
   const initialMode = (_mode === 'video' ? 'video' : _mode === 'avatar' ? 'avatar' : _mode === 'action_imitation' ? 'action_imitation' : 'image') as 'image' | 'video' | 'avatar' | 'action_imitation'
   const batchListRef = useRef<BatchListHandle>(null)
 
-  const [activeBatchCount, setActiveBatchCount] = useState(0)
+  // 当前正在进行中的 batch ID 集合，用于挂载 SSE 订阅
+  const [activeBatchIds, setActiveBatchIds] = useState<Set<string>>(new Set())
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [rightTab, setRightTab] = useState<'history' | 'assets'>('history')
   const { batches: hiddenBatches } = useHiddenBatches(true)
   const hasHidden = hiddenBatches.length > 0
 
-  // Map<batchId, intervalId> — each batch polled independently
-  const pollTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
-
-  const resetGeneration = useGenerationStore((s) => s.reset)
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -70,93 +77,35 @@ export default function ImagePage() {
   useEffect(() => { activeTeamIdRef.current = activeTeamId }, [activeTeamId])
   const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
 
+  // 切换工作区时清空所有活跃订阅
   useEffect(() => {
-    return () => { resetGeneration() }
-  }, [resetGeneration])
-
-  // Clear all polls when workspace changes
-  useEffect(() => {
-    pollTimersRef.current.forEach(clearInterval)
-    pollTimersRef.current.clear()
-    setActiveBatchCount(0)
+    setActiveBatchIds(new Set())
   }, [activeWorkspaceId])
 
-  // Clear all polls on unmount
-  useEffect(() => {
-    const timers = pollTimersRef.current
-    return () => { timers.forEach(clearInterval); timers.clear() }
+  const handleBatchUpdate = useCallback((batch: BatchResponse) => {
+    batchListRef.current?.update(batch)
   }, [])
 
-  const stopPolling = useCallback((batchId: string) => {
-    const timer = pollTimersRef.current.get(batchId)
-    if (timer !== undefined) {
-      clearInterval(timer)
-      pollTimersRef.current.delete(batchId)
-    }
-    setActiveBatchCount((c) => Math.max(0, c - 1))
+  const handleBatchTerminal = useCallback((batchId: string, batch: BatchResponse) => {
+    setActiveBatchIds((prev) => {
+      const next = new Set(prev)
+      next.delete(batchId)
+      return next
+    })
+    // 刷新列表以获取最终状态（含资产 URL）
+    batchListRef.current?.update(batch)
+    batchListRef.current?.refresh()
+    setTimeout(() => { batchListRef.current?.refresh() }, 800)
+    // 任务结束后刷新积分余额（积分已确认扣除或退还）
+    if (activeTeamIdRef.current) mutate(`/teams/${activeTeamIdRef.current}`)
   }, [])
-
-  const pollOnce = useCallback(async (batchId: string) => {
-    try {
-      const updated = await apiGet<BatchResponse>(`/batches/${batchId}`)
-      console.log('[Poll]', batchId, updated.status, updated.completed_count, '/', updated.quantity)
-      batchListRef.current?.update(updated)
-
-      if (isTerminalStatus(updated.status) && hasExpectedOutputs(updated)) {
-        stopPolling(batchId)
-        batchListRef.current?.refresh()
-        setTimeout(() => { batchListRef.current?.refresh() }, 800)
-        // Refresh credit balance after task completes (credits confirmed/refunded)
-        if (activeTeamIdRef.current) mutate(`/teams/${activeTeamIdRef.current}`)
-      }
-    } catch (err) {
-      // 429: rate limited — skip this cycle, retry on next interval
-      if (err instanceof ApiError && err.status === 429) {
-        console.warn('[Poll] Rate limited for batch', batchId, '- retrying next cycle')
-        return
-      }
-      console.error('[Poll] Error fetching batch', batchId, err)
-      stopPolling(batchId)
-    }
-  }, [stopPolling])
-
-  const startPolling = useCallback((batchId: string, intervalMs = POLL_INTERVAL_MS) => {
-    // Avoid duplicate polling for the same batch
-    if (pollTimersRef.current.has(batchId)) return
-
-    // Stagger start by up to 1.5s so concurrent batches don't all fire at once
-    const jitter = Math.floor(Math.random() * 1500)
-    const startTimer = setTimeout(() => {
-      if (!pollTimersRef.current.has(batchId)) return // stopped during jitter window
-      const timer = setInterval(() => pollOnce(batchId), intervalMs)
-      pollTimersRef.current.set(batchId, timer)
-      pollOnce(batchId) // fire immediately after jitter
-    }, jitter)
-    pollTimersRef.current.set(batchId, startTimer)
-  }, [pollOnce])
-
-  // When tab becomes visible again, immediately poll all active batches
-  // (browser throttles setInterval to ~1 min in background tabs)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        for (const batchId of pollTimersRef.current.keys()) {
-          pollOnce(batchId)
-        }
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [pollOnce])
 
   const handleBatchCreated = useCallback((batch: BatchResponse) => {
     batchListRef.current?.prepend(batch)
-    setActiveBatchCount((c) => c + 1)
-    const intervalMs = ((batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation') ? VIDEO_POLL_INTERVAL_MS : POLL_INTERVAL_MS
-    startPolling(batch.id, intervalMs)
-    // Refresh credit balance immediately after submission (credits are frozen)
+    setActiveBatchIds((prev) => new Set(prev).add(batch.id))
+    // 提交后立即刷新积分（积分已冻结）
     if (activeTeamId) mutate(`/teams/${activeTeamId}`)
-  }, [startPolling, activeTeamId])
+  }, [activeTeamId])
 
   const teamRole = activeTeam()?.role
   const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
@@ -178,6 +127,16 @@ export default function ImagePage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full">
+      {/* 为每个活跃 batch 挂载 SSE 订阅，组件不渲染任何 DOM */}
+      {Array.from(activeBatchIds).map((id) => (
+        <BatchSSEWatcher
+          key={id}
+          batchId={id}
+          onUpdate={handleBatchUpdate}
+          onTerminal={handleBatchTerminal}
+        />
+      ))}
+
       {/* Left column — Generation Panel */}
       <div className="w-full lg:w-[400px] shrink-0 flex flex-col">
         {noWorkspace && (
@@ -197,7 +156,7 @@ export default function ImagePage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               {isOwnerOrAdmin
-                ? '团队积分余额不足，请充值后再继续生成。'
+                ? 'A豆余额不足，请充值后再继续生成。'
                 : '你的可用积分已耗尽，请联系团队负责人增加你的积分配额。'
               }
             </AlertDescription>
@@ -216,24 +175,24 @@ export default function ImagePage() {
             <CardTitle className="text-base flex items-center gap-2">
               <div className="flex rounded-lg border p-1">
                 <Button
-                  variant={rightTab === 'history' ? 'default' : 'ghost'}
+                  variant="ghost"
                   size="sm"
-                  className="h-7 px-3 text-xs"
+                  className={cn('h-7 px-3 text-xs', rightTab === 'history' ? 'nav-item-active' : 'hover:bg-accent')}
                   onClick={() => setRightTab('history')}
                 >
                   历史记录
                 </Button>
                 <Button
-                  variant={rightTab === 'assets' ? 'default' : 'ghost'}
+                  variant="ghost"
                   size="sm"
-                  className="h-7 px-3 text-xs"
+                  className={cn('h-7 px-3 text-xs', rightTab === 'assets' ? 'nav-item-active' : 'hover:bg-accent')}
                   onClick={() => setRightTab('assets')}
                 >
                   资产库
                 </Button>
               </div>
-              {activeBatchCount > 0 && rightTab === 'history' && (
-                <Badge variant="processing" className="text-xs">生成中 ({activeBatchCount})</Badge>
+              {activeBatchIds.size > 0 && rightTab === 'history' && (
+                <Badge variant="processing" className="text-xs">生成中 ({activeBatchIds.size})</Badge>
               )}
               {hasHidden && rightTab === 'history' && (
                 <Button

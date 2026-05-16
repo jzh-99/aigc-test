@@ -7,29 +7,12 @@ import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import { Redis } from 'ioredis'
 import { jwtAuthPlugin } from './plugins/jwt-auth.js'
-import { healthzRoutes } from './routes/healthz.js'
-import { generateRoutes } from './routes/generate.js'
-import { sseRoutes } from './routes/sse.js'
-import { batchRoutes } from './routes/batches.js'
-import { authRoutes } from './routes/auth.js'
-import { userRoutes } from './routes/users.js'
-import { teamRoutes } from './routes/teams.js'
-import { workspaceRoutes } from './routes/workspaces.js'
-import { adminRoutes } from './routes/admin.js'
-import { proxyRoutes } from './routes/proxy.js'
-import { assetRoutes } from './routes/assets.js'
-import { videoRoutes } from './routes/videos.js'
 import multipart from '@fastify/multipart'
-import { aiAssistantRoutes } from './routes/ai-assistant.js'
-import { avatarRoutes } from './routes/avatar.js'
-import { actionImitationRoutes } from './routes/action-imitation.js'
-import { canvasRoutes } from './routes/canvas.js'
-import { canvasAgentRoutes } from './routes/canvas-agent.js'
-import { videoStudioRoutes } from './routes/video-studio.js'
-import { companyARoutes } from './routes/company-a.js'
-import { clientErrorsRoutes } from './routes/client-errors.js'
-import { paymentRoutes } from './routes/payment.js'
-import { modelRoutes } from './routes/models.js'
+import autoload from '@fastify/autoload'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export async function buildApp() {
   const logger = buildLogger()
@@ -71,12 +54,17 @@ export async function buildApp() {
     contentSecurityPolicy: false, // managed by Next.js for frontend
   })
 
-  // Attach Redis client
+  // Attach Redis client（普通命令）
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379')
   app.decorate('redis', redis)
 
+  // 专用 Pub/Sub 订阅连接：subscribe 模式下连接不能复用做普通命令，单独维护
+  const redisSub = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379')
+  app.decorate('redisSub', redisSub)
+
   app.addHook('onClose', async () => {
     await redis.quit()
+    await redisSub.quit()
   })
 
   // Global rate limit: 1200 requests per minute per client identity.
@@ -108,34 +96,106 @@ export async function buildApp() {
   // Plugins
   await app.register(jwtAuthPlugin)
 
-  // Routes — all prefixed with /api/v1
-  await app.register(
-    async (v1) => {
-      await v1.register(authRoutes)
-      await v1.register(userRoutes)
-      await v1.register(healthzRoutes)
-      await v1.register(generateRoutes)
-      await v1.register(sseRoutes)
-      await v1.register(batchRoutes)
-      await v1.register(teamRoutes)
-      await v1.register(workspaceRoutes)
-      await v1.register(adminRoutes)
-      await v1.register(proxyRoutes)
-      await v1.register(assetRoutes)
-      await v1.register(videoRoutes)
-      await v1.register(aiAssistantRoutes)
-      await v1.register(avatarRoutes)
-      await v1.register(actionImitationRoutes)
-      await v1.register(canvasRoutes)
-      await v1.register(canvasAgentRoutes)
-      await v1.register(videoStudioRoutes)
-      await v1.register(companyARoutes)
-      await v1.register(clientErrorsRoutes)
-      await v1.register(paymentRoutes)
-      await v1.register(modelRoutes)
-    },
-    { prefix: '/api/v1' },
-  )
+  // Swagger UI（仅开发环境，必须在 autoload 之前注册）
+  if (process.env.NODE_ENV !== 'production') {
+    // tag 中文映射表
+    const TAG_LABELS: Record<string, string> = {
+      auth: '认证',
+      users: '用户',
+      teams: '团队',
+      workspaces: '工作区',
+      models: '模型',
+      generate: '图片生成',
+      batches: '任务批次',
+      assets: '素材',
+      canvas: '画布',
+      'canvas-agent': '画布 AI 助手',
+      'ai-assistant': 'AI 助手',
+      avatar: '头像生成',
+      'action-imitation': '动作模仿',
+      'video-studio': '视频工作室',
+      videos: '视频',
+      payment: '支付',
+      sse: 'SSE 推送',
+      admin: '管理后台',
+      'company-a': '外部图库',
+      proxy: '资源代理',
+      healthz: '健康检查',
+      'client-errors': '客户端错误上报',
+    }
+
+    // HTTP 方法 → 操作动词
+    const METHOD_VERB: Record<string, string> = {
+      GET: '查询',
+      POST: '创建',
+      PUT: '替换',
+      PATCH: '更新',
+      DELETE: '删除',
+    }
+
+    await app.register(import('@fastify/swagger'), {
+      openapi: {
+        info: { title: 'AIGC API', version: '1.0.0', description: 'AIGC 创作平台 API 文档' },
+        components: {
+          securitySchemes: {
+            bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+          },
+        },
+        security: [{ bearerAuth: [] }],
+      },
+      // 自动为没有 schema.tags/summary 的路由补全分组和摘要
+      transform({ schema, url, route }) {
+        // /docs 内部路由没有 schema，直接透传
+        if (!schema) return { schema, url }
+        const s = schema as Record<string, unknown>
+
+        // 非 /api/v1 路由（如 /docs 内部路由）不处理
+        if (!url.startsWith('/api/v1/')) return { schema, url }
+
+        // 从 /api/v1/<module>/... 提取模块名
+        const match = url.match(/^\/api\/v1\/([^/]+)/)
+        const module = match?.[1] ?? 'other'
+        const tagLabel = TAG_LABELS[module] ?? module
+
+        const tags: string[] = Array.isArray(s.tags) && s.tags.length > 0
+          ? (s.tags as string[])
+          : [tagLabel]
+
+        // 没有 summary 时自动生成：「操作动词 + 路径末段」
+        const autoSummary = (() => {
+          const method = (route.method as string | string[])
+          const verb = METHOD_VERB[(Array.isArray(method) ? method[0] : method).toUpperCase()] ?? method
+          // 取路径最后一段（去掉 :param 前缀的冒号）
+          const lastSeg = url.split('/').filter(Boolean).pop() ?? ''
+          const label = lastSeg.startsWith(':') ? lastSeg.slice(1) : lastSeg
+          return `${verb} ${label}`
+        })()
+
+        const summary = typeof s.summary === 'string' && s.summary.length > 0
+          ? s.summary
+          : autoSummary
+
+        return { schema: { ...s, tags, summary }, url }
+      },
+    })
+    await app.register(import('@fastify/swagger-ui'), {
+      routePrefix: '/docs',
+      uiConfig: { docExpansion: 'list', deepLinking: false },
+    })
+  }
+
+  // 用 Fastify 原生 scoped plugin 挂载 /api/v1 前缀
+  // autoload v5 的 prefix 选项与 dirNameRoutePrefix:false 组合时不生效，改用此方式
+  await app.register(async (instance) => {
+    await instance.register(autoload, {
+      dir: join(__dirname, 'routes'),
+      dirNameRoutePrefix: false,
+      forceESM: true,
+      autoHooks: true,
+      cascadeHooks: false,
+      ignorePattern: /^_/,
+    })
+  }, { prefix: '/api/v1' })
 
   return app
 }

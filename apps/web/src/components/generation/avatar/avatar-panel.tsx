@@ -29,13 +29,14 @@ interface AvatarPanelProps {
 }
 
 export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
-  const { videoDefaults, avatarDefaults, userDefaults } = useGenerationStore()
+  const { videoDefaults, avatarDefaults, userDefaults, prompt: storePrompt } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { save: saveDefaults } = useGenerationDefaults()
 
   const [avatarImage, setAvatarImage] = useState<FrameImage | null>(null)
   const [avatarAudio, setAvatarAudio] = useState<AvatarAudio | null>(null)
-  const [avatarPrompt, setAvatarPrompt] = useState('')
+  // 从 store 读取 prompt 作为初始值，支持从历史记录复用配置
+  const [avatarPrompt, setAvatarPrompt] = useState(storePrompt)
   const [avatarResolution, setAvatarResolution] = useState<'720p' | '1080p'>(
     (avatarDefaults?.avatarResolution as '720p' | '1080p') ?? '720p'
   )

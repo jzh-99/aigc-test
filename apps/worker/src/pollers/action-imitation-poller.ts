@@ -1,7 +1,7 @@
 import pino_ from 'pino'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { getPubRedis, getRedis } from '../lib/redis.js'
+import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { Queue } from 'bullmq'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
 
@@ -11,7 +11,7 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
   if (!_transferQueue) {
-    _transferQueue = new Queue('transfer-queue', { connection: getRedis() })
+    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection() })
   }
   return _transferQueue
 }
@@ -124,7 +124,10 @@ async function handleActionSuccess(task: ActionTaskRow, videoUrl: string): Promi
 
   const assetRow = await db.selectFrom('assets').select('id').where('task_id', '=', taskId).executeTakeFirst()
   if (assetRow) {
-    await getTransferQueue().add('transfer', { taskId, assetId: assetRow.id, originalUrl: videoUrl, assetType: 'video' })
+    await getTransferQueue().add('transfer', { taskId, assetId: assetRow.id, originalUrl: videoUrl, assetType: 'video' }, {
+      attempts: 10,
+      backoff: { type: 'exponential', delay: 30_000 },
+    })
   }
 
   logger.info({ taskId, batchId, videoUrl }, 'Action Imitation task completed')

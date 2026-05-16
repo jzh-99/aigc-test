@@ -62,7 +62,7 @@ export default function CreditsPage() {
               <div className="flex items-center gap-3">
                 <Coins className="h-5 w-5 text-accent-orange" />
                 <div>
-                  <p className="text-sm font-medium">团队积分管理</p>
+                  <p className="text-sm font-medium">A豆管理</p>
                   <p className="text-xs text-muted-foreground">充值、查看团队流水和成员权限</p>
                 </div>
               </div>

@@ -25,6 +25,9 @@ async function compressBuffer(input: Buffer): Promise<Buffer> {
  * Compress a base64 data URI.  Also handles HTTP/HTTPS URLs by downloading first.
  * Images already under SKIP_THRESHOLD are returned as-is (data URI).
  */
+// 参考图片下载超时：30 秒，防止慢速/挂起连接卡死整个 job
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000
+
 async function prepareDataUri(urlOrDataUri: string, index: number): Promise<string> {
   let inputBuffer: Buffer
 
@@ -33,9 +36,15 @@ async function prepareDataUri(urlOrDataUri: string, index: number): Promise<stri
     inputBuffer = Buffer.from(urlOrDataUri.slice(commaIdx + 1), 'base64')
   } else {
     // Download URL (may be internal address — worker fetches it directly)
-    const res = await fetch(urlOrDataUri)
-    if (!res.ok) throw new Error(`Failed to fetch reference image ${index + 1}: HTTP ${res.status}`)
-    inputBuffer = Buffer.from(await res.arrayBuffer())
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), IMAGE_DOWNLOAD_TIMEOUT_MS)
+    try {
+      const res = await fetch(urlOrDataUri, { signal: controller.signal })
+      if (!res.ok) throw new Error(`Failed to fetch reference image ${index + 1}: HTTP ${res.status}`)
+      inputBuffer = Buffer.from(await res.arrayBuffer())
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   if (inputBuffer.length < SKIP_THRESHOLD) {
@@ -83,23 +92,24 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
 
     const maxRetries = 1 // Retry once on fast API errors (not timeout)
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      console.log(`[nano-banana] 开始调用 model=${model} useEdits=${useEdits} attempt=${attempt + 1}/${maxRetries + 1}`)
       const result = useEdits
         ? await this.callEdits(model, prompt, extraParams, imageUrls!)
         : await this.callGenerations(model, prompt, extraParams, imageUrls)
 
       if (!result.success && attempt < maxRetries && this.isRetryable(result.errorMessage)) {
-        console.log(`[nano-banana] Retrying after fast API error (attempt ${attempt + 1}/${maxRetries}): ${result.errorMessage}`)
+        console.log(`[nano-banana] 快速 API 错误，准备重试 (attempt ${attempt + 1}/${maxRetries}): ${result.errorMessage}`)
         await new Promise((r) => setTimeout(r, 2000)) // 2 second delay before retry
         continue
       }
 
+      console.log(`[nano-banana] 调用结束 success=${result.success} error=${result.errorMessage ?? '-'}`)
       return result
     }
 
     return { success: false, errorMessage: 'Exhausted retries' }
   }
 
-  // /v1/images/generations — JSON body, supports optional image array for reference images
   private async callGenerations(
     model: string,
     prompt: string,
@@ -109,12 +119,15 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     const body: Record<string, unknown> = { model, prompt, response_format: 'url' }
     if (extraParams.aspect_ratio) body.aspect_ratio = extraParams.aspect_ratio
     if (imageUrls && imageUrls.length > 0) {
+      console.log(`[nano-banana] callGenerations 开始下载并压缩 ${imageUrls.length} 张参考图片`)
       // Download URLs and convert to base64 data URI before embedding in JSON body
       body.image = await Promise.all(imageUrls.map((url, i) => prepareDataUri(url, i)))
+      console.log(`[nano-banana] callGenerations 参考图片准备完毕`)
     }
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
+    console.log(`[nano-banana] callGenerations 发起 HTTP 请求 model=${model}`)
     try {
       const res = await fetch(`${this.apiUrl}/v1/images/generations`, {
         method: 'POST',
@@ -122,8 +135,10 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
         body: JSON.stringify(body),
         signal: controller.signal,
       })
+      console.log(`[nano-banana] callGenerations 收到响应 status=${res.status}`)
       return await this.parseResponse(res)
     } catch (err) {
+      console.error(`[nano-banana] callGenerations 请求异常: ${err instanceof Error ? err.message : String(err)}`)
       return { success: false, errorMessage: err instanceof Error ? err.message : String(err) }
     } finally {
       clearTimeout(timeout)
@@ -138,6 +153,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
     imageUrls: string[],
   ): Promise<AdapterGenerateResult> {
     // Convert each reference image to a compressed Blob
+    console.log(`[nano-banana] callEdits 开始下载并压缩 ${imageUrls.length} 张参考图片`)
     let imageBlobs: Array<{ blob: Blob; filename: string }>
     try {
       imageBlobs = await Promise.all(
@@ -149,9 +165,15 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
             const data = url.slice(commaIdx + 1)
             inputBuffer = Buffer.from(data, 'base64')
           } else {
-            const res = await fetch(url)
-            if (!res.ok) throw new Error(`Failed to fetch reference image ${i + 1}: ${res.status}`)
-            inputBuffer = Buffer.from(await res.arrayBuffer())
+            const controller = new AbortController()
+            const timer = setTimeout(() => controller.abort(), IMAGE_DOWNLOAD_TIMEOUT_MS)
+            try {
+              const res = await fetch(url, { signal: controller.signal })
+              if (!res.ok) throw new Error(`Failed to fetch reference image ${i + 1}: ${res.status}`)
+              inputBuffer = Buffer.from(await res.arrayBuffer())
+            } finally {
+              clearTimeout(timer)
+            }
           }
 
           // Compress if large
@@ -175,6 +197,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
       return { success: false, errorMessage: err instanceof Error ? err.message : String(err) }
     }
 
+    console.log(`[nano-banana] callEdits 参考图片准备完毕，共 ${imageBlobs.length} 张`)
     const form = new FormData()
     form.append('model', model)
     form.append('prompt', prompt)
@@ -186,6 +209,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
+    console.log(`[nano-banana] callEdits 发起 HTTP 请求 model=${model}`)
     try {
       const res = await fetch(`${this.apiUrl}/v1/images/edits`, {
         method: 'POST',
@@ -193,8 +217,10 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
         body: form,
         signal: controller.signal,
       })
+      console.log(`[nano-banana] callEdits 收到响应 status=${res.status}`)
       return await this.parseResponse(res)
     } catch (err) {
+      console.error(`[nano-banana] callEdits 请求异常: ${err instanceof Error ? err.message : String(err)}`)
       return { success: false, errorMessage: err instanceof Error ? err.message : String(err) }
     } finally {
       clearTimeout(timeout)
