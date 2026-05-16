@@ -23,6 +23,7 @@ logs/
 
 # Local docs
 docs/
+!apps/web/src/app/docs/
 
 # Editor/notebook checkpoints
 .ipynb_checkpoints/
@@ -71,6 +72,5 @@ packages/db/scripts/*.js
 packages/db/scripts/*.d.ts
 packages/db/scripts/*.map
 
-docs
 CLAUDE.md
 **/CLAUDE.md
