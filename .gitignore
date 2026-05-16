@@ -23,7 +23,7 @@ logs/
 
 # Local docs
 docs/
-!apps/web/src/app/docs/
+!apps/web/src/app/docs/*
 
 # Editor/notebook checkpoints
 .ipynb_checkpoints/
