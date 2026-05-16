@@ -99,11 +99,11 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
 
   return (
     <>
-      <div className="flex flex-col h-full w-72 border-l bg-white shadow-xl shrink-0">
+      <div className="flex flex-col h-full w-72 border-l bg-background shadow-xl shrink-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-          <span className="text-sm font-semibold text-zinc-800">画布记录</span>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 transition-colors p-0.5 rounded">
+          <span className="text-sm font-semibold text-foreground">画布记录</span>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded">
             <X size={15} />
           </button>
         </div>
@@ -117,7 +117,7 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
               onClick={() => setTab(t)}
               className={cn(
                 'flex-1 py-2 text-xs font-medium transition-colors',
-                tab === t ? 'border-b-2 border-zinc-800 text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
+                tab === t ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground'
               )}
             >
               {t === 'history' ? '任务记录' : '资产库'}
@@ -220,18 +220,18 @@ function HistoryTab({
   if (loading && items.length === 0) {
     return (
       <div className="flex justify-center py-10">
-        <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       </div>
     )
   }
   if (loaded && !loading && items.length === 0) {
-    return <div className="text-center py-10 text-xs text-zinc-400">暂无任务记录</div>
+    return <div className="text-center py-10 text-xs text-muted-foreground">暂无任务记录</div>
   }
 
   return (
     <div className="divide-y">
       {items.map((batch) => {
-        const st = STATUS_MAP[batch.status] ?? { label: batch.status, cls: 'bg-zinc-100 text-zinc-500' }
+        const st = STATUS_MAP[batch.status] ?? { label: batch.status, cls: 'bg-muted text-muted-foreground' }
         const statusHint = batch.status === 'pending'
           ? typeof batch.queue_position === 'number'
             ? `前方还有 ${batch.queue_position} 个任务`
@@ -244,16 +244,16 @@ function HistoryTab({
             key={batch.id}
             data-testid={`canvas-history-item-${batch.id}`}
             onClick={() => onOpenDetail(batch.id)}
-            className="w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors"
+            className="w-full text-left px-4 py-3 hover:bg-muted transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-zinc-400 font-mono">
+              <span className="text-[10px] text-muted-foreground font-mono">
                 {batch.canvas_node_id ? `节点 …${batch.canvas_node_id.slice(-6)}` : '—'}
               </span>
               <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium', st.cls)}>{st.label}</span>
             </div>
-            <p className="text-xs text-zinc-700 line-clamp-2 mb-1.5">{batch.prompt || '(无提示词)'}</p>
-            <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+            <p className="text-xs text-foreground line-clamp-2 mb-1.5">{batch.prompt || '(无提示词)'}</p>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               <span>{batch.completed_count}/{batch.quantity} {(batch.module === 'video' || /^(seedance-|veo)/i.test(batch.model || '')) ? '条' : '张'}</span>
               {statusHint && (
                 <>
@@ -283,7 +283,7 @@ function HistoryTab({
         <button
           onClick={loadMore}
           disabled={loading}
-          className="w-full py-3 text-xs text-zinc-500 hover:text-zinc-700 flex items-center justify-center gap-1 disabled:opacity-50"
+          className="w-full py-3 text-xs text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 disabled:opacity-50"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronDown className="w-3.5 h-3.5" />}
           加载更多
@@ -315,13 +315,13 @@ function AssetsTab({
 
   return (
     <div className="p-3">
-      <div className="mb-3 flex rounded-lg border border-zinc-200 overflow-hidden">
+      <div className="mb-3 flex rounded-lg border border-border overflow-hidden">
         <button
           data-testid="canvas-assets-subtab-image"
           onClick={() => onSubTabChange('image')}
           className={cn(
             'flex-1 py-1.5 text-[11px] font-medium transition-colors',
-            subTab === 'image' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-600 hover:bg-zinc-50'
+            subTab === 'image' ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:bg-muted'
           )}
         >
           图片
@@ -331,7 +331,7 @@ function AssetsTab({
           onClick={() => onSubTabChange('video')}
           className={cn(
             'flex-1 py-1.5 text-[11px] font-medium transition-colors',
-            subTab === 'video' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-600 hover:bg-zinc-50'
+            subTab === 'video' ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:bg-muted'
           )}
         >
           视频
@@ -340,10 +340,10 @@ function AssetsTab({
 
       {loading && items.length === 0 ? (
         <div className="flex justify-center py-10">
-          <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       ) : loaded && !loading && items.length === 0 ? (
-        <div className="text-center py-10 text-xs text-zinc-400">{subTab === 'video' ? '暂无视频资产' : '暂无图片资产'}</div>
+        <div className="text-center py-10 text-xs text-muted-foreground">{subTab === 'video' ? '暂无视频资产' : '暂无图片资产'}</div>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2">
@@ -355,7 +355,7 @@ function AssetsTab({
                   key={asset.id}
                   data-testid={`canvas-asset-item-${asset.id}`}
                   onClick={() => (url ? onOpenLightbox(url, isVideo ? 'video' : 'image') : onOpenDetail(asset.batch_id))}
-                  className="group relative rounded-lg overflow-hidden bg-zinc-100 aspect-square focus:outline-none"
+                  className="group relative rounded-lg overflow-hidden bg-muted aspect-square focus:outline-none"
                 >
                   {url ? (
                     isVideo ? (
@@ -366,7 +366,7 @@ function AssetsTab({
                     )
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      {isVideo ? <Film className="w-5 h-5 text-zinc-300" /> : <ImageIcon className="w-5 h-5 text-zinc-300" />}
+                      {isVideo ? <Film className="w-5 h-5 text-muted-foreground/50" /> : <ImageIcon className="w-5 h-5 text-muted-foreground/50" />}
                     </div>
                   )}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5">
@@ -388,7 +388,7 @@ function AssetsTab({
             <button
               onClick={loadMore}
               disabled={loading}
-              className="w-full mt-3 py-2 text-xs text-zinc-500 hover:text-zinc-700 flex items-center justify-center gap-1 disabled:opacity-50"
+              className="w-full mt-3 py-2 text-xs text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronDown className="w-3.5 h-3.5" />}
               加载更多

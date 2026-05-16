@@ -18,7 +18,7 @@ type Tab = 'chat' | 'image' // | 'video'
 
 const TAB_CONFIG: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat', label: '对话助手', icon: <MessageSquare className="h-3.5 w-3.5" /> },
-  { id: 'image', label: '图片解析', icon: <ImageIcon className="h-3.5 w-3.5" /> },
+  // { id: 'image', label: '图片解析', icon: <ImageIcon className="h-3.5 w-3.5" /> },
   // { id: 'video', label: '视频解析', icon: <Video className="h-3.5 w-3.5" /> },
 ]
 

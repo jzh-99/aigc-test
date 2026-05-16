@@ -110,27 +110,27 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
   return (
     <div
       className={cn(
-        'group relative flex flex-col rounded-xl shadow-md border transition-all duration-200 bg-white',
+        'group relative flex flex-col rounded-xl shadow-md border transition-all duration-200 bg-card',
         isGenerating
           ? 'border-blue-400 shadow-blue-200 ring-1 ring-blue-400'
           : isFailed
           ? 'border-red-400 shadow-red-100 ring-1 ring-red-300'
           : isUpstream
           ? 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100'
-          : 'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
+          : 'border-border hover:border-border/60 hover:shadow-lg',
         '[transform:translateZ(0)] [backface-visibility:hidden]'
       )}
       style={{ width: nodeWidth }}
     >
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
-        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-white text-zinc-400 hover:text-red-500 border-zinc-200"
+        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-red-500 border-border"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <X size={11} />
       </button>
 
-      <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50 flex items-center justify-between">
+      <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-muted flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">
           <Film className="w-3 h-3 text-red-400 shrink-0" />
           <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
@@ -184,7 +184,7 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
               )}
             >
               <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
-                {playing ? <Pause className="w-4 h-4 text-zinc-800" /> : <Play className="w-4 h-4 text-zinc-800 ml-0.5" />}
+                {playing ? <Pause className="w-4 h-4 text-foreground" /> : <Play className="w-4 h-4 text-foreground ml-0.5" />}
               </div>
             </button>
             {isSequencePreview && (
@@ -194,12 +194,12 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
             )}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center gap-2 text-zinc-400 rounded-lg bg-zinc-50" style={{ aspectRatio: '16/9' }}>
+          <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground rounded-lg bg-muted" style={{ aspectRatio: '16/9' }}>
             {isGenerating ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span className="font-mono text-[10px] tracking-widest uppercase">
-                  {Math.round(progress)}<span className="text-zinc-300 ml-0.5">%</span>
+                  {Math.round(progress)}<span className="text-muted-foreground/50 ml-0.5">%</span>
                 </span>
               </>
             ) : (
@@ -217,7 +217,7 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
       )}
 
       {stitchedUrl && (
-        <div className="border-t border-zinc-100 px-3 py-1 flex items-center justify-center gap-1.5 bg-zinc-50 rounded-b-xl text-[10px] text-green-600">
+        <div className="border-t border-border px-3 py-1 flex items-center justify-center gap-1.5 bg-muted rounded-b-xl text-[10px] text-green-600">
           <Check className="w-3 h-3" /> 拼接完成
         </div>
       )}
@@ -243,7 +243,7 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
         type="source"
         position={Position.Right}
         id="video-out"
-        className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all"
+        className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all"
       />
     </div>
   )

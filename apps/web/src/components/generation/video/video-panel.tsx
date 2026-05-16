@@ -210,9 +210,8 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
 
   const modeBtnCls = (active: boolean) => cn(
     'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
-    active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
+    active ? 'nav-item-active text-primary-foreground' : 'hover:bg-accent text-muted-foreground hover:text-foreground hover:bg-muted/80'
   )
-
   const isComponentsDisabled = videoMode === 'components' && componentImages.length === 0
 
   return (

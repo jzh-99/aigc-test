@@ -38,6 +38,7 @@
     /* Custom B2 semantic tokens */
     --surface-warm: 27 90% 97%;       /* #FEF8F2 */
     --accent-gradient: linear-gradient(135deg, #F5A962, #C89BEC, #6BA3F5);
+    --accent-dark-gradient: linear-gradient(90deg, #5a41f5, #a855f7);
   }
 }
 
@@ -52,11 +53,40 @@
 
 /* Gradient utility */
 .gradient-accent {
-  background: linear-gradient(135deg, #F5A962, #C89BEC, #6BA3F5);
+  background: var(--accent-gradient);
+}
+
+.dark .gradient-accent {
+  background: var(--accent-dark-gradient);
+}
+
+/* 导航选中态 — 亮色主题「云霞蓝」：橙→紫→蓝品牌渐变，与整体暖调一致 */
+.nav-item-active {
+  background: var(--accent-gradient);
+  color: white;
+  text-shadow: 0 1px 2px rgba(45, 36, 64, 0.2);
+  box-shadow: 0 2px 8px rgba(200, 155, 236, 0.35);
+}
+.nav-item-active:hover {
+  opacity: 0.92;
+  background: var(--accent-gradient);
+  color: white;
+}
+
+/* 暗黑主题「深渊黑域」：深蓝→紫，与深空背景协调，亮度克制 */
+.dark .nav-item-active {
+  /* background: linear-gradient(135deg, #3b5bdb 0%, #7c3aed 60%, #c89bec 100%); */
+  background: var(--accent-dark-gradient);
+  text-shadow: none;
+  box-shadow: 0 2px 12px rgba(124, 58, 237, 0.4);
+}
+.dark .nav-item-active:hover {
+  opacity: 0.92;
+  background: var(--accent-dark-gradient);
 }
 
 .gradient-accent-text {
-  background: linear-gradient(135deg, #F5A962, #C89BEC, #6BA3F5);
+  background: var(--accent-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -363,7 +393,7 @@
   --popover: 222 40% 8%;
   --popover-foreground: 210 30% 90%;
 
-  --primary: 216 88% 65%;            /* #6BA3F5 蓝色保持 */
+  --primary: 273 68% 77%;            /* #c89cec 紫色保持 */
   --primary-foreground: 222 47% 5%;
 
   --secondary: 30 70% 55%;           /* #E0924A 橙色降饱和 */
@@ -713,6 +743,11 @@ html {
 .login-submit-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
 .login-submit-btn:active:not(:disabled) { transform: translateY(0); }
 .login-submit-btn:disabled { opacity: 0.5; }
+
+.dark .login-submit-btn {
+  background: linear-gradient(90deg, #5a41f5, #a855f7) !important;
+  box-shadow: 0 4px 20px rgba(90, 65, 245, 0.35) !important;
+}
 
 .login-footer-links {
   display: flex;

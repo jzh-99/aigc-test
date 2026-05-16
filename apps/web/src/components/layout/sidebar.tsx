@@ -80,10 +80,11 @@ export function Sidebar() {
     const button = (
       <Button
         key={item.href}
-        variant={isActive ? 'default' : 'ghost'}
+        variant="ghost"
         className={cn(
           'w-full justify-start gap-3',
-          sidebarCollapsed && 'justify-center px-0'
+          sidebarCollapsed && 'justify-center px-0',
+          isActive ? 'nav-item-active' : 'hover:bg-accent'
         )}
         asChild
       >

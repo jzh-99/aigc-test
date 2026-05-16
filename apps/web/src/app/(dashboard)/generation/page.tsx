@@ -16,6 +16,7 @@ import { useHiddenBatches } from '@/hooks/use-batches'
 import { useBatchSSE } from '@/hooks/use-batch-sse'
 import { Button } from '@/components/ui/button'
 import { AssetsLibraryTab } from '@/components/generation/assets-library-tab'
+import { cn } from '@/lib/utils'
 
 interface TeamMember {
   user_id: string
@@ -174,17 +175,17 @@ export default function ImagePage() {
             <CardTitle className="text-base flex items-center gap-2">
               <div className="flex rounded-lg border p-1">
                 <Button
-                  variant={rightTab === 'history' ? 'default' : 'ghost'}
+                  variant="ghost"
                   size="sm"
-                  className="h-7 px-3 text-xs"
+                  className={cn('h-7 px-3 text-xs', rightTab === 'history' ? 'nav-item-active' : 'hover:bg-accent')}
                   onClick={() => setRightTab('history')}
                 >
                   历史记录
                 </Button>
                 <Button
-                  variant={rightTab === 'assets' ? 'default' : 'ghost'}
+                  variant="ghost"
                   size="sm"
-                  className="h-7 px-3 text-xs"
+                  className={cn('h-7 px-3 text-xs', rightTab === 'assets' ? 'nav-item-active' : 'hover:bg-accent')}
                   onClick={() => setRightTab('assets')}
                 >
                   资产库

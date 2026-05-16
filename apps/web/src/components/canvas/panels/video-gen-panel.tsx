@@ -209,7 +209,7 @@ export function VideoGenPanel({
                 </label>
                 <div className="flex gap-1 flex-wrap">
                   {multirefVideos.map((url, i) => (
-                    <div key={i} className="relative w-12 h-12 rounded border border-border bg-zinc-900 flex items-center justify-center overflow-hidden">
+                    <div key={i} className="relative w-12 h-12 rounded border border-border bg-muted flex items-center justify-center overflow-hidden">
                       <video src={url} className="w-full h-full object-cover" muted preload="metadata" />
                       <span className="absolute -top-1 -left-1 text-[8px] bg-violet-500 text-white rounded px-0.5 font-bold">{i + 1}</span>
                     </div>
