@@ -19,7 +19,7 @@ services:
       TOS_ACCESS_KEY_ID: ${TOS_ACCESS_KEY_ID}
       TOS_SECRET_ACCESS_KEY: ${TOS_SECRET_ACCESS_KEY}
       TOS_REGION: ${TOS_REGION:-cn-shanghai}
-      TOS_ENDPOINT: ${TOS_ENDPOINT:-tos-cn-shanghai.volces.com}
+      TOS_ENDPOINT: ${TOS_ENDPOINT:-https://tos-cn-shanghai.volces.com}
       TOS_BUCKET: ${TOS_BUCKET:-toby-ai-prod}
       TOS_PUBLIC_URL: ${TOS_PUBLIC_URL}
       API_PORT: "7001"

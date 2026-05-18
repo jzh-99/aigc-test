@@ -50,8 +50,6 @@ function SsoHandler() {
   return null
 }
 
-const TECH_TAGS = ['AI 图像生成', '智能画布', '数字人', '视频创作', '团队协作']
-
 export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
@@ -94,7 +92,6 @@ export default function LoginPage() {
     <div className="login-split-layout">
       {/* ── 左侧品牌面板 ── */}
       <div className="login-brand-panel" aria-hidden="true">
-        {/* 背景视频：循环静音播放，隐藏原生控件 */}
         <video
           className="login-brand-video"
           src="https://toby-ai-dev.tos-cn-shanghai.volces.com/assets/video/bg.mp4"
@@ -105,54 +102,36 @@ export default function LoginPage() {
           disablePictureInPicture
           controlsList="nodownload nofullscreen noremoteplayback"
         />
-        {/* 网格背景 */}
-        <div className="login-grid-bg" />
-        {/* 浮动光斑 */}
-        <div className="login-orb login-orb-1" />
-        <div className="login-orb login-orb-2" />
-        <div className="login-orb login-orb-3" />
-        {/* 底部扫光线 */}
-        <div className="login-scan-line" />
-
-        <div className="login-brand-content">
-          {/* Logo 标志 */}
-          <div className="login-logo-mark">
-            <svg viewBox="0 0 20 20" className="h-7 w-7" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="2" y="2.5" width="16" height="4" rx="1.5" fill="white" />
-              <rect x="7.5" y="6" width="5" height="11.5" rx="1.5" fill="white" />
-              <circle cx="17" cy="15.5" r="1.5" fill="rgba(255,255,255,0.7)" />
-            </svg>
-          </div>
-
-          {/* 主标题 */}
-          <h1 className="login-headline">
-            <span className="login-headline-line">AI 创作</span>
-            <span className="login-headline-line login-headline-accent">无限</span>
-            <span className="login-headline-line">可能</span>
-          </h1>
-
-          {/* 副标题 */}
-          <p className="login-subtext">
-            Toby.AI 企业版 · 智能内容生成平台<br />
-            图像、视频、数字人，一站式 AI 创作工作流
-          </p>
-
-          {/* 技术标签 */}
-          <div className="login-tech-tags">
-            {TECH_TAGS.map((tag) => (
-              <span key={tag} className="login-tech-tag">{tag}</span>
-            ))}
-          </div>
-        </div>
+        <div className="login-brand-video-overlay" />
       </div>
 
       {/* ── 右侧表单面板 ── */}
       <div className="login-form-panel">
+        {/* 背景装饰光晕 */}
+        <div className="login-panel-orb login-panel-orb-1" />
+        <div className="login-panel-orb login-panel-orb-2" />
+        <div className="login-panel-noise" />
+
         <div className="login-form-inner">
+          {/* Logo + Slogan */}
+          <div className="login-logo-block">
+            <div className="login-logo-icon">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="3" width="20" height="5" rx="2" fill="white" />
+                <rect x="9" y="7.5" width="6" height="13.5" rx="2" fill="white" />
+                <circle cx="20" cy="18" r="2" fill="rgba(200,155,236,0.9)" />
+              </svg>
+            </div>
+            <div className="login-logo-text">
+              <span className="login-logo-name">Toby.AI</span>
+              <span className="login-logo-slogan">让美好，被看见。</span>
+            </div>
+          </div>
+
           {/* 表单头部 */}
           <div className="login-form-header">
             <h2 className="login-form-title">欢迎回来</h2>
-            <p className="login-form-subtitle">登录您的 Toby.AI 账户</p>
+            <p className="login-form-subtitle">登录您的账户，开启 AI 创作之旅</p>
           </div>
 
           <Suspense fallback={null}>

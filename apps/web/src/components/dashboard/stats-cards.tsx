@@ -3,8 +3,8 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Coins, ImageIcon, TrendingUp } from 'lucide-react'
-import { useBatches } from '@/hooks/use-batches'
 import { useAuthStore } from '@/stores/auth-store'
+import { useBatchStats } from '@/hooks/use-batch-stats'
 import useSWR from 'swr'
 
 interface TeamMember {
@@ -23,17 +23,11 @@ interface TeamInfo {
 }
 
 export function StatsCards() {
-  const { batches, isLoadingInitial } = useBatches()
+  const { total, totalCompleted, successRate, isLoading: isStatsLoading } = useBatchStats()
   const user = useAuthStore((s) => s.user)
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
   const activeTeam = useAuthStore((s) => s.activeTeam)
-  const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
-
-  // Compute real stats from batch data
-  const completedImages = batches.reduce((sum, b) => sum + b.completed_count, 0)
-  const failedImages = batches.reduce((sum, b) => sum + b.failed_count, 0)
-  const finishedImages = completedImages + failedImages
-  const successRate = finishedImages > 0 ? Math.round((completedImages / finishedImages) * 100) : 0
+  const { data: teamData, isLoading: isTeamLoading } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
 
   const teamRole = activeTeam()?.role
   const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
@@ -69,7 +63,7 @@ export function StatsCards() {
   const stats = [
     {
       label: creditLabel,
-      value: isLoadingInitial ? null : creditValue.toLocaleString(),
+      value: isTeamLoading ? null : creditValue.toLocaleString(),
       subtitle: creditSubtitle,
       icon: Coins,
       color: 'text-accent-orange',
@@ -77,7 +71,7 @@ export function StatsCards() {
     },
     {
       label: '生成次数',
-      value: isLoadingInitial ? null : String(completedImages),
+      value: isStatsLoading ? null : String(total),
       subtitle: null,
       icon: ImageIcon,
       color: 'text-accent-blue',
@@ -85,7 +79,7 @@ export function StatsCards() {
     },
     {
       label: '成功率',
-      value: isLoadingInitial ? null : (finishedImages > 0 ? `${successRate}%` : '-'),
+      value: isStatsLoading ? null : (successRate !== null ? `${successRate}%` : '-'),
       subtitle: null,
       icon: TrendingUp,
       color: 'text-success',

@@ -69,6 +69,13 @@ export interface BatchSSEEvent {
   data: BatchResponse
 }
 
+export interface BatchStatsResponse {
+  total_completed: number
+  total_failed: number
+  /** 成功率百分比（0-100），无数据时为 null */
+  success_rate: number | null
+}
+
 // ─── Auth & User Management ─────────────────────────────────────────────────
 
 export interface LoginRequest {
