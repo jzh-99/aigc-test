@@ -149,8 +149,11 @@ const route: FastifyPluginAsync = async (app) => {
       sendPing()
     }, 15_000)
 
-    // 清理函数：取消订阅、关闭连接（延迟关闭确保数据已发送）
+    // 清理函数：取消订阅、关闭连接（幂等，防止重复调用）
+    let cleaned = false
     const cleanup = () => {
+      if (cleaned) return
+      cleaned = true
       logger.info({ batchId }, '执行清理：取消订阅、关闭连接')
       clearInterval(heartbeat)
       sub.unsubscribe(channel).catch((err) => logger.error({ batchId, err }, '取消订阅失败'))
@@ -159,7 +162,10 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     // 客户端断开时清理资源
-    request.raw.on('close', () => logger.info({ batchId }, '客户端连接已关闭'))
+    request.raw.on('close', () => {
+      logger.info({ batchId }, '客户端连接已关闭，触发清理')
+      cleanup()
+    })
 
     return reply.hijack()
   })
