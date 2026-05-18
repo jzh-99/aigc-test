@@ -83,6 +83,7 @@ export default function ImagePage() {
   }, [activeWorkspaceId])
 
   const handleBatchUpdate = useCallback((batch: BatchResponse) => {
+    console.log(`[GenerationPage] 🔔 handleBatchUpdate: id=${batch.id}, status=${batch.status}`)
     batchListRef.current?.update(batch)
   }, [])
 

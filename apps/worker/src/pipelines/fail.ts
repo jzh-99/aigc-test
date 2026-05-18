@@ -2,6 +2,9 @@ import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import type { GenerationJobData } from '@aigc/types'
 import { getPubRedis } from '../lib/redis.js'
+import { buildLogger } from '../logger.js'
+
+const logger = buildLogger()
 
 export async function failPipeline(
   jobData: GenerationJobData,
@@ -9,6 +12,7 @@ export async function failPipeline(
 ): Promise<void> {
   const db = getDb()
   const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = jobData
+  logger.info({ taskId, batchId, errorMessage }, '开始执行失败管线')
 
   await db.transaction().execute(async (trx: any) => {
     // 先对 task 行加行锁，防止 timeout-guardian 与正常失败流程并发执行时
@@ -19,6 +23,7 @@ export async function failPipeline(
 
     const currentStatus = (taskLock.rows as Array<{ status: string }>)[0]?.status
     if (currentStatus === 'completed' || currentStatus === 'failed') {
+      logger.warn({ taskId, batchId, currentStatus }, '任务已处理，跳过（幂等保护触发）')
       return
     }
 
@@ -106,5 +111,14 @@ export async function failPipeline(
   })
 
   // 3. Publish SSE event
-  await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+  const channel = `sse:batch:${batchId}`
+  const publishPayload = JSON.stringify({ event: 'batch_update' })
+  logger.info({ batchId, channel }, '准备发布 SSE 事件')
+  try {
+    const result = await getPubRedis().publish(channel, publishPayload)
+    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+  } catch (err) {
+    logger.error({ batchId, err }, 'SSE 事件发布失败')
+    throw err
+  }
 }

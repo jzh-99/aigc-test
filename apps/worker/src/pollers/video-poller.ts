@@ -1,8 +1,8 @@
-import pino_ from 'pino'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { Queue } from 'bullmq'
+import { buildLogger } from '../logger.js'
 
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
@@ -12,8 +12,7 @@ function getTransferQueue(): Queue {
   return _transferQueue
 }
 
-const pino = pino_ as any
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+const logger = buildLogger()
 
 // Track consecutive poll errors per task to detect persistent API failures
 const pollErrorCounts = new Map<string, number>()
@@ -157,7 +156,17 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
       .where('id', '=', batchId).execute()
   })
 
-  await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+  // Publish SSE event
+  const channel = `sse:batch:${batchId}`
+  const publishPayload = JSON.stringify({ event: 'batch_update' })
+  logger.info({ batchId, channel }, '准备发布 SSE 事件')
+  try {
+    const result = await getPubRedis().publish(channel, publishPayload)
+    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+  } catch (err) {
+    logger.error({ batchId, err }, 'SSE 事件发布失败')
+    throw err
+  }
 
   // Write canvas_node_outputs if this task belongs to a canvas node
   if (task.canvasId && task.canvasNodeId) {
@@ -243,7 +252,17 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
       .where('id', '=', batchId).execute()
   })
 
-  await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+  // Publish SSE event
+  const channel = `sse:batch:${batchId}`
+  const publishPayload = JSON.stringify({ event: 'batch_update' })
+  logger.info({ batchId, channel }, '准备发布 SSE 事件')
+  try {
+    const result = await getPubRedis().publish(channel, publishPayload)
+    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+  } catch (err) {
+    logger.error({ batchId, err }, 'SSE 事件发布失败')
+    throw err
+  }
   logger.warn({ taskId, batchId, errorMessage }, 'Video task failed')
 }
 
