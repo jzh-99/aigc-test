@@ -47,6 +47,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     baseType: 'text_input',
     baseLabel: '文本',
     colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
+    testId: 'canvas-add-node-text',
     items: [
       { type: 'script_writer', label: '剧本', testId: 'canvas-add-node-script' },
       { type: 'storyboard_splitter', label: '分镜', testId: 'canvas-add-node-storyboard' },

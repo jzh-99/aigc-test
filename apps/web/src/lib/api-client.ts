@@ -9,7 +9,6 @@ export class ApiError extends Error {
   originalMessage: string
 
   constructor(status: number, code: string, message: string) {
-    // 翻译错误信息为中文
     const translatedMessage = getErrorMessage(code, translateError(message))
     super(translatedMessage)
     this.name = 'ApiError'
@@ -21,15 +20,12 @@ export class ApiError extends Error {
 
 export function getRequestErrorMessage(error: unknown, fallback = '提交失败，请稍后重试'): string {
   if (error instanceof ApiError) return error.message
-
   if (error instanceof DOMException && error.name === 'AbortError') {
     return '请求超时，请稍后重试'
   }
-
   if (error instanceof SyntaxError) {
     return '服务响应异常，请稍后重试'
   }
-
   const raw = typeof error === 'string' ? error : error instanceof Error ? error.message : ''
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return '网络连接失败，请检查网络后重试'
@@ -37,7 +33,6 @@ export function getRequestErrorMessage(error: unknown, fallback = '提交失败�
   if (/failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(raw)) {
     return '网络连接失败，请检查网络后重试'
   }
-
   return fallback
 }
 
@@ -55,11 +50,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
     try {
       const body = await res.json()
       if (body?.error && typeof body.error === 'object') {
-        // Our custom error format: { error: { code, message } }
         code = body.error.code ?? code
         message = body.error.message ?? message
       } else if (body?.code || body?.message) {
-        // Fastify built-in error format: { code, message, error: "Bad Request" }
         code = body.code ?? code
         message = body.message ?? message
       }
@@ -81,7 +74,6 @@ async function refreshAccessToken(): Promise<{ token: string | null; rateLimited
       credentials: 'include',
     })
     if (res.status === 429) {
-      // Rate limited — do NOT clear auth, user is still logged in
       return { token: null, rateLimited: true }
     }
     if (!res.ok) return { token: null, rateLimited: false }
@@ -96,10 +88,33 @@ async function refreshAccessToken(): Promise<{ token: string | null; rateLimited
   }
 }
 
-export async function fetchWithAuth<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+export async function fetchWithAuth<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // 等待认证初始化完成（包括 refresh 流程），用 subscribe 替代轮询避免超时误判
+  await new Promise<void>((resolve) => {
+    const state = useAuthStore.getState()
+    if (state.isInitialized && !state.isRefreshing) {
+      resolve()
+      return
+    }
+    const unsubscribe = useAuthStore.subscribe((s) => {
+      if (s.isInitialized && !s.isRefreshing) {
+        unsubscribe()
+        resolve()
+      }
+    })
+    // 兜底超时：10 秒后强制继续，防止 subscribe 永远不触发
+    setTimeout(() => {
+      unsubscribe()
+      resolve()
+    }, 10000)
+  })
+
+  const finalState = useAuthStore.getState()
+
+  if (!finalState.user && !path.startsWith('/auth/')) {
+    throw new ApiError(401, 'AUTH_REQUIRED', '未登录或登录已过期')
+  }
+
   const headers = { ...getHeaders(), ...init.headers }
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -108,7 +123,6 @@ export async function fetchWithAuth<T>(
   })
 
   if (res.status === 401) {
-    // 拦截 Token 被踢出的情况
     try {
       const clonedRes = res.clone()
       const errorData = await clonedRes.json()
@@ -121,14 +135,12 @@ export async function fetchWithAuth<T>(
       }
     } catch (e) {
       if (e instanceof ApiError) throw e
-      // 忽略 parse error
     }
 
-    // Skip refresh for auth endpoints — treat as normal error
     if (path.startsWith('/auth/')) {
       return handleResponse<T>(res)
     }
-    // Try refresh (deduplicate concurrent refreshes)
+
     if (!refreshPromise) {
       refreshPromise = refreshAccessToken().finally(() => {
         refreshPromise = null
@@ -136,11 +148,9 @@ export async function fetchWithAuth<T>(
     }
     const refreshResult = await refreshPromise
     if (refreshResult.rateLimited) {
-      // Server is rate-limiting us — do NOT log out, just surface the error
       throw new ApiError(429, 'RATE_LIMITED', '请求过于频繁，请稍后再试')
     }
     if (refreshResult.token) {
-      // Retry original request
       const retryHeaders = { ...init.headers, Authorization: `Bearer ${refreshResult.token}` } as Record<string, string>
       const retryRes = await fetch(`${API_BASE}${path}`, {
         ...init,
@@ -149,7 +159,6 @@ export async function fetchWithAuth<T>(
       })
       return handleResponse<T>(retryRes)
     }
-    // Refresh failed (truly invalid/expired) — clear auth, redirect
     useAuthStore.getState().clearAuth()
     if (typeof window !== 'undefined') {
       window.location.href = '/login'
