@@ -4,9 +4,9 @@ import { sql } from 'kysely'
 import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { Queue } from 'bullmq'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
+import { buildLogger } from '../logger.js'
 
-const pino = pino_ as any
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+const logger = buildLogger()
 
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {

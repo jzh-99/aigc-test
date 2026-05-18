@@ -89,25 +89,28 @@ async function refreshAccessToken(): Promise<{ token: string | null; rateLimited
 }
 
 export async function fetchWithAuth<T>(path: string, init: RequestInit = {}): Promise<T> {
-  // 等待认证初始化完成（包括 refresh 流程），用 subscribe 替代轮询避免超时误判
-  await new Promise<void>((resolve) => {
-    const state = useAuthStore.getState()
-    if (state.isInitialized && !state.isRefreshing) {
-      resolve()
-      return
-    }
-    const unsubscribe = useAuthStore.subscribe((s) => {
-      if (s.isInitialized && !s.isRefreshing) {
+  // auth 路径（登录/注册/SSO 等）不依赖已有认证状态，跳过初始化等待
+  if (!path.startsWith('/auth/')) {
+    // 等待认证初始化完成（包括 refresh 流程），用 subscribe 替代轮询避免超时误判
+    await new Promise<void>((resolve) => {
+      const state = useAuthStore.getState()
+      if (state.isInitialized && !state.isRefreshing) {
+        resolve()
+        return
+      }
+      const unsubscribe = useAuthStore.subscribe((s) => {
+        if (s.isInitialized && !s.isRefreshing) {
+          unsubscribe()
+          resolve()
+        }
+      })
+      // 兜底超时：10 秒后强制继续，防止 subscribe 永远不触发
+      setTimeout(() => {
         unsubscribe()
         resolve()
-      }
+      }, 10000)
     })
-    // 兜底超时：10 秒后强制继续，防止 subscribe 永远不触发
-    setTimeout(() => {
-      unsubscribe()
-      resolve()
-    }, 10000)
-  })
+  }
 
   const finalState = useAuthStore.getState()
 

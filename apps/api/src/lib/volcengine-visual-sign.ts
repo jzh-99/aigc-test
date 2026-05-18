@@ -1,4 +1,3 @@
-import { log } from 'node:console'
 import crypto from 'node:crypto'
 
 const REGION = 'cn-north-1'
@@ -23,17 +22,13 @@ export function buildSignedRequest(
 
   const now = new Date()
 
-  // 1. 日期：纯数字 20260516
-  const datestamp = now.toISOString().split('T')[0].replace(/-/g, '')
-
-  // 2. ✅ 关键：强制去掉毫秒！！！火山唯一认可格式
-  const fullIsoTime = now.toISOString().split('.')[0] + 'Z' // 2026-05-16T08:10:52Z
-
-  log('datestamp:', datestamp)
-  log('fullIsoTime:', fullIsoTime)
+  // 火山引擎签名要求紧凑格式（类 AWS SigV4）：YYYYMMDD 和 YYYYMMDDTHHMMSSZ，不含分隔符
+  const datestamp = now.toISOString().split('T')[0].replace(/-/g, '') // 20260518
+  const fullIsoTime = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z' // 20260518T154038Z
 
   const bodyStr = JSON.stringify(body)
   const payloadHash = sha256Hex(bodyStr)
+  // Action 在 V 前，字母顺序已排好
   const queryString = `Action=${action}&Version=${version}`
 
   const canonicalHeaders =
@@ -44,8 +39,9 @@ export function buildSignedRequest(
 
   const signedHeaders = 'content-type;host;x-content-sha256;x-date'
 
+  // CanonicalQueryString 必须与实际 URL 查询参数一致，不能留空
   const canonicalRequest = [
-    'POST', '/', '',
+    'POST', '/', queryString,
     canonicalHeaders,
     signedHeaders,
     payloadHash

@@ -94,6 +94,17 @@ export default function LoginPage() {
     <div className="login-split-layout">
       {/* ── 左侧品牌面板 ── */}
       <div className="login-brand-panel" aria-hidden="true">
+        {/* 背景视频：循环静音播放，隐藏原生控件 */}
+        <video
+          className="login-brand-video"
+          src="https://toby-ai-dev.tos-cn-shanghai.volces.com/assets/video/bg.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          disablePictureInPicture
+          controlsList="nodownload nofullscreen noremoteplayback"
+        />
         {/* 网格背景 */}
         <div className="login-grid-bg" />
         {/* 浮动光斑 */}

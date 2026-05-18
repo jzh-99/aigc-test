@@ -46,7 +46,8 @@ const route: FastifyPluginAsync = async (app) => {
       .where('module', '=', 'avatar')
       .where('is_active', '=', true)
       .executeTakeFirst()
-
+    app.log.info({ userId, workspaceId, avatarModel: avatarModel?.code }, '查询当前激活的 avatar 模型') 
+    
     if (!avatarModel) {
       return reply.status(503).send({ error: 'No active avatar model configured' })
     }

@@ -4,9 +4,10 @@ import { sql } from 'kysely'
 import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { Queue } from 'bullmq'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
+import { log } from 'node:console'
+import { buildLogger } from '../logger.js'
 
-const pino = pino_ as any
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+const logger = buildLogger()
 
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
@@ -130,7 +131,7 @@ async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promi
     })
   }
 
-  logger.info({ taskId, batchId, videoUrl }, 'Avatar task completed')
+  logger.error({ taskId, batchId, videoUrl }, 'Avatar task completed')
 }
 
 async function handleAvatarFailure(task: AvatarTaskRow, errorMessage: string): Promise<void> {
@@ -211,6 +212,9 @@ async function pollAvatarTasks(): Promise<void> {
         pollErrorCounts.set(task.taskId, count)
         if (count >= MAX_CONSECUTIVE_POLL_ERRORS) {
           pollErrorCounts.delete(task.taskId)
+          
+          logger.error({ taskId: task.taskId, batchId: task.batchId, errorCount: count, result: result }, 'Avatar task polling failed repeatedly, marking as failed');
+          
           await handleAvatarFailure(task, '生成过程中出现异常，请重新发起请求')
         }
       } else {
