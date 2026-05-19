@@ -58,7 +58,7 @@ export function ImageParams({
     if (currentDbModel) {
       const enums = extractSchemaEnums(currentDbModel.params_schema, 'resolution')
       if (enums.length > 0) {
-        return ALL_RESOLUTION_OPTIONS.filter((r) => enums.includes(r.value))
+        return ALL_RESOLUTION_OPTIONS.filter((r) => enums.some((e) => e.value === r.value))
       }
     }
     return ALL_RESOLUTION_OPTIONS.filter(

@@ -101,7 +101,7 @@ export function VideoGenPanel({
   const aspectRatioOptions: Array<{ value: string; label: string }> = (() => {
     if (currentDbModel) {
       const enums = extractSchemaEnums(currentDbModel.params_schema, 'aspect_ratio')
-      if (enums.length > 0) return enums.map((v) => ({ value: v, label: v }))
+      if (enums.length > 0) return enums
     }
     return [...(isSeedance ? VIDEO_ASPECT_RATIOS_SEEDANCE : VIDEO_ASPECT_RATIOS_VEO)]
   })()
@@ -111,8 +111,8 @@ export function VideoGenPanel({
     if (currentDbModel) {
       const enums = extractSchemaEnums(currentDbModel.params_schema, 'time_length')
       if (enums.length > 0) {
-        return enums.map((v) => {
-          const num = Number(v)
+        return enums.map((item) => {
+          const num = Number(item.value)
           return { value: num, label: num === -1 ? '自动' : `${num}s` }
         })
       }

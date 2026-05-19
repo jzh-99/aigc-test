@@ -2,21 +2,26 @@ import type { ModelItem } from '@aigc/types'
 import { ALL_RESOLUTION_OPTIONS, MODEL_OPTIONS } from './constants'
 
 /**
- * 从 params_schema 中提取指定字段的字符串枚举值
+ * 从 params_schema 中提取指定字段的枚举选项列表
  * 支持扁平数组格式：{ resolution: ['1k', '2k', '4k'] }
- * 数组元素可以是字符串，也可以是 { label, value } 对象（取 value 字段）
+ * 数组元素可以是字符串，也可以是 { label?, value } 对象
  */
-export function extractSchemaEnums(schema: unknown, field: string): string[] {
+export function extractSchemaEnums(schema: unknown, field: string): Array<{ label: string; value: string }> {
   if (!schema || typeof schema !== 'object') return []
   const raw = (schema as Record<string, unknown>)[field]
   if (!Array.isArray(raw)) return []
   return raw
     .map((item) => {
-      if (typeof item === 'string') return item
-      if (item && typeof item === 'object' && 'value' in item) return String((item as { value: unknown }).value)
+      if (typeof item === 'string') return { label: item, value: item }
+      if (item && typeof item === 'object' && 'value' in item) {
+        const obj = item as { value: unknown; label?: unknown }
+        const value = String(obj.value)
+        const label = obj.label ? String(obj.label) : value
+        return { label, value }
+      }
       return null
     })
-    .filter((v): v is string => v !== null && v !== '')
+    .filter((v): v is { label: string; value: string } => v !== null && v.value !== '')
 }
 
 /**
@@ -28,7 +33,7 @@ export function getModelResolutions(modelCode: string, dbModels?: ModelItem[]): 
   if (dbModel) {
     const enums = extractSchemaEnums(dbModel.params_schema, 'resolution')
     if (enums.length > 0) {
-      return ALL_RESOLUTION_OPTIONS.filter((r) => enums.includes(r.value)).map((r) => r.value)
+      return ALL_RESOLUTION_OPTIONS.filter((r) => enums.some((e) => e.value === r.value)).map((r) => r.value)
     }
   }
   const staticModel = MODEL_OPTIONS.find((m) => m.value === modelCode)

@@ -122,7 +122,7 @@ export function VideoParams({
     if (currentDbModel) {
       // 当前分辨率对应的单价
       const resolution = hasDbResolutions
-        ? (videoUpsample ? dbResolutions[dbResolutions.length - 1] : dbResolutions[0])
+        ? (videoUpsample ? dbResolutions[dbResolutions.length - 1].value : dbResolutions[0].value)
         : (videoUpsample ? '1080p' : '720p')
       return getPriceByResolution(currentDbModel, resolution, currentDbModel.credit_cost)
     }
@@ -207,15 +207,15 @@ export function VideoParams({
               {hasDbResolutions ? (
                 // DB 模型：用提取到的分辨率字符串列表
                 <Select
-                  value={videoUpsample ? dbResolutions[dbResolutions.length - 1] : dbResolutions[0]}
-                  onValueChange={(v) => onUpsampleChange(v === dbResolutions[dbResolutions.length - 1])}
+                  value={videoUpsample ? dbResolutions[dbResolutions.length - 1].value : dbResolutions[0].value}
+                  onValueChange={(v) => onUpsampleChange(v === dbResolutions[dbResolutions.length - 1].value)}
                   disabled={isDisabled}
                 >
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {dbResolutions.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        <span className="font-medium">{r}</span>
+                      <SelectItem key={r.value} value={r.value}>
+                        <span className="font-medium">{r.label}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>

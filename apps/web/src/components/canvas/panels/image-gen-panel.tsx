@@ -61,7 +61,7 @@ export function ImageGenPanel({
   const resolutions: string[] = (() => {
     if (currentDbModel) {
       const enums = extractSchemaEnums(currentDbModel.params_schema, 'resolution')
-      if (enums.length > 0) return enums
+      if (enums.length > 0) return enums.map((e) => e.value)
     }
     return currentStaticModel.resolutions
   })()
@@ -70,7 +70,7 @@ export function ImageGenPanel({
   const aspectRatios: string[] = (() => {
     if (currentDbModel) {
       const enums = extractSchemaEnums(currentDbModel.params_schema, 'aspect_ratio')
-      if (enums.length > 0) return enums
+      if (enums.length > 0) return enums.map((e) => e.value)
     }
     return [...ASPECT_RATIOS_IMAGE]
   })()
