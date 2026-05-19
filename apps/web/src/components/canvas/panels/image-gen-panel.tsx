@@ -158,10 +158,12 @@ export function ImageGenPanel({
       </div>
 
       <div className="p-3 flex flex-col gap-3 justify-between" style={{ width: 120 }}>
-        <div className="space-y-1 text-[11px] text-muted-foreground">
+        {/* <div className="space-y-1 text-[11px] text-muted-foreground">
           <label className="font-medium">数量</label>
           <div className="rounded border bg-muted/40 px-2 py-1 text-foreground">固定 1 张</div>
-        </div>
+        </div> */}
+        
+        {/* 质量 */}
 
         <button
           data-testid="canvas-execute-image"

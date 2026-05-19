@@ -28,7 +28,7 @@ export class NodeRegistry {
 
     this.register({
       type: 'image_gen',
-      label: 'AI 生图',
+      label: '图片',
       CanvasComponent: ImageGenNode as any,
       inputs: [
         { id: 'any-in', type: 'any', position: 'left', isList: true },
@@ -48,7 +48,7 @@ export class NodeRegistry {
 
     this.register({
       type: 'video_gen',
-      label: 'AI 视频',
+      label: '视频',
       CanvasComponent: VideoGenNode as any,
       inputs: [
         // single any-in handle for both multiref and keyframe modes
@@ -78,7 +78,7 @@ export class NodeRegistry {
 
     this.register({
       type: 'storyboard_splitter',
-      label: '分镜拆分',
+      label: '脚本',
       CanvasComponent: StoryboardSplitterNode as any,
       inputs: [{ id: 'any-in', type: 'any', position: 'left' }],
       outputs: [{ id: 'text-out', type: 'text', position: 'right' }],

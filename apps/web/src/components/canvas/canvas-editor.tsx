@@ -31,7 +31,7 @@ const nodeTypes = nodeRegistry.getReactFlowTypesMapping()
 
 
 type NodeMenuCategory = {
-  id: 'text' | 'image' | 'video' | 'asset'
+  id: 'text' | 'image' | 'video' | 'asset' | 'storyboard_splitter'
   label: string
   baseType: string
   baseLabel: string
@@ -48,16 +48,17 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     baseLabel: '文本',
     colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
     testId: 'canvas-add-node-text',
-    items: [
-      { type: 'script_writer', label: '剧本', testId: 'canvas-add-node-script' },
-      { type: 'storyboard_splitter', label: '分镜', testId: 'canvas-add-node-storyboard' },
-    ],
+    items: []
+    // items: [
+    //   { type: 'script_writer', label: '剧本', testId: 'canvas-add-node-script' },
+    //   { type: 'storyboard_splitter', label: '分镜', testId: 'canvas-add-node-storyboard' },
+    // ],
   },
   {
     id: 'image',
-    label: '生图',
+    label: '图片',
     baseType: 'image_gen',
-    baseLabel: '生图',
+    baseLabel: '图片',
     colorClass: 'bg-blue-600 hover:bg-blue-500 text-white shadow',
     testId: 'canvas-add-node-image',
     items: [],
@@ -70,18 +71,27 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     colorClass: 'bg-violet-600 hover:bg-violet-500 text-white shadow',
     testId: 'canvas-add-node-video',
     items: [
-      { type: 'video_stitch', label: '视频拼接', testId: 'canvas-add-node-video-stitch' },
+      // { type: 'video_stitch', label: '视频拼接', testId: 'canvas-add-node-video-stitch' },
     ],
   },
   {
-    id: 'asset',
-    label: '资产',
-    baseType: 'asset',
-    baseLabel: '资产',
+    id: 'storyboard_splitter',
+    label: '分镜',
+    baseType: 'storyboard_splitter',
+    baseLabel: '分镜',
     colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
-    testId: 'canvas-add-node-asset',
+    testId: 'canvas-add-node-storyboard',
     items: [],
   },
+  // {
+  //   id: 'asset',
+  //   label: '资产',
+  //   baseType: 'asset',
+  //   baseLabel: '资产',
+  //   colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
+  //   testId: 'canvas-add-node-asset',
+  //   items: [],
+  // },
 ]
 
 function AddNodePanel({ onSelect }: { onSelect: (type: string) => void }) {
@@ -98,7 +108,7 @@ function AddNodePanel({ onSelect }: { onSelect: (type: string) => void }) {
         </button>
       ))}
       <div className="pointer-events-none absolute left-0 top-full mt-2 w-[360px] opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-        <div className="grid grid-cols-4 gap-2 rounded-xl border border-border bg-background/95 p-3 shadow-xl backdrop-blur-md">
+        {/* <div className="grid grid-cols-4 gap-2 rounded-xl border border-border bg-background/95 p-3 shadow-xl backdrop-blur-md">
           {NODE_MENU_CATEGORIES.map((category) => (
             <div key={category.id} className="min-w-0">
               <div className="mb-1.5 text-[11px] font-semibold text-muted-foreground">{category.label}</div>
@@ -118,7 +128,7 @@ function AddNodePanel({ onSelect }: { onSelect: (type: string) => void }) {
               </div>
             </div>
           ))}
-        </div>
+        </div> */}
       </div>
     </div>
   )
@@ -153,7 +163,7 @@ function ContextNodeMenu({
             <span>+ {category.baseLabel}</span>
             <span className="text-border">›</span>
           </button>
-          <div className="pointer-events-none absolute left-full top-0 ml-1 min-w-[140px] rounded-xl border border-border bg-background py-1 opacity-0 shadow-xl group-hover/item:pointer-events-auto group-hover/item:opacity-100">
+          {/* <div className="pointer-events-none absolute left-full top-0 ml-1 min-w-[140px] rounded-xl border border-border bg-background py-1 opacity-0 shadow-xl group-hover/item:pointer-events-auto group-hover/item:opacity-100">
             <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground">{category.label}</div>
             {category.items.length === 0 ? (
               <div className="px-3 py-2 text-xs text-muted-foreground">暂无</div>
@@ -166,7 +176,7 @@ function ContextNodeMenu({
                 + {item.label}
               </button>
             ))}
-          </div>
+          </div> */}
         </div>
       ))}
     </div>,

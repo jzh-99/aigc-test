@@ -221,7 +221,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         <div className="flex gap-2 shrink-0">
           <button onClick={() => switchMode('multimodal')} className={modeBtnCls(videoMode === 'multimodal')}>全能参考</button>
           <button onClick={() => switchMode('frames')} className={modeBtnCls(videoMode === 'frames')}>首尾帧</button>
-          <button onClick={() => switchMode('components')} className={modeBtnCls(videoMode === 'components')}>参考生视频</button>
+          {/* <button onClick={() => switchMode('components')} className={modeBtnCls(videoMode === 'components')}>参考生视频</button> */}
         </div>
 
         {/* 素材上传区 */}
