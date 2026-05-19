@@ -111,7 +111,15 @@ const route: FastifyPluginAsync = async (app) => {
             Accept: 'application/json',
             Authorization: `Bearer ${AI_API_KEY}`,
           },
-          body: JSON.stringify({ model: AI_MODEL, messages, stream: true, max_tokens: 4000 }),
+          body: JSON.stringify({ 
+            model: AI_MODEL,
+            messages,
+            stream: true,
+            max_tokens: 4000,
+            thinking: {
+              "type":"disabled"
+            }
+          }),
           signal: controller.signal,
         })
       } finally {
@@ -140,6 +148,10 @@ const route: FastifyPluginAsync = async (app) => {
 
       const reader = doubaoRes.body!.getReader()
       const decoder = new TextDecoder()
+
+      // 客户端主动断开时取消上游读取，避免服务器空跑
+      request.raw.on('close', () => { reader.cancel().catch(() => {}) })
+
       try {
         while (true) {
           const { done, value } = await reader.read()

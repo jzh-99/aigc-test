@@ -49,14 +49,22 @@ export function AiAssistant() {
   // const [videoUploadProgress, setVideoUploadProgress] = useState(0)
   // const [videoTempId, setVideoTempId] = useState<string | null>(null)
 
-  // Draggable & resizable state
-  const [position, setPosition] = useState({ x: 0, y: 0 })
+  // 拖拽 & 缩放 —— 用 ref 直接操作 DOM，避免 mousemove 触发 re-render 导致卡顿
+  const positionRef = useRef<{ x: number; y: number } | null>(null)
   const [width, setWidth] = useState(420)
-  const [isDragging, setIsDragging] = useState(false)
-  const [isResizing, setIsResizing] = useState(false)
-  const [resizeEdge, setResizeEdge] = useState<'left' | 'right'>('left')
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [resizeStart, setResizeStart] = useState({ x: 0, width: 0, posX: 0 })
+  const widthRef = useRef(420)
+  const isDraggingRef = useRef(false)
+  const isResizingRef = useRef(false)
+  const resizeEdgeRef = useRef<'left' | 'right'>('left')
+  const dragOffsetRef = useRef({ x: 0, y: 0 })
+  const resizeStartRef = useRef({ x: 0, width: 0, posX: 0 })
+
+  // 按钮贴边隐藏
+  const [buttonDockedEdge, setButtonDockedEdge] = useState<'left' | 'right' | null>(null)
+  const [isButtonDockedExpanded, setIsButtonDockedExpanded] = useState(false)
+  const BUTTON_DOCK_THRESHOLD = 80
+  const BUTTON_PEEK = 20
+  const BUTTON_SIZE = 56
 
   // Floating button draggable state
   const [buttonPosition, setButtonPosition] = useState({ x: 0, y: 0 })
@@ -65,6 +73,7 @@ export function AiAssistant() {
   const buttonDraggedRef = useRef(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const chatImageRef = useRef<HTMLInputElement>(null)
   // const chatVideoRef = useRef<HTMLInputElement>(null)
   const imageTabRef = useRef<HTMLInputElement>(null)
@@ -122,52 +131,71 @@ export function AiAssistant() {
     }
   }, [open])
 
+  // 将面板 DOM 样式同步到当前 positionRef（非贴边状态下调用）
+  const applyPanelPosition = useCallback((x: number, y: number) => {
+    if (!panelRef.current) return
+    panelRef.current.style.left = `${x}px`
+    panelRef.current.style.right = 'auto'
+    panelRef.current.style.top = `${y}px`
+    panelRef.current.style.transform = 'translateX(0px)'
+    panelRef.current.style.transition = 'none'
+  }, [])
+
   // Drag & resize handlers
   useEffect(() => {
-    if (!isDragging && !isResizing && !isButtonDragging) return
-
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        setPosition({
-          x: e.clientX - dragStart.x,
-          y: e.clientY - dragStart.y,
-        })
-      } else if (isResizing) {
-        const delta = e.clientX - resizeStart.x
-        if (resizeEdge === 'left') {
-          // 从左边拖动：调整左侧边界（同时改变位置和宽度）
-          const targetWidth = resizeStart.width - delta
+      if (isDraggingRef.current) {
+        const x = e.clientX - dragOffsetRef.current.x
+        const y = e.clientY - dragOffsetRef.current.y
+        positionRef.current = { x, y }
+        applyPanelPosition(x, y)
+      } else if (isResizingRef.current) {
+        const delta = e.clientX - resizeStartRef.current.x
+        if (resizeEdgeRef.current === 'left') {
+          const targetWidth = resizeStartRef.current.width - delta
           const newWidth = Math.max(360, Math.min(800, targetWidth))
-          // 计算实际可以移动的距离（考虑宽度限制）
-          const actualWidthChange = resizeStart.width - newWidth
-          const newLeft = resizeStart.posX + actualWidthChange
+          const actualWidthChange = resizeStartRef.current.width - newWidth
+          const newLeft = resizeStartRef.current.posX + actualWidthChange
+          widthRef.current = newWidth
           setWidth(newWidth)
-          setPosition(prev => ({
-            ...prev,
-            x: newLeft
-          }))
+          if (panelRef.current) {
+            panelRef.current.style.width = `${newWidth}px`
+            panelRef.current.style.left = `${newLeft}px`
+          }
+          if (positionRef.current) positionRef.current.x = newLeft
         } else {
-          // 从右边拖动：调整右侧边界（只改变宽度）
-          const newWidth = Math.max(360, Math.min(800, resizeStart.width + delta))
+          const newWidth = Math.max(360, Math.min(800, resizeStartRef.current.width + delta))
+          widthRef.current = newWidth
           setWidth(newWidth)
+          if (panelRef.current) panelRef.current.style.width = `${newWidth}px`
         }
       } else if (isButtonDragging) {
         const newX = e.clientX - buttonDragStart.x
         const newY = e.clientY - buttonDragStart.y
-        // 如果移动超过5px，认为是拖动而不是点击
         if (Math.abs(newX - buttonPosition.x) > 5 || Math.abs(newY - buttonPosition.y) > 5) {
           buttonDraggedRef.current = true
         }
-        setButtonPosition({
-          x: newX,
-          y: newY,
-        })
+        setButtonPosition({ x: newX, y: newY })
       }
     }
 
     const handleMouseUp = () => {
-      setIsDragging(false)
-      setIsResizing(false)
+      // 面板拖拽结束，不做贴边检测
+      isDraggingRef.current = false
+      isResizingRef.current = false
+
+      // 按钮拖拽结束，检测是否靠近屏幕边缘触发贴边
+      if (isButtonDragging && buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect()
+        const vw = window.innerWidth
+        if (rect.left < BUTTON_DOCK_THRESHOLD) {
+          setButtonDockedEdge('left')
+          setIsButtonDockedExpanded(false)
+        } else if (vw - rect.right < BUTTON_DOCK_THRESHOLD) {
+          setButtonDockedEdge('right')
+          setIsButtonDockedExpanded(false)
+        }
+      }
       setIsButtonDragging(false)
     }
 
@@ -177,40 +205,45 @@ export function AiAssistant() {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging, isResizing, isButtonDragging, dragStart, resizeStart, buttonDragStart])
+  }, [isButtonDragging, buttonDragStart, buttonPosition, applyPanelPosition])
 
   const handleDragStart = (e: React.MouseEvent) => {
     if (!panelRef.current) return
     const rect = panelRef.current.getBoundingClientRect()
-    setDragStart({
+    dragOffsetRef.current = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
-    })
-    setIsDragging(true)
+    }
+    isDraggingRef.current = true
   }
 
   const handleResizeStart = (edge: 'left' | 'right') => (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!panelRef.current) return
     const rect = panelRef.current.getBoundingClientRect()
-    setResizeEdge(edge)
-    setResizeStart({
+    resizeEdgeRef.current = edge
+    resizeStartRef.current = {
       x: e.clientX,
-      width,
-      posX: rect.left, // 使用实际的左边界位置，而不是 position.x
-    })
-    setIsResizing(true)
+      width: widthRef.current,
+      posX: rect.left,
+    }
+    isResizingRef.current = true
   }
 
   const handleButtonDragStart = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!buttonRef.current) return
+    // 贴边状态下开始拖拽，先取消贴边
+    if (buttonDockedEdge) {
+      setButtonDockedEdge(null)
+      setIsButtonDockedExpanded(false)
+    }
     const rect = buttonRef.current.getBoundingClientRect()
     setButtonDragStart({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     })
-    buttonDraggedRef.current = false // 重置拖动标记
+    buttonDraggedRef.current = false
     setIsButtonDragging(true)
   }
 
@@ -340,6 +373,9 @@ export function AiAssistant() {
     setMessages((prev) => [...prev, userMsg, assistantMsg])
     setLoading(true)
 
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
     // Build history (text only, last 6 messages, content truncated to 12000 chars)
     const history = messages
       .filter((m) => !m.mediaLabel || m.role === 'assistant')
@@ -352,6 +388,7 @@ export function AiAssistant() {
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: abortController.signal,
         body: JSON.stringify({
           message: message || undefined,
           tab: sendTab,
@@ -409,10 +446,13 @@ export function AiAssistant() {
         }
       }
     } catch (err) {
+      // 用户主动中止，不显示错误
+      if (err instanceof Error && err.name === 'AbortError') return
       setMessages((prev) => prev.map((m) =>
         m.id === assistantMsg.id ? { ...m, content: '请求失败，请检查网络后重试' } : m
       ))
     } finally {
+      abortControllerRef.current = null
       setLoading(false)
     }
   }, [messages])
@@ -503,29 +543,44 @@ export function AiAssistant() {
         ref={buttonRef}
         onMouseDown={handleButtonDragStart}
         onClick={handleButtonClick}
+        onMouseEnter={() => { if (buttonDockedEdge) setIsButtonDockedExpanded(true) }}
+        onMouseLeave={() => { if (buttonDockedEdge) setIsButtonDockedExpanded(false) }}
         className={cn(
-          'fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-200 gradient-accent hover:scale-105 active:scale-95 cursor-move',
+          'fixed z-50 flex h-14 w-14 items-center justify-center shadow-lg gradient-accent cursor-move',
+          'transition-[transform,border-radius] duration-300 ease-in-out',
+          !buttonDockedEdge && 'hover:scale-105 active:scale-95',
           open && 'rotate-90',
-          showHint && !open && 'ring-4 ring-primary/30 shadow-2xl shadow-primary/40'
+          showHint && !open && !buttonDockedEdge && 'ring-4 ring-primary/30 shadow-2xl shadow-primary/40',
+          buttonDockedEdge === 'left' ? 'rounded-r-full rounded-l-none' :
+          buttonDockedEdge === 'right' ? 'rounded-l-full rounded-r-none' : 'rounded-full',
         )}
-        style={{
-          left: buttonPosition.x ? `${buttonPosition.x}px` : 'auto',
-          right: buttonPosition.x ? 'auto' : '24px',
-          top: buttonPosition.y ? `${buttonPosition.y}px` : 'auto',
-          bottom: buttonPosition.y ? 'auto' : '80px',
+        style={buttonDockedEdge ? {
+          // 贴边时：固定到对应屏幕边缘，translateX 控制露出量
+          left: buttonDockedEdge === 'left' ? '0px' : 'auto',
+          right: buttonDockedEdge === 'right' ? '0px' : 'auto',
+          top: buttonPosition.y !== 0 ? `${buttonPosition.y}px` : 'auto',
+          bottom: buttonPosition.y !== 0 ? 'auto' : '80px',
+          transform: isButtonDockedExpanded
+            ? 'translateX(0px)'
+            : `translateX(${buttonDockedEdge === 'left' ? -(BUTTON_SIZE - BUTTON_PEEK) : BUTTON_SIZE - BUTTON_PEEK}px)`,
+        } : {
+          left: buttonPosition.x !== 0 ? `${buttonPosition.x}px` : 'auto',
+          right: buttonPosition.x !== 0 ? 'auto' : '24px',
+          top: buttonPosition.y !== 0 ? `${buttonPosition.y}px` : 'auto',
+          bottom: buttonPosition.y !== 0 ? 'auto' : '80px',
         }}
         aria-label="AI助手"
       >
         {open ? <X className="h-6 w-6 text-white" /> : <Bot className="h-6 w-6 text-white" />}
       </button>
-      {showHint && !open && (
+      {showHint && !open && !buttonDockedEdge && (
         <div
           className="fixed z-50 w-64 rounded-2xl bg-background p-[2px] text-sm text-foreground shadow-2xl shadow-primary/20 animate-in fade-in slide-in-from-bottom-3 zoom-in-95 duration-500 gradient-accent"
           style={{
-            right: buttonPosition.x ? 'auto' : '24px',
-            left: buttonPosition.x ? `${Math.max(16, buttonPosition.x - 208)}px` : 'auto',
-            bottom: buttonPosition.y ? 'auto' : '152px',
-            top: buttonPosition.y ? `${Math.max(16, buttonPosition.y - 104)}px` : 'auto',
+            right: buttonPosition.x !== 0 ? 'auto' : '24px',
+            left: buttonPosition.x !== 0 ? `${Math.max(16, buttonPosition.x - 208)}px` : 'auto',
+            bottom: buttonPosition.y !== 0 ? 'auto' : '152px',
+            top: buttonPosition.y !== 0 ? `${Math.max(16, buttonPosition.y - 104)}px` : 'auto',
           }}
         >
           <div className="relative rounded-[14px] bg-background p-4">
@@ -556,27 +611,29 @@ export function AiAssistant() {
       {open && (
         <div
           ref={panelRef}
-          className="fixed z-50 flex flex-col rounded-2xl border border-border bg-background shadow-2xl overflow-hidden"
+          className="fixed z-50 flex flex-col border border-border bg-background shadow-2xl overflow-hidden rounded-2xl"
           style={{
-            left: position.x ? `${position.x}px` : 'auto',
-            right: position.x ? 'auto' : '104px',
-            top: position.y ? `${position.y}px` : '16px',
+            left: positionRef.current !== null ? `${positionRef.current.x}px` : 'auto',
+            right: positionRef.current !== null ? 'auto' : '104px',
+            top: positionRef.current !== null ? `${positionRef.current.y}px` : '16px',
             width: `${width}px`,
             height: 'calc(100vh - 32px)',
-          }}>
-
+          }}
+        >
           {/* Header - draggable */}
           <div
-            className="flex items-center justify-between px-4 py-3 gradient-accent cursor-move"
+            className="flex items-center justify-between px-4 py-3 gradient-accent cursor-move shrink-0"
             onMouseDown={handleDragStart}>
             <div className="flex items-center gap-2">
               <GripVertical className="h-4 w-4 text-white/50" />
               <Bot className="h-5 w-5 text-white" />
               <span className="font-semibold text-white text-sm">Toby.AI 创作助手</span>
             </div>
-            <button onClick={handleClear} className="text-red-400 hover:text-red-300 transition-colors" title="清空对话">
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={handleClear} className="text-red-400 hover:text-red-300 transition-colors" title="清空对话">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Resize handle - left edge */}
@@ -619,7 +676,7 @@ export function AiAssistant() {
                     : msg.role === 'assistant'
                     ? (
                       <>
-                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-8 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-4 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
                         {msg.content && (
                           <button
                             onClick={() => handleCopy(msg.content, msg.id)}
@@ -707,9 +764,10 @@ export function AiAssistant() {
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors">
                       <Video className="h-4 w-4 text-muted-foreground" />
                     </button> */}
-                    <Button size="icon" className="h-8 w-8 gradient-accent" onClick={handleChatSend}
-                      disabled={loading || (!input.trim() && !chatImage)}>
-                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    <Button size="icon" className="h-8 w-8 gradient-accent" onClick={loading ? () => abortControllerRef.current?.abort() : handleChatSend}
+                      disabled={!loading && (!input.trim() && !chatImage)}
+                      title={loading ? '停止生成' : '发送'}>
+                      {loading ? <X className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                     </Button>
                   </div>
                 </div>
