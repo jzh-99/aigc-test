@@ -446,7 +446,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           executing={executing}
           hasPrompt={!!hasImagePrompt}
           models={imageModels}
-          modelsReady={imageModelsReady}
           onModelChange={handleModelChange}
           onUpdateCfg={updateCfg}
           onExecute={handleExecuteImage}
@@ -476,7 +475,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           executing={executing}
           hasPrompt={!!hasVideoPrompt}
           models={videoModels}
-          modelsReady={videoModelsReady}
           onVideoModelChange={handleVideoModelChange}
           onVideoModeChange={handleVideoModeChange}
           onUpdateCfg={updateCfg}

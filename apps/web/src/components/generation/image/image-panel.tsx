@@ -245,7 +245,6 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
 
       <ImageParams
         models={imageModels}
-        modelsReady={imageModelsReady}
         modelType={modelType}
         resolution={resolution}
         aspectRatio={aspectRatio}

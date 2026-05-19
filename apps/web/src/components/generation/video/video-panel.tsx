@@ -261,7 +261,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
 
       <VideoParamsPanel
         models={videoModels}
-        modelsReady={videoModelsReady}
         videoMode={videoMode} videoModel={videoModel} videoAspectRatio={videoAspectRatio}
         videoUpsample={videoUpsample} videoDuration={videoDuration}
         videoGenerateAudio={videoGenerateAudio} videoCameraFixed={videoCameraFixed}
