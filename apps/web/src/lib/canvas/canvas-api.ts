@@ -6,6 +6,7 @@
 import { apiGet, apiPost } from '@/lib/api-client'
 import type {
   ImageGenConfig,
+  ShotItem,
   TaskBatchStatus,
 } from '@/lib/canvas/types'
 
@@ -525,7 +526,7 @@ export async function executeScriptWriterNode(params: {
 export async function executeStoryboardSplitterNode(params: {
   script: string
   shotCount: number
-}, token?: string): Promise<{ shots: Array<{ id: string; label: string; content: string }> }> {
+}, token?: string): Promise<{ shots: ShotItem[] }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
 

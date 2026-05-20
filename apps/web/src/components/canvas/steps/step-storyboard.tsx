@@ -27,7 +27,12 @@ export function StepStoryboard({ script, storyboardData, onComplete }: Props) {
     setLoading(true)
     try {
       const res = await executeStoryboardSplitterNode({ script, shotCount }, token ?? undefined)
-      setShots(res.shots)
+      // 将 ShotItem 转换为本地可编辑的 Shot 格式
+      setShots(res.shots.map((s, idx) => ({
+        id: generateUUID(),
+        label: `镜头${idx + 1}`,
+        content: s.sceneDescription ?? '',
+      })))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '分镜拆分失败')
     } finally {

@@ -60,6 +60,27 @@ export interface StoryboardSplitterConfig {
   shotCount: number
 }
 
+/** 分镜拆分结果中单个镜头的数据结构 */
+export interface ShotItem {
+  shotNumber: number
+  duration: number
+  sceneDescription: string
+  character1: string
+  characterDesc1: string
+  character2: string
+  characterDesc2: string
+  reference: string
+  shotType: string
+  characterAction: string
+  emotion: string
+  sceneTags: string[]
+  lightAtmosphere: string
+  soundEffect: string
+  dialogue: string
+  compositionPrompt: string
+  cameraMotionPrompt: string
+}
+
 export interface VideoStitchConfig {
   inputOrder: string[]
 }
