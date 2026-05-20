@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { CanvasApiError, executeStoryboardSplitterNode } from '@/lib/canvas/canvas-api'
+import { CanvasApiError, executeStoryboardSplitterNodeStream } from '@/lib/canvas/canvas-api'
 import type { StoryboardSplitterConfig, AppNode, AppEdge, ShotItem } from '@/lib/canvas/types'
 import { isTextInputConfig } from '@/lib/canvas/types'
 import { generateUUID } from '@/lib/utils'
@@ -79,8 +79,9 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, 
     setExpanded(false)
     setNodeStatus(nodeId, 'pending', { progress: 0 })
     try {
-      const result = await executeStoryboardSplitterNode(
+      const result = await executeStoryboardSplitterNodeStream(
         { script, shotCount: config.shotCount },
+        (percent) => setNodeStatus(nodeId, 'pending', { progress: percent }),
         token ?? undefined,
       )
       addNodeOutput(nodeId, {
