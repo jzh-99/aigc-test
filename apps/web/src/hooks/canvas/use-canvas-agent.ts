@@ -35,7 +35,7 @@ import {
   executeCanvasNode,
   executeVideoNode,
   executeScriptWriterNode,
-  executeStoryboardSplitterNode,
+  executeStoryboardSplitterNodeStream,
   startVideoConcatExport,
   getVideoConcatExport,
   CanvasApiError,
@@ -338,8 +338,9 @@ async function executeNode(
         }
       }
       const script = scriptParts.join('\n')
-      const result = await executeStoryboardSplitterNode(
+      const result = await executeStoryboardSplitterNodeStream(
         { script, shotCount: cfg.shotCount },
+        (percent) => execStore.setNodeStatus(nodeId, 'processing', { progress: percent }),
         token ?? undefined,
       )
       execStore.addNodeOutput(nodeId, {
