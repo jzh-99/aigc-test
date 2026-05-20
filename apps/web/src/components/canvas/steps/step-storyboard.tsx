@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import { Loader2, GripVertical, Plus, Trash2, ArrowRight, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { executeStoryboardSplitterNode } from '@/lib/canvas/canvas-api'
+import { executeStoryboardSplitterNodeStream } from '@/lib/canvas/canvas-api'
 import { generateUUID } from '@/lib/utils'
 
 interface Shot { id: string; label: string; content: string }
@@ -26,7 +26,7 @@ export function StepStoryboard({ script, storyboardData, onComplete }: Props) {
     if (!script.trim()) { toast.error('请先完成剧本步骤'); return }
     setLoading(true)
     try {
-      const res = await executeStoryboardSplitterNode({ script, shotCount }, token ?? undefined)
+      const res = await executeStoryboardSplitterNodeStream({ script, shotCount }, undefined, token ?? undefined)
       // 将 ShotItem 转换为本地可编辑的 Shot 格式
       setShots(res.shots.map((s, idx) => ({
         id: generateUUID(),
