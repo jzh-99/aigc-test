@@ -7,15 +7,9 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { CanvasApiError, executeStoryboardSplitterNode } from '@/lib/canvas/canvas-api'
-import type { StoryboardSplitterConfig, AppNode, AppEdge } from '@/lib/canvas/types'
-import { isScriptWriterConfig, isTextInputConfig } from '@/lib/canvas/types'
+import type { StoryboardSplitterConfig, AppNode, AppEdge, ShotItem } from '@/lib/canvas/types'
+import { isTextInputConfig } from '@/lib/canvas/types'
 import { generateUUID } from '@/lib/utils'
-
-interface Shot {
-  id: string
-  label: string
-  content: string
-}
 
 interface Props {
   nodeId: string
@@ -36,24 +30,25 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, 
   const [executing, setExecuting] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
-  // Editable shot drafts — initialized from execState when done
-  const rawShots = (execState?.outputs[0]?.paramsSnapshot as { shots?: Shot[] } | undefined)?.shots ?? []
-  const [editedShots, setEditedShots] = useState<Shot[]>([])
+  // 从执行状态中读取原始分镜数据，类型适配 ShotItem
+  const rawShots = (execState?.outputs[0]?.paramsSnapshot as { shots?: ShotItem[] } | undefined)?.shots ?? []
+  const [editedShots, setEditedShots] = useState<ShotItem[]>([])
   const isDone = execState?.submissionStatus === 'completed' && rawShots.length > 0
 
-  // Sync editedShots when rawShots first arrive
-  const shotsToShow: Shot[] = editedShots.length > 0 ? editedShots : rawShots
+  // 优先展示用户编辑后的草稿，否则展示原始数据
+  const shotsToShow: ShotItem[] = editedShots.length > 0 ? editedShots : rawShots
 
   const updateCfg = useCallback((patch: Partial<StoryboardSplitterConfig>) => {
     updateNodeData(nodeId, { config: { ...config, ...patch } })
   }, [nodeId, config, updateNodeData])
 
-  const updateShot = (id: string, content: string) => {
+  // 基于 shotNumber 定位并更新 sceneDescription
+  const updateShot = (shotNumber: number, sceneDescription: string) => {
     const base = editedShots.length > 0 ? editedShots : rawShots
-    setEditedShots(base.map((s) => s.id === id ? { ...s, content } : s))
+    setEditedShots(base.map((s) => s.shotNumber === shotNumber ? { ...s, sceneDescription } : s))
   }
 
-  // Collect upstream script text
+  // 收集上游剧本文本
   const getUpstreamScript = useCallback((): string => {
     const { nodes, edges } = useCanvasStructureStore.getState()
     const execStore = useCanvasExecutionStore.getState()
@@ -107,6 +102,7 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, 
     }
   }, [config.shotCount, nodeId, token, getUpstreamScript, addNodeOutput, setNodeStatus, setNodeError, onExecuted])
 
+  // 将分镜草稿展开为画布节点，使用 compositionPrompt 作为节点内容
   const handleExpandToCanvas = useCallback(() => {
     const shots = shotsToShow
     if (shots.length === 0) return
@@ -119,7 +115,7 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, 
       id: `shot_${nodeId}_${i}`,
       type: 'text_input' as const,
       position: { x: baseX, y: baseY + i * 220 },
-      data: { label: shot.label, config: { text: shot.content } },
+      data: { label: `镜头${shot.shotNumber}`, config: { text: shot.compositionPrompt } },
     }))
     const newEdges: AppEdge[] = newNodes.map((n) => ({
       id: `edge_${nodeId}_${n.id}`,
@@ -175,11 +171,14 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, 
           </p>
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
             {shotsToShow.map((shot) => (
-              <div key={shot.id} className="space-y-0.5">
-                <span className="text-[10px] font-medium text-muted-foreground">{shot.label}</span>
+              <div key={shot.shotNumber} className="space-y-0.5">
+                {/* 展示镜头编号、时长、景别 */}
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {`镜头${shot.shotNumber} · ${shot.duration}s · ${shot.shotType}`}
+                </span>
                 <textarea
-                  value={shot.content}
-                  onChange={(e) => updateShot(shot.id, e.target.value)}
+                  value={shot.sceneDescription}
+                  onChange={(e) => updateShot(shot.shotNumber, e.target.value)}
                   rows={3}
                   className="w-full text-[11px] bg-background border border-border rounded px-2 py-1.5 resize-y outline-none focus:border-primary/50 transition-colors"
                 />
