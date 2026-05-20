@@ -46,13 +46,14 @@ export function useCanvasPoller(canvasId: string | null) {
       const outputs = await fetchNodeOutputs(canvasId, nodeId, token || undefined)
       if (!outputs.length) return
       const store = useCanvasExecutionStore.getState()
-      for (const row of outputs) {
-        const url = row.output_urls?.[0]
-        if (!url) continue
-        const type: 'video' | 'image' = row.asset_type === 'video'
+      // 生成完成后拉取结果：替换当前输出（始终只保留最新一条）
+      const latest = outputs[outputs.length - 1]
+      const url = latest.output_urls?.[0]
+      if (url) {
+        const type: 'video' | 'image' = latest.asset_type === 'video'
           ? 'video'
           : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
-        store.addNodeOutput(nodeId, { id: row.id, url, type })
+        store.replaceNodeOutput(nodeId, { id: latest.id, url, type })
       }
       const selected = outputs.find((o) => o.is_selected)
       if (selected) store.selectNodeOutput(nodeId, selected.id)
@@ -70,16 +71,16 @@ export function useCanvasPoller(canvasId: string | null) {
       const grouped = await fetchAllNodeOutputs(canvasId, token || undefined)
       const store = useCanvasExecutionStore.getState()
       for (const [nodeId, outputs] of Object.entries(grouped)) {
-        for (const row of outputs) {
-          const url = row.output_urls?.[0]
-          if (!url) continue
-          const type: 'video' | 'image' = row.asset_type === 'video'
-            ? 'video'
-            : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
-          store.addNodeOutput(nodeId, { id: row.id, url, type })
-        }
-        const selected = outputs.find((o) => o.is_selected)
-        if (selected) store.selectNodeOutput(nodeId, selected.id)
+        if (!outputs.length) continue
+        // 每个节点最多一条输出，取 is_selected 或最新一条
+        const target = outputs.find((o) => o.is_selected) ?? outputs[outputs.length - 1]
+        const url = target.output_urls?.[0]
+        if (!url) continue
+        const type: 'video' | 'image' = target.asset_type === 'video'
+          ? 'video'
+          : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
+        store.replaceNodeOutput(nodeId, { id: target.id, url, type })
+        store.selectNodeOutput(nodeId, target.id)
       }
     } catch (e) {
       console.warn('[Canvas Poller] 批量拉取节点输出失败，回退逐个加载:', e)

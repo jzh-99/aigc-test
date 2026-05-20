@@ -1,23 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { createWriteStream } from 'node:fs'
-import { unlink, mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
-import { pipeline } from 'node:stream/promises'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import { signAssetUrl, uploadToTos } from '../../lib/storage.js'
-import {
-  CANVAS_UPLOAD_DIR,
-  CANVAS_ENABLED_TEAM_TYPES,
-  hasS3UploadConfig,
-  uploadViaLocalTemp,
-} from './_shared.js'
+import { CANVAS_ENABLED_TEAM_TYPES } from './_shared.js'
 
 // POST /canvases/asset-upload — 上传图片/视频文件作为资产节点使用
 const route: FastifyPluginAsync = async (app) => {
-  // 确保临时上传目录存在
-  await mkdir(CANVAS_UPLOAD_DIR, { recursive: true })
-
   app.post('/canvases/asset-upload', {
     config: {
       rateLimit: {
@@ -54,41 +42,26 @@ const route: FastifyPluginAsync = async (app) => {
 
     const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? 'bin'
     const fileId = `${randomUUID()}.${ext}`
-    const filePath = join(CANVAS_UPLOAD_DIR, fileId)
 
-    // 先流式写入磁盘
-    await pipeline(data.file, createWriteStream(filePath))
+    // 读取流为 Buffer，直接上传到 TOS/S3，与 worker 转存逻辑一致
+    const chunks: Buffer[] = []
+    for await (const chunk of data.file) {
+      chunks.push(chunk as Buffer)
+    }
+    const buffer = Buffer.concat(chunks)
 
     try {
-      let storageUrl: string
-
-      if (hasS3UploadConfig()) {
-        const key = `canvas-assets/${fileId}`
-        try {
-          const buf = await import('node:fs/promises').then((m) => m.readFile(filePath))
-          storageUrl = await uploadToTos(key, buf, mimeType)
-        } catch (err: any) {
-          app.log.warn({ err: err?.message ?? String(err) }, 'S3 upload failed, fallback to external storage')
-          storageUrl = await uploadViaLocalTemp(fileId, mimeType)
-        }
-      } else {
-        storageUrl = await uploadViaLocalTemp(fileId, mimeType)
-      }
-
+      const key = `canvas-assets/${fileId}`
+      const storageUrl = await uploadToTos(key, buffer, mimeType)
       const signedUrl = await signAssetUrl(storageUrl)
       return reply.send({ url: signedUrl ?? storageUrl, storageUrl })
-    } catch (err: any) {
-      app.log.error({ err: err?.message ?? String(err) }, 'Canvas asset upload failed')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '上传服务暂时不可用，请稍后重试'
+      app.log.error({ err: message }, 'Canvas asset upload failed')
       return reply.status(502).send({
         success: false,
-        error: {
-          code: 'UPLOAD_FAILED',
-          message: err?.message ?? '上传服务暂时不可用，请稍后重试',
-        },
+        error: { code: 'UPLOAD_FAILED', message },
       })
-    } finally {
-      // 无论成功失败都清理临时文件
-      unlink(filePath).catch(() => {})
     }
   })
 }

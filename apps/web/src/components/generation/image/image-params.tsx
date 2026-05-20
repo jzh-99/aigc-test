@@ -7,7 +7,6 @@ import { Sparkles, Loader2, Coins } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ASPECT_RATIOS, QUANTITY_OPTIONS } from '../shared/constants'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
-import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import type { ModelItem } from '@aigc/types'
 
 interface ImageParamsProps {
@@ -48,7 +47,7 @@ export function ImageParams({
   const availableResolutions = extractSchemaEnums(currentDbModel?.params_schema, 'resolution')
 
   const unitPrice = currentDbModel
-    ? getPriceByResolution(currentDbModel, resolution, IMAGE_MODEL_CREDITS[modelType as keyof typeof IMAGE_MODEL_CREDITS] ?? currentDbModel.credit_cost)
+    ? getPriceByResolution(currentDbModel, resolution, currentDbModel.credit_cost ?? 5)
     : 0
 
   const estimatedCredits = unitPrice * quantity

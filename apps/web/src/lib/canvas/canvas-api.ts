@@ -50,6 +50,8 @@ export interface ExecuteVideoNodeParams {
   model: string
   videoMode: 'multiref' | 'keyframe'
   aspectRatio?: string
+  /** 视频分辨率，可选，如 '720p'、'1080p' 等 */
+  resolution?: string
   duration?: number
   generateAudio?: boolean
   cameraFixed?: boolean
@@ -294,7 +296,7 @@ export async function uploadAssetFile(file: File, token?: string): Promise<strin
   }
 
   const data = await res.json()
-  return data.url as string
+  return data.storageUrl as string
 }
 
 /**
@@ -381,6 +383,30 @@ export async function fetchCanvasAssets(
   return await res.json() as CursorListResponse<CanvasAssetItem>
 }
 
+export async function createNodeOutput(
+  canvasId: string,
+  nodeId: string,
+  outputUrl: string,
+  token?: string,
+): Promise<string> {
+  const res = await fetch(`/api/v1/canvases/${canvasId}/node-outputs/${nodeId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ output_urls: [outputUrl], is_selected: true }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw toCanvasApiError('保存输出失败', res.status, err)
+  }
+
+  const data = await res.json() as { id: string }
+  return data.id
+}
+
 export async function selectNodeOutputForCanvas(
   canvasId: string,
   nodeId: string,
@@ -422,6 +448,8 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
   }
 
   if (params.aspectRatio) body.aspect_ratio = params.aspectRatio
+  // 透传分辨率参数（可选）
+  if (params.resolution) body.resolution = params.resolution
 
   if (isSeedance) {
     if (params.duration && params.duration !== 0) body.duration = params.duration

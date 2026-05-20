@@ -3,6 +3,7 @@ import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 
 // POST /canvases/:id/node-outputs/:nodeId — 写入预生成输出（如视频工作室导出）
+// 若节点已存在 is_selected=true 的记录则替换，否则新增
 const route: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string; nodeId: string }; Body: { output_urls: string[]; is_selected?: boolean } }>(
     '/canvases/:id/node-outputs/:nodeId',
@@ -28,12 +29,34 @@ const route: FastifyPluginAsync = async (app) => {
 
       // 使用 sql.raw 构建 PostgreSQL 数组字面量
       const urlsLiteral = output_urls.map((u) => `'${u.replace(/'/g, "''")}'`).join(',')
+      const urlsArray = sql.raw(`ARRAY[${urlsLiteral}]::text[]`)
+
+      // 查找该节点已有的 is_selected 记录，有则替换，无则新增
+      const existing = await db
+        .selectFrom('canvas_node_outputs')
+        .select('id')
+        .where('canvas_id', '=', id)
+        .where('node_id', '=', nodeId)
+        .where('is_selected', '=', true)
+        .orderBy('created_at', 'desc')
+        .limit(1)
+        .executeTakeFirst()
+
+      if (existing) {
+        await db
+          .updateTable('canvas_node_outputs')
+          .set({ output_urls: urlsArray, is_selected })
+          .where('id', '=', existing.id)
+          .execute()
+        return reply.status(200).send({ id: existing.id })
+      }
+
       const row = await db
         .insertInto('canvas_node_outputs')
         .values({
           canvas_id: id,
           node_id: nodeId,
-          output_urls: sql.raw(`ARRAY[${urlsLiteral}]::text[]`),
+          output_urls: urlsArray,
           is_selected,
         })
         .returning('id')

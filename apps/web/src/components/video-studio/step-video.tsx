@@ -5,13 +5,13 @@ import { Loader2, Play, Download, ArrowRight, ChevronDown, ChevronUp, Check, Ale
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiPost } from '@/lib/api-client'
-import type { BatchResponse } from '@aigc/types'
+import type { BatchResponse, ModelItem } from '@aigc/types'
 import type { Fragment } from '@/lib/video-studio-api'
 import type { DescribeData } from '@/hooks/video-studio/use-wizard-state'
 import { usePendingBatchWatcher } from '@/hooks/video-studio/use-pending-batch-watcher'
-import { VIDEO_PER_SECOND_CREDITS } from '@/lib/credits'
+import { useModels } from '@/hooks/use-models'
 
-type VideoModel = 'seedance-2.0' | 'seedance-2.0-fast' | 'seedance-1.5-pro'
+type VideoModel = string
 type VideoResolution = '720p' | '1080p'
 
 interface VideoParams {
@@ -21,25 +21,24 @@ interface VideoParams {
   style: string
 }
 
-const VIDEO_MODEL_OPTIONS: Array<{ value: VideoModel; label: string; creditsPerSec: number }> = [
-  { value: 'seedance-2.0',      label: 'Seedance 2.0',      creditsPerSec: VIDEO_PER_SECOND_CREDITS['seedance-2.0'] },
-  { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', creditsPerSec: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'] },
-  { value: 'seedance-1.5-pro',  label: 'Seedance 1.5 Pro',  creditsPerSec: VIDEO_PER_SECOND_CREDITS['seedance-1.5-pro'] },
-]
-
 const VIDEO_RESOLUTION_OPTIONS: Array<{ value: VideoResolution; label: string; desc: string }> = [
   { value: '720p', label: '720p', desc: '标准' },
   { value: '1080p', label: '1080p', desc: '高清' },
 ]
 
 const FRAGMENT_DURATION_OPTIONS = [null, 4, 5, 6, 8, 10] as const
-const DEFAULT_VIDEO_PARAMS: Omit<VideoParams, 'style'> = { model: 'seedance-2.0', resolution: '720p', durationOverride: null }
+const DEFAULT_VIDEO_PARAMS: Omit<VideoParams, 'style'> = { model: '', resolution: '720p', durationOverride: null }
 const VIDEO_PROMPT_SUFFIX = '画面稳定流畅，面部清晰不变形，人体结构正常，无文字伪影，无多余手指。视频需要有台词和音效，不要有字幕和bgm。'
 
-function calcVideoCost(fragment: Fragment, params: VideoParams, durationOverride?: number | null): number {
+function getCreditsPerSec(model: string, videoModels: ModelItem[]): number {
+  const m = videoModels.find((vm) => vm.code === model)
+  if (m?.params_pricing?.[0]) return m.params_pricing[0].unit_price
+  return 5
+}
+
+function calcVideoCost(fragment: Fragment, params: VideoParams, videoModels: ModelItem[], durationOverride?: number | null): number {
   const dur = Math.min(Math.max(Math.round(durationOverride ?? params.durationOverride ?? fragment.duration), 4), 15)
-  const cps = VIDEO_MODEL_OPTIONS.find(m => m.value === params.model)?.creditsPerSec ?? 5
-  return dur * cps
+  return dur * getCreditsPerSec(params.model, videoModels)
 }
 
 async function submitVideoBatch(params: {
@@ -79,6 +78,7 @@ interface FragmentVideoCardProps {
   workspaceId: string
   projectId: string
   videoParams: VideoParams
+  videoModels: ModelItem[]
   tailFrameUrl?: string
   isFirstFragment: boolean
   tailFrameEnabled: boolean
@@ -136,7 +136,7 @@ function buildFragmentPrompt(fragment: Fragment, style: string, labelMap: Record
   return appendPromptSuffix(`画面风格和类型: ${style}\n生成一个由以下${shots.length}个分镜组成的视频:${transition}${tailFrameInstruction}\n${body}`)
 }
 
-function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, videoUrl, videoHistory, aspectRatio, workspaceId, projectId, videoParams, tailFrameUrl, isFirstFragment, tailFrameEnabled, needsTailFrameConfirmation, promptOverride, durationOverride, isLocked, isPending, onVideoReady, onSelectVideo, onBatchSubmitted, onConfirm, onTailFrameExtracted, onTailFrameToggle, onPromptChange, onDurationChange, registerGenerate }: FragmentVideoCardProps) {
+function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, videoUrl, videoHistory, aspectRatio, workspaceId, projectId, videoParams, videoModels, tailFrameUrl, isFirstFragment, tailFrameEnabled, needsTailFrameConfirmation, promptOverride, durationOverride, isLocked, isPending, onVideoReady, onSelectVideo, onBatchSubmitted, onConfirm, onTailFrameExtracted, onTailFrameToggle, onPromptChange, onDurationChange, registerGenerate }: FragmentVideoCardProps) {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -323,7 +323,7 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
               className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {(loading || isPending) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {loading || isPending ? '生成中…' : `生成视频 · ${calcVideoCost(fragment, videoParams, durationOverride)}积分`}
+              {loading || isPending ? '生成中…' : `生成视频 · ${calcVideoCost(fragment, videoParams, videoModels, durationOverride)}积分`}
             </button>
           )}
 
@@ -500,8 +500,9 @@ interface Props {
 
 export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory, describeData, characters, characterImages, sceneImages, projectId, projectName, pendingVideoBatches, onAddPendingVideoBatch, onClearPendingVideoBatch, onVideoReady, refreshFromServer, onComplete }: Props) {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
+  const { models: videoModels } = useModels('video', workspaceId || undefined)
   const [showParams, setShowParams] = useState(false)
-  const [videoParams, setVideoParams] = useState<VideoParams>(() => ({ ...DEFAULT_VIDEO_PARAMS, style: describeData.style }))
+  const [videoParams, setVideoParams] = useState<VideoParams>(() => ({ ...DEFAULT_VIDEO_PARAMS, model: '', style: describeData.style }))
   const [fragmentPrompts, setFragmentPrompts] = useState<Record<string, string>>({})
   const [fragmentDurations, setFragmentDurations] = useState<Record<string, number | null>>({})
   const [tailFrameEnabled, setTailFrameEnabled] = useState<Record<string, boolean>>({})
@@ -513,6 +514,13 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
   useEffect(() => {
     void refreshFromServer?.()
   }, [refreshFromServer])
+
+  // 模型列表加载后设置默认模型
+  useEffect(() => {
+    if (videoModels.length > 0 && !videoParams.model) {
+      setVideoParams((p) => ({ ...p, model: videoModels[0].code }))
+    }
+  }, [videoModels, videoParams.model])
 
   const registerGenerate = useCallback((fragmentId: string, fn: () => Promise<void>) => {
     generateFnsRef.current[fragmentId] = fn
@@ -626,7 +634,7 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
           >
             <span className="text-muted-foreground">生成参数</span>
             <div className="flex items-center gap-2">
-              <span className="text-foreground">{VIDEO_MODEL_OPTIONS.find(m => m.value === videoParams.model)?.label} · 有声{videoParams.durationOverride ? ` · ${videoParams.durationOverride}s` : ''}</span>
+              <span className="text-foreground">{videoModels.find(m => m.code === videoParams.model)?.name ?? videoParams.model} · 有声{videoParams.durationOverride ? ` · ${videoParams.durationOverride}s` : ''}</span>
               {showParams ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </div>
           </button>
@@ -635,14 +643,14 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
               <div className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">模型</p>
                 <div className="grid grid-cols-1 gap-1">
-                  {VIDEO_MODEL_OPTIONS.map((m) => (
+                  {videoModels.map((m) => (
                     <button
-                      key={m.value}
-                      onClick={() => setVideoParams((p) => ({ ...p, model: m.value, resolution: m.value === 'seedance-2.0-fast' && p.resolution === '1080p' ? '720p' : p.resolution }))}
-                      className={`text-left px-2 py-1 rounded text-xs transition-colors ${videoParams.model === m.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      key={m.code}
+                      onClick={() => setVideoParams((p) => ({ ...p, model: m.code }))}
+                      className={`text-left px-2 py-1 rounded text-xs transition-colors ${videoParams.model === m.code ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     >
-                      {m.label}
-                      <span className="ml-1 opacity-60">{m.creditsPerSec}积分/秒</span>
+                      {m.name}
+                      <span className="ml-1 opacity-60">{getCreditsPerSec(m.code, videoModels)}积分/秒</span>
                     </button>
                   ))}
                 </div>
@@ -687,7 +695,7 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
             className="w-full flex items-center justify-center gap-2 text-xs bg-primary text-primary-foreground py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {batchRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-            {batchRunning ? '批量生成中…' : `批量生成 (${batchEligibleCount}) · ${batchEligibleFragments.reduce((sum, fragment) => sum + calcVideoCost(fragment, videoParams, fragmentDurations[fragment.id]), 0)}积分`}
+            {batchRunning ? '批量生成中…' : `批量生成 (${batchEligibleCount}) · ${batchEligibleFragments.reduce((sum, fragment) => sum + calcVideoCost(fragment, videoParams, videoModels, fragmentDurations[fragment.id]), 0)}积分`}
           </button>
         )}
 
@@ -736,6 +744,7 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
               workspaceId={workspaceId}
               projectId={projectId}
               videoParams={videoParams}
+              videoModels={videoModels}
               promptOverride={fragmentPrompts[fragment.id]}
               durationOverride={fragmentDurations[fragment.id]}
               onVideoReady={(url) => onVideoReady(fragment.id, url)}

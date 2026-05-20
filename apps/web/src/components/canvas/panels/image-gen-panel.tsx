@@ -1,7 +1,6 @@
 import { Loader2, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
-import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import { ASPECT_RATIOS_IMAGE } from './panel-constants'
 import type { ModelType, Resolution } from './panel-constants'
 import type { ModelItem } from '@aigc/types'
@@ -53,7 +52,7 @@ export function ImageGenPanel({
   const displayAspectRatios = aspectRatios.length > 0 ? aspectRatios : [...ASPECT_RATIOS_IMAGE]
 
   const credits = currentDbModel
-    ? getPriceByResolution(currentDbModel, resolution, IMAGE_MODEL_CREDITS[modelType] ?? 5)
+    ? getPriceByResolution(currentDbModel, resolution, currentDbModel.credit_cost ?? 5)
     : 0
 
   const showQualitySelector = modelType !== 'gpt-image-2' && resolutions.length > 1
@@ -98,7 +97,7 @@ export function ImageGenPanel({
         <div className="flex flex-col gap-1">
           {(models ?? []).map((m) => {
             const isActive = modelType === m.code
-            const modelCredits = m.params_pricing[0]?.unit_price ?? IMAGE_MODEL_CREDITS[m.code] ?? 5
+            const modelCredits = m.params_pricing[0]?.unit_price ?? m.credit_cost ?? 5
             return (
               <button
                 key={m.code}

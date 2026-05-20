@@ -11,7 +11,9 @@ import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
 import type { CanvasNodeData } from '@/lib/canvas/types'
+import { isAssetConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
+import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
 
 export type VideoMode = 'multiref' | 'keyframe'
 
@@ -87,12 +89,13 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
       const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
       return incoming.filter((e) => {
         const src = s.nodes.find((n) => n.id === e.source)
-        const mt = (src?.data.config as any)?.mimeType as string | undefined
+        const mt = isAssetConfig(src?.data.config) ? src.data.config.mimeType : undefined
         return src?.type !== 'text_input' && (!mt || mt.startsWith('image'))
       }).length
     })
   )
   const token = useAuthStore((s) => s.accessToken)
+  const { inputRef, uploading: nodeUploading, triggerUpload, handleChange } = useNodeUpload(id, canvasId ?? '', 'video/*')
   const [confirming, setConfirming] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [videoSize, setVideoSize] = useState<{ w: number; h: number } | null>(null)
@@ -131,8 +134,8 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
     try {
       await selectNodeOutputForCanvas(canvasId, id, selectedOutputId, token)
       toast.success('已设为定稿视频')
-    } catch (err: any) {
-      toast.error(err?.message ?? '设为定稿失败')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '设为定稿失败')
     } finally {
       setConfirming(false)
     }
@@ -171,6 +174,24 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         onMouseDown={(e) => e.stopPropagation()}
       >
         <X size={11} />
+      </button>
+
+      {/* 上传按钮 — 顶部居中，hover 显示 */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleChange}
+      />
+      <button
+        onClick={(e) => { e.stopPropagation(); triggerUpload() }}
+        onMouseDown={(e) => e.stopPropagation()}
+        disabled={nodeUploading}
+        className="absolute -top-3 left-1/2 -translate-x-1/2 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-blue-500 border-border disabled:opacity-40"
+        title="上传视频"
+      >
+        {nodeUploading ? <Loader2 size={11} className="animate-spin" /> : <span className="text-xs font-bold leading-none">+</span>}
       </button>
 
       {/* Header */}

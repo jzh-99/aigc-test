@@ -1,5 +1,4 @@
 import type { ModelItem } from '@aigc/types'
-import { ALL_RESOLUTION_OPTIONS, MODEL_OPTIONS } from './constants'
 
 /**
  * 从 params_schema 中提取指定字段的枚举选项列表
@@ -26,21 +25,15 @@ export function extractSchemaEnums(schema: unknown, field: string): Array<{ labe
 
 /**
  * 获取指定模型的可用分辨率列表（首项为默认值）。
- * 优先从 DB 模型的 params_schema 提取，fallback 到静态常量。
+ * 从 DB 模型的 params_schema 提取。
  */
 export function getModelResolutions(modelCode: string, dbModels?: ModelItem[]): string[] {
   const dbModel = dbModels?.find((m) => m.code === modelCode)
   if (dbModel) {
     const enums = extractSchemaEnums(dbModel.params_schema, 'resolution')
-    if (enums.length > 0) {
-      return ALL_RESOLUTION_OPTIONS.filter((r) => enums.some((e) => e.value === r.value)).map((r) => r.value)
-    }
+    if (enums.length > 0) return enums.map((e) => e.value)
   }
-  const staticModel = MODEL_OPTIONS.find((m) => m.value === modelCode)
-  if (staticModel) {
-    return ALL_RESOLUTION_OPTIONS.filter((r) => staticModel.resolutions.includes(r.value as never)).map((r) => r.value)
-  }
-  return ALL_RESOLUTION_OPTIONS.map((r) => r.value)
+  return []
 }
 
 export function isSeedanceModel(model: ModelItem): boolean {

@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { executeCanvasNode } from '@/lib/canvas/canvas-api'
-import { MODEL_CODE_MAP } from '@/components/canvas/panels/panel-constants'
+import { useModels } from '@/hooks/use-models'
 
 interface ImageCardProps {
   name: string
@@ -20,19 +20,24 @@ interface ImageCardProps {
 function ImageCard({ name, type, selectedUrl, onSelect, canvasId }: ImageCardProps) {
   const token = useAuthStore((s) => s.accessToken)
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const { models: imageModels } = useModels('image', activeWorkspaceId)
   const [loading, setLoading] = useState(false)
   const [urls, setUrls] = useState<string[]>(selectedUrl ? [selectedUrl] : [])
 
   const generate = useCallback(async () => {
     setLoading(true)
     try {
-      // Create a temporary node id for this generation
       const tempNodeId = `steps_${type}_${name}_${Date.now()}`
       const prompt = type === 'character'
         ? `${name}，角色参考图，三视图（正面、侧面、背面），白色背景，写实风格`
         : `${name}，场景参考图，无人物，写实风格，宽幅构图`
       const aspectRatio = type === 'character' ? '1:1' : '16:9'
-      const modelCode = MODEL_CODE_MAP['gemini']?.['2k'] ?? 'gemini-3.1-flash-image-preview-2k'
+      const modelCode = imageModels[0]?.code ?? ''
+      if (!modelCode) {
+        toast.error('暂无可用图片模型')
+        return
+      }
 
       await executeCanvasNode({
         canvasId,
@@ -61,7 +66,7 @@ function ImageCard({ name, type, selectedUrl, onSelect, canvasId }: ImageCardPro
     } finally {
       setLoading(false)
     }
-  }, [name, type, canvasId, workspaceId, token, onSelect])
+  }, [name, type, canvasId, workspaceId, token, onSelect, imageModels])
 
   return (
     <div className="border rounded-xl bg-card p-4 space-y-3">

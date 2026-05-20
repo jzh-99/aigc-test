@@ -10,8 +10,9 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
-import type { CanvasNodeData } from '@/lib/canvas/types'
+import type { CanvasNodeData, ImageGenConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
+import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
 
 function nodeWidthFromRatio(w: number, h: number): number {
   const ratio = w / h
@@ -31,7 +32,7 @@ function useElapsedTimer(startedAt: number | null): string {
   return `${elapsed}s`
 }
 
-export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<any> }) {
+export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<ImageGenConfig> }) {
   const execState = useNodeExecutionState(id)
   const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
@@ -58,6 +59,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
     })
   )
   const token = useAuthStore((s) => s.accessToken)
+  const { inputRef, uploading: nodeUploading, triggerUpload, handleChange } = useNodeUpload(id, canvasId ?? '', 'image/*')
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
   const [confirming, setConfirming] = useState(false)
 
@@ -87,8 +89,8 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
     try {
       await selectNodeOutputForCanvas(canvasId, id, selectedOutputId, token)
       toast.success('已设为定稿图')
-    } catch (err: any) {
-      toast.error(err?.message ?? '设为定稿失败')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '设为定稿失败')
     } finally {
       setConfirming(false)
     }
@@ -119,6 +121,24 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
         onMouseDown={(e) => e.stopPropagation()}
       >
         <X size={11} />
+      </button>
+
+      {/* 上传按钮 — 顶部居中，hover 显示 */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleChange}
+      />
+      <button
+        onClick={(e) => { e.stopPropagation(); triggerUpload() }}
+        onMouseDown={(e) => e.stopPropagation()}
+        disabled={nodeUploading}
+        className="absolute -top-3 left-1/2 -translate-x-1/2 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-blue-500 border-border disabled:opacity-40"
+        title="上传图片"
+      >
+        {nodeUploading ? <Loader2 size={11} className="animate-spin" /> : <span className="text-xs font-bold leading-none">+</span>}
       </button>
 
       {/* Header */}

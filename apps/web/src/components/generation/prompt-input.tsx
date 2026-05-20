@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useGenerate } from '@/hooks/use-generate'
+import { getPriceByResolution } from '@/components/generation/shared/schema-utils'
 import { Sparkles, Loader2, Coins } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
 import { toast } from 'sonner'
 import { getRequestErrorMessage, reportClientSubmissionError, ApiError } from '@/lib/api-client'
-import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 
 interface PromptInputProps {
   onBatchCreated: (batch: BatchResponse) => void
@@ -17,8 +17,11 @@ interface PromptInputProps {
 }
 
 export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
-  const { prompt, setPrompt, modelType, setModelType, resolution, setResolution, quantity, setQuantity, isGenerating } = useGenerationStore()
-  const estimatedCredits = (IMAGE_MODEL_CREDITS[modelType] ?? 5) * quantity
+  const { prompt, setPrompt, modelType, setModelType, resolution, setResolution, quantity, setQuantity, isGenerating, imageModels } = useGenerationStore()
+  const currentModel = imageModels.find((m) => m.code === modelType)
+  const estimatedCredits = currentModel
+    ? getPriceByResolution(currentModel, resolution, 5) * quantity
+    : quantity
   const showQualitySelector = modelType !== 'gpt-image-2'
   const { generate } = useGenerate()
 

@@ -85,6 +85,8 @@ interface CanvasExecutionState {
   setNodeStatus: (nodeId: string, status: NodeSubmissionStatus, patch?: Partial<NodeExecutionState>) => void
   setNodeProgress: (nodeId: string, progress: number, isGenerating: boolean) => void
   addNodeOutput: (nodeId: string, output: NodeOutputAsset) => void
+  /** 替换节点当前输出（AI 生成完成、手动上传），始终只保留最新一条 */
+  replaceNodeOutput: (nodeId: string, output: NodeOutputAsset) => void
   selectNodeOutput: (nodeId: string, outputId: string) => void
   setNodeWarning: (nodeId: string, warning?: string) => void
   setNodeError: (nodeId: string, error?: string, errorCode?: string) => void
@@ -165,6 +167,18 @@ export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) =
         nodes: {
           ...s.nodes,
           [nodeId]: { ...nodeState, outputs: [...nodeState.outputs, output], selectedOutputId: output.id },
+        },
+      }
+    })
+  },
+
+  replaceNodeOutput: (nodeId, output) => {
+    set((s) => {
+      const nodeState = s.nodes[nodeId] || DEFAULT_NODE_STATE
+      return {
+        nodes: {
+          ...s.nodes,
+          [nodeId]: { ...nodeState, outputs: [output], selectedOutputId: output.id },
         },
       }
     })

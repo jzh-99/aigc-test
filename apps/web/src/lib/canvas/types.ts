@@ -39,6 +39,8 @@ export interface VideoGenConfig {
   generateAudio: boolean
   cameraFixed: boolean
   watermark: boolean
+  /** 视频分辨率，可选，如 '720p'、'1080p' 等 */
+  resolution?: string
 }
 
 export interface AssetConfig {

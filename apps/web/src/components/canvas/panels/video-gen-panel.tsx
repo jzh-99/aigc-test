@@ -31,7 +31,8 @@ interface VideoGenPanelProps {
   executing: boolean
   hasPrompt: boolean
   models?: ModelItem[]
-  modelsReady?: boolean
+  videoResolution: string
+  onVideoResolutionChange: (value: string) => void
   onVideoModelChange: (value: string) => void
   onVideoModeChange: (value: VideoMode) => void
   onUpdateCfg: (patch: Record<string, unknown>) => void
@@ -59,6 +60,8 @@ export function VideoGenPanel({
   executing,
   hasPrompt,
   models,
+  videoResolution,
+  onVideoResolutionChange,
   onVideoModelChange,
   onVideoModeChange,
   onUpdateCfg,
@@ -78,6 +81,9 @@ export function VideoGenPanel({
     const num = Number(item.value)
     return { value: num, label: num === -1 ? '自动' : `${num}s` }
   })
+  // 从模型 schema 读取分辨率可选项，超过 1 个才显示选择器
+  const resolutionOptions = extractSchemaEnums(currentDbModel?.params_schema, 'resolution').map((e) => e.value)
+  const showResolutionSelector = resolutionOptions.length > 1
 
   const videoCredits = currentDbModel
     ? getPriceByResolution(currentDbModel, String(videoDuration), currentDbModel.credit_cost)
@@ -262,6 +268,29 @@ export function VideoGenPanel({
             })}
           </div>
         </div>
+
+        {/* 分辨率选择器：仅当模型 schema 提供超过 1 个选项时显示 */}
+        {showResolutionSelector && (
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium text-muted-foreground">分辨率</label>
+            <div className="flex flex-wrap gap-1">
+              {resolutionOptions.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => onVideoResolutionChange(r)}
+                  className={cn(
+                    'px-2 py-0.5 rounded text-[11px] font-medium border transition-colors',
+                    videoResolution === r
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-muted/40 border-transparent hover:bg-muted'
+                  )}
+                >
+                  {r.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">比例</label>

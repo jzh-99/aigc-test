@@ -3,58 +3,69 @@
 import { useState, useMemo } from 'react'
 import { Zap } from 'lucide-react'
 import type { AgentStep, StepParams } from '@/lib/canvas/agent-types'
-import { estimateStepCredits } from '@/hooks/canvas/use-canvas-agent'
+import type { ModelItem } from '@aigc/types'
+import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
 import {
-  IMAGE_MODEL_OPTIONS,
-  MODEL_CODE_MAP,
-  VIDEO_MODEL_OPTIONS,
   SEEDANCE_DURATION_OPTIONS,
   VIDEO_ASPECT_RATIOS_SEEDANCE,
   VIDEO_ASPECT_RATIOS_VEO,
   ASPECT_RATIOS_IMAGE,
 } from '@/components/canvas/panels/panel-constants'
-import type { ImageModelType, ImageResolution } from '@/lib/canvas/types'
 
 interface Props {
   step: AgentStep
   onConfirm: (params: StepParams) => void
   disabled?: boolean
-  completed?: boolean  // true for historical steps that are no longer active
+  completed?: boolean
+  imageModels?: ModelItem[]
+  videoModels?: ModelItem[]
 }
 
-const DEFAULT_IMAGE_PARAMS: StepParams = {
-  modelType: 'gemini',
-  resolution: '2k',
-  aspectRatio: '1:1',
-}
-
-const DEFAULT_VIDEO_PARAMS: StepParams = {
-  videoModel: 'seedance-2.0',
-  duration: 5,
-  aspectRatio: 'adaptive',
-}
-
-export function GuideStepCard({ step, onConfirm, disabled, completed }: Props) {
+export function GuideStepCard({ step, onConfirm, disabled, completed, imageModels = [], videoModels = [] }: Props) {
   const isImage = step.nodeType === 'image_gen'
   const isVideo = step.nodeType === 'video_gen'
   const needsParams = step.needsRun && (isImage || isVideo)
 
-  const [params, setParams] = useState<StepParams>(
-    isVideo ? DEFAULT_VIDEO_PARAMS : DEFAULT_IMAGE_PARAMS,
+  const defaultImageModel = imageModels[0]?.code ?? ''
+  const defaultVideoModel = videoModels[0]?.code ?? ''
+
+  const defaultImageResolution = useMemo(() => {
+    const m = imageModels[0]
+    if (!m) return '2k'
+    return extractSchemaEnums(m.params_schema, 'resolution')[0]?.value ?? '2k'
+  }, [imageModels])
+
+  const [params, setParams] = useState<StepParams>(() =>
+    isVideo
+      ? { videoModel: defaultVideoModel, duration: 5, aspectRatio: 'adaptive' }
+      : { modelType: defaultImageModel, resolution: defaultImageResolution, aspectRatio: '1:1' }
   )
 
-  const credits = useMemo(() => estimateStepCredits(step, params), [step, params])
+  const selectedImageModel = isImage ? imageModels.find((m) => m.code === params.modelType) : undefined
+  const selectedVideoModel = isVideo ? videoModels.find((m) => m.code === params.videoModel) : undefined
 
-  const selectedModel = isImage
-    ? IMAGE_MODEL_OPTIONS.find((m) => m.value === params.modelType)
-    : VIDEO_MODEL_OPTIONS.find((m) => m.value === params.videoModel)
+  const resolutionOptions = useMemo(() => {
+    if (!selectedImageModel) return []
+    return extractSchemaEnums(selectedImageModel.params_schema, 'resolution').map((e) => e.value)
+  }, [selectedImageModel])
 
-  const resolutionOptions = isImage && selectedModel
-    ? (selectedModel as typeof IMAGE_MODEL_OPTIONS[number]).resolutions
-    : []
-
-  const isSeedance = isVideo && (selectedModel as typeof VIDEO_MODEL_OPTIONS[number])?.isSeedance
+  const isSeedance = isVideo && (params.videoModel ?? '').startsWith('seedance-')
   const aspectRatios = isSeedance ? VIDEO_ASPECT_RATIOS_SEEDANCE : VIDEO_ASPECT_RATIOS_VEO
+
+  // 积分估算：从 params_pricing 读取
+  const credits = useMemo(() => {
+    if (isImage && selectedImageModel) {
+      const price = getPriceByResolution(selectedImageModel, params.resolution ?? '2k', 5)
+      return step.nodeIds.length * price
+    }
+    if (isVideo && selectedVideoModel) {
+      const pricing = selectedVideoModel.params_pricing[0]
+      if (pricing) {
+        return step.nodeIds.length * pricing.unit_price * (params.duration ?? 5)
+      }
+    }
+    return 0
+  }, [isImage, isVideo, selectedImageModel, selectedVideoModel, params, step.nodeIds.length])
 
   return (
     <div className={`rounded-lg border bg-muted/30 p-3 space-y-3 text-sm ${completed ? 'border-border opacity-60' : 'border-border'}`}>
@@ -89,17 +100,18 @@ export function GuideStepCard({ step, onConfirm, disabled, completed }: Props) {
                 <select
                   value={params.modelType}
                   onChange={(e) => {
-                    const mt = e.target.value as ImageModelType
-                    const model = IMAGE_MODEL_OPTIONS.find((m) => m.value === mt)
-                    const res = model?.resolutions.includes(params.resolution as ImageResolution)
+                    const mt = e.target.value
+                    const m = imageModels.find((m) => m.code === mt)
+                    const enums = m ? extractSchemaEnums(m.params_schema, 'resolution') : []
+                    const res = enums.some((en) => en.value === params.resolution)
                       ? params.resolution
-                      : model?.resolutions[0]
+                      : enums[0]?.value
                     setParams((p) => ({ ...p, modelType: mt, resolution: res }))
                   }}
                   className="flex-1 text-xs bg-background border border-border rounded px-2 py-1"
                 >
-                  {IMAGE_MODEL_OPTIONS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
+                  {imageModels.map((m) => (
+                    <option key={m.code} value={m.code}>{m.name}</option>
                   ))}
                 </select>
               </div>
@@ -107,7 +119,7 @@ export function GuideStepCard({ step, onConfirm, disabled, completed }: Props) {
                 <span className="text-xs text-muted-foreground w-12 shrink-0">分辨率</span>
                 <select
                   value={params.resolution}
-                  onChange={(e) => setParams((p) => ({ ...p, resolution: e.target.value as ImageResolution }))}
+                  onChange={(e) => setParams((p) => ({ ...p, resolution: e.target.value }))}
                   className="flex-1 text-xs bg-background border border-border rounded px-2 py-1"
                 >
                   {resolutionOptions.map((r) => (
@@ -139,8 +151,8 @@ export function GuideStepCard({ step, onConfirm, disabled, completed }: Props) {
                   onChange={(e) => setParams((p) => ({ ...p, videoModel: e.target.value }))}
                   className="flex-1 text-xs bg-background border border-border rounded px-2 py-1"
                 >
-                  {VIDEO_MODEL_OPTIONS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
+                  {videoModels.map((m) => (
+                    <option key={m.code} value={m.code}>{m.name}</option>
                   ))}
                 </select>
               </div>
@@ -173,11 +185,12 @@ export function GuideStepCard({ step, onConfirm, disabled, completed }: Props) {
             </>
           )}
 
-          {/* Credit estimate */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
-            <Zap className="w-3 h-3 text-yellow-500" />
-            <span>预计消耗 <span className="text-foreground font-medium">{credits}</span> 积分</span>
-          </div>
+          {credits > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
+              <Zap className="w-3 h-3 text-yellow-500" />
+              <span>预计消耗 <span className="text-foreground font-medium">{credits}</span> 积分</span>
+            </div>
+          )}
         </div>
       )}
 

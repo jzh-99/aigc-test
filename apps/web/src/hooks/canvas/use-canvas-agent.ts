@@ -40,12 +40,6 @@ import {
   getVideoConcatExport,
   CanvasApiError,
 } from '@/lib/canvas/canvas-api'
-import {
-  IMAGE_MODEL_CREDITS,
-  VIDEO_PER_SECOND_CREDITS,
-  VIDEO_FLAT_CREDITS,
-} from '@/lib/credits'
-import { MODEL_CODE_MAP } from '@/components/canvas/panels/panel-constants'
 import { mutate } from 'swr'
 
 // ── Canvas context builder ───────────────────────────────────────────────────
@@ -172,16 +166,11 @@ export function estimateStepCredits(step: AgentStep, params: StepParams): number
     const node = nodes.find((n) => n.id === id)
     if (!node) return total
     if (node.type === 'image_gen' && isImageGenConfig(node.data.config)) {
-      const credits = IMAGE_MODEL_CREDITS[params.modelType ?? 'gemini'] ?? 5
-      return total + credits
+      // 积分从 params_pricing 读取，此处无法访问 DB 模型，返回 0 作为占位
+      return total + 0
     }
     if (node.type === 'video_gen' || node.type === 'video_stitch') {
-      const model = params.videoModel ?? 'seedance-2.0'
-      const perSec = VIDEO_PER_SECOND_CREDITS[model]
-      if (perSec !== undefined) return total + perSec * (params.duration ?? 5)
-      const flat = VIDEO_FLAT_CREDITS[model]
-      if (flat !== undefined) return total + flat
-      return total + 5 * (params.duration ?? 5)
+      return total + 0
     }
     return total
   }, 0)
@@ -206,9 +195,10 @@ async function executeNode(
   try {
     if (node.type === 'image_gen' && isImageGenConfig(node.data.config)) {
       const cfg = node.data.config
-      const modelType = params.modelType ?? cfg.modelType ?? 'gemini'
+      const modelType = params.modelType ?? cfg.modelType
       const resolution = params.resolution ?? cfg.resolution ?? '2k'
-      const modelCode = MODEL_CODE_MAP[modelType]?.[resolution] ?? 'gemini-3.1-flash-image-preview-2k'
+      // 直接用 modelType 作为 model code（DB 体系下 modelType 已是真实 code）
+      const modelCode = modelType ?? 'gemini-3.1-flash-image-preview-2k'
 
       // Collect upstream image refs
       const upstreamEdges = edges.filter((e) => e.target === nodeId)
@@ -403,7 +393,7 @@ async function executeNode(
         execStore.setNodeStatus(nodeId, 'processing', { progress: Math.min(95, 5 + ((i + 1) / 120) * 90) })
 
         if (result.status === 'done' && result.resultUrl) {
-          execStore.addNodeOutput(nodeId, {
+          execStore.replaceNodeOutput(nodeId, {
             id: jobId,
             url: result.resultUrl,
             type: 'video',

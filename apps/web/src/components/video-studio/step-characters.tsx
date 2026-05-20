@@ -7,33 +7,23 @@ import { useAuthStore } from '@/stores/auth-store'
 import { generateAssetPrompts } from '@/lib/video-studio-api'
 import type { ScriptResult } from '@/lib/video-studio-api'
 import { apiPost } from '@/lib/api-client'
-import type { BatchResponse } from '@aigc/types'
+import type { BatchResponse, ModelItem } from '@aigc/types'
 import { usePendingBatchWatcher } from '@/hooks/video-studio/use-pending-batch-watcher'
 import type { PendingImageBatchTarget } from '@/hooks/video-studio/use-wizard-state'
-import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
-import { MODEL_CODE_MAP } from '@/components/canvas/panels/panel-constants'
+import { useModels } from '@/hooks/use-models'
+import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
 
-type ImageModel = 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
-type ImageResolution = '1k' | '2k' | '3k' | '4k'
+type ImageResolution = string
 
 interface ImageParams {
-  characterModel: ImageModel
+  characterModel: string
   characterResolution: ImageResolution
-  sceneModel: ImageModel
+  sceneModel: string
   sceneResolution: ImageResolution
   quantity: number
 }
 
-const IMAGE_MODEL_OPTIONS: Array<{ value: ImageModel; label: string; resolutions: ImageResolution[] }> = [
-  { value: 'seedream-5.0-lite', label: 'Seedream 5.0', resolutions: ['2k', '3k'] },
-  { value: 'seedream-4.5',      label: 'Seedream 4.5', resolutions: ['2k', '4k'] },
-  { value: 'seedream-4.0',      label: 'Seedream 4.0', resolutions: ['1k', '2k', '4k'] },
-  { value: 'nano-banana-pro',   label: '全能图片Pro',   resolutions: ['1k', '2k', '4k'] },
-  { value: 'gemini',            label: '全能图片2',     resolutions: ['1k', '2k', '4k'] },
-  { value: 'gpt-image-2',       label: '超能图片2',     resolutions: ['2k'] },
-]
-
-const DEFAULT_IMAGE_PARAMS: ImageParams = { characterModel: 'seedream-5.0-lite', characterResolution: '2k', sceneModel: 'gemini', sceneResolution: '2k', quantity: 1 }
+const DEFAULT_IMAGE_PARAMS: ImageParams = { characterModel: '', characterResolution: '2k', sceneModel: '', sceneResolution: '2k', quantity: 1 }
 
 interface AssetItem {
   name: string
@@ -45,14 +35,13 @@ interface AssetItem {
   shared?: boolean
 }
 
-async function submitImageBatch(prompt: string, aspectRatio: string, workspaceId: string, model: ImageModel, resolution: ImageResolution, quantity: number, projectId: string): Promise<string> {
+async function submitImageBatch(prompt: string, aspectRatio: string, workspaceId: string, model: string, resolution: ImageResolution, quantity: number, projectId: string): Promise<string> {
   if (!workspaceId) throw new Error('未选择工作区')
-  const modelCode = MODEL_CODE_MAP[model as keyof typeof MODEL_CODE_MAP]?.[resolution as keyof (typeof MODEL_CODE_MAP)[keyof typeof MODEL_CODE_MAP]] ?? model
   const batch = await apiPost<BatchResponse>('/generate/image', {
     idempotency_key: `vs_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     workspace_id: workspaceId,
     quantity,
-    model: modelCode,
+    model,
     prompt,
     params: { aspect_ratio: aspectRatio, resolution },
     ...(projectId ? { video_studio_project_id: projectId } : {}),
@@ -76,9 +65,10 @@ interface ImageCardProps {
   onUpdate: (updated: Partial<AssetItem>) => void
   onBatchSubmitted: (batchId: string) => void
   registerGenerate: (name: string, type: AssetItem['type'], fn: () => Promise<boolean>) => void
+  imageModels: ModelItem[]
 }
 
-function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isPending, onUpdate, onBatchSubmitted, registerGenerate }: ImageCardProps) {
+function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isPending, onUpdate, onBatchSubmitted, registerGenerate, imageModels }: ImageCardProps) {
   const [loading, setLoading] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [editedPrompt, setEditedPrompt] = useState(item.prompt)
@@ -224,7 +214,14 @@ function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isP
             className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-primary text-primary-foreground py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {loading || isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            {loading || isPending ? '生成中…' : item.urls.length > 0 ? `重新生成 · ${(IMAGE_MODEL_CREDITS[item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel] ?? 10) * imageParams.quantity}积分` : `生成参考图 · ${(IMAGE_MODEL_CREDITS[item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel] ?? 10) * imageParams.quantity}积分`}
+          {loading || isPending ? '生成中…' : (() => {
+              const modelCode = item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel
+              const model = imageModels.find((m) => m.code === modelCode)
+              const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
+              const price = model ? getPriceByResolution(model, resolution, 10) : 10
+              const label = item.urls.length > 0 ? '重新生成' : '生成参考图'
+              return `${label} · ${price * imageParams.quantity}积分`
+            })()}
           </button>
           <label className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1.5 border rounded-lg transition-colors">
             <Upload className="w-3.5 h-3.5" />
@@ -363,10 +360,15 @@ function buildAssetItems(params: {
 export function StepCharacters({ projectId, scriptData, style: initialStyle, assetStyle, characterImages, sceneImages, characterImageHistory, sceneImageHistory, pendingImageBatches, mode = 'single', sharedCharacters = [], sharedScenes = [], sharedCharacterImages = {}, sharedSceneImages = {}, sharedCharacterImageHistory = {}, sharedSceneImageHistory = {}, onAddPendingImageBatch, onClearPendingImageBatch, onSelectCharacterImage, onSelectSceneImage, onAssetStyleChange, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
+  const { models: imageModels } = useModels('image', workspaceId || undefined)
   const [loadingPrompts, setLoadingPrompts] = useState(false)
   const [batchRunning, setBatchRunning] = useState(false)
   const [showParams, setShowParams] = useState(false)
-  const [imageParams, setImageParams] = useState<ImageParams>(DEFAULT_IMAGE_PARAMS)
+  const [imageParams, setImageParams] = useState<ImageParams>(() => ({
+    ...DEFAULT_IMAGE_PARAMS,
+    characterModel: imageModels[0]?.code ?? '',
+    sceneModel: imageModels[0]?.code ?? '',
+  }))
   const initialAssetStyle = assetStyle ?? initialStyle
   const [activeStyle, setActiveStyle] = useState(initialAssetStyle)
   const [styleInput, setStyleInput] = useState(initialAssetStyle)
@@ -517,7 +519,9 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
           >
             <span className="text-muted-foreground">生成参数</span>
             <div className="flex items-center gap-2">
-              <span className="text-foreground">角色 Seedream 5.0 · 场景 全能图片2 · ×{imageParams.quantity}</span>
+              <span className="text-foreground">
+                角色 {imageModels.find((m) => m.code === imageParams.characterModel)?.name ?? imageParams.characterModel} · 场景 {imageModels.find((m) => m.code === imageParams.sceneModel)?.name ?? imageParams.sceneModel} · ×{imageParams.quantity}
+              </span>
               {showParams ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </div>
           </button>
@@ -529,22 +533,28 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
               <div className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">人物模型</p>
                 <div className="grid grid-cols-1 gap-1">
-                  {IMAGE_MODEL_OPTIONS.filter((m) => m.value === 'seedream-5.0-lite').map((m) => (
-                    <button
-                      key={m.value}
-                      onClick={() => setImageParams((p) => ({ ...p, characterModel: m.value, characterResolution: m.resolutions.includes(p.characterResolution) ? p.characterResolution : m.resolutions[0] }))}
-                      className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.characterModel === m.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                    >
-                      {m.label}
-                      <span className="ml-1 opacity-60">{IMAGE_MODEL_CREDITS[m.value]}积分/张</span>
-                    </button>
-                  ))}
+                  {imageModels.filter((m) => m.code.startsWith('seedream-5.0')).map((m) => {
+                    const price = getPriceByResolution(m, imageParams.characterResolution, 10)
+                    return (
+                      <button
+                        key={m.code}
+                        onClick={() => {
+                          const resolutions = extractSchemaEnums(m.params_schema, 'resolution').map((e) => e.value)
+                          setImageParams((p) => ({ ...p, characterModel: m.code, characterResolution: resolutions.includes(p.characterResolution) ? p.characterResolution : (resolutions[0] ?? p.characterResolution) }))
+                        }}
+                        className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.characterModel === m.code ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      >
+                        {m.name}
+                        <span className="ml-1 opacity-60">{price}积分/张</span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
               <div className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">人物分辨率</p>
                 <div className="flex gap-1 flex-wrap">
-                  {(IMAGE_MODEL_OPTIONS.find(m => m.value === imageParams.characterModel)?.resolutions ?? ['2k']).map((r) => (
+                  {(extractSchemaEnums(imageModels.find((m) => m.code === imageParams.characterModel)?.params_schema, 'resolution').map((e) => e.value) ?? ['2k']).map((r) => (
                     <button
                       key={r}
                       onClick={() => setImageParams((p) => ({ ...p, characterResolution: r }))}
@@ -558,22 +568,28 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
               <div className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">场景模型</p>
                 <div className="grid grid-cols-1 gap-1">
-                  {IMAGE_MODEL_OPTIONS.filter((m) => m.value === 'gemini').map((m) => (
-                    <button
-                      key={m.value}
-                      onClick={() => setImageParams((p) => ({ ...p, sceneModel: m.value, sceneResolution: m.resolutions.includes(p.sceneResolution) ? p.sceneResolution : m.resolutions[0] }))}
-                      className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.sceneModel === m.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                    >
-                      {m.label}
-                      <span className="ml-1 opacity-60">{IMAGE_MODEL_CREDITS[m.value]}积分/张</span>
-                    </button>
-                  ))}
+                  {imageModels.filter((m) => !m.code.startsWith('seedream-5.0')).map((m) => {
+                    const price = getPriceByResolution(m, imageParams.sceneResolution, 10)
+                    return (
+                      <button
+                        key={m.code}
+                        onClick={() => {
+                          const resolutions = extractSchemaEnums(m.params_schema, 'resolution').map((e) => e.value)
+                          setImageParams((p) => ({ ...p, sceneModel: m.code, sceneResolution: resolutions.includes(p.sceneResolution) ? p.sceneResolution : (resolutions[0] ?? p.sceneResolution) }))
+                        }}
+                        className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.sceneModel === m.code ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      >
+                        {m.name}
+                        <span className="ml-1 opacity-60">{price}积分/张</span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
               <div className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">场景分辨率</p>
                 <div className="flex gap-1 flex-wrap">
-                  {(IMAGE_MODEL_OPTIONS.find(m => m.value === imageParams.sceneModel)?.resolutions ?? ['2k']).map((r) => (
+                  {(extractSchemaEnums(imageModels.find((m) => m.code === imageParams.sceneModel)?.params_schema, 'resolution').map((e) => e.value) ?? ['2k']).map((r) => (
                     <button
                       key={r}
                       onClick={() => setImageParams((p) => ({ ...p, sceneResolution: r }))}
@@ -608,7 +624,15 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
           className="w-full flex items-center justify-center gap-2 text-xs bg-primary text-primary-foreground py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           {batchRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-          {batchRunning ? '批量生成中…' : `批量生成全部 (${localItems.length}) · ${localItems.reduce((sum, item) => sum + (IMAGE_MODEL_CREDITS[item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel] ?? 10) * imageParams.quantity, 0)}积分`}
+          {batchRunning ? '批量生成中…' : (() => {
+            const total = localItems.reduce((sum, item) => {
+              const modelCode = item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel
+              const model = imageModels.find((m) => m.code === modelCode)
+              const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
+              return sum + (model ? getPriceByResolution(model, resolution, 10) : 10) * imageParams.quantity
+            }, 0)
+            return `批量生成全部 (${localItems.length}) · ${total}积分`
+          })()}
         </button>
 
         <div className="text-xs text-muted-foreground space-y-1">
@@ -655,6 +679,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
                   onUpdate={(u) => updateItem(item.name, 'character', u)}
                   onBatchSubmitted={(batchId) => onAddPendingImageBatch(batchId, { name: item.name, type: 'character' })}
                   registerGenerate={registerGenerate}
+                  imageModels={imageModels}
                 />
               ))}
             </div>
@@ -677,6 +702,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
                   onUpdate={(u) => updateItem(item.name, 'scene', u)}
                   onBatchSubmitted={(batchId) => onAddPendingImageBatch(batchId, { name: item.name, type: 'scene' })}
                   registerGenerate={registerGenerate}
+                  imageModels={imageModels}
                 />
               ))}
             </div>
