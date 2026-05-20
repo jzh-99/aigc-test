@@ -543,3 +543,62 @@ export async function executeStoryboardSplitterNode(params: {
   return await res.json()
 }
 
+// ── Text gen ──────────────────────────────────────────────────────────────────
+
+/**
+ * 流式调用文本生成接口，通过 onChunk 回调逐步输出内容
+ * @returns 完整生成文本
+ */
+export async function executeTextGenNode(
+  params: { prompt: string },
+  onChunk: (delta: string) => void,
+  token?: string,
+): Promise<string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch('/api/v1/canvas-agent/text-gen', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw toCanvasApiError('文本生成失败', res.status, error)
+  }
+
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let fullText = ''
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    // 最后一行可能不完整，保留到下次
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+      const data = line.slice(5).trim()
+      if (data === '[DONE]') break
+      try {
+        const json = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> }
+        const delta = json.choices?.[0]?.delta?.content ?? ''
+        if (delta) {
+          fullText += delta
+          onChunk(delta)
+        }
+      } catch {
+        // 跳过非 JSON 行
+      }
+    }
+  }
+
+  return fullText
+}
+

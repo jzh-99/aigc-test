@@ -77,9 +77,9 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
   },
   {
     id: 'storyboard_splitter',
-    label: '分镜',
+    label: '脚本',
     baseType: 'storyboard_splitter',
-    baseLabel: '分镜',
+    baseLabel: '脚本',
     colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
     testId: 'canvas-add-node-storyboard',
     items: [],
