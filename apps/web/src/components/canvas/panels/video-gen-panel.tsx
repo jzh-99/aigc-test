@@ -150,7 +150,7 @@ export function VideoGenPanel({
             {multirefImages.length > 0 && (
               <div>
                 <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
-                  <ImageIcon className="w-3 h-3" />参考 ({multirefImages.length})
+                  <ImageIcon className="w-3 h-3" />参考图片 ({multirefImages.length})
                 </label>
                 <div className="flex gap-1 flex-wrap">
                   {multirefImages.map((url, i) => (
