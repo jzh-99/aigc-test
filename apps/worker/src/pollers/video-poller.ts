@@ -81,7 +81,7 @@ async function checkVolcengineTask(externalTaskId: string): Promise<{
     if (!res.ok) return { status: 'POLL_ERROR' }
     const data = (await res.json()) as {
       status: string
-      content?: { video_url?: string }
+      content?: Array<{ type: string; video_url?: { url?: string } }>
       error?: { message?: string }
     }
     // Map Volcengine status to internal status
@@ -93,9 +93,11 @@ async function checkVolcengineTask(externalTaskId: string): Promise<{
       running: 'IN_PROGRESS',
       cancelled: 'FAILURE',
     }
+    // content 是数组，取第一个 video_url 项的 url
+    const videoItem = data.content?.find(item => item.type === 'video_url')
     return {
       status: statusMap[data.status] ?? 'POLL_ERROR',
-      videoUrl: data.content?.video_url,
+      videoUrl: videoItem?.video_url?.url,
       failReason: data.error?.message,
     }
   } catch {

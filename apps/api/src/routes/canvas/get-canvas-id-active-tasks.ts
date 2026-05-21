@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { assertCanvasEnabledForWorkspace } from './_shared.js'
 
+const ACTIVE_TASK_STATUSES = ['pending', 'processing', 'completed', 'partial_complete', 'failed'] as const
+
 // GET /canvases/:id/active-tasks — 轮询画布执行进度（高频接口，单独限速）
 const route: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>('/canvases/:id/active-tasks', {
@@ -46,12 +48,12 @@ const route: FastifyPluginAsync = async (app) => {
       request.log.warn({ err: error, canvasId: id }, 'Failed to read canvas dirty version')
     }
 
-    // 获取该画布的活跃批次
+    // 获取该画布的任务批次，包含终态，供前端回写节点最终状态和输出
     const activeRows = await db
       .selectFrom('task_batches')
       .select(['id', 'canvas_node_id', 'status', 'quantity', 'completed_count', 'failed_count', 'provider', 'created_at'])
       .where('canvas_id', '=', id)
-      .where('status', 'in', ['pending', 'processing'])
+      .where('status', 'in', ACTIVE_TASK_STATUSES)
       .execute()
 
     const batches = await Promise.all(activeRows.map(async (batch: any) => {

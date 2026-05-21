@@ -169,8 +169,11 @@ export function VideoGenPanel({
                 </label>
                 <div className="flex gap-1 flex-wrap">
                   {multirefVideos.map((url, i) => (
-                    <div key={i} className="relative w-12 h-12 rounded border border-border bg-muted flex items-center justify-center overflow-hidden">
+                    <div key={i} className="relative w-12 h-12 rounded border border-border bg-muted flex items-center justify-center overflow-hidden group">
                       <video src={url} className="w-full h-full object-cover" muted preload="metadata" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                        <Play className="w-3.5 h-3.5 text-white fill-white" />
+                      </div>
                       <span className="absolute -top-1 -left-1 text-[8px] bg-violet-500 text-white rounded px-0.5 font-bold">{i + 1}</span>
                     </div>
                   ))}
@@ -182,11 +185,11 @@ export function VideoGenPanel({
                 <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
                   <Music className="w-3 h-3" />参考音频 ({multirefAudios.length})
                 </label>
-                <div className="flex flex-col gap-1">
-                  {multirefAudios.map((url, i) => (
-                    <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-muted/20">
-                      <Music className="w-3 h-3 text-muted-foreground shrink-0" />
-                      <audio src={url} controls className="h-6 w-full" style={{ minWidth: 0 }} />
+                <div className="flex gap-1 flex-wrap">
+                  {multirefAudios.map((_url, i) => (
+                    <div key={i} className="relative w-12 h-12 rounded border border-border bg-muted/60 flex items-center justify-center">
+                      <Music className="w-5 h-5 text-muted-foreground" />
+                      <span className="absolute -top-1 -left-1 text-[8px] bg-emerald-500 text-white rounded px-0.5 font-bold">{i + 1}</span>
                     </div>
                   ))}
                 </div>

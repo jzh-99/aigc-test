@@ -49,6 +49,39 @@ function toPublicUrls(urls: string[] | undefined): string[] | undefined {
   return urls.map(toPublicUrl)
 }
 
+/** 从 URL 扩展名推断媒体类型，用于防御性校验 */
+function inferMediaType(url: string): 'image' | 'video' | 'audio' | undefined {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase()
+    if (/\.(mp4|mov|webm|avi|mkv)$/.test(pathname)) return 'video'
+    if (/\.(mp3|wav|ogg|aac|flac|m4a)$/.test(pathname)) return 'audio'
+    if (/\.(jpe?g|png|gif|webp|bmp|svg)$/.test(pathname)) return 'image'
+  } catch { /* ignore */ }
+  return undefined
+}
+
+/** 按 URL 扩展名重新校验并纠正素材分类 */
+function reclassifyReferences(
+  images: string[] | undefined,
+  videos: string[] | undefined,
+  audios: string[] | undefined,
+): { images: string[]; videos: string[]; audios: string[] } {
+  const result = { images: [] as string[], videos: [] as string[], audios: [] as string[] }
+  const all = [
+    ...(images ?? []).map((u) => ({ url: u, declared: 'image' as const })),
+    ...(videos ?? []).map((u) => ({ url: u, declared: 'video' as const })),
+    ...(audios ?? []).map((u) => ({ url: u, declared: 'audio' as const })),
+  ]
+  for (const { url, declared } of all) {
+    const inferred = inferMediaType(url)
+    const actual = inferred ?? declared
+    if (actual === 'video') result.videos.push(url)
+    else if (actual === 'audio') result.audios.push(url)
+    else result.images.push(url)
+  }
+  return result
+}
+
 async function submitVolcengine(model: string, prompt: string, params: Record<string, unknown>): Promise<string> {
   const volcModel = VOLCENGINE_MODEL_ID[model]
   if (!volcModel) throw new Error(`未知的火山引擎视频模型: ${model}`)
@@ -76,18 +109,19 @@ async function submitVolcengine(model: string, prompt: string, params: Record<st
     content.push(...images.map(url => ({ type: 'image_url', image_url: { url: toPublicUrl(url) } })))
   }
 
-  // 多模态参考素材
-  const refImages = toPublicUrls(params.reference_images as string[] | undefined)
-  const refVideos = toPublicUrls(params.reference_videos as string[] | undefined)
-  const refAudios = toPublicUrls(params.reference_audios as string[] | undefined)
-  if (refImages?.length) {
-    content.push(...refImages.map(url => ({ type: 'image_url', image_url: { url } })))
+  // 多模态参考素材：先转公网 URL，再按扩展名防御性校验分类
+  const rawImages = toPublicUrls(params.reference_images as string[] | undefined)
+  const rawVideos = toPublicUrls(params.reference_videos as string[] | undefined)
+  const rawAudios = toPublicUrls(params.reference_audios as string[] | undefined)
+  const classified = reclassifyReferences(rawImages, rawVideos, rawAudios)
+  if (classified.images.length) {
+    content.push(...classified.images.map(url => ({ type: 'image_url', image_url: { url } })))
   }
-  if (refVideos?.length) {
-    content.push(...refVideos.map(url => ({ type: 'video_url', video_url: { url } })))
+  if (classified.videos.length) {
+    content.push(...classified.videos.map(url => ({ type: 'video_url', video_url: { url }, role: 'reference_video' })))
   }
-  if (refAudios?.length) {
-    content.push(...refAudios.map(url => ({ type: 'audio_url', audio_url: { url } })))
+  if (classified.audios.length) {
+    content.push(...classified.audios.map(url => ({ type: 'audio_url', audio_url: { url }, role: 'reference_audio' })))
   }
 
   const apiKey = process.env.VOLCENGINE_API_KEY ?? ''

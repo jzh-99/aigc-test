@@ -1,5 +1,39 @@
 # Task Plan — 模型管理功能
 
+## 2026-05-21 — 视频参考素材分类修复
+
+## 状态说明
+- [ ] 待完成
+- [x] 已完成
+- [~] 进行中
+
+## 修复任务
+- [x] 定位根因：`use-node-topology.ts` 只从 asset 节点获取 mimeType，gen 节点输出类型丢失。
+- [x] 前端修复：增加 execution store 输出类型 + URL 扩展名推断的分类链路。
+- [x] Worker 防御：`video-submit.ts` 增加 `reclassifyReferences()` 二次校验。
+- [x] 面板展示优化：视频缩略图加 Play 图标，音频用默认图标。
+- [x] 构建验证：`@aigc/web` + `@aigc/worker` 通过。
+- [ ] 浏览器复测：连接视频节点作为参考，确认不再报 "image format not supported"。
+
+---
+
+## 2026-05-21 — 画布视频节点状态同步修复
+
+## 状态说明
+- [ ] 待完成
+- [x] 已完成
+- [~] 进行中
+
+## 修复任务
+- [x] 复现并确认 `active-tasks` 只返回进行中批次。
+- [x] RED：确认旧实现不包含 completed/failed 终态批次。
+- [x] GREEN：放宽 `active-tasks` 的状态过滤，保留终态用于前端回写。
+- [x] 验证：`pnpm --filter @aigc/api build` 通过。
+
+---
+
+## 2026-05-21 — 视频生成参考图未生效排查
+
 ## 2026-05-21 — 视频生成参考图未生效排查
 
 ## 状态说明

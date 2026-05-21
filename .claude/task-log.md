@@ -1,5 +1,53 @@
 # Task Log — 模型管理功能
 
+## 2026-05-21 — 视频参考素材分类修复（视频 URL 被当图片提交）
+
+### 根因
+- `use-node-topology.ts` 的 `orderedImageRefs` 只从 `asset` 类型节点获取 `mimeType`，对于 `video_gen` / `image_gen` 节点，`mimeType` 始终为 `undefined`。
+- 分类逻辑 `!r.mimeType || r.mimeType.startsWith('image')` 导致视频 URL 被归入 `multirefImages`。
+- 最终 worker 将视频 URL 以 `image_url` 类型提交给火山引擎，报错 "image format is not supported"。
+
+### 修复
+1. **前端分类修复**（`use-node-topology.ts`）：
+   - 新增 `upstreamSelectedOutputTypes` 从 execution store 获取生成节点的输出类型（`HandleType`）
+   - 新增 `handleTypeToMimeType()` 将 HandleType 转换为 MIME 类型
+   - 新增 `inferMediaTypeFromUrl()` 从 URL 扩展名推断媒体类型作为兜底
+   - `orderedImageRefs` 的 mimeType 推导链路：asset 配置 → 执行层输出类型 → URL 扩展名推断
+
+2. **Worker 防御性校验**（`video-submit.ts`）：
+   - 新增 `inferMediaType()` 从 URL 扩展名推断媒体类型
+   - 新增 `reclassifyReferences()` 对前端传来的分类做二次校验，自动纠正错配的 URL
+   - 即使前端分类有误，worker 也能按正确类型提交给火山引擎
+
+3. **面板展示优化**（`video-gen-panel.tsx`）：
+   - 视频参考：缩略图上叠加 Play 图标，更直观表示是视频
+   - 音频参考：用 Music 图标替代 audio player，节省面板空间
+
+### 验证
+- `pnpm --filter @aigc/web build` 通过
+- `pnpm --filter @aigc/worker build` 通过
+
+---
+
+## 2026-05-21 — 画布视频节点状态同步修复
+
+### 根因确认
+- `apps/api/src/routes/canvas/get-canvas-id-active-tasks.ts` 只返回 `pending` / `processing` 的批次，导致视频任务在 `task_batches.status` 变成 `completed` 后，前端轮询再也拿不到这条批次，自然无法把画布节点从 `processing` 回写到 `completed`。
+- `apps/worker/src/pollers/video-poller.ts` 已经会在成功时写入 `canvas_node_outputs` 并递增 `canvas:dirty:${canvasId}`，问题不在 worker 写库，而在 active-tasks 的回写数据源缺少终态。
+
+### 修复
+- 在 `active-tasks` 接口中放宽 batch 状态过滤，改为返回 `pending` / `processing` / `completed` / `partial_complete` / `failed`。
+- 这样前端 `use-canvas-poller` 收到版本变化后，能继续通过 `updateNodeFromBatch()` 把节点状态回写到最终态，再按既有逻辑补拉输出。
+
+### 验证
+- RED：最小 Node 断言确认旧实现没有包含终态状态，按预期失败。
+- GREEN：修改后断言通过。
+- 构建验证：`pnpm --filter @aigc/api build` 通过。
+
+---
+
+# Task Log — 模型管理功能
+
 ## 2026-05-21 — 视频生成参考图未生效排查
 
 ### 已确认链路

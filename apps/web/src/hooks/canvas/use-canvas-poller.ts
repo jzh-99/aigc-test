@@ -113,7 +113,8 @@ export function useCanvasPoller(canvasId: string | null) {
     try {
       const data = await fetchCanvasActiveTasks(canvasId, token || undefined)
       consecutiveErrorRef.current = 0
-      const hasActiveTasks = data.batches.length > 0
+      const activeBatches = data.batches.filter((batch) => !TERMINAL_STATUSES.has(batch.status))
+      const hasActiveTasks = activeBatches.length > 0
       const versionChanged = data.version !== lastVersion.current
 
       if (versionChanged) {
@@ -133,7 +134,7 @@ export function useCanvasPoller(canvasId: string | null) {
             processing_started_at: batch.processing_started_at,
           })
         }
-        store.reconcileNodes(data.batches.map((b) => b.canvas_node_id))
+        store.reconcileNodes(activeBatches.map((b) => b.canvas_node_id))
 
         // Detect batch terminal transitions → refresh history sidebar
         let anyBatchJustFinished = false
