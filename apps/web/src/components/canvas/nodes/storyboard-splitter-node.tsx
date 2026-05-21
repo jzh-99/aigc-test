@@ -6,7 +6,8 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { X, Clapperboard, Loader2, CheckCircle2, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { CanvasNodeData, StoryboardSplitterConfig, ShotItem } from '@/lib/canvas/types'
+import type { CanvasNodeData, StoryboardSplitterConfig } from '@/lib/canvas/types'
+import { normalizeStoryboardShots } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 import { StoryboardTableDialog } from './storyboard-table-dialog'
 
@@ -20,11 +21,14 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const { isGenerating, submissionStatus, outputs } = useNodeExecutionState(id)
+  console.log('isGenerating: ', isGenerating);
   const isUpstream = useNodeHighlighted(id)
   const [tableOpen, setTableOpen] = useState(false)
 
-  const shots = (outputs[0]?.paramsSnapshot as { shots?: ShotItem[] } | undefined)?.shots ?? []
+  const shots = normalizeStoryboardShots((outputs[0]?.paramsSnapshot as { shots?: unknown } | undefined)?.shots)
+  console.log('shots: ', shots);
   const isDone = submissionStatus === 'completed'
+  console.log('isDone: --- ', id, isDone);
   const previewShots = shots.slice(0, 3)
   const remaining = shots.length - previewShots.length
 

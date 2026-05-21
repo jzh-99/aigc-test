@@ -6,7 +6,7 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
-import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig, isVideoStitchConfig } from '@/lib/canvas/types'
+import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig, isVideoStitchConfig, normalizeStoryboardShots } from '@/lib/canvas/types'
 import { callCanvasAgent } from '@/lib/canvas/agent-api'
 import { generateUUID } from '@/lib/utils'
 import {
@@ -35,7 +35,7 @@ import {
   executeCanvasNode,
   executeVideoNode,
   executeScriptWriterNode,
-  executeStoryboardSplitterNodeStream,
+  submitStoryboardSplitterJob,
   startVideoConcatExport,
   getVideoConcatExport,
   CanvasApiError,
@@ -120,9 +120,9 @@ function buildUserContent(
         parts.push({ type: 'text', text: `[剧本节点「${label}」：尚未生成]` })
       }
     } else if (node.type === 'storyboard_splitter') {
-      const shots = (execNodes[nodeId]?.outputs[0]?.paramsSnapshot as { shots?: Array<{ label?: string; content?: string }> } | undefined)?.shots
-      if (shots?.length) {
-        const shotText = shots.map((shot, index) => `${index + 1}. ${shot.label ?? '分镜'}：${shot.content ?? ''}`).join('\n')
+      const shots = normalizeStoryboardShots((execNodes[nodeId]?.outputs[0]?.paramsSnapshot as { shots?: unknown } | undefined)?.shots)
+      if (shots.length) {
+        const shotText = shots.map((shot, index) => `${index + 1}. ${shot.shotNumber > 0 ? `镜头${shot.shotNumber}` : '分镜'}：${shot.sceneDescription || shot.compositionPrompt || ''}`).join('\n')
         parts.push({ type: 'text', text: `[分镜节点「${label}」：\n${shotText.slice(0, 400)}${shotText.length > 400 ? '…' : ''}]` })
       } else {
         parts.push({ type: 'text', text: `[分镜节点「${label}」：尚未生成]` })
@@ -338,18 +338,12 @@ async function executeNode(
         }
       }
       const script = scriptParts.join('\n')
-      const result = await executeStoryboardSplitterNodeStream(
-        { script, shotCount: cfg.shotCount },
-        (percent) => execStore.setNodeStatus(nodeId, 'processing', { progress: percent }),
+      // 提交到队列，结果由 poller 轮询写入，不在此等待
+      await submitStoryboardSplitterJob(
+        { script, shotCount: cfg.shotCount, canvasId, canvasNodeId: nodeId },
         token ?? undefined,
       )
-      execStore.addNodeOutput(nodeId, {
-        id: generateUUID(),
-        url: '',
-        type: 'text',
-        paramsSnapshot: { shots: result.shots },
-      })
-      execStore.setNodeStatus(nodeId, 'completed', { progress: 100 })
+      // 状态设为 pending，poller 检测到完成后会更新为 completed 并写入 outputs
     } else if (node.type === 'video_stitch' && isVideoStitchConfig(node.data.config)) {
       const upstreamEdges = edges.filter((e) => e.target === nodeId && (!e.targetHandle || e.targetHandle === 'video-in'))
       const order = node.data.config.inputOrder ?? []

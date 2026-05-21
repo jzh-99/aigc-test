@@ -45,6 +45,7 @@ const route: FastifyPluginAsync = async (app) => {
         'canvas_node_outputs.id',
         'canvas_node_outputs.node_id',
         'canvas_node_outputs.output_urls',
+        'canvas_node_outputs.params_snapshot',
         'canvas_node_outputs.is_selected',
         'canvas_node_outputs.created_at',
         'assets.type as asset_type',

@@ -120,6 +120,7 @@ interface CursorListResponse<T> {
 export interface CanvasNodeOutputRow {
   id: string
   output_urls: string[]
+  params_snapshot?: Record<string, unknown> | null
   is_selected: boolean
   created_at: string
   asset_type?: 'image' | 'video' | 'audio' | null
@@ -521,18 +522,16 @@ export async function executeScriptWriterNode(params: {
   return await res.json()
 }
 
-// ── Storyboard splitter（SSE 流式）────────────────────────────────────────────
+// ── Storyboard splitter（BullMQ 队列异步）────────────────────────────────────
 
 /**
- * 流式调用分镜拆分接口，SSE 透传 Qwen 输出
- * 流结束后解析完整 JSON，返回 ShotItem 数组
- * @param onProgress 可选进度回调，参数为 0-99（流式中），完成后由调用方设为 100
+ * 提交分镜拆分任务到队列，立即返回 batchId/taskId
+ * 前端通过 active-tasks 轮询感知完成，结果从 node-outputs 读取
  */
-export async function executeStoryboardSplitterNodeStream(
-  params: { script: string; shotCount: number },
-  onProgress?: (percent: number) => void,
+export async function submitStoryboardSplitterJob(
+  params: { script: string; shotCount: number; canvasId: string; canvasNodeId: string },
   token?: string,
-): Promise<{ shots: ShotItem[] }> {
+): Promise<{ batchId: string; taskId: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
@@ -544,83 +543,36 @@ export async function executeStoryboardSplitterNodeStream(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}))
+    throw toCanvasApiError('分镜拆分提交失败', res.status, error)
+  }
+
+  const data = await res.json() as { batchId: string; taskId: string }
+  return data
+}
+
+/**
+ * 同步分镜拆分（供 wizard 流程使用，直接返回结果，不走队列）
+ */
+export async function splitStoryboardSync(
+  params: { script: string; shotCount: number },
+  token?: string,
+): Promise<{ shots: ShotItem[] }> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch('/api/v1/canvas-agent/storyboard-split-sync', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
     throw toCanvasApiError('分镜拆分失败', res.status, error)
   }
 
-  const reader = res.body!.getReader()
-  const decoder = new TextDecoder()
-  let fullText = ''
-  let buffer = ''
-  let progressTick = 0
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-
-    for (const line of lines) {
-      if (!line.startsWith('data:')) continue
-      const data = line.slice(5).trim()
-      if (data === '[DONE]') break
-      try {
-        const json = JSON.parse(data) as {
-          choices?: Array<{ delta?: { content?: string } }>
-        }
-        const delta = json.choices?.[0]?.delta?.content ?? ''
-        if (delta) {
-          fullText += delta
-          progressTick++
-          if (onProgress && progressTick % 5 === 0) {
-            onProgress(Math.min(99, Math.floor(progressTick / 2)))
-          }
-        }
-      } catch {
-        // 跳过非 JSON 行
-      }
-    }
-  }
-
-  // 剥离 <think>...</think> 思考标签，提取 JSON 数组
-  const cleaned = fullText.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-  const jsonMatch = cleaned.match(/\[[\s\S]*\]/)
-  if (!jsonMatch) {
-    throw toCanvasApiError('分镜拆分失败', 502, { error: { code: 'PARSE_ERROR', message: 'AI返回格式错误，请重试' } })
-  }
-
-  let parsed: Array<Record<string, unknown>>
-  try {
-    parsed = JSON.parse(jsonMatch[0]) as Array<Record<string, unknown>>
-  } catch {
-    throw toCanvasApiError('分镜拆分失败', 502, { error: { code: 'PARSE_ERROR', message: 'AI返回格式错误，请重试' } })
-  }
-
-  const shots: ShotItem[] = parsed.map((s, i) => ({
-    shotNumber: (s.shotNumber as number) ?? i + 1,
-    duration: (s.duration as number) ?? 4,
-    sceneDescription: (s.sceneDescription as string) ?? '',
-    character1: (s.character1 as string) ?? '',
-    characterDesc1: (s.characterDesc1 as string) ?? '',
-    character2: (s.character2 as string) ?? '',
-    characterDesc2: (s.characterDesc2 as string) ?? '',
-    reference: (s.reference as string) ?? '',
-    shotType: (s.shotType as string) ?? '',
-    characterAction: (s.characterAction as string) ?? '',
-    emotion: (s.emotion as string) ?? '',
-    sceneTags: Array.isArray(s.sceneTags) ? (s.sceneTags as string[]) : [],
-    lightAtmosphere: (s.lightAtmosphere as string) ?? '',
-    soundEffect: (s.soundEffect as string) ?? '',
-    dialogue: (s.dialogue as string) ?? '无',
-    compositionPrompt: (s.compositionPrompt as string) ?? '',
-    cameraMotionPrompt: (s.cameraMotionPrompt as string) ?? '',
-  }))
-
-  return { shots }
+  return await res.json() as { shots: ShotItem[] }
 }
-
-// ── Text gen ──────────────────────────────────────────────────────────────────
 
 /**
  * 流式调用文本生成接口，通过 onChunk 回调逐步输出内容

@@ -23,6 +23,7 @@ function getRedisOptions(): RedisOptions & { maxRetriesPerRequest: null } {
 let _imageQueue: Queue | null = null
 let _transferQueue: Queue | null = null
 let _videoQueue: Queue | null = null
+let _storyboardQueue: Queue | null = null
 
 export function getImageQueue(): Queue {
   if (!_imageQueue) {
@@ -43,4 +44,11 @@ export function getVideoQueue(): Queue {
     _videoQueue = new Queue('video-queue', { connection: getRedisOptions() })
   }
   return _videoQueue
+}
+
+export function getStoryboardQueue(): Queue {
+  if (!_storyboardQueue) {
+    _storyboardQueue = new Queue('storyboard-queue', { connection: getRedisOptions() })
+  }
+  return _storyboardQueue
 }

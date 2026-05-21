@@ -174,11 +174,15 @@ export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) =
 
   replaceNodeOutput: (nodeId, output) => {
     set((s) => {
-      const nodeState = s.nodes[nodeId] || DEFAULT_NODE_STATE
+      const prev = s.nodes[nodeId] || DEFAULT_NODE_STATE
+      const shouldComplete = prev.submissionStatus === 'idle' || prev.submissionStatus === 'pending'
+      const nextState = shouldComplete
+        ? withStatus(prev, 'completed', { progress: 100 })
+        : prev
       return {
         nodes: {
           ...s.nodes,
-          [nodeId]: { ...nodeState, outputs: [output], selectedOutputId: output.id },
+          [nodeId]: { ...nextState, outputs: [output], selectedOutputId: output.id },
         },
       }
     })

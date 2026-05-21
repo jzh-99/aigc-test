@@ -46,7 +46,6 @@ export function useCanvasPoller(canvasId: string | null) {
       const outputs = await fetchNodeOutputs(canvasId, nodeId, token || undefined)
       if (!outputs.length) return
       const store = useCanvasExecutionStore.getState()
-      // 生成完成后拉取结果：替换当前输出（始终只保留最新一条）
       const latest = outputs[outputs.length - 1]
       const url = latest.output_urls?.[0]
       if (url) {
@@ -54,6 +53,14 @@ export function useCanvasPoller(canvasId: string | null) {
           ? 'video'
           : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
         store.replaceNodeOutput(nodeId, { id: latest.id, url, type })
+      } else if (latest.params_snapshot) {
+        // storyboard_splitter 等无 URL 输出的节点，通过 params_snapshot 传递结构化数据
+        store.replaceNodeOutput(nodeId, {
+          id: latest.id,
+          url: '',
+          type: 'text',
+          paramsSnapshot: latest.params_snapshot as Record<string, unknown>,
+        })
       }
       const selected = outputs.find((o) => o.is_selected)
       if (selected) store.selectNodeOutput(nodeId, selected.id)
@@ -72,15 +79,23 @@ export function useCanvasPoller(canvasId: string | null) {
       const store = useCanvasExecutionStore.getState()
       for (const [nodeId, outputs] of Object.entries(grouped)) {
         if (!outputs.length) continue
-        // 每个节点最多一条输出，取 is_selected 或最新一条
         const target = outputs.find((o) => o.is_selected) ?? outputs[outputs.length - 1]
         const url = target.output_urls?.[0]
-        if (!url) continue
-        const type: 'video' | 'image' = target.asset_type === 'video'
-          ? 'video'
-          : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
-        store.replaceNodeOutput(nodeId, { id: target.id, url, type })
-        store.selectNodeOutput(nodeId, target.id)
+        if (url) {
+          const type: 'video' | 'image' = target.asset_type === 'video'
+            ? 'video'
+            : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
+          store.replaceNodeOutput(nodeId, { id: target.id, url, type })
+          store.selectNodeOutput(nodeId, target.id)
+        } else if (target.params_snapshot) {
+          store.replaceNodeOutput(nodeId, {
+            id: target.id,
+            url: '',
+            type: 'text',
+            paramsSnapshot: target.params_snapshot as Record<string, unknown>,
+          })
+          store.selectNodeOutput(nodeId, target.id)
+        }
       }
     } catch (e) {
       console.warn('[Canvas Poller] 批量拉取节点输出失败，回退逐个加载:', e)

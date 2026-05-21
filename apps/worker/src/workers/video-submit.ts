@@ -68,22 +68,27 @@ async function submitVolcengine(model: string, prompt: string, params: Record<st
   if (params.resolution) reqParams.resolution = params.resolution
   if (Object.keys(reqParams).length > 0) body.parameters = reqParams
 
+  const content = body.content as unknown[]
+
   // 首尾帧
   const images = params.images as string[] | undefined
   if (images?.length) {
-    body.content = [
-      ...(body.content as unknown[]),
-      ...images.map(url => ({ type: 'image_url', image_url: { url: toPublicUrl(url) } })),
-    ]
+    content.push(...images.map(url => ({ type: 'image_url', image_url: { url: toPublicUrl(url) } })))
   }
 
   // 多模态参考素材
   const refImages = toPublicUrls(params.reference_images as string[] | undefined)
   const refVideos = toPublicUrls(params.reference_videos as string[] | undefined)
   const refAudios = toPublicUrls(params.reference_audios as string[] | undefined)
-  if (refImages?.length) body.reference_images = refImages
-  if (refVideos?.length) body.reference_videos = refVideos
-  if (refAudios?.length) body.reference_audios = refAudios
+  if (refImages?.length) {
+    content.push(...refImages.map(url => ({ type: 'image_url', image_url: { url } })))
+  }
+  if (refVideos?.length) {
+    content.push(...refVideos.map(url => ({ type: 'video_url', video_url: { url } })))
+  }
+  if (refAudios?.length) {
+    content.push(...refAudios.map(url => ({ type: 'audio_url', audio_url: { url } })))
+  }
 
   const apiKey = process.env.VOLCENGINE_API_KEY ?? ''
   const res = await fetch(`${VOLCENGINE_API_URL}/contents/generations/tasks`, {

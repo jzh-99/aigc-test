@@ -43,3 +43,16 @@ export interface TransferJobData {
   originalUrl: string
   assetType?: 'image' | 'video'
 }
+
+export interface StoryboardJobData {
+  taskId: string
+  batchId: string
+  userId: string
+  teamId: string
+  creditAccountId: string
+  estimatedCredits: number
+  canvasId: string
+  canvasNodeId: string
+  script: string
+  shotCount: number
+}

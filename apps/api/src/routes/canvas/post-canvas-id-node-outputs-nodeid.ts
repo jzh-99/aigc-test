@@ -27,9 +27,8 @@ const route: FastifyPluginAsync = async (app) => {
         .executeTakeFirst()
       if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
 
-      // 使用 sql.raw 构建 PostgreSQL 数组字面量
-      const urlsLiteral = output_urls.map((u) => `'${u.replace(/'/g, "''")}'`).join(',')
-      const urlsArray = sql.raw(`ARRAY[${urlsLiteral}]::text[]`)
+      // 构建 PostgreSQL text[] 字面量：ARRAY['url1','url2']
+      const urlsArray = sql<string>`ARRAY[${sql.join(output_urls.map((u) => sql`${u}`), sql`, `)}]`
 
       // 查找该节点已有的 is_selected 记录，有则替换，无则新增
       const existing = await db

@@ -1,90 +1,130 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { getDb } from '@aigc/db'
+import { getStoryboardQueue } from '../../lib/queue.js'
 
-// POST /canvas-agent/storyboard-split — AI 分镜拆分（Qwen SSE 流式）
+// POST /canvas-agent/storyboard-split — 分镜拆分任务入队（BullMQ 异步）
 const route: FastifyPluginAsync = async (app) => {
-  const API_URL = process.env.QWEN_API_URL ?? ''
-  const API_KEY = process.env.QWEN_API_KEY ?? ''
-  const MODEL = process.env.QWEN_MODEL ?? 'qwen3-6b-plus'
-  const SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_STORYBOARD_SPLIT ?? ''
-
   app.post<{
-    Body: { script: string; shotCount: number }
+    Body: { script: string; shotCount: number; canvasId: string; canvasNodeId: string }
   }>(
     '/canvas-agent/storyboard-split',
     {
       schema: {
         body: {
           type: 'object',
-          required: ['script', 'shotCount'],
+          required: ['script', 'shotCount', 'canvasId', 'canvasNodeId'],
           properties: {
             script: { type: 'string', maxLength: 10000 },
             shotCount: { type: 'number', minimum: 0, maximum: 50 },
+            canvasId: { type: 'string', format: 'uuid' },
+            canvasNodeId: { type: 'string', maxLength: 128 },
           },
         },
       },
     },
     async (request, reply) => {
-      if (!API_URL || !API_KEY) {
-        return reply.status(503).send({ success: false, error: { code: 'NOT_CONFIGURED', message: 'Qwen 服务未配置' } })
+      const { script, shotCount, canvasId, canvasNodeId } = request.body
+      const userId = request.user.id
+      const db = getDb()
+
+      // 验证用户对该画布有访问权限
+      const canvas = await db
+        .selectFrom('canvases')
+        .select('workspace_id')
+        .where('id', '=', canvasId)
+        .where('is_deleted', '=', false)
+        .executeTakeFirst()
+
+      if (!canvas) {
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: '画布不存在' } })
       }
 
-      const { script, shotCount } = request.body
-      const countInstruction = shotCount > 0
-        ? `分割成 ${shotCount} 个分镜`
-        : '根据剧本内容自动决定分镜数量（每个分镜约10秒）'
+      const member = await db
+        .selectFrom('workspace_members')
+        .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
+        .select(['workspaces.team_id'])
+        .where('workspace_members.workspace_id', '=', canvas.workspace_id)
+        .where('workspace_members.user_id', '=', userId)
+        .executeTakeFirst()
 
-      const userPrompt = `请将以下剧本${countInstruction}：\n\n${script}`
-
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 120_000)
-
-      let res: Response
-      try {
-        res = await fetch(`${API_URL}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: MODEL,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: userPrompt },
-            ],
-            stream: true,
-            enable_thinking: true,
-            max_tokens: 16000,
-          }),
-          signal: controller.signal,
-        })
-      } finally {
-        clearTimeout(timer)
+      if (!member && request.user.role !== 'admin') {
+        return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
       }
 
-      if (!res.ok) {
-        const errText = await res.text()
-        app.log.error({ status: res.status, body: errText }, 'Storyboard splitter Qwen error')
-        return reply.status(502).send({ success: false, error: { code: 'AI_ERROR', message: 'AI服务暂时不可用，请稍后重试' } })
+      const teamId = member?.team_id ?? ''
+
+      // 查团队积分账户（不扣积分，但字段 NOT NULL）
+      const creditAccount = await db
+        .selectFrom('credit_accounts')
+        .select('id')
+        .where('team_id', '=', teamId)
+        .where('owner_type', '=', 'team')
+        .executeTakeFirst()
+
+      if (!creditAccount) {
+        return reply.status(402).send({ success: false, error: { code: 'NO_CREDIT_ACCOUNT', message: '未找到积分账户' } })
       }
 
-      // 设置 SSE 响应头，透传 Qwen 的流
-      reply.raw.setHeader('Content-Type', 'text/event-stream')
-      reply.raw.setHeader('Cache-Control', 'no-cache')
-      reply.raw.setHeader('Connection', 'keep-alive')
-      reply.raw.setHeader('X-Accel-Buffering', 'no')
+      // 创建 task_batches + task 记录
+      const batchId = crypto.randomUUID()
+      const taskId = crypto.randomUUID()
 
-      const reader = res.body!.getReader()
-      const decoder = new TextDecoder()
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          reply.raw.write(decoder.decode(value, { stream: true }))
-        }
-      } finally {
-        reply.raw.end()
-      }
+      await db.transaction().execute(async (trx: any) => {
+        await trx
+          .insertInto('task_batches')
+          .values({
+            id: batchId,
+            user_id: userId,
+            team_id: teamId,
+            workspace_id: canvas.workspace_id,
+            credit_account_id: creditAccount.id,
+            idempotency_key: crypto.randomUUID(),
+            module: 'storyboard',
+            provider: 'qwen',
+            model: process.env.QWEN_MODEL ?? 'qwen3-6b-plus',
+            prompt: script.slice(0, 500),
+            params: JSON.stringify({ shotCount }),
+            quantity: 1,
+            status: 'pending',
+            estimated_credits: 0,
+            canvas_id: canvasId,
+            canvas_node_id: canvasNodeId,
+          })
+          .execute()
+
+        await trx
+          .insertInto('tasks')
+          .values({
+            id: taskId,
+            batch_id: batchId,
+            user_id: userId,
+            version_index: 0,
+            estimated_credits: 0,
+            status: 'pending',
+          })
+          .execute()
+      })
+
+      // 入队
+      await getStoryboardQueue().add('storyboard', {
+        taskId,
+        batchId,
+        userId,
+        teamId,
+        creditAccountId: creditAccount.id,
+        estimatedCredits: 0,
+        canvasId,
+        canvasNodeId,
+        script,
+        shotCount,
+      })
+
+      return reply.status(201).send({
+        success: true,
+        batchId,
+        taskId,
+        status: 'pending',
+      })
     },
   )
 }

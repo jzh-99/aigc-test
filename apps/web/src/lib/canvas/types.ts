@@ -81,6 +81,49 @@ export interface ShotItem {
   cameraMotionPrompt: string
 }
 
+export interface LegacyShotItem {
+  id?: string
+  label?: string
+  content?: string
+}
+
+export type StoryboardShot = ShotItem | LegacyShotItem
+
+const DEFAULT_SHOT_DURATION = 4
+
+export function isShotItem(shot: StoryboardShot): shot is ShotItem {
+  return typeof (shot as Partial<ShotItem>).shotNumber === 'number'
+}
+
+export function normalizeStoryboardShots(rawShots: unknown): ShotItem[] {
+  if (!Array.isArray(rawShots)) return []
+
+  return rawShots.map((rawShot, index) => {
+    const shot = rawShot as Partial<ShotItem & LegacyShotItem>
+    const fallbackText = shot.sceneDescription ?? shot.content ?? ''
+
+    return {
+      shotNumber: typeof shot.shotNumber === 'number' ? shot.shotNumber : index + 1,
+      duration: typeof shot.duration === 'number' ? shot.duration : DEFAULT_SHOT_DURATION,
+      sceneDescription: fallbackText,
+      character1: shot.character1 ?? '',
+      characterDesc1: shot.characterDesc1 ?? '',
+      character2: shot.character2 ?? '',
+      characterDesc2: shot.characterDesc2 ?? '',
+      reference: shot.reference ?? '',
+      shotType: shot.shotType ?? '',
+      characterAction: shot.characterAction ?? '',
+      emotion: shot.emotion ?? '',
+      sceneTags: Array.isArray(shot.sceneTags) ? shot.sceneTags : [],
+      lightAtmosphere: shot.lightAtmosphere ?? '',
+      soundEffect: shot.soundEffect ?? '',
+      dialogue: shot.dialogue ?? '无',
+      compositionPrompt: shot.compositionPrompt ?? fallbackText,
+      cameraMotionPrompt: shot.cameraMotionPrompt ?? '',
+    }
+  })
+}
+
 export interface VideoStitchConfig {
   inputOrder: string[]
 }

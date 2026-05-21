@@ -46,6 +46,8 @@ const route: FastifyPluginAsync = async (app) => {
           reference_images: { type: 'array', items: { type: 'string' } },
           reference_videos: { type: 'array', items: { type: 'string' } },
           reference_audios: { type: 'array', items: { type: 'string' } },
+          canvas_id: { type: 'string', format: 'uuid' },
+          canvas_node_id: { type: 'string', maxLength: 128 },
           video_studio_project_id: { type: 'string', format: 'uuid' },
         },
         additionalProperties: false,
@@ -54,6 +56,7 @@ const route: FastifyPluginAsync = async (app) => {
   }, async (request, reply) => {
     const {
       prompt, workspace_id: workspaceId, model, video_studio_project_id,
+      canvas_id: canvasId, canvas_node_id: canvasNodeId,
       aspect_ratio, resolution, duration, generate_audio, camera_fixed,
       enable_upsample, watermark, images, reference_images, reference_videos, reference_audios,
     } = request.body as any
@@ -145,6 +148,7 @@ const route: FastifyPluginAsync = async (app) => {
             quantity: 1,
             status: 'pending',
             estimated_credits: estimatedCredits,
+            ...(canvasId && canvasNodeId ? { canvas_id: canvasId, canvas_node_id: canvasNodeId } : {}),
             ...(video_studio_project_id ? { video_studio_project_id } : {}),
           })
           .returningAll()
