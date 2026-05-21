@@ -22,7 +22,7 @@ logs/
 .pnpm-build-approvals.json
 
 # Local docs
-docs/
+# docs/
 !apps/web/src/app/docs/*
 
 # Editor/notebook checkpoints
@@ -30,8 +30,8 @@ docs/
 **/.ipynb_checkpoints/
 
 # Design/planning docs should stay out of the repo
-docs/plans/
-docs/ai-platform-pricing-plan.md
+# docs/plans/
+# docs/ai-platform-pricing-plan.md
 canvas-*-plan.md
 *-design-plan.md
 *-redesign-plan.md
@@ -46,7 +46,7 @@ DATABASE_*_GUIDE.md
 MIGRATION_*_EXPLAINED.md
 TIMEOUT_*_REPORT.md
 DEPLOY-TEST.md
-docs/distributed-deployment-handover.md
+# docs/distributed-deployment-handover.md
 
 # Local operations scripts
 /deploy*.sh
