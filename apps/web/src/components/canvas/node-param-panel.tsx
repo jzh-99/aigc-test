@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react'
 import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { mutate } from 'swr'
@@ -12,7 +12,7 @@ import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { CanvasApiError, executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
 import { useModels } from '@/hooks/use-models'
 import { getModelResolutions, extractSchemaEnums } from '@/components/generation/shared/schema-utils'
-import type { ModelItem } from '@aigc/types'
+import { parseVideoCategories, validateVideoReferenceLimits, type ModelItem, type VideoCategory, type VideoReferenceCounts } from '@aigc/types'
 import type {
   AppNode,
   AssetConfig,
@@ -24,6 +24,7 @@ import type {
   StoryboardSplitterConfig,
 } from '@/lib/canvas/types'
 import {
+  DEFAULT_VIDEO_CATEGORY_LIMITS,
   isAssetConfig,
   isImageGenConfig,
   isTextInputConfig,
@@ -72,6 +73,7 @@ const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
   generateAudio: true,
   cameraFixed: false,
   watermark: false,
+  videoCategoryLimits: DEFAULT_VIDEO_CATEGORY_LIMITS,
 }
 
 const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '' }
@@ -79,6 +81,16 @@ const DEFAULT_ASSET_CONFIG: AssetConfig = { url: '', name: '', mimeType: 'image/
 const DEFAULT_SCRIPT_WRITER_CONFIG: ScriptWriterConfig = { description: '', style: '现代都市', duration: 60 }
 const DEFAULT_STORYBOARD_SPLITTER_CONFIG: StoryboardSplitterConfig = { shotCount: 0 }
 const DEFAULT_VIDEO_STITCH_CONFIG: VideoStitchConfig = { inputOrder: [] }
+
+const CANVAS_MODE_TO_CATEGORY: Record<VideoGenConfig['videoMode'], VideoCategory> = {
+  multiref: 'multimodal',
+  keyframe: 'frames',
+}
+
+const CATEGORY_TO_CANVAS_MODE: Record<VideoCategory, VideoGenConfig['videoMode']> = {
+  multimodal: 'multiref',
+  frames: 'keyframe',
+}
 
 function normalizeImageConfig(config: unknown, models?: ModelItem[]): ImageGenConfig {
   const raw = (config && typeof config === 'object' ? config : {}) as Partial<ImageGenConfig>
@@ -105,12 +117,16 @@ function normalizeVideoConfig(config: unknown): VideoGenConfig {
   const raw = (config && typeof config === 'object' ? config : {}) as Partial<VideoGenConfig>
   const videoMode = raw.videoMode === 'keyframe' || raw.videoMode === 'multiref' ? raw.videoMode : DEFAULT_VIDEO_CONFIG.videoMode
   const duration = typeof raw.duration === 'number' ? raw.duration : DEFAULT_VIDEO_CONFIG.duration
+  // 使用 parseVideoCategories 确保数据格式正确
+  const parsed = parseVideoCategories(raw.videoCategoryLimits)
+  const videoCategoryLimits = Object.keys(parsed).length > 0 ? parsed : DEFAULT_VIDEO_CATEGORY_LIMITS
 
   return {
     ...DEFAULT_VIDEO_CONFIG,
     ...raw,
     videoMode,
     duration,
+    videoCategoryLimits,
   }
 }
 
@@ -207,6 +223,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const videoWatermark = globalWatermark
   // 视频分辨率（可选）
   const videoResolution = videoCfg.resolution ?? ''
+  const currentVideoDbModel = videoModels.find((m) => m.code === videoModel)
+  const currentVideoCategories = useMemo(
+    () => parseVideoCategories(currentVideoDbModel?.video_categories),
+    [currentVideoDbModel?.video_categories],
+  )
 
   const handleModelChange = useCallback((val: ModelType) => {
     // 优先从 DB 模型列表获取新模型的首个可用分辨率
@@ -214,6 +235,16 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     const nextResolution = nextResolutions.includes(resolution) ? resolution : (nextResolutions[0] ?? resolution)
     updateCfg({ modelType: val, resolution: nextResolution })
   }, [resolution, updateCfg, imageModels])
+
+  // 确保节点配置中的 videoCategoryLimits 始终与模型数据同步
+  useEffect(() => {
+    if (!isVideoGen || !videoModelsReady || !currentVideoDbModel) return
+    const parsed = parseVideoCategories(currentVideoDbModel.video_categories)
+    // 只有当确实有变化时才更新，避免无限循环
+    if (JSON.stringify(parsed) !== JSON.stringify(videoCfg.videoCategoryLimits)) {
+      updateCfg({ videoCategoryLimits: parsed })
+    }
+  }, [currentVideoDbModel, isVideoGen, updateCfg, videoModelsReady, videoCfg.videoCategoryLimits])
 
   const handleExecuteImage = useCallback(async () => {
     const dbModel = imageModels.find((m) => m.code === modelType)
@@ -310,20 +341,40 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const handleVideoModelChange = useCallback((val: string) => {
     const dbModel = videoModels.find((m) => m.code === val)
     const isSeedanceModel = val.startsWith('seedance-')
-    const supportsMultiref = dbModel
-      ? (Array.isArray(dbModel.video_categories) ? (dbModel.video_categories as string[]).includes('multimodal') : true)
-      : true
-
-    const newMode = videoMode === 'multiref' && !supportsMultiref ? 'keyframe' : videoMode
+    const categories = parseVideoCategories(dbModel?.video_categories)
+    const targetCategory = CANVAS_MODE_TO_CATEGORY[videoMode]
+    const nextCategory = categories[targetCategory]
+      ? targetCategory
+      : (categories.multimodal ? 'multimodal' : categories.frames ? 'frames' : targetCategory)
     const newAspect = isSeedanceModel ? (videoAspect || 'adaptive') : ''
-    updateCfg({ model: val, videoMode: newMode, aspectRatio: newAspect })
+
+    updateCfg({
+      model: val,
+      videoMode: CATEGORY_TO_CANVAS_MODE[nextCategory],
+      aspectRatio: newAspect,
+      videoCategoryLimits: categories,
+    })
   }, [updateCfg, videoAspect, videoMode, videoModels])
+
+  const getCanvasVideoCounts = useCallback((_mode: VideoGenConfig['videoMode']): VideoReferenceCounts => {
+    return orderedImageRefs.reduce<VideoReferenceCounts>((counts, ref) => {
+      if (ref.mimeType?.startsWith('video')) return { ...counts, video: counts.video + 1 }
+      if (ref.mimeType?.startsWith('audio')) return { ...counts, audio: counts.audio + 1 }
+      return { ...counts, image: counts.image + 1 }
+    }, { image: 0, video: 0, audio: 0 })
+  }, [orderedImageRefs])
 
   const handleVideoModeChange = useCallback((newMode: VideoGenConfig['videoMode']) => {
     if (newMode === videoMode) return
+    const category = CANVAS_MODE_TO_CATEGORY[newMode]
+    const validation = validateVideoReferenceLimits(currentVideoCategories, category, getCanvasVideoCounts(newMode))
+    if (!validation.valid) {
+      toast.error(validation.message ?? '当前连线不符合目标模式限制')
+      return
+    }
     updateCfg({ videoMode: newMode })
     setKeyframeSwapped(false)
-  }, [updateCfg, videoMode])
+  }, [currentVideoCategories, getCanvasVideoCounts, updateCfg, videoMode])
 
   // 视频分辨率变更回调
   const handleVideoResolutionChange = useCallback((val: string) => {
@@ -334,6 +385,13 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     const finalPrompt = [...upstreamTexts, promptDraft].filter(Boolean).join('\n')
     if (!canvasId || !finalPrompt.trim()) {
       toast.error('请先填写提示词')
+      return
+    }
+
+    const category = CANVAS_MODE_TO_CATEGORY[videoMode]
+    const validation = validateVideoReferenceLimits(currentVideoCategories, category, getCanvasVideoCounts(videoMode))
+    if (!validation.valid) {
+      toast.error(validation.message ?? '当前参考素材不符合模型限制')
       return
     }
 
@@ -399,8 +457,10 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [
     cameraFixed,
     canvasId,
+    currentVideoCategories,
     displayedKeyframes,
     generateAudio,
+    getCanvasVideoCounts,
     multirefAudios,
     multirefImages,
     multirefVideos,
@@ -469,7 +529,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           setPromptDraft={setPromptDraft}
           flushPromptDraft={flushPromptDraft}
           upstreamTextNodeLabels={upstreamTextNodeLabels}
-          orderedImageRefCount={orderedImageRefs.length}
           multirefImages={multirefImages}
           multirefVideos={multirefVideos}
           multirefAudios={multirefAudios}

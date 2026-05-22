@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
-import { type HandleType, isAssetConfig, isTextInputConfig } from '@/lib/canvas/types'
+import { type AppNode, type HandleType, isAssetConfig, isTextInputConfig } from '@/lib/canvas/types'
 
 export interface OrderedReferenceItem {
   url: string
@@ -34,6 +34,23 @@ function inferMediaTypeFromUrl(url: string): 'image' | 'video' | 'audio' | undef
     if (/\.(jpe?g|png|gif|webp|bmp|svg)$/.test(pathname)) return 'image'
   } catch { /* URL 解析失败，忽略 */ }
   return undefined
+}
+
+/** 统一解析参考素材类型，避免不同模式对同一条连线产生不一致判断 */
+function resolveReferenceMimeType(
+  sourceNode: AppNode,
+  url: string,
+  outputType?: HandleType,
+): string | undefined {
+  if (sourceNode.type === 'asset' && isAssetConfig(sourceNode.data.config)) {
+    return sourceNode.data.config.mimeType
+  }
+  if (outputType) return handleTypeToMimeType(outputType)
+  // 未执行时按节点类型推断
+  if (sourceNode.type === 'video_gen' || sourceNode.type === 'video_stitch') return 'video/mp4'
+  if (sourceNode.type === 'image_gen') return 'image/jpeg'
+  const inferred = inferMediaTypeFromUrl(url)
+  return inferred ? `${inferred}/x` : undefined
 }
 
 export function useNodeTopology(nodeId: string) {
@@ -115,22 +132,13 @@ export function useNodeTopology(nodeId: string) {
       const url = resolveSourceUrl(edge.source)
       if (!url) continue
 
-      // 获取 MIME 类型：优先 asset 节点配置 → 生成节点输出类型 → URL 扩展名推断
-      const mimeType = (() => {
-        if (sourceNode.type === 'asset' && isAssetConfig(sourceNode.data.config)) {
-          return sourceNode.data.config.mimeType
-        }
-        const outputType = upstreamSelectedOutputTypes[sourceNode.id]
-        if (outputType) return handleTypeToMimeType(outputType)
-        const inferred = inferMediaTypeFromUrl(url)
-        return inferred ? `${inferred}/x` : undefined
-      })()
+      const mimeType = resolveReferenceMimeType(sourceNode, url, upstreamSelectedOutputTypes[sourceNode.id])
 
       result.push({ url, mimeType })
     }
 
     return result
-  }, [incomingEdges, upstreamNodes, resolveSourceUrl])
+  }, [incomingEdges, upstreamNodes, resolveSourceUrl, upstreamSelectedOutputTypes])
 
   const multirefImages = useMemo(
     () => orderedImageRefs
@@ -164,13 +172,15 @@ export function useNodeTopology(nodeId: string) {
 
       const url = resolveSourceUrl(edge.source)
       if (!url) continue
+      const mimeType = resolveReferenceMimeType(sourceNode, url, upstreamSelectedOutputTypes[sourceNode.id])
+      if (mimeType && !mimeType.startsWith('image')) continue
 
       result.push({ url, edgeId: edge.id })
       if (result.length >= 2) break
     }
 
     return result
-  }, [incomingEdges, upstreamNodes, resolveSourceUrl])
+  }, [incomingEdges, upstreamNodes, resolveSourceUrl, upstreamSelectedOutputTypes])
 
   return {
     incomingEdges,

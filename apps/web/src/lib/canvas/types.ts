@@ -1,5 +1,6 @@
-import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
 import type { ComponentType } from 'react'
+import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
+import type { VideoCategories } from '@aigc/types'
 
 export type HandleType = 'image' | 'text' | 'video' | 'audio' | 'any'
 
@@ -12,6 +13,30 @@ export type HandleRole =
 
 export type CanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'asset' | 'script_writer' | 'storyboard_splitter' | 'video_stitch'
 export type VideoMode = 'multiref' | 'keyframe'
+
+export const DEFAULT_VIDEO_CATEGORY_LIMITS = {
+  multimodal: {
+    label: '全能参考',
+    limits: {
+      image: { min: 0, max: 9 },
+      video: { min: 0, max: 3 },
+      audio: { min: 0, max: 3 },
+    },
+  },
+  frames: {
+    label: '首尾帧',
+    limits: {
+      image: { min: 1, max: 2 },
+      video: { min: 0, max: 0 },
+      audio: { min: 0, max: 0 },
+    },
+  },
+} as const satisfies VideoCategories
+
+export const CANVAS_VIDEO_MODE_TO_CATEGORY = {
+  multiref: 'multimodal',
+  keyframe: 'frames',
+} as const satisfies Record<VideoMode, keyof VideoCategories>
 
 // 保留 union 类型供静态 fallback 使用，实际存储和运行时用 string
 export type ImageModelType = string
@@ -39,6 +64,7 @@ export interface VideoGenConfig {
   generateAudio: boolean
   cameraFixed: boolean
   watermark: boolean
+  videoCategoryLimits?: VideoCategories
   /** 视频分辨率，可选，如 '720p'、'1080p' 等 */
   resolution?: string
 }

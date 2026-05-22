@@ -451,13 +451,36 @@ async function main() {
     { label: '有声', value: true, default: true },
     { label: '无声', value: false, default: true },
   ]
+  const FRAMES_VIDEO_CATEGORIES = {
+    frames: {
+      label: '首尾帧',
+      limits: {
+        image: { min: 1, max: 2 },
+        video: { min: 0, max: 0 },
+        audio: { min: 0, max: 0 },
+      },
+    },
+  }
+
+  const MULTIMODAL_AND_FRAMES_VIDEO_CATEGORIES = {
+    multimodal: {
+      label: '全能参考',
+      limits: {
+        image: { min: 0, max: 9 },
+        video: { min: 0, max: 3 },
+        audio: { min: 0, max: 3 },
+      },
+    },
+    frames: FRAMES_VIDEO_CATEGORIES.frames,
+  }
+
   const veoVideoModels = [
     {
       code: 'veo3.1-fast',
       name: '全能视频3.1 Fast',
       description: '快速高质量视频生成',
       credit_cost: 10,
-      video_categories: ['frames'],
+      video_categories: FRAMES_VIDEO_CATEGORIES,
       params_pricing: [
         { resolution: '720p', model: 'veo3.1-fast', unit_price: 4 },
         { resolution: '1080p', model: 'veo3.1-fast', unit_price: 4 },
@@ -475,7 +498,6 @@ async function main() {
     //   name: '全能视频3.1',
     //   description: '基于参考图片生成视频',
     //   credit_cost: 15,
-    //   video_categories: ['components'],
     //   params_schema: JSON.stringify({
     //     type: 'object',
     //     properties: {
@@ -637,7 +659,7 @@ async function main() {
       name: 'Seedance 1.5 Pro',
       description: '有声视频生成，支持首尾帧',
       credit_cost: 15,
-      video_categories: ['frames'],
+      video_categories: FRAMES_VIDEO_CATEGORIES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-1.5-pro', unit_price: 5 },
         { resolution: '720p', model: 'seedance-1.5-pro', unit_price: 10 },
@@ -656,7 +678,7 @@ async function main() {
       name: 'Seedance 2.0',
       description: '新一代有声视频，支持首尾帧',
       credit_cost: 15,
-      video_categories: ['multimodal', 'frames', 'components'],
+      video_categories: MULTIMODAL_AND_FRAMES_VIDEO_CATEGORIES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-2.0', unit_price: 7 },
         { resolution: '720p', model: 'seedance-2.0', unit_price: 15 },
@@ -675,7 +697,7 @@ async function main() {
       name: 'Seedance 2.0 Fast',
       description: '新一代有声视频，支持首尾帧',
       credit_cost: 15,
-      video_categories: ['multimodal', 'frames', 'components'],
+      video_categories: MULTIMODAL_AND_FRAMES_VIDEO_CATEGORIES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-2.0-fast', unit_price: 5 },
         { resolution: '720p', model: 'seedance-2.0-fast', unit_price: 12 },

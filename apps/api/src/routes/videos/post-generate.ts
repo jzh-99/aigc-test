@@ -1,5 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
+import {
+  parseVideoCategories,
+  validateVideoReferenceLimits,
+  type VideoCategory,
+  type VideoReferenceCounts,
+} from '@aigc/types'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { getVideoQueue } from '../../lib/queue.js'
@@ -10,6 +16,44 @@ const ALLOWED_PARAM_KEYS = new Set([
   'camera_fixed', 'enable_upsample', 'watermark',
   'images', 'reference_images', 'reference_videos', 'reference_audios',
 ])
+
+interface VideoGenerateBody {
+  prompt: string
+  workspace_id: string
+  model: string
+  aspect_ratio?: string
+  resolution?: string
+  duration?: number
+  generate_audio?: boolean
+  camera_fixed?: boolean
+  enable_upsample?: boolean
+  watermark?: boolean
+  images?: string[]
+  reference_images?: string[]
+  reference_videos?: string[]
+  reference_audios?: string[]
+  canvas_id?: string
+  canvas_node_id?: string
+  video_studio_project_id?: string
+}
+
+function countArray(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0
+}
+
+function resolveRequestCategory(body: VideoGenerateBody): { category: VideoCategory; counts: VideoReferenceCounts } | { error: string } {
+  const framesCount = countArray(body.images)
+  const referenceCounts: VideoReferenceCounts = {
+    image: countArray(body.reference_images),
+    video: countArray(body.reference_videos),
+    audio: countArray(body.reference_audios),
+  }
+  const hasReferences = referenceCounts.image > 0 || referenceCounts.video > 0 || referenceCounts.audio > 0
+
+  if (framesCount > 0 && hasReferences) return { error: '同一次请求不能同时使用首尾帧和全能参考素材' }
+  if (framesCount > 0) return { category: 'frames', counts: { image: framesCount, video: 0, audio: 0 } }
+  return { category: 'multimodal', counts: referenceCounts }
+}
 
 function sanitizeParams(raw: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -25,7 +69,7 @@ function sanitizeParams(raw: Record<string, unknown>): Record<string, unknown> {
 }
 
 const route: FastifyPluginAsync = async (app) => {
-  app.post<{ Body: Record<string, unknown> }>('/videos/generate', {
+  app.post<{ Body: VideoGenerateBody }>('/videos/generate', {
     schema: {
       body: {
         type: 'object',
@@ -59,7 +103,7 @@ const route: FastifyPluginAsync = async (app) => {
       canvas_id: canvasId, canvas_node_id: canvasNodeId,
       aspect_ratio, resolution, duration, generate_audio, camera_fixed,
       enable_upsample, watermark, images, reference_images, reference_videos, reference_audios,
-    } = request.body as any
+    } = request.body
 
     const params = sanitizeParams({
       aspect_ratio, resolution, duration, generate_audio, camera_fixed,
@@ -102,6 +146,7 @@ const route: FastifyPluginAsync = async (app) => {
         'provider_models.id as modelId',
         'provider_models.credit_cost',
         'provider_models.params_pricing',
+        'provider_models.video_categories',
         'providers.code as providerCode',
       ])
       .where('provider_models.code', '=', model)
@@ -111,6 +156,21 @@ const route: FastifyPluginAsync = async (app) => {
 
     if (!providerModel) {
       return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: `模型 "${model}" 未找到或已停用` } })
+    }
+
+    const categories = parseVideoCategories(providerModel.video_categories)
+    const requestCategory = resolveRequestCategory(request.body)
+
+    if ('error' in requestCategory) {
+      return reply.status(400).send({ success: false, error: { code: 'INVALID_VIDEO_REFERENCES', message: requestCategory.error } })
+    }
+
+    const validation = validateVideoReferenceLimits(categories, requestCategory.category, requestCategory.counts)
+    if (!validation.valid) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_VIDEO_REFERENCES', message: validation.message ?? '视频参考素材数量不符合模型限制' },
+      })
     }
 
     // 按秒计费：unitPrice × duration，duration=-1（自动）时用 credit_cost 兜底

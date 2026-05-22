@@ -11,6 +11,8 @@ import { normalizeStoryboardShots } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 import { StoryboardTableDialog } from './storyboard-table-dialog'
 
+const PREVIEW_SHOT_COUNT = 3
+
 export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
   id,
   data,
@@ -21,26 +23,22 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const { isGenerating, submissionStatus, outputs } = useNodeExecutionState(id)
-  console.log('isGenerating: ', isGenerating);
   const isUpstream = useNodeHighlighted(id)
   const [tableOpen, setTableOpen] = useState(false)
 
   const shots = normalizeStoryboardShots((outputs[0]?.paramsSnapshot as { shots?: unknown } | undefined)?.shots)
-  console.log('shots: ', shots);
   const isDone = submissionStatus === 'completed'
-  console.log('isDone: --- ', id, isDone);
-  const previewShots = shots.slice(0, 3)
+  const previewShots = shots.slice(0, PREVIEW_SHOT_COUNT)
   const remaining = shots.length - previewShots.length
 
   return (
     <>
       <div
         className={cn(
-          'group relative flex flex-col rounded-xl shadow-md border transition-shadow duration-150',
-          'bg-card',
-          'border-border hover:border-border/60 hover:shadow-lg',
-          isGenerating && 'ring-1 ring-violet-400 shadow-violet-100',
-          isUpstream && !isGenerating && 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100',
+          'group relative flex flex-col rounded-xl border shadow-md transition-shadow duration-150',
+          'border-border bg-card hover:border-border/60 hover:shadow-lg',
+          isGenerating && 'ring-1 ring-violet-400/80 shadow-violet-100 dark:shadow-none',
+          isUpstream && !isGenerating && 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100 dark:shadow-none',
           '[transform:translateZ(0)] [backface-visibility:hidden]',
           '[contain:layout_style] [will-change:transform]',
         )}
@@ -54,14 +52,21 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
           <X size={11} />
         </button>
 
-        <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-violet-50 dark:bg-violet-950/30 flex items-center gap-1.5">
-          <Clapperboard size={12} className="text-violet-500 shrink-0" />
+        <div className="flex items-center gap-1.5 rounded-t-xl border-b border-border bg-muted px-3 py-1.5">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/10 text-violet-500">
+            <Clapperboard size={12} />
+          </span>
           <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
+          {isDone && shots.length > 0 && (
+            <span className="ml-auto shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground shadow-sm">
+              {shots.length} 镜头
+            </span>
+          )}
           {isDone && shots.length > 0 && (
             <button
               onClick={(e) => { e.stopPropagation(); setTableOpen(true) }}
               onMouseDown={(e) => e.stopPropagation()}
-              className="ml-auto p-0.5 rounded hover:bg-violet-100 dark:hover:bg-violet-900/40 text-violet-400 hover:text-violet-600 transition-colors"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted-foreground/10 hover:text-foreground"
               title="全屏查看分镜表"
             >
               <Maximize2 size={11} />
@@ -69,37 +74,44 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
           )}
         </div>
 
-        <div className="p-2.5 flex-1 min-h-[60px] flex flex-col justify-center">
+        <div className="flex min-h-[74px] flex-1 flex-col justify-center p-2.5">
           {isGenerating && (
             <div className="flex items-center gap-1.5 text-xs text-violet-500">
-              <Loader2 size={12} className="animate-spin" />
+              <Loader2 size={12} className="shrink-0 animate-spin" />
               <span>拆分分镜中…</span>
             </div>
           )}
 
           {!isGenerating && isDone && shots.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 mb-1.5">
-                <CheckCircle2 size={11} className="text-violet-500 shrink-0" />
-                <span className="text-[10px] text-violet-600 font-medium">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1">
+                <CheckCircle2 size={11} className="shrink-0 text-violet-500" />
+                <span className="text-[10px] font-medium text-violet-500">
                   {shots.length} 个分镜已就绪
                 </span>
               </div>
-              {previewShots.map((shot) => (
-                <div key={shot.shotNumber} className="flex items-start gap-1.5 text-[10px] leading-relaxed">
-                  <span className="shrink-0 font-medium text-violet-500 w-8">
-                    镜头{shot.shotNumber}
-                  </span>
-                  <span className="shrink-0 text-muted-foreground w-5">{shot.duration}s</span>
-                  <span className="shrink-0 text-muted-foreground w-8 truncate">{shot.shotType.slice(0, 2)}</span>
-                  <span className="text-foreground/70 truncate flex-1">{shot.sceneDescription}</span>
-                </div>
-              ))}
+              <div className="space-y-1">
+                {previewShots.map((shot) => (
+                  <div
+                    key={shot.shotNumber}
+                    className="grid grid-cols-[34px_28px_34px_minmax(0,1fr)] items-center gap-1.5 text-[10px] leading-relaxed"
+                  >
+                    <span className="font-medium text-violet-500">
+                      镜头{shot.shotNumber}
+                    </span>
+                    <span className="font-mono text-[9px] text-muted-foreground">{shot.duration}s</span>
+                    <span className="truncate rounded bg-violet-500/10 px-1 py-0.5 text-center text-[9px] font-medium text-violet-500">
+                      {shot.shotType.slice(0, 2)}
+                    </span>
+                    <span className="truncate text-foreground/70">{shot.sceneDescription}</span>
+                  </div>
+                ))}
+              </div>
               {remaining > 0 && (
                 <button
                   onClick={(e) => { e.stopPropagation(); setTableOpen(true) }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className="text-[10px] text-violet-500 hover:text-violet-700 hover:underline transition-colors"
+                  className="text-[10px] text-violet-500 transition-colors hover:text-violet-400 hover:underline"
                 >
                   +{remaining} 个镜头，点击全屏查看
                 </button>

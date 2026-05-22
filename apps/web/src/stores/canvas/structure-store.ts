@@ -9,7 +9,8 @@ import {
 } from 'reactflow'
 import type { AppNode, AppEdge, CanvasNodeConfig, VideoMode } from '@/lib/canvas/types'
 import type { AgentWorkflow } from '@/lib/canvas/agent-types'
-import { isAssetConfig, isVideoGenConfig } from '@/lib/canvas/types'
+import { DEFAULT_VIDEO_CATEGORY_LIMITS, isAssetConfig, isVideoGenConfig } from '@/lib/canvas/types'
+import { parseVideoCategories } from '@aigc/types'
 import { hasCycle } from '@/lib/canvas/dag'
 import { nodeRegistry } from '@/lib/canvas/registry'
 import {
@@ -132,6 +133,32 @@ function createEdgeWithId(connection: Connection): AppEdge {
   }
 }
 
+function getVideoCategoryLimits(node: AppNode | undefined) {
+  if (!node || node.type !== 'video_gen' || !isVideoGenConfig(node.data.config)) {
+    return DEFAULT_VIDEO_CATEGORY_LIMITS
+  }
+  // 使用 parseVideoCategories 确保数据格式正确
+  const parsed = parseVideoCategories(node.data.config.videoCategoryLimits)
+  // 如果解析结果为空对象，返回默认值
+  if (Object.keys(parsed).length === 0) {
+    return DEFAULT_VIDEO_CATEGORY_LIMITS
+  }
+  return parsed
+}
+
+function getReferenceKind(node: AppNode | undefined): 'image' | 'video' | 'audio' | null {
+  if (!node || node.type === 'text_input') return null
+  if (node.type === 'image_gen') return 'image'
+  if (node.type === 'video_gen' || node.type === 'video_stitch') return 'video'
+  if (!isAssetConfig(node.data.config)) return null
+
+  const mimeType = node.data.config.mimeType ?? ''
+  if (mimeType.startsWith('image')) return 'image'
+  if (mimeType.startsWith('video')) return 'video'
+  if (mimeType.startsWith('audio')) return 'audio'
+  return null
+}
+
 function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Connection): string | null {
   if (!connection.source || !connection.target || connection.source === connection.target) return null
 
@@ -144,6 +171,7 @@ function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Conn
   }
 
   const sourceMime = getNodeMimeType(sourceNode)
+  const sourceKind = getReferenceKind(sourceNode)
 
   if (targetNode?.type === 'video_stitch') {
     const isVideoSource = sourceNode?.type === 'video_gen'
@@ -162,41 +190,25 @@ function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Conn
       const videoMode: VideoMode = isVideoGenConfig(targetNode.data.config)
         ? targetNode.data.config.videoMode
         : 'multiref'
+      const categoryKey = videoMode === 'keyframe' ? 'frames' : 'multimodal'
+      const categoryLimits = getVideoCategoryLimits(targetNode)[categoryKey] ?? DEFAULT_VIDEO_CATEGORY_LIMITS[categoryKey]
       const existingAnyIn = edges.filter((e) => e.target === connection.target && (!e.targetHandle || e.targetHandle === 'any-in'))
+      const countByKind = (kind: 'image' | 'video' | 'audio') => existingAnyIn.filter((e) => {
+        const src = nodes.find((n) => n.id === e.source)
+        return getReferenceKind(src) === kind
+      }).length
 
       if (videoMode === 'keyframe') {
         if (sourceNode?.type !== 'text_input') {
-          const existingImages = existingAnyIn.filter((e) => {
-            const src = nodes.find((n) => n.id === e.source)
-            return src?.type !== 'text_input'
-          }).length
-          if (existingImages >= 2) return '首尾帧最多连接 2 张图片'
           if (mimeType && !mimeType.startsWith('image')) return '首尾帧模式只接受图片素材'
+          if (countByKind('image') >= categoryLimits.limits.image.max) return `首尾帧最多连接 ${categoryLimits.limits.image.max} 张图片`
         }
-      } else {
-        const existingImages = existingAnyIn.filter((e) => {
-          const src = nodes.find((n) => n.id === e.source)
-          const mt = getNodeMimeType(src)
-          return !mt || mt.startsWith('image')
-        }).length
-        const existingVideos = existingAnyIn.filter((e) => {
-          const src = nodes.find((n) => n.id === e.source)
-          const mt = getNodeMimeType(src)
-          return mt?.startsWith('video')
-        }).length
-        const existingAudios = existingAnyIn.filter((e) => {
-          const src = nodes.find((n) => n.id === e.source)
-          const mt = getNodeMimeType(src)
-          return mt?.startsWith('audio')
-        }).length
-
-        const isVideo = mimeType?.startsWith('video')
-        const isAudio = mimeType?.startsWith('audio')
-        const isImage = !isVideo && !isAudio
-
-        if (isImage && existingImages >= 9) return '参考图最多 9 张'
-        if (isVideo && existingVideos >= 3) return '参考视频最多 3 个'
-        if (isAudio && existingAudios >= 3) return '参考音频最多 3 个'
+      } else if (sourceKind) {
+        if (countByKind(sourceKind) >= categoryLimits.limits[sourceKind].max) {
+          const label = sourceKind === 'image' ? '参考图' : sourceKind === 'video' ? '参考视频' : '参考音频'
+          const unit = sourceKind === 'image' ? '张' : '个'
+          return `${label}最多 ${categoryLimits.limits[sourceKind].max} ${unit}`
+        }
       }
     }
   }

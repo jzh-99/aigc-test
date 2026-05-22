@@ -1,5 +1,5 @@
 export type ModuleType = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
-export type VideoCategory = 'multimodal' | 'frames' | 'components'
+export type VideoCategory = 'multimodal' | 'frames'
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed'
 export type BatchStatus = 'pending' | 'processing' | 'completed' | 'partial_complete' | 'failed'
 export type TransferStatus = 'pending' | 'completed' | 'failed'

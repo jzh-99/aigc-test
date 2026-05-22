@@ -325,7 +325,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
                 style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
               >
                 <span className="text-[9px] font-medium text-muted-foreground bg-card border border-border rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-                  全能×{multirefCount}
+                  视频×{multirefCount}
                 </span>
               </div>
             )}

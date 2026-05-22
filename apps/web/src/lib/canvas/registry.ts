@@ -1,4 +1,5 @@
 import type { CanvasNodeDefinition, CanvasNodeData, AppNode, CanvasNodeType } from './types'
+import { DEFAULT_VIDEO_CATEGORY_LIMITS } from './types'
 import { generateUUID } from '@/lib/utils'
 import { TextNode } from '@/components/canvas/nodes/text-node'
 import { ImageGenNode } from '@/components/canvas/nodes/image-gen-node'
@@ -64,6 +65,7 @@ export class NodeRegistry {
         generateAudio: true,
         cameraFixed: false,
         watermark: false,
+        videoCategoryLimits: DEFAULT_VIDEO_CATEGORY_LIMITS,
       },
     })
 

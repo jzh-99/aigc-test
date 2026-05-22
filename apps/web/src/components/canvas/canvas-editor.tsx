@@ -258,7 +258,7 @@ function FloatingParamPanel({
 
   return createPortal(
     <div
-      className="fixed z-50 drop-shadow-2xl"
+      className="fixed z-40 drop-shadow-2xl"
       style={{ top, left, width: PANEL_W, maxHeight: PANEL_MAX_H, overflowY: 'auto' }}
     >
       <NodeParamPanel

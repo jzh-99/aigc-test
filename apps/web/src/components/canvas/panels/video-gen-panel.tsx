@@ -2,11 +2,16 @@ import { Film, ImageIcon, Loader2, Music, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { VideoMode } from '@/lib/canvas/types'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
-import type { ModelItem } from '@aigc/types'
+import { getVideoCategoryKeys, parseVideoCategories, type ModelItem, type VideoCategory } from '@aigc/types'
 
-const VIDEO_MODE_TO_CATEGORY: Record<VideoMode, string> = {
+const VIDEO_MODE_TO_CATEGORY: Record<VideoMode, VideoCategory> = {
   multiref: 'multimodal',
   keyframe: 'frames',
+}
+
+const CATEGORY_TO_VIDEO_MODE: Record<VideoCategory, VideoMode> = {
+  multimodal: 'multiref',
+  frames: 'keyframe',
 }
 
 interface VideoGenPanelProps {
@@ -14,7 +19,6 @@ interface VideoGenPanelProps {
   setPromptDraft: (value: string) => void
   flushPromptDraft: () => void
   upstreamTextNodeLabels: string[]
-  orderedImageRefCount: number
   multirefImages: string[]
   multirefVideos: string[]
   multirefAudios: string[]
@@ -44,7 +48,6 @@ export function VideoGenPanel({
   setPromptDraft,
   flushPromptDraft,
   upstreamTextNodeLabels,
-  orderedImageRefCount,
   multirefImages,
   multirefVideos,
   multirefAudios,
@@ -71,10 +74,12 @@ export function VideoGenPanel({
   const isSeedance = currentDbModel ? currentDbModel.code.startsWith('seedance-') : false
 
   const filteredModels = (models ?? []).filter((m) => {
-    const cats = Array.isArray(m.video_categories) ? (m.video_categories as string[]) : []
-    const targetCategory = VIDEO_MODE_TO_CATEGORY[videoMode]
-    return cats.length === 0 || cats.includes(targetCategory)
+    const categories = parseVideoCategories(m.video_categories)
+    return Boolean(categories[VIDEO_MODE_TO_CATEGORY[videoMode]])
   })
+
+  const currentCategories = parseVideoCategories(currentDbModel?.video_categories)
+  const availableModes = getVideoCategoryKeys(currentCategories)
 
   const aspectRatioOptions = extractSchemaEnums(currentDbModel?.params_schema, 'aspect_ratio')
   const durationOptions = extractSchemaEnums(currentDbModel?.params_schema, 'time_length').map((item) => {
@@ -89,42 +94,30 @@ export function VideoGenPanel({
     ? getPriceByResolution(currentDbModel, String(videoDuration), currentDbModel.credit_cost)
     : 0
 
-  const currentSupportsMultiref = currentDbModel
-    ? (() => {
-        const cats = Array.isArray(currentDbModel.video_categories) ? (currentDbModel.video_categories as string[]) : []
-        return cats.length === 0 || cats.includes('multimodal')
-      })()
-    : false
-
   return (
     <div className="flex gap-0 divide-x divide-border">
       <div className="p-3 flex flex-col gap-2" style={{ width: 220 }}>
         <div className="flex rounded-lg overflow-hidden border border-border text-[11px] font-medium">
-          <button
-            data-testid="video-mode-multiref"
-            onClick={() => onVideoModeChange('multiref')}
-            disabled={!currentSupportsMultiref}
-            className={cn(
-              'flex-1 py-1 transition-colors',
-              videoMode === 'multiref'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted/40 text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed'
-            )}
-          >
-            全能参考
-          </button>
-          <button
-            data-testid="video-mode-keyframe"
-            onClick={() => onVideoModeChange('keyframe')}
-            className={cn(
-              'flex-1 py-1 transition-colors',
-              videoMode === 'keyframe'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted/40 text-muted-foreground hover:bg-muted'
-            )}
-          >
-            首尾帧
-          </button>
+          {availableModes.map((category) => {
+            const mode = CATEGORY_TO_VIDEO_MODE[category]
+            const label = currentCategories[category]?.label ?? category
+            return (
+              <button
+                key={category}
+                data-testid={`video-mode-${mode}`}
+                onClick={() => onVideoModeChange(mode)}
+                disabled={!currentCategories[category]}
+                className={cn(
+                  'flex-1 py-1 transition-colors',
+                  videoMode === mode
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted/40 text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed'
+                )}
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
 
         <label className="text-[11px] font-medium text-muted-foreground">提示词</label>
@@ -146,58 +139,28 @@ export function VideoGenPanel({
         />
 
         {videoMode === 'multiref' && (
-          <div className="space-y-2">
-            {multirefImages.length > 0 && (
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
-                  <ImageIcon className="w-3 h-3" />参考图片 ({multirefImages.length})
-                </label>
-                <div className="flex gap-1 flex-wrap">
-                  {multirefImages.map((url, i) => (
-                    <div key={i} className="relative w-12 h-12 rounded border border-border overflow-hidden">
-                      <img src={url} alt="" className="w-full h-full object-cover" />
-                      <span className="absolute -top-1 -left-1 text-[8px] bg-blue-500 text-white rounded px-0.5 font-bold">{i + 1}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {multirefVideos.length > 0 && (
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
-                  <Film className="w-3 h-3" />参考视频 ({multirefVideos.length})
-                </label>
-                <div className="flex gap-1 flex-wrap">
-                  {multirefVideos.map((url, i) => (
-                    <div key={i} className="relative w-12 h-12 rounded border border-border bg-muted flex items-center justify-center overflow-hidden group">
-                      <video src={url} className="w-full h-full object-cover" muted preload="metadata" />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <Play className="w-3.5 h-3.5 text-white fill-white" />
-                      </div>
-                      <span className="absolute -top-1 -left-1 text-[8px] bg-violet-500 text-white rounded px-0.5 font-bold">{i + 1}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {multirefAudios.length > 0 && (
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
-                  <Music className="w-3 h-3" />参考音频 ({multirefAudios.length})
-                </label>
-                <div className="flex gap-1 flex-wrap">
-                  {multirefAudios.map((_url, i) => (
-                    <div key={i} className="relative w-12 h-12 rounded border border-border bg-muted/60 flex items-center justify-center">
-                      <Music className="w-5 h-5 text-muted-foreground" />
-                      <span className="absolute -top-1 -left-1 text-[8px] bg-emerald-500 text-white rounded px-0.5 font-bold">{i + 1}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {orderedImageRefCount === 0 && (
+          <div className="space-y-1">
+            {(multirefImages.length + multirefVideos.length + multirefAudios.length) === 0 ? (
               <div className="text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">
                 可连接图片、视频、音频节点
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {multirefImages.length > 0 && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
+                    <ImageIcon className="w-3 h-3" />图片 x{multirefImages.length}
+                  </span>
+                )}
+                {multirefVideos.length > 0 && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-violet-50 border border-violet-200 text-[10px] text-violet-600 font-medium">
+                    <Film className="w-3 h-3" />视频 x{multirefVideos.length}
+                  </span>
+                )}
+                {multirefAudios.length > 0 && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-600 font-medium">
+                    <Music className="w-3 h-3" />音频 x{multirefAudios.length}
+                  </span>
+                )}
               </div>
             )}
           </div>

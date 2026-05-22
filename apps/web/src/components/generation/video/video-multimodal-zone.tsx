@@ -8,7 +8,8 @@ import { cn, generateUUID } from '@/lib/utils'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import type { FrameImage, MediaPreview } from '../shared/types'
 import { readFrameFile, isValidVideoFile, isValidAudioFile, fetchAssetFile, getDraggedAsset, isValidImageFile } from '../shared/file-utils'
-import { MAX_MULTIMODAL_IMAGES, MAX_MULTIMODAL_VIDEOS, MAX_MULTIMODAL_AUDIOS, SEEDANCE_MAX_TOTAL_VIDEO_DURATION } from '../shared/constants'
+import { SEEDANCE_MAX_TOTAL_VIDEO_DURATION } from '../shared/constants'
+import type { VideoReferenceCounts } from '@aigc/types'
 
 export interface MultimodalAudio {
   id: string
@@ -31,13 +32,14 @@ interface VideoMultimodalZoneProps {
   videos: MultimodalVideo[]
   audios: MultimodalAudio[]
   isSeedance: boolean
+  referenceLimits: VideoReferenceCounts
   onImagesChange: (imgs: FrameImage[]) => void
   onVideosChange: (vids: MultimodalVideo[]) => void
   onAudiosChange: (auds: MultimodalAudio[]) => void
 }
 
 export function VideoMultimodalZone({
-  images, videos, audios, isSeedance,
+  images, videos, audios, isSeedance, referenceLimits,
   onImagesChange, onVideosChange, onAudiosChange,
 }: VideoMultimodalZoneProps) {
   const [managerOpen, setManagerOpen] = useState(false)
@@ -50,6 +52,9 @@ export function VideoMultimodalZone({
   const videoInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
 
+  const imageLimit = referenceLimits.image || 0
+  const videoLimit = referenceLimits.video || 0
+  const audioLimit = referenceLimits.audio || 0
   const totalCount = images.length + videos.length + audios.length
   const stackPreviews = [
     ...images.map(i => ({ id: i.id ?? '', type: 'image' as const, previewUrl: i.previewUrl })),
@@ -76,6 +81,10 @@ export function VideoMultimodalZone({
           return
         }
       }
+      if (videoLimit > 0 && videos.length >= videoLimit) {
+        toast.error(`最多添加 ${videoLimit} 个参考视频`)
+        return
+      }
       const previewUrl = URL.createObjectURL(file)
       onVideosChange([...videos, { id: generateUUID(), name: file.name, previewUrl, file, duration: dur }])
     }
@@ -97,14 +106,14 @@ export function VideoMultimodalZone({
     if (!files) return
     for (const file of Array.from(files)) {
       if (isValidImageFile(file)) {
-        if (images.length >= MAX_MULTIMODAL_IMAGES) { toast.error(`最多添加 ${MAX_MULTIMODAL_IMAGES} 张参考图`); continue }
+        if (imageLimit > 0 && images.length >= imageLimit) { toast.error(`最多添加 ${imageLimit} 张参考图`); continue }
         const img = await readFrameFile(file)
         if (img) onImagesChange([...images, img])
       } else if (isValidVideoFile(file)) {
-        if (videos.length >= MAX_MULTIMODAL_VIDEOS) { toast.error(`最多添加 ${MAX_MULTIMODAL_VIDEOS} 个参考视频`); continue }
+        if (videoLimit > 0 && videos.length >= videoLimit) { toast.error(`最多添加 ${videoLimit} 个参考视频`); continue }
         validateAndAddVideo(file)
       } else if (isValidAudioFile(file)) {
-        if (audios.length >= MAX_MULTIMODAL_AUDIOS) { toast.error(`最多添加 ${MAX_MULTIMODAL_AUDIOS} 个参考音频`); continue }
+        if (audioLimit > 0 && audios.length >= audioLimit) { toast.error(`最多添加 ${audioLimit} 个参考音频`); continue }
         validateAndAddAudio(file)
       } else {
         toast.error(`文件「${file.name}」格式不支持`)
@@ -123,10 +132,10 @@ export function VideoMultimodalZone({
     try {
       const file = await fetchAssetFile(asset.url, asset.type, 'asset')
       if (isValidVideoFile(file)) {
-        if (videos.length >= MAX_MULTIMODAL_VIDEOS) { toast.error(`最多添加 ${MAX_MULTIMODAL_VIDEOS} 个参考视频`); return }
+        if (videoLimit > 0 && videos.length >= videoLimit) { toast.error(`最多添加 ${videoLimit} 个参考视频`); return }
         validateAndAddVideo(file)
       } else if (isValidImageFile(file)) {
-        if (images.length >= MAX_MULTIMODAL_IMAGES) { toast.error(`最多添加 ${MAX_MULTIMODAL_IMAGES} 张参考图`); return }
+        if (imageLimit > 0 && images.length >= imageLimit) { toast.error(`最多添加 ${imageLimit} 张参考图`); return }
         const img = await readFrameFile(file, true)
         if (img) onImagesChange([...images, img])
       }
@@ -193,9 +202,9 @@ export function VideoMultimodalZone({
       <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple className="hidden"
         onChange={(e) => handleAllFiles(e.target.files)} />
       <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime,video/webm" multiple className="hidden"
-        onChange={(e) => { const files = e.target.files; if (!files) return; for (const f of Array.from(files)) { if (videos.length >= MAX_MULTIMODAL_VIDEOS) { toast.error('最多添加 3 个参考视频'); break } if (!isValidVideoFile(f)) { toast.error(`文件「${f.name}」格式不支持`); continue } validateAndAddVideo(f) } e.target.value = '' }} />
+        onChange={(e) => { const files = e.target.files; if (!files) return; for (const f of Array.from(files)) { if (videoLimit > 0 && videos.length >= videoLimit) { toast.error(`最多添加 ${videoLimit} 个参考视频`); break } if (!isValidVideoFile(f)) { toast.error(`文件「${f.name}」格式不支持`); continue } validateAndAddVideo(f) } e.target.value = '' }} />
       <input ref={audioInputRef} type="file" accept="audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/x-m4a" multiple className="hidden"
-        onChange={(e) => { const files = e.target.files; if (!files) return; for (const f of Array.from(files)) { if (audios.length >= MAX_MULTIMODAL_AUDIOS) { toast.error('最多添加 3 个参考音频'); break } if (!isValidAudioFile(f)) { toast.error(`文件「${f.name}」格式不支持`); continue } validateAndAddAudio(f) } e.target.value = '' }} />
+        onChange={(e) => { const files = e.target.files; if (!files) return; for (const f of Array.from(files)) { if (audioLimit > 0 && audios.length >= audioLimit) { toast.error(`最多添加 ${audioLimit} 个参考音频`); break } if (!isValidAudioFile(f)) { toast.error(`文件「${f.name}」格式不支持`); continue } validateAndAddAudio(f) } e.target.value = '' }} />
 
       {/* 素材管理弹窗 */}
       {managerOpen && (
@@ -218,7 +227,7 @@ export function VideoMultimodalZone({
                 {/* 图片栏 */}
                 <div className="p-4 flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">图片 {images.length}/9</span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">图片 {images.length}/{imageLimit}</span>
                     {images.length > 0 && <button onClick={() => onImagesChange([])} className="text-[10px] text-destructive hover:underline">清空</button>}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -235,7 +244,7 @@ export function VideoMultimodalZone({
                         </button>
                       </div>
                     ))}
-                    {images.length < MAX_MULTIMODAL_IMAGES && (
+                    {images.length < imageLimit && (
                       <button onClick={() => imageInputRef.current?.click()}
                         className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1">
                         <ImagePlus className="h-4 w-4 text-muted-foreground" />
@@ -248,7 +257,7 @@ export function VideoMultimodalZone({
                 {/* 视频栏 */}
                 <div className="p-4 flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">视频 {videos.length}/3</span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">视频 {videos.length}/{videoLimit}</span>
                     {videos.length > 0 && <button onClick={() => onVideosChange([])} className="text-[10px] text-destructive hover:underline">清空</button>}
                   </div>
                   <div className="flex flex-col gap-2">
@@ -270,7 +279,7 @@ export function VideoMultimodalZone({
                         </button>
                       </div>
                     ))}
-                    {videos.length < MAX_MULTIMODAL_VIDEOS && (
+                    {videos.length < videoLimit && (
                       <button onClick={() => videoInputRef.current?.click()}
                         className="h-16 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1">
                         <Play className="h-4 w-4 text-muted-foreground" />
@@ -283,7 +292,7 @@ export function VideoMultimodalZone({
                 {/* 音频栏 */}
                 <div className="p-4 flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">音频 {audios.length}/3</span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">音频 {audios.length}/{audioLimit}</span>
                     {audios.length > 0 && <button onClick={() => onAudiosChange([])} className="text-[10px] text-destructive hover:underline">清空</button>}
                   </div>
                   <div className="flex flex-col gap-3">
@@ -303,7 +312,7 @@ export function VideoMultimodalZone({
                         <audio src={a.previewUrl} controls className="w-full h-7" style={{ accentColor: 'hsl(var(--primary))' }} />
                       </div>
                     ))}
-                    {audios.length < MAX_MULTIMODAL_AUDIOS && (
+                    {audios.length < audioLimit && (
                       <button onClick={() => audioInputRef.current?.click()}
                         className="h-12 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1">
                         <Music className="h-4 w-4 text-muted-foreground" />

@@ -12,7 +12,7 @@
   "dependencies": {
     "@aigc/types": "workspace:*",
     "@mdx-js/loader": "^3.1.1",
-    "@next/mdx": "^16.2.1",
+    "@next/mdx": "^14.2.35",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
