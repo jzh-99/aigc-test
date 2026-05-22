@@ -24,6 +24,7 @@ export interface VideoSubmitJobData {
   prompt: string
   params: Record<string, unknown>
   estimatedCredits: number
+  videoCategory?: 'multimodal' | 'frames'
 }
 
 export interface CompletionJobData {

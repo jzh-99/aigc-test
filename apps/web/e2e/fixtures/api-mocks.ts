@@ -2,6 +2,81 @@ import type { Page, Route } from '@playwright/test'
 import { mockAuth } from './auth'
 import type { E2ECanvasEdge, E2ECanvasNode } from './canvas'
 
+const VIDEO_MODEL_FIXTURE = {
+  id: 'model-seedance-2',
+  code: 'seedance-2.0',
+  name: 'Seedance 2.0',
+  description: null,
+  module: 'video',
+  provider_code: 'volcengine',
+  credit_cost: 12,
+  resolution: null,
+  is_active: true,
+  params_pricing: [
+    { model: 'seedance-2.0', resolution: '5', unit_price: 12 },
+  ],
+  params_schema: {
+    type: 'object',
+    properties: {
+      aspect_ratio: {
+        enum: ['adaptive', '16:9', '9:16', '1:1'],
+        enumNames: ['自适应', '16:9', '9:16', '1:1'],
+      },
+      time_length: {
+        enum: [5, 10],
+        enumNames: ['5s', '10s'],
+      },
+    },
+  },
+  video_categories: {
+    multimodal: {
+      label: '全能参考',
+      limits: {
+        image: { min: 0, max: 9 },
+        video: { min: 0, max: 3 },
+        audio: { min: 0, max: 3 },
+      },
+    },
+    frames: {
+      label: '首尾帧',
+      limits: {
+        image: { min: 1, max: 2 },
+        video: { min: 0, max: 0 },
+        audio: { min: 0, max: 0 },
+      },
+    },
+  },
+}
+
+const IMAGE_MODEL_FIXTURE = {
+  id: 'model-gemini',
+  code: 'gemini',
+  name: 'Gemini Image',
+  description: null,
+  module: 'image',
+  provider_code: 'gemini',
+  credit_cost: 5,
+  resolution: null,
+  is_active: true,
+  params_pricing: [
+    { model: 'gemini', resolution: '2k', unit_price: 5 },
+  ],
+  params_schema: {
+    type: 'object',
+    properties: {
+      resolution: {
+        enum: ['2k'],
+        enumNames: ['2K'],
+      },
+      aspect_ratio: {
+        enum: ['1:1', '16:9'],
+        enumNames: ['1:1', '16:9'],
+      },
+    },
+  },
+  video_categories: {},
+}
+
 interface MockCanvasEditorOptions {
   canvasId: string
   canvasName?: string
@@ -12,6 +87,7 @@ interface MockCanvasEditorOptions {
   historyItems?: unknown[]
   imageAssets?: unknown[]
   videoAssets?: unknown[]
+  onImageGenerate?: (body: any, route: Route) => Promise<void> | void
   onVideoGenerate?: (body: any, route: Route) => Promise<void> | void
 }
 
@@ -45,6 +121,16 @@ export async function mockCanvasEditor(page: Page, options: MockCanvasEditorOpti
   }
 
   await mockAuth(page, { workspaceId: cfg.workspaceId })
+
+  await page.route('**/api/v1/models**', async (route, request) => {
+    const url = new URL(request.url())
+    const module = url.searchParams.get('module')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(module === 'video' ? [VIDEO_MODEL_FIXTURE] : module === 'image' ? [IMAGE_MODEL_FIXTURE] : []),
+    })
+  })
 
   await page.route(`**/api/v1/canvases/${cfg.canvasId}`, async (route, req) => {
     const method = req.method().toUpperCase()
@@ -150,6 +236,25 @@ export async function mockCanvasEditor(page: Page, options: MockCanvasEditorOpti
         id: `batch-${Date.now()}`,
         quantity: 1,
         estimated_credits: 12,
+      }),
+    })
+  })
+
+  await page.route('**/api/v1/generate/image', async (route, request) => {
+    const body = readJson(request.postData())
+
+    if (cfg.onImageGenerate) {
+      await cfg.onImageGenerate(body, route)
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: `batch-${Date.now()}`,
+        quantity: 1,
+        estimated_credits: 5,
       }),
     })
   })

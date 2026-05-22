@@ -61,6 +61,7 @@ export interface ExecuteVideoNodeParams {
   // multiref mode: reference images, videos, audios
   referenceImages?: string[]
   referenceVideos?: string[]
+  referenceVideoDurations?: number[]
   referenceAudios?: string[]
   // keyframe mode: first and last frame
   frameStart?: string
@@ -104,6 +105,7 @@ export interface CanvasAssetItem {
   id: string
   type: string
   storage_url: string | null
+  thumbnail_url: string | null
   original_url: string | null
   created_at: string
   batch_id: string
@@ -120,6 +122,7 @@ interface CursorListResponse<T> {
 export interface CanvasNodeOutputRow {
   id: string
   output_urls: string[]
+  thumbnail_url?: string | null
   params_snapshot?: Record<string, unknown> | null
   is_selected: boolean
   created_at: string
@@ -129,7 +132,7 @@ export interface CanvasNodeOutputRow {
 export interface CanvasActiveBatch {
   id: string
   canvas_node_id: string
-  status: Extract<TaskBatchStatus, 'pending' | 'processing'>
+  status: TaskBatchStatus
   quantity: number
   completed_count: number
   failed_count: number
@@ -445,6 +448,7 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
     prompt: params.prompt,
     workspace_id: params.workspaceId,
     model: params.model,
+    video_category: params.videoMode === 'keyframe' ? 'frames' : 'multimodal',
     canvas_id: params.canvasId,
     canvas_node_id: params.canvasNodeId,
   }
@@ -474,6 +478,7 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
     if (isSeedance2) {
       if (refImages.length > 0) body.reference_images = refImages
       if (refVideos.length > 0) body.reference_videos = refVideos
+      if (params.referenceVideoDurations?.length) body.reference_video_durations = params.referenceVideoDurations
       if (refAudios.length > 0) body.reference_audios = refAudios
     } else {
       // non-seedance2 multiref: use images field

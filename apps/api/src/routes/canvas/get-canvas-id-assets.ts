@@ -48,7 +48,7 @@ const route: FastifyPluginAsync = async (app) => {
     let query = db
       .selectFrom('assets as a')
       .innerJoin('task_batches as b', 'b.id', 'a.batch_id')
-      .select(['a.id', 'a.type', 'a.storage_url', 'a.original_url', 'a.created_at',
+      .select(['a.id', 'a.type', 'a.storage_url', 'a.thumbnail_url', 'a.original_url', 'a.created_at',
                'b.id as batch_id', 'b.canvas_node_id', 'b.prompt', 'b.model'])
       .where('b.canvas_id', '=', id)
       .where('a.is_deleted', '=', false)
@@ -80,6 +80,7 @@ const route: FastifyPluginAsync = async (app) => {
       items.map(async (item: any) => ({
         ...item,
         storage_url: await signAssetUrl(item.storage_url),
+        thumbnail_url: item.thumbnail_url ? await signAssetUrl(item.thumbnail_url) : null,
         original_url: item.original_url ? await signAssetUrl(item.original_url) : null,
       }))
     )

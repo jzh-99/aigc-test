@@ -1,3 +1,4 @@
+import './bootstrap.js'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { hostname } from 'node:os'

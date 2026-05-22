@@ -25,6 +25,12 @@ function deriveProgressForStatus(status: NodeSubmissionStatus, progress: number)
   return p
 }
 
+function parseStartedAt(startedAt?: string | null): number | null {
+  if (!startedAt) return null
+  const timestamp = new Date(startedAt).getTime()
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
 function withStatus(
   prev: NodeExecutionState,
   status: NodeSubmissionStatus,
@@ -33,6 +39,9 @@ function withStatus(
   const nextIsGenerating = isActiveStatus(status)
   const patchProgress = patch?.progress ?? prev.progress
   const nextProgress = deriveProgressForStatus(status, patchProgress)
+  const nextStartedAt = nextIsGenerating
+    ? (patch?.startedAt ?? prev.startedAt ?? Date.now())
+    : null
 
   const next: NodeExecutionState = {
     ...prev,
@@ -40,7 +49,7 @@ function withStatus(
     submissionStatus: status,
     isGenerating: nextIsGenerating,
     progress: nextProgress,
-    startedAt: nextIsGenerating ? (prev.startedAt ?? Date.now()) : null,
+    startedAt: nextStartedAt,
   }
 
   // Clear stale errors when entering non-failed states (unless explicitly patched)
@@ -69,6 +78,7 @@ interface CanvasTaskBatchLite {
   quantity: number
   completed_count: number
   failed_count?: number
+  processing_started_at?: string | null
   error?: {
     message?: string
     code?: string
@@ -213,6 +223,8 @@ export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) =
 
   updateNodeFromBatch: (nodeId, batchInfo) => {
     const progress = batchInfo.quantity > 0 ? (batchInfo.completed_count / batchInfo.quantity) * 100 : 0
+    const startedAt = parseStartedAt(batchInfo.processing_started_at)
+    const timingPatch = startedAt === null ? {} : { startedAt }
 
     if (batchInfo.status === 'failed') {
       get().setNodeStatus(nodeId, 'failed', {
@@ -223,7 +235,7 @@ export const useCanvasExecutionStore = create<CanvasExecutionState>((set, get) =
       return
     }
 
-    get().setNodeStatus(nodeId, batchInfo.status, { progress })
+    get().setNodeStatus(nodeId, batchInfo.status, { progress, ...timingPatch })
   },
 
   reconcileNodes: (activeNodeIds) => {

@@ -2,6 +2,8 @@ import { Loader2, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
 import { ASPECT_RATIOS_IMAGE } from './panel-constants'
+import { ResourceMentionTextarea } from './resource-mention-textarea'
+import type { CanvasReferenceMentionResource } from './resource-mentions'
 import type { ModelType, Resolution } from './panel-constants'
 import type { ModelItem } from '@aigc/types'
 
@@ -15,6 +17,7 @@ interface ImageGenPanelProps {
   flushPromptDraft: () => void
   upstreamTextNodeLabels: string[]
   orderedImageRefs: OrderedImageRef[]
+  mentionResources: CanvasReferenceMentionResource[]
   modelType: ModelType
   resolution: Resolution
   aspectRatio: string
@@ -34,6 +37,7 @@ export function ImageGenPanel({
   flushPromptDraft,
   upstreamTextNodeLabels,
   orderedImageRefs,
+  mentionResources,
   modelType,
   resolution,
   aspectRatio,
@@ -70,11 +74,12 @@ export function ImageGenPanel({
             ))}
           </div>
         )}
-        <textarea
-          className="flex-1 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary min-h-[100px]"
+        <ResourceMentionTextarea
+          minHeightClassName="min-h-[100px]"
           placeholder="描述你想生成的图片..."
           value={promptDraft}
-          onChange={(e) => setPromptDraft(e.target.value)}
+          resources={mentionResources}
+          onChange={setPromptDraft}
           onBlur={flushPromptDraft}
         />
         {orderedImageRefs.length > 0 && (

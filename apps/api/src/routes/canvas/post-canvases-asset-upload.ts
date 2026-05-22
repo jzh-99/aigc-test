@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
-import { signAssetUrl, uploadToTos } from '../../lib/storage.js'
+import { getStorageRuntimeInfo, signAssetUrl, uploadToTos } from '../../lib/storage.js'
 import { CANVAS_ENABLED_TEAM_TYPES } from './_shared.js'
 
 // POST /canvases/asset-upload — 上传图片/视频文件作为资产节点使用
@@ -57,7 +57,7 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.send({ url: signedUrl ?? storageUrl, storageUrl })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '上传服务暂时不可用，请稍后重试'
-      app.log.error({ err: message }, 'Canvas asset upload failed')
+      app.log.error({ err, storage: getStorageRuntimeInfo() }, 'Canvas asset upload failed')
       return reply.status(502).send({
         success: false,
         error: { code: 'UPLOAD_FAILED', message },

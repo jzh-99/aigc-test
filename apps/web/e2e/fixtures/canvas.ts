@@ -94,6 +94,8 @@ export function createAssetNode(params: {
   label?: string
   url: string
   mimeType?: string
+  thumbnailUrl?: string
+  duration?: number
   position?: { x: number; y: number }
 }): E2ECanvasNode {
   return {
@@ -106,6 +108,8 @@ export function createAssetNode(params: {
         url: params.url,
         name: params.label ?? '素材',
         mimeType: params.mimeType ?? 'image/jpeg',
+        ...(params.thumbnailUrl !== undefined ? { thumbnailUrl: params.thumbnailUrl } : {}),
+        ...(params.duration !== undefined ? { duration: params.duration } : {}),
       },
     },
   }

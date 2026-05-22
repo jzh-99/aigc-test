@@ -20,6 +20,33 @@ export interface VideoReferenceCounts {
   audio: number
 }
 
+export interface VideoBillingInput {
+  generatedDuration?: number | null
+  referenceVideoDurations?: number[]
+  unitPrice: number
+  fallbackCreditCost: number
+}
+
+function normalizePositiveSeconds(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
+export function calculateReferenceVideoDurationSeconds(referenceVideoDurations?: number[]): number {
+  const total = (referenceVideoDurations ?? []).reduce((sum, duration) => sum + normalizePositiveSeconds(duration), 0)
+  return total > 0 ? Math.ceil(total) : 0
+}
+
+export function calculateVideoEstimatedCredits(input: VideoBillingInput): number {
+  const generatedDuration = normalizePositiveSeconds(input.generatedDuration)
+  const referenceDuration = calculateReferenceVideoDurationSeconds(input.referenceVideoDurations)
+  const referenceCredits = referenceDuration * input.unitPrice
+  const generatedCredits = generatedDuration > 0
+    ? generatedDuration * input.unitPrice
+    : input.fallbackCreditCost
+
+  return generatedCredits + referenceCredits
+}
+
 export interface VideoLimitValidationResult {
   valid: boolean
   message?: string

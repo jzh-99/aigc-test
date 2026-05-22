@@ -6,9 +6,11 @@ interface VideoGenerateParams {
   prompt: string
   workspace_id: string
   model?: string
+  video_category?: 'multimodal' | 'frames'
   images?: string[]            // 首尾帧（frames Tab）
   reference_images?: string[]  // 参考图（components/multimodal Tab，Seedance 2.0 专用）
   reference_videos?: string[]  // 参考视频（multimodal Tab，Seedance 2.0 专用）
+  reference_video_durations?: number[] // 参考视频时长（秒），用于计费
   reference_audios?: string[]  // 参考音频（multimodal Tab，Seedance 2.0 专用）
   aspect_ratio?: string
   enable_upsample?: boolean

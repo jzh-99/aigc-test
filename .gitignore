@@ -74,3 +74,5 @@ packages/db/scripts/*.map
 
 CLAUDE.md
 **/CLAUDE.md
+
+AGENTS.md

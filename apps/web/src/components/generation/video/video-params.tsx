@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Sparkles, Loader2, Coins, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
-import { parseVideoCategories, type ModelItem, type VideoCategory } from '@aigc/types'
+import { calculateReferenceVideoDurationSeconds, parseVideoCategories, type ModelItem, type VideoCategory } from '@aigc/types'
 
 type VideoMode = VideoCategory
 
@@ -17,6 +17,7 @@ interface VideoParamsProps {
   videoAspectRatio: string
   videoUpsample: boolean
   videoDuration: number
+  referenceVideoDurations: number[]
   videoGenerateAudio: boolean
   videoCameraFixed: boolean
   isSeedance: boolean
@@ -41,7 +42,7 @@ const toggleBtnCls = (active: boolean, disabled: boolean) => cn(
 
 export function VideoParams({
   models, videoMode, videoModel, videoAspectRatio, videoUpsample, videoDuration,
-  videoGenerateAudio, videoCameraFixed, isSeedance,
+  referenceVideoDurations, videoGenerateAudio, videoCameraFixed, isSeedance,
   isGenerating, isUploading, disabled,
   onModelChange, onAspectRatioChange, onUpsampleChange, onDurationChange,
   onGenerateAudioChange, onCameraFixedChange,
@@ -72,8 +73,10 @@ export function VideoParams({
       })()
     : 0
 
+  const billableDuration = (videoDuration === -1 ? 15 : videoDuration) + calculateReferenceVideoDurationSeconds(referenceVideoDurations)
+
   const estimatedCredits = isSeedance
-    ? (videoDuration === -1 ? 15 : videoDuration) * unitPrice
+    ? billableDuration * unitPrice
     : unitPrice
 
   return (

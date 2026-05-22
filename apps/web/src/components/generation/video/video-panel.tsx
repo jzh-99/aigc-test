@@ -157,6 +157,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
       let imagesParam: string[] | undefined
       let referenceImagesParam: string[] | undefined
       let referenceVideosParam: string[] | undefined
+      let referenceVideoDurationsParam: number[] | undefined
       let referenceAudiosParam: string[] | undefined
 
       if (videoMode === 'frames') {
@@ -178,6 +179,9 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         ])
         referenceImagesParam = imgs ?? undefined
         referenceVideosParam = vids ?? undefined
+        referenceVideoDurationsParam = multimodalVideos.length > 0
+          ? multimodalVideos.map((video) => video.duration).filter((duration) => Number.isFinite(duration) && duration > 0)
+          : undefined
         referenceAudiosParam = auds ?? undefined
       }
 
@@ -185,9 +189,11 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         prompt: videoPrompt.trim(),
         workspace_id: activeWorkspaceId ?? '',
         model: videoModel,
+        video_category: videoMode,
         images: imagesParam,
         reference_images: referenceImagesParam,
         reference_videos: referenceVideosParam,
+        reference_video_durations: referenceVideoDurationsParam,
         reference_audios: referenceAudiosParam,
         aspect_ratio: videoAspectRatio || undefined,
         ...(isSeedance ? {
@@ -284,6 +290,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         videoAspectRatio={videoAspectRatio}
         videoUpsample={videoUpsample}
         videoDuration={videoDuration}
+        referenceVideoDurations={multimodalVideos.map((video) => video.duration)}
         videoGenerateAudio={videoGenerateAudio}
         videoCameraFixed={videoCameraFixed}
         isSeedance={isSeedance}

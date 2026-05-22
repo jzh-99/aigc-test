@@ -122,6 +122,15 @@ const route: FastifyPluginAsync = async (app) => {
   }, async (request, reply) => {
     const { idempotency_key, model, prompt, quantity = 1, params: rawParams = {}, workspace_id: workspaceId, canvas_id, canvas_node_id, video_studio_project_id } = request.body as any
 
+    if (canvas_id && canvas_node_id) {
+      app.log.info({
+        idempotencyKey: idempotency_key,
+        canvasId: canvas_id,
+        canvasNodeId: canvas_node_id,
+        prompt,
+      }, 'Canvas image generate request received')
+    }
+
     // 清洗 params：白名单键 + 类型校验
     const params = resolveProxyUrls(sanitizeParams(rawParams))
 

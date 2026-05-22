@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { signAssetUrls } from '../../lib/storage.js'
+import { signAssetUrl, signAssetUrls } from '../../lib/storage.js'
 import { assertCanvasEnabledForWorkspace } from './_shared.js'
 
 // GET /canvases/:id/node-outputs/:nodeId — 加载单个节点的历史输出（含签名 URL）
@@ -48,6 +48,7 @@ const route: FastifyPluginAsync = async (app) => {
         'canvas_node_outputs.is_selected',
         'canvas_node_outputs.created_at',
         'assets.type as asset_type',
+        'assets.thumbnail_url',
       ])
       .where('canvas_node_outputs.canvas_id', '=', id)
       .where('canvas_node_outputs.node_id', '=', nodeId)
@@ -59,6 +60,7 @@ const route: FastifyPluginAsync = async (app) => {
       outputs.map(async (row) => ({
         ...row,
         output_urls: await signAssetUrls(row.output_urls ?? []),
+        thumbnail_url: row.thumbnail_url ? await signAssetUrl(row.thumbnail_url) : null,
       }))
     )
 

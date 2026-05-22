@@ -4,7 +4,7 @@ import { sql } from 'kysely'
 import type { TransferJobData } from '@aigc/types'
 import { getBullMQConnection } from '../lib/redis.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
-import { getTos, getBucket, getPublicUrl } from '../lib/storage.js'
+import { getTos, getBucket, getPublicUrl, getStorageRuntimeInfo } from '../lib/storage.js'
 import { buildLogger } from '../logger.js'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -138,7 +138,7 @@ export const transferWorker = new Worker<TransferJobData>(
       const cause = err instanceof Error && (err as NodeJS.ErrnoException).cause
         ? String((err as NodeJS.ErrnoException).cause)
         : undefined
-      logger.error({ jobId: job.id, taskId, assetId, originalUrl, err: msg, cause }, 'Transfer 失败')
+      logger.error({ jobId: job.id, taskId, assetId, originalUrl, err: msg, cause, storage: getStorageRuntimeInfo() }, 'Transfer 失败')
 
       const db = getDb()
       await db

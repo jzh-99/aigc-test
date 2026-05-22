@@ -22,11 +22,20 @@ import { useAuthStore } from '@/stores/auth-store'
 import { uploadAssetFile, createNodeOutput } from '@/lib/canvas/canvas-api'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { toast } from 'sonner'
+import { computeFloatingParamPanelPosition } from './floating-param-panel-position'
 import { NodeParamPanel } from './node-param-panel'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
 import { getUpstreamNodeIds } from '@/lib/canvas/dag'
 import { generateUUID } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
+import {
+  getCanvasUploadMediaKind,
+  getNodeUploadRule,
+  getUploadAccept,
+  getUploadTargetLabel,
+  isFileAllowedForUploadTarget,
+  type CanvasUploadTarget,
+} from '@/lib/canvas/media-upload-rules'
 
 const nodeTypes = nodeRegistry.getReactFlowTypesMapping()
 
@@ -80,7 +89,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     label: '脚本',
     baseType: 'storyboard_splitter',
     baseLabel: '脚本',
-    colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
+    colorClass: 'bg-lavender hover:bg-lavender text-foreground border border-border',
     testId: 'canvas-add-node-storyboard',
     items: [],
   },
@@ -142,6 +151,7 @@ function ContextNodeMenu({
   onSelect,
   onClose,
   onUpload,
+  uploadLabel = '上传文件',
   uploadingFromMenu,
 }: {
   x: number
@@ -151,6 +161,7 @@ function ContextNodeMenu({
   onClose: () => void
   /** 点击后触发文件选择（仅 add 模式下传入） */
   onUpload?: () => void
+  uploadLabel?: string
   /** 上传进行中时禁用按钮 */
   uploadingFromMenu?: boolean
 }) {
@@ -200,7 +211,7 @@ function ContextNodeMenu({
             ) : (
               <span>↑</span>
             )}
-            上传文件
+            {uploadLabel}
           </button>
         </>
       )}
@@ -217,6 +228,16 @@ const NODE_CANVAS_H: Record<string, number> = {
   script_writer: 100,
   storyboard_splitter: 100,
   video_stitch: 220,
+}
+
+const NODE_CANVAS_W: Record<string, number> = {
+  image_gen: 260,
+  text_input: 240,
+  asset: 160,
+  video_gen: 280,
+  script_writer: 240,
+  storyboard_splitter: 280,
+  video_stitch: 280,
 }
 
 function FloatingParamPanel({
@@ -237,24 +258,35 @@ function FloatingParamPanel({
   const [tx, ty, zoom] = useStore((s) => s.transform)
   const PANEL_W = ['script_writer', 'storyboard_splitter'].includes(node.type ?? '') ? 320 : 640
   const PANEL_MAX_H = 560
-  const NODE_W = node.type === 'script_writer' || node.type === 'storyboard_splitter' ? 240 : 280
   const GAP = 8
 
   const rect = wrapperRef.current?.getBoundingClientRect()
   if (!rect) return null
 
   const domNode = wrapperRef.current?.querySelector(`[data-id="${node.id}"]`) as HTMLElement | null
-  const nodeScreenH = domNode
-    ? domNode.getBoundingClientRect().height
-    : (NODE_CANVAS_H[node.type ?? ''] ?? 200) * zoom
-
-  const sx = rect.left + node.position.x * zoom + tx
-  const sy = rect.top + node.position.y * zoom + ty
-
-  const rawTop = sy + nodeScreenH + GAP
-  const rawLeft = sx + (NODE_W * zoom) / 2 - PANEL_W / 2
-  const top = Math.min(rawTop, window.innerHeight - 200)
-  const left = Math.max(8, Math.min(rawLeft, window.innerWidth - PANEL_W - 8))
+  const nodeRect = domNode?.getBoundingClientRect()
+  // 参数面板必须跟随节点的实际 DOM 中心，避免动态宽度节点出现视觉偏移。
+  const { top, left } = computeFloatingParamPanelPosition({
+    panelWidth: PANEL_W,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    gap: GAP,
+    wrapperRect: rect,
+    transform: { x: tx, y: ty, zoom },
+    nodePosition: node.position,
+    fallbackNodeSize: {
+      width: NODE_CANVAS_W[node.type ?? ''] ?? 280,
+      height: NODE_CANVAS_H[node.type ?? ''] ?? 200,
+    },
+    nodeRect: nodeRect
+      ? {
+          left: nodeRect.left,
+          top: nodeRect.top,
+          width: nodeRect.width,
+          height: nodeRect.height,
+        }
+      : undefined,
+  })
 
   return createPortal(
     <div
@@ -301,9 +333,10 @@ function Flow({
   const addNodeAndConnect = useCanvasStructureStore((s) => s.addNodeAndConnect)
   const addNodesWithEdges = useCanvasStructureStore((s) => s.addNodesWithEdges)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
+  const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const generatingNodeIds = useCanvasExecutionStore((s) => s.generatingNodeIds)
   const setHighlightedNodes = useCanvasExecutionStore((s) => s.setHighlightedNodes)
-  const addNodeOutput = useCanvasExecutionStore((s) => s.addNodeOutput)
+  const replaceNodeOutput = useCanvasExecutionStore((s) => s.replaceNodeOutput)
   const initNodeState = useCanvasExecutionStore((s) => s.initNodeState)
   const { project } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -318,6 +351,8 @@ function Flow({
   const [uploadingFromMenu, setUploadingFromMenu] = useState(false)
   /** 记录右键菜单触发时的画布坐标，用于定位新建节点 */
   const uploadMenuPositionRef = useRef<{ x: number; y: number } | null>(null)
+  /** 记录右键菜单触发的上传目标，空白画布新增素材节点，节点菜单替换节点资源 */
+  const uploadMenuTargetRef = useRef<CanvasUploadTarget | null>(null)
 
   // Track drag-connect source so onConnectEnd can auto-connect to node body
   const connectStartRef = useRef<{ nodeId: string; handleId: string | null } | null>(null)
@@ -373,27 +408,26 @@ function Flow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kickPoll])
 
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number; mode: 'add' | 'downstream'; sourceNodeIds: string[] } | null>(null)
-
-  const getActiveSourceNodeIds = useCallback(() => (
-    selectedNodeIds.length > 1 ? selectedNodeIds : selectedNodeId ? [selectedNodeId] : []
-  ), [selectedNodeId, selectedNodeIds])
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number; mode: 'add' | 'downstream'; sourceNodeIds: string[]; uploadTarget: CanvasUploadTarget | null } | null>(null)
 
   const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const rect = wrapperRef.current?.getBoundingClientRect()
     if (!rect) return
     const canvasPos = project({ x: e.clientX - rect.left, y: e.clientY - rect.top })
-    const sourceNodeIds = getActiveSourceNodeIds()
+    setSelectedNodeId(null)
+    setSelectedEdgeId(null)
+    setSelectedNodeIds((prev) => (prev.length === 0 ? prev : []))
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       canvasX: canvasPos.x,
       canvasY: canvasPos.y,
-      mode: sourceNodeIds.length > 0 ? 'downstream' : 'add',
-      sourceNodeIds,
+      mode: 'add',
+      sourceNodeIds: [],
+      uploadTarget: { kind: 'canvas' },
     })
-  }, [project, getActiveSourceNodeIds])
+  }, [project])
 
   const handleNodeContextMenu = useCallback((e: React.MouseEvent, node: AppNode) => {
     e.preventDefault()
@@ -416,6 +450,7 @@ function Flow({
       canvasY: avgY,
       mode: 'downstream',
       sourceNodeIds,
+      uploadTarget: getNodeUploadRule(node),
     })
   }, [nodes, selectedNodeId, selectedNodeIds])
 
@@ -432,13 +467,15 @@ function Flow({
 
   /** 右键菜单点击"上传文件"：记录坐标后触发隐藏 input */
   const handleContextMenuUpload = useCallback(() => {
-    if (!contextMenu) return
+    if (!contextMenu?.uploadTarget) return
     uploadMenuPositionRef.current = { x: contextMenu.canvasX, y: contextMenu.canvasY }
+    uploadMenuTargetRef.current = contextMenu.uploadTarget
+    uploadFromMenuRef.current?.setAttribute('accept', getUploadAccept(contextMenu.uploadTarget))
     setContextMenu(null)
     uploadFromMenuRef.current?.click()
   }, [contextMenu])
 
-  /** 文件选择后：上传并根据 MIME 类型创建图片或视频节点 */
+  /** 文件选择后：空白画布新增素材节点；节点菜单替换当前图片/视频资源 */
   const handleUploadFromMenu = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -446,23 +483,56 @@ function Flow({
 
     if (!token) { toast.error('请先登录'); return }
 
+    const target = uploadMenuTargetRef.current ?? { kind: 'canvas' as const }
+    if (!isFileAllowedForUploadTarget(file, target)) {
+      const acceptText = target.kind === 'canvas'
+        ? '请选择图片或视频文件'
+        : target.mediaKind === 'image'
+        ? '当前节点只能上传图片文件'
+        : '当前节点只能上传视频文件'
+      toast.error(acceptText)
+      return
+    }
+
     const position = uploadMenuPositionRef.current ?? { x: 200, y: 200 }
-    const isVideo = file.type.startsWith('video/')
-    const nodeType = isVideo ? 'video_gen' : 'image_gen'
+    const mediaKind = getCanvasUploadMediaKind(file)
+    if (!mediaKind) {
+      toast.error('请选择图片或视频文件')
+      return
+    }
 
     setUploadingFromMenu(true)
     try {
       const url = await uploadAssetFile(file, token)
-      const nodeId = `node_${generateUUID()}`
-      addNodeWithConfig(nodeType, position, {}, nodeId)
-      // 持久化到数据库，拿到真实 UUID
-      const outputId = await createNodeOutput(canvasId, nodeId, url, token)
-      initNodeState(nodeId)
-      addNodeOutput(nodeId, {
-        id: outputId,
-        url,
-        type: isVideo ? 'video' : 'image',
-      })
+      if (target.kind === 'canvas') {
+        const nodeId = `node_${generateUUID()}`
+        const nodeType = mediaKind === 'video' ? 'video_gen' : 'image_gen'
+        addNodeWithConfig(nodeType, position, {}, nodeId)
+        const outputId = await createNodeOutput(canvasId, nodeId, url, token)
+        initNodeState(nodeId)
+        replaceNodeOutput(nodeId, {
+          id: outputId,
+          url,
+          type: mediaKind,
+        })
+        toast.success('上传成功')
+        return
+      }
+
+      if (target.uploadMode === 'output') {
+        const outputId = await createNodeOutput(canvasId, target.nodeId, url, token)
+        initNodeState(target.nodeId)
+        replaceNodeOutput(target.nodeId, {
+          id: outputId,
+          url,
+          type: mediaKind,
+        })
+      } else {
+        updateNodeData(target.nodeId, {
+          config: { url, name: file.name, mimeType: file.type },
+          label: file.name.replace(/\.[^.]+$/, ''),
+        })
+      }
       toast.success('上传成功')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '上传失败'
@@ -470,7 +540,7 @@ function Flow({
     } finally {
       setUploadingFromMenu(false)
     }
-  }, [token, canvasId, addNodeWithConfig, addNodeOutput, initNodeState])
+  }, [token, canvasId, addNodeWithConfig, initNodeState, replaceNodeOutput, updateNodeData])
 
   const [showShortcuts, setShowShortcuts] = useState(false)
   const clipboardRef = useRef<{ nodes: AppNode[]; edges: AppEdge[] } | null>(null)
@@ -908,7 +978,8 @@ function Flow({
           title={contextMenu.mode === 'downstream' ? '创建下游节点' : undefined}
           onSelect={handleContextMenuAdd}
           onClose={() => setContextMenu(null)}
-          onUpload={contextMenu.mode === 'add' ? handleContextMenuUpload : undefined}
+          onUpload={contextMenu.uploadTarget ? handleContextMenuUpload : undefined}
+          uploadLabel={contextMenu.uploadTarget ? getUploadTargetLabel(contextMenu.uploadTarget) : undefined}
           uploadingFromMenu={uploadingFromMenu}
         />
       )}

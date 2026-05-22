@@ -349,6 +349,7 @@ function AssetsTab({
           <div className="grid grid-cols-2 gap-2">
             {items.map((asset) => {
               const url = asset.storage_url || asset.original_url
+              const thumbnailUrl = asset.thumbnail_url || null
               const isVideo = subTab === 'video' || asset.type?.startsWith('video')
               return (
                 <button
@@ -358,11 +359,11 @@ function AssetsTab({
                   className="group relative rounded-lg overflow-hidden bg-muted aspect-square focus:outline-none"
                 >
                   {url ? (
-                    isVideo ? (
+                    isVideo && !thumbnailUrl ? (
                       <video src={url} muted preload="metadata" playsInline className="w-full h-full object-cover" />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      <img src={thumbnailUrl ?? url} alt="" className="w-full h-full object-cover" loading="lazy" />
                     )
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">

@@ -3,6 +3,7 @@ import { getDb } from '@aigc/db'
 import {
   parseVideoCategories,
   validateVideoReferenceLimits,
+  calculateVideoEstimatedCredits,
   type VideoCategory,
   type VideoReferenceCounts,
 } from '@aigc/types'
@@ -15,6 +16,7 @@ const ALLOWED_PARAM_KEYS = new Set([
   'aspect_ratio', 'resolution', 'duration', 'generate_audio',
   'camera_fixed', 'enable_upsample', 'watermark',
   'images', 'reference_images', 'reference_videos', 'reference_audios',
+  'video_category', 'reference_video_durations',
 ])
 
 interface VideoGenerateBody {
@@ -31,7 +33,9 @@ interface VideoGenerateBody {
   images?: string[]
   reference_images?: string[]
   reference_videos?: string[]
+  reference_video_durations?: number[]
   reference_audios?: string[]
+  video_category?: VideoCategory
   canvas_id?: string
   canvas_node_id?: string
   video_studio_project_id?: string
@@ -51,6 +55,8 @@ function resolveRequestCategory(body: VideoGenerateBody): { category: VideoCateg
   const hasReferences = referenceCounts.image > 0 || referenceCounts.video > 0 || referenceCounts.audio > 0
 
   if (framesCount > 0 && hasReferences) return { error: '同一次请求不能同时使用首尾帧和全能参考素材' }
+  if (body.video_category === 'frames') return { category: 'frames', counts: { image: framesCount, video: 0, audio: 0 } }
+  if (body.video_category === 'multimodal') return { category: 'multimodal', counts: referenceCounts }
   if (framesCount > 0) return { category: 'frames', counts: { image: framesCount, video: 0, audio: 0 } }
   return { category: 'multimodal', counts: referenceCounts }
 }
@@ -62,6 +68,13 @@ function sanitizeParams(raw: Record<string, unknown>): Record<string, unknown> {
     if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
       out[k] = v
     } else if (Array.isArray(v)) {
+      if (k === 'reference_video_durations') {
+        out[k] = v
+          .slice(0, 10)
+          .map(item => Number(item))
+          .filter(item => Number.isFinite(item) && item > 0)
+        continue
+      }
       out[k] = v.slice(0, 10).map(item => (typeof item === 'string' ? item : String(item)))
     }
   }
@@ -89,7 +102,9 @@ const route: FastifyPluginAsync = async (app) => {
           images:           { type: 'array', items: { type: 'string' } },
           reference_images: { type: 'array', items: { type: 'string' } },
           reference_videos: { type: 'array', items: { type: 'string' } },
+          reference_video_durations: { type: 'array', items: { type: 'number', minimum: 0 } },
           reference_audios: { type: 'array', items: { type: 'string' } },
+          video_category: { type: 'string', enum: ['multimodal', 'frames'] },
           canvas_id: { type: 'string', format: 'uuid' },
           canvas_node_id: { type: 'string', maxLength: 128 },
           video_studio_project_id: { type: 'string', format: 'uuid' },
@@ -102,12 +117,14 @@ const route: FastifyPluginAsync = async (app) => {
       prompt, workspace_id: workspaceId, model, video_studio_project_id,
       canvas_id: canvasId, canvas_node_id: canvasNodeId,
       aspect_ratio, resolution, duration, generate_audio, camera_fixed,
-      enable_upsample, watermark, images, reference_images, reference_videos, reference_audios,
+      enable_upsample, watermark, images, reference_images, reference_videos, reference_video_durations, reference_audios,
+      video_category,
     } = request.body
 
     const params = sanitizeParams({
       aspect_ratio, resolution, duration, generate_audio, camera_fixed,
-      enable_upsample, watermark, images, reference_images, reference_videos, reference_audios,
+      enable_upsample, watermark, images, reference_images, reference_videos, reference_video_durations, reference_audios,
+      video_category,
     })
 
     const db = getDb()
@@ -173,11 +190,19 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 按秒计费：unitPrice × duration，duration=-1（自动）时用 credit_cost 兜底
+    // 按秒计费：生成时长 + 参考视频总时长；duration=-1（自动）时生成部分用 credit_cost 兜底
     const durationSec = typeof params.duration === 'number' && params.duration > 0 ? params.duration : null
+    const referenceVideoDurations = Array.isArray(params.reference_video_durations)
+      ? params.reference_video_durations.filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
+      : []
     const resolutionStr = typeof params.resolution === 'string' ? params.resolution : undefined
     const { unitPrice } = resolveUnitPrice(providerModel.params_pricing, resolutionStr, providerModel.credit_cost)
-    const estimatedCredits = durationSec !== null ? unitPrice * durationSec : providerModel.credit_cost
+    const estimatedCredits = calculateVideoEstimatedCredits({
+      generatedDuration: durationSec,
+      referenceVideoDurations,
+      unitPrice,
+      fallbackCreditCost: providerModel.credit_cost,
+    })
 
     // 冻结积分
     let creditAccountId: string

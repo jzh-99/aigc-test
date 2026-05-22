@@ -3,6 +3,14 @@ import { sql } from 'kysely'
 import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { Queue } from 'bullmq'
 import { buildLogger } from '../logger.js'
+import {
+  classifyVideoPollHttpError,
+  MAX_CONSECUTIVE_VIDEO_POLL_ERRORS,
+  parseVolcengineTaskResponse,
+  VIDEO_POLL_INTERVAL_MS,
+  type VideoPollStatus,
+  type VideoPollResult,
+} from './video-poller-result.js'
 
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
@@ -16,14 +24,18 @@ const logger = buildLogger()
 
 // Track consecutive poll errors per task to detect persistent API failures
 const pollErrorCounts = new Map<string, number>()
-const MAX_CONSECUTIVE_POLL_ERRORS = 5
 let pollTick = 0
 const POLL_CONCURRENCY = 10
 
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
 const MAX_VIDEO_AGE_MS = 60 * 60 * 1000 // 1 hour
-
+const VEO_STATUS_MAP: Record<string, VideoPollStatus> = {
+  SUCCESS: 'SUCCESS',
+  FAILURE: 'FAILURE',
+  NOT_START: 'NOT_START',
+  IN_PROGRESS: 'IN_PROGRESS',
+}
 interface VideoTaskRow {
   taskId: string
   batchId: string
@@ -36,13 +48,10 @@ interface VideoTaskRow {
   provider: string
   canvasId: string | null
   canvasNodeId: string | null
+  params: unknown
 }
 
-async function checkVeoTask(externalTaskId: string): Promise<{
-  status: string
-  videoUrl?: string
-  failReason?: string
-}> {
+async function checkVeoTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
   try {
@@ -50,25 +59,25 @@ async function checkVeoTask(externalTaskId: string): Promise<{
       headers: { Authorization: `Bearer ${VEO_API_KEY}` },
       signal: controller.signal,
     })
-    if (!res.ok) return { status: 'POLL_ERROR' }
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return classifyVideoPollHttpError(res.status, errorBody)
+    }
     const data = (await res.json()) as { status: string; data?: { output?: string }; fail_reason?: string }
     return {
-      status: data.status,
+      status: VEO_STATUS_MAP[data.status] ?? 'POLL_ERROR',
       videoUrl: data.data?.output,
       failReason: data.fail_reason,
     }
-  } catch {
-    return { status: 'POLL_ERROR' }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true }
   } finally {
     clearTimeout(timer)
   }
 }
 
-async function checkVolcengineTask(externalTaskId: string): Promise<{
-  status: string
-  videoUrl?: string
-  failReason?: string
-}> {
+async function checkVolcengineTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
   try {
@@ -78,30 +87,14 @@ async function checkVolcengineTask(externalTaskId: string): Promise<{
       headers: { Authorization: `Bearer ${volcengineApiKey}` },
       signal: controller.signal,
     })
-    if (!res.ok) return { status: 'POLL_ERROR' }
-    const data = (await res.json()) as {
-      status: string
-      content?: Array<{ type: string; video_url?: { url?: string } }>
-      error?: { message?: string }
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return classifyVideoPollHttpError(res.status, errorBody)
     }
-    // Map Volcengine status to internal status
-    const statusMap: Record<string, string> = {
-      succeeded: 'SUCCESS',
-      failed: 'FAILURE',
-      expired: 'FAILURE',
-      queued: 'NOT_START',
-      running: 'IN_PROGRESS',
-      cancelled: 'FAILURE',
-    }
-    // content 是数组，取第一个 video_url 项的 url
-    const videoItem = data.content?.find(item => item.type === 'video_url')
-    return {
-      status: statusMap[data.status] ?? 'POLL_ERROR',
-      videoUrl: videoItem?.video_url?.url,
-      failReason: data.error?.message,
-    }
-  } catch {
-    return { status: 'POLL_ERROR' }
+    return parseVolcengineTaskResponse(await res.json())
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true }
   } finally {
     clearTimeout(timer)
   }
@@ -174,6 +167,12 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
   if (task.canvasId && task.canvasNodeId) {
     const canvasId = task.canvasId
     const nodeId = task.canvasNodeId
+    const params = task.params as { duration?: unknown } | null | undefined
+    const duration = typeof params?.duration === 'number' && Number.isFinite(params.duration) && params.duration > 0 ? params.duration : undefined
+    const paramsSnapshot = JSON.stringify({
+      params: task.params,
+      ...(duration !== undefined ? { duration } : {}),
+    })
     await db.updateTable('canvas_node_outputs')
       .set({ is_selected: false })
       .where('canvas_id', '=', canvasId)
@@ -185,6 +184,7 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
         node_id: nodeId,
         batch_id: batchId,
         output_urls: sql`ARRAY[${videoUrl}]::text[]`,
+        params_snapshot: sql`${paramsSnapshot}::jsonb`,
         is_selected: true,
       })
       .execute()
@@ -308,10 +308,32 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
     } else if (result.status === 'FAILURE') {
       pollErrorCounts.delete(task.taskId)
       await handleVideoFailure(task, result.failReason ?? 'Video generation failed')
+    } else if (result.status === 'POLL_AUTH_ERROR') {
+      pollErrorCounts.delete(task.taskId)
+      logger.error({
+        taskId: task.taskId,
+        batchId: task.batchId,
+        provider: task.provider,
+        externalTaskId: task.externalTaskId,
+        httpStatus: result.httpStatus,
+        errorMessage: result.errorMessage,
+      }, 'Video task poll auth failed, failing task')
+      await handleVideoFailure(task, result.failReason ?? '视频状态查询鉴权失败，请检查服务配置')
     } else if (result.status === 'POLL_ERROR') {
       const count = (pollErrorCounts.get(task.taskId) ?? 0) + 1
       pollErrorCounts.set(task.taskId, count)
-      if (count >= MAX_CONSECUTIVE_POLL_ERRORS) {
+      logger.warn({
+        taskId: task.taskId,
+        batchId: task.batchId,
+        provider: task.provider,
+        externalTaskId: task.externalTaskId,
+        count,
+        max: MAX_CONSECUTIVE_VIDEO_POLL_ERRORS,
+        httpStatus: result.httpStatus,
+        retryable: result.retryable,
+        errorMessage: result.errorMessage,
+      }, 'Video task poll error')
+      if (count >= MAX_CONSECUTIVE_VIDEO_POLL_ERRORS) {
         logger.warn({ taskId: task.taskId, count }, 'Video task exceeded max poll errors, failing task')
         pollErrorCounts.delete(task.taskId)
         await handleVideoFailure(task, '生成过程中出现异常，请重新发起请求')
@@ -343,6 +365,7 @@ async function pollVideoTasks(): Promise<void> {
       'task_batches.provider as provider',
       'task_batches.canvas_id as canvasId',
       'task_batches.canvas_node_id as canvasNodeId',
+      'task_batches.params as params',
     ])
     .where('tasks.status', '=', 'processing')
     .where('task_batches.module', '=', 'video')
@@ -361,8 +384,6 @@ async function pollVideoTasks(): Promise<void> {
 }
 
 export function startVideoPoller(): NodeJS.Timeout {
-  const POLL_INTERVAL = 15_000
-
   // Delay first run by 30s to let service warm up
   const initialDelay = setTimeout(() => {
     pollVideoTasks().catch((err) => logger.error({ err }, 'Video poller error'))
@@ -370,7 +391,7 @@ export function startVideoPoller(): NodeJS.Timeout {
 
   const timer = setInterval(() => {
     pollVideoTasks().catch((err) => logger.error({ err }, 'Video poller error'))
-  }, POLL_INTERVAL)
+  }, VIDEO_POLL_INTERVAL_MS)
 
   logger.info('Video poller started (every 15 seconds)')
   return timer

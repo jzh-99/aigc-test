@@ -2,7 +2,9 @@ import { Film, ImageIcon, Loader2, Music, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { VideoMode } from '@/lib/canvas/types'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
-import { getVideoCategoryKeys, parseVideoCategories, type ModelItem, type VideoCategory } from '@aigc/types'
+import { calculateReferenceVideoDurationSeconds, getVideoCategoryKeys, parseVideoCategories, type ModelItem, type VideoCategory } from '@aigc/types'
+import { ResourceMentionTextarea } from './resource-mention-textarea'
+import type { CanvasReferenceMentionResource } from './resource-mentions'
 
 const VIDEO_MODE_TO_CATEGORY: Record<VideoMode, VideoCategory> = {
   multiref: 'multimodal',
@@ -14,13 +16,102 @@ const CATEGORY_TO_VIDEO_MODE: Record<VideoCategory, VideoMode> = {
   frames: 'keyframe',
 }
 
+function getReferenceBadgeClass(resource: CanvasReferenceMentionResource): string {
+  if (resource.type === 'video') return 'bg-violet-600 text-white'
+  if (resource.type === 'audio') return 'bg-emerald-600 text-white'
+  return 'bg-blue-600 text-white'
+}
+
+function ReferencePreviewItem({ resource }: { resource: CanvasReferenceMentionResource }) {
+  const isImage = resource.type === 'image'
+  const isVideo = resource.type === 'video'
+  const isAudio = resource.type === 'audio'
+  const previewImageUrl = isVideo ? resource.thumbnailUrl : resource.url
+
+  return (
+    <div
+      data-testid={`canvas-reference-preview-${resource.mentionLabel}`}
+      className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border bg-muted/40"
+      title={`${resource.mentionLabel} · ${resource.sourceLabel}`}
+    >
+      {(isImage || (isVideo && previewImageUrl)) && (
+        <img
+          src={previewImageUrl ?? resource.url}
+          alt={resource.mentionLabel}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      )}
+      {isVideo && !previewImageUrl && (
+        <video
+          src={resource.url}
+          className="h-full w-full bg-black object-cover"
+          muted
+          playsInline
+          preload="metadata"
+          aria-label={resource.mentionLabel}
+        />
+      )}
+      {isAudio && (
+        <div className="flex h-full w-full items-center justify-center bg-emerald-50">
+          <Music className="h-5 w-5 text-emerald-600" />
+        </div>
+      )}
+      {isVideo && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/90 shadow">
+            <Play className="ml-0.5 h-3 w-3 text-violet-700" />
+          </div>
+        </div>
+      )}
+      <span className={cn('absolute left-1 top-1 rounded px-1 text-[9px] font-bold leading-4 shadow', getReferenceBadgeClass(resource))}>
+        @{resource.mentionLabel}
+      </span>
+    </div>
+  )
+}
+
+function ReferencePreviewGroup({
+  title,
+  count,
+  type,
+  resources,
+}: {
+  title: string
+  count: number
+  type: CanvasReferenceMentionResource['type']
+  resources: CanvasReferenceMentionResource[]
+}) {
+  if (resources.length === 0) return null
+
+  const Icon = type === 'video' ? Film : type === 'audio' ? Music : ImageIcon
+  const iconClassName = type === 'video' ? 'text-violet-600' : type === 'audio' ? 'text-emerald-600' : 'text-blue-600'
+
+  return (
+    <div data-testid={`canvas-reference-preview-group-${type}`} className="space-y-1">
+      <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+        <Icon className={cn('h-3 w-3', iconClassName)} />
+        <span>{title} {count}</span>
+      </div>
+      <div
+        data-testid={`canvas-reference-preview-list-${type}`}
+        className="flex max-w-full gap-1.5 overflow-x-auto pb-1"
+      >
+        {resources.map((resource) => <ReferencePreviewItem key={resource.id} resource={resource} />)}
+      </div>
+    </div>
+  )
+}
+
 interface VideoGenPanelProps {
   promptDraft: string
   setPromptDraft: (value: string) => void
   flushPromptDraft: () => void
   upstreamTextNodeLabels: string[]
+  mentionResources: CanvasReferenceMentionResource[]
   multirefImages: string[]
   multirefVideos: string[]
+  multirefVideoDurations: number[]
   multirefAudios: string[]
   keyframeImages: Array<{ url: string; edgeId: string }>
   displayedKeyframes: Array<{ url: string; edgeId: string }>
@@ -48,8 +139,10 @@ export function VideoGenPanel({
   setPromptDraft,
   flushPromptDraft,
   upstreamTextNodeLabels,
+  mentionResources,
   multirefImages,
   multirefVideos,
+  multirefVideoDurations,
   multirefAudios,
   keyframeImages,
   displayedKeyframes,
@@ -90,9 +183,18 @@ export function VideoGenPanel({
   const resolutionOptions = extractSchemaEnums(currentDbModel?.params_schema, 'resolution').map((e) => e.value)
   const showResolutionSelector = resolutionOptions.length > 1
 
-  const videoCredits = currentDbModel
-    ? getPriceByResolution(currentDbModel, String(videoDuration), currentDbModel.credit_cost)
+  const videoUnitPrice = currentDbModel
+    ? getPriceByResolution(currentDbModel, videoResolution || resolutionOptions[0] || '', currentDbModel.credit_cost)
     : 0
+  const referenceDuration = videoMode === 'multiref' ? calculateReferenceVideoDurationSeconds(multirefVideoDurations) : 0
+  const videoCredits = currentDbModel && isSeedance
+    ? (videoDuration > 0
+      ? (videoDuration + referenceDuration) * videoUnitPrice
+      : currentDbModel.credit_cost + referenceDuration * videoUnitPrice)
+    : videoUnitPrice
+  const imageMentionResources = mentionResources.filter((resource) => resource.type === 'image')
+  const videoMentionResources = mentionResources.filter((resource) => resource.type === 'video')
+  const audioMentionResources = mentionResources.filter((resource) => resource.type === 'audio')
 
   return (
     <div className="flex gap-0 divide-x divide-border">
@@ -130,11 +232,12 @@ export function VideoGenPanel({
             ))}
           </div>
         )}
-        <textarea
-          className="flex-1 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary min-h-[80px]"
+        <ResourceMentionTextarea
+          minHeightClassName="min-h-[80px]"
           placeholder="描述视频内容..."
           value={promptDraft}
-          onChange={(e) => setPromptDraft(e.target.value)}
+          resources={mentionResources}
+          onChange={setPromptDraft}
           onBlur={flushPromptDraft}
         />
 
@@ -145,22 +248,10 @@ export function VideoGenPanel({
                 可连接图片、视频、音频节点
               </div>
             ) : (
-              <div className="flex flex-wrap gap-1">
-                {multirefImages.length > 0 && (
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
-                    <ImageIcon className="w-3 h-3" />图片 x{multirefImages.length}
-                  </span>
-                )}
-                {multirefVideos.length > 0 && (
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-violet-50 border border-violet-200 text-[10px] text-violet-600 font-medium">
-                    <Film className="w-3 h-3" />视频 x{multirefVideos.length}
-                  </span>
-                )}
-                {multirefAudios.length > 0 && (
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-600 font-medium">
-                    <Music className="w-3 h-3" />音频 x{multirefAudios.length}
-                  </span>
-                )}
+              <div className="space-y-2">
+                <ReferencePreviewGroup title="图片" count={multirefImages.length} type="image" resources={imageMentionResources} />
+                <ReferencePreviewGroup title="视频" count={multirefVideos.length} type="video" resources={videoMentionResources} />
+                <ReferencePreviewGroup title="音频" count={multirefAudios.length} type="audio" resources={audioMentionResources} />
               </div>
             )}
           </div>

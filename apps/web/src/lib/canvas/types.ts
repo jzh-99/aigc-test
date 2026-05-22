@@ -73,6 +73,8 @@ export interface AssetConfig {
   url: string
   name?: string
   mimeType?: string
+  thumbnailUrl?: string
+  thumbnail_url?: string
   duration?: number
 }
 
@@ -235,6 +237,7 @@ export interface NodeOutputAsset {
   id: string           // 资产或快照 ID
   url: string          // S3 访问地址
   type: HandleType     // 输出类型 (image/video/text)
+  thumbnailUrl?: string
   paramsSnapshot?: unknown // 当时的参数快照
 }
 

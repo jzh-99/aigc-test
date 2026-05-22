@@ -1,6 +1,23 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { signAssetUrl, extractStorageKey, signThumbnailUrl, encryptProxyUrl } from '../../lib/storage.js'
+import { signAssetUrl } from '../../lib/storage.js'
+
+interface AssetThumbnailSource {
+  thumbnail_url: string | null
+}
+
+type SignUrl = (url: string) => Promise<string | null>
+
+/**
+ * 资产列表只透传数据库记录的缩略图。
+ * 图片资产的 thumbnail_url 允许为 null，避免接口临时生成缩略图破坏字段语义。
+ */
+export async function resolveAssetThumbnailUrl(
+  asset: AssetThumbnailSource,
+  signUrl: SignUrl = signAssetUrl,
+): Promise<string | null> {
+  return asset.thumbnail_url ? await signUrl(asset.thumbnail_url) : null
+}
 
 const route: FastifyPluginAsync = async (app) => {
   // GET /assets — 分页查询工作区资产列表（游标分页）
@@ -49,6 +66,7 @@ const route: FastifyPluginAsync = async (app) => {
           'a.id',
           'a.type',
           'a.storage_url',
+          'a.thumbnail_url',
           'a.original_url',
           'a.created_at',
           'b.id as batch_id',
@@ -99,20 +117,11 @@ const route: FastifyPluginAsync = async (app) => {
       const signed = await Promise.all(
         assets.map(async (a: any) => {
           const rawUrl: string | null = a.storage_url
-          const storageKey = rawUrl ? extractStorageKey(rawUrl) : null
-          let thumbnail_url: string | null = null
-          if (storageKey) {
-            // MinIO/S3 — HMAC 签名缩略图端点
-            thumbnail_url = signThumbnailUrl(storageKey, 400) || null
-          } else if (rawUrl?.startsWith('http://')) {
-            // 加密 URL 以隐藏存储服务器 IP
-            thumbnail_url = `/api/v1/assets/proxy?token=${encryptProxyUrl(rawUrl)}&w=400`
-          }
           return {
             id: a.id,
             type: a.type,
             storage_url: rawUrl ? await signAssetUrl(rawUrl) : null,
-            thumbnail_url,
+            thumbnail_url: await resolveAssetThumbnailUrl(a),
             original_url: a.original_url ? await signAssetUrl(a.original_url) : null,
             created_at: a.created_at.toISOString?.() ?? String(a.created_at),
             batch: { id: a.batch_id, prompt: a.prompt, model: a.model },

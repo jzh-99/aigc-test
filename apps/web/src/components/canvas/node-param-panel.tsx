@@ -46,6 +46,7 @@ import { VideoGenPanel } from './panels/video-gen-panel'
 import { ScriptWriterPanel } from './panels/script-writer-panel'
 import { StoryboardSplitterPanel } from './panels/storyboard-splitter-panel'
 import { VideoStitchPanel } from './panels/video-stitch-panel'
+import { buildPromptWithResourceMentions, PROMPT_MAX_LENGTH } from './panels/resource-mentions'
 
 interface Props {
   node: AppNode
@@ -179,6 +180,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     orderedImageRefs,
     multirefImages,
     multirefVideos,
+    multirefVideoDurations,
     multirefAudios,
     keyframeImages,
   } = useNodeTopology(node.id)
@@ -247,6 +249,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [currentVideoDbModel, isVideoGen, updateCfg, videoModelsReady, videoCfg.videoCategoryLimits])
 
   const handleExecuteImage = useCallback(async () => {
+    if (Array.from(promptDraft).length > PROMPT_MAX_LENGTH) {
+      toast.error(`提示词不能超过 ${PROMPT_MAX_LENGTH} 字`)
+      return
+    }
+
     const dbModel = imageModels.find((m) => m.code === modelType)
     const modelCode = (() => {
       if (dbModel && dbModel.params_pricing.length > 0) {
@@ -261,7 +268,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
       return
     }
 
-    const finalPrompt = [...upstreamTexts, promptDraft].filter(Boolean).join('\n')
+    const finalPrompt = buildPromptWithResourceMentions(upstreamTexts, promptDraft, orderedImageRefs)
     if (!canvasId || !finalPrompt.trim()) {
       toast.error('请先填写提示词')
       return
@@ -382,7 +389,12 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [updateCfg])
 
   const handleExecuteVideo = useCallback(async () => {
-    const finalPrompt = [...upstreamTexts, promptDraft].filter(Boolean).join('\n')
+    if (Array.from(promptDraft).length > PROMPT_MAX_LENGTH) {
+      toast.error(`提示词不能超过 ${PROMPT_MAX_LENGTH} 字`)
+      return
+    }
+
+    const finalPrompt = buildPromptWithResourceMentions(upstreamTexts, promptDraft, orderedImageRefs)
     if (!canvasId || !finalPrompt.trim()) {
       toast.error('请先填写提示词')
       return
@@ -415,6 +427,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           watermark: videoWatermark,
           referenceImages: videoMode === 'multiref' ? multirefImages : undefined,
           referenceVideos: videoMode === 'multiref' ? multirefVideos : undefined,
+          referenceVideoDurations: videoMode === 'multiref' ? multirefVideoDurations : undefined,
           referenceAudios: videoMode === 'multiref' ? multirefAudios : undefined,
           frameStart: videoMode === 'keyframe' ? displayedKeyframes[0]?.url : undefined,
           frameEnd: videoMode === 'keyframe' ? displayedKeyframes[1]?.url : undefined,
@@ -464,9 +477,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     multirefAudios,
     multirefImages,
     multirefVideos,
+    multirefVideoDurations,
     node.id,
     onExecuted,
     promptDraft,
+    orderedImageRefs,
     setNodeError,
     setNodeStatus,
     token,
@@ -510,6 +525,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           flushPromptDraft={flushPromptDraft}
           upstreamTextNodeLabels={upstreamTextNodeLabels}
           orderedImageRefs={orderedImageRefs}
+          mentionResources={orderedImageRefs}
           modelType={modelType}
           resolution={resolution}
           aspectRatio={aspectRatio}
@@ -529,8 +545,10 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           setPromptDraft={setPromptDraft}
           flushPromptDraft={flushPromptDraft}
           upstreamTextNodeLabels={upstreamTextNodeLabels}
+          mentionResources={orderedImageRefs}
           multirefImages={multirefImages}
           multirefVideos={multirefVideos}
+          multirefVideoDurations={multirefVideoDurations}
           multirefAudios={multirefAudios}
           keyframeImages={keyframeImages}
           displayedKeyframes={displayedKeyframes}

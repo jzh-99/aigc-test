@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
-import type { CanvasNodeData } from '@/lib/canvas/types'
+import type { AppNode, CanvasNodeData } from '@/lib/canvas/types'
 import { isAssetConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
@@ -57,18 +57,47 @@ function toCssAspectRatio(aspectRatio: string | undefined): string {
   return `${wRaw} / ${hRaw}`
 }
 
+function getReferenceKind(node: AppNode | undefined): 'image' | 'video' | 'audio' | null {
+  if (!node || node.type === 'text_input') return null
+  if (node.type === 'image_gen') return 'image'
+  if (node.type === 'video_gen' || node.type === 'video_stitch') return 'video'
+  if (!isAssetConfig(node.data.config)) return null
+
+  const mimeType = node.data.config.mimeType ?? ''
+  if (mimeType.startsWith('image')) return 'image'
+  if (mimeType.startsWith('video')) return 'video'
+  if (mimeType.startsWith('audio')) return 'audio'
+  return null
+}
+
 export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: string; data: CanvasNodeData<VideoGenConfig> }) {
   const execState = useNodeExecutionState(id)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
-  // Count incoming multiref edges (non-text, any-in handle only)
-  const multirefCount = useCanvasStructureStore(
+  // 按素材类型统计全能参考连线，避免图片/音频被误显示成视频数量
+  const multirefCounts = useCanvasStructureStore(
     useShallow((s) => {
+      const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
+      return incoming.reduce(
+        (counts, edge) => {
+          const kind = getReferenceKind(s.nodes.find((n) => n.id === edge.source))
+          if (!kind) return counts
+          return { ...counts, [kind]: counts[kind] + 1 }
+        },
+        { image: 0, video: 0, audio: 0 },
+      )
+    })
+  )
+  const hasMultirefReferences = multirefCounts.image > 0 || multirefCounts.video > 0 || multirefCounts.audio > 0
+  // Count image assets connected in keyframe mode
+  const keyframeImageCount = useCanvasStructureStore(
+    useShallow((s) => {
+      if ((data.config?.videoMode ?? 'multiref') !== 'keyframe') return 0
       const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
       return incoming.filter((e) => {
         const src = s.nodes.find((n) => n.id === e.source)
-        return src?.type !== 'text_input'
+        return getReferenceKind(src) === 'image'
       }).length
     })
   )
@@ -80,18 +109,6 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         .map((e) => s.nodes.find((n) => n.id === e.source))
         .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'text_input')
         .map((n) => n.data.label ?? '文本')
-    })
-  )
-  // Count image assets connected in keyframe mode
-  const keyframeImageCount = useCanvasStructureStore(
-    useShallow((s) => {
-      if ((data.config?.videoMode ?? 'multiref') !== 'keyframe') return 0
-      const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
-      return incoming.filter((e) => {
-        const src = s.nodes.find((n) => n.id === e.source)
-        const mt = isAssetConfig(src?.data.config) ? src.data.config.mimeType : undefined
-        return src?.type !== 'text_input' && (!mt || mt.startsWith('image'))
-      }).length
     })
   )
   const token = useAuthStore((s) => s.accessToken)
@@ -319,14 +336,26 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
       <>
         {videoMode === 'multiref' ? (
           <>
-            {multirefCount > 0 && (
+            {hasMultirefReferences && (
               <div
-                className="absolute flex items-center pointer-events-none"
+                className="absolute flex flex-col items-end gap-1 pointer-events-none"
                 style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
               >
-                <span className="text-[9px] font-medium text-muted-foreground bg-card border border-border rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-                  视频×{multirefCount}
-                </span>
+                {multirefCounts.image > 0 && (
+                  <span className="text-[9px] font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                    图×{multirefCounts.image}
+                  </span>
+                )}
+                {multirefCounts.video > 0 && (
+                  <span className="text-[9px] font-medium text-violet-600 bg-violet-50 border border-violet-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                    视频×{multirefCounts.video}
+                  </span>
+                )}
+                {multirefCounts.audio > 0 && (
+                  <span className="text-[9px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                    音频×{multirefCounts.audio}
+                  </span>
+                )}
               </div>
             )}
             {upstreamTextLabels.length > 0 && (
