@@ -75,6 +75,44 @@ const IMAGE_MODEL_FIXTURE = {
     },
   },
   video_categories: {},
+  image_categories: {
+    text_to_image: {
+      label: '文生图',
+      limits: {
+        image: { min: 0, max: 0 },
+      },
+    },
+    image_to_image: {
+      label: '图生图',
+      limits: {
+        image: { min: 0, max: 6 },
+      },
+    },
+  },
+}
+
+const SINGLE_REFERENCE_IMAGE_MODEL_FIXTURE = {
+  ...IMAGE_MODEL_FIXTURE,
+  id: 'model-single-reference',
+  code: 'single-reference-image',
+  name: '单参考图片',
+  params_pricing: [
+    { model: 'single-reference-image', resolution: '2k', unit_price: 3 },
+  ],
+  image_categories: {
+    text_to_image: {
+      label: '文生图',
+      limits: {
+        image: { min: 0, max: 0 },
+      },
+    },
+    image_to_image: {
+      label: '图生图',
+      limits: {
+        image: { min: 0, max: 1 },
+      },
+    },
+  },
 }
 
 interface MockCanvasEditorOptions {
@@ -128,7 +166,7 @@ export async function mockCanvasEditor(page: Page, options: MockCanvasEditorOpti
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(module === 'video' ? [VIDEO_MODEL_FIXTURE] : module === 'image' ? [IMAGE_MODEL_FIXTURE] : []),
+      body: JSON.stringify(module === 'video' ? [VIDEO_MODEL_FIXTURE] : module === 'image' ? [IMAGE_MODEL_FIXTURE, SINGLE_REFERENCE_IMAGE_MODEL_FIXTURE] : []),
     })
   })
 

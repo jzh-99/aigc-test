@@ -20,6 +20,7 @@ import { isValidImageFile } from '../shared/file-utils'
 import { MAX_REF_IMAGES } from '../shared/constants'
 import { getModelResolutions } from '../shared/schema-utils'
 import { useModels } from '@/hooks/use-models'
+import { getMaxImageReferenceCount } from '@/lib/image-categories'
 
 interface ImagePanelProps {
   onBatchCreated: (batch: BatchResponse) => void
@@ -44,6 +45,8 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
   const { generate } = useGenerate()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
+  const currentImageModel = imageModels.find((m) => m.code === modelType)
+  const maxReferenceImages = currentImageModel ? getMaxImageReferenceCount(currentImageModel) : MAX_REF_IMAGES
 
   // 模型列表加载完成后缓存到 store，供 use-generate 查 params_pricing
   useEffect(() => {
@@ -79,9 +82,10 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
 
   const handleImageFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
+    let nextReferenceCount = referenceImages.length
     for (const file of Array.from(files)) {
-      if (referenceImages.length >= MAX_REF_IMAGES) {
-        toast.error(`最多添加 ${MAX_REF_IMAGES} 张参考图`)
+      if (nextReferenceCount >= maxReferenceImages) {
+        toast.error(`当前模型最多添加 ${maxReferenceImages} 张参考图`)
         break
       }
       if (!isValidImageFile(file)) {
@@ -93,18 +97,19 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
         continue
       }
       addReferenceImage({ id: generateUUID(), file, previewUrl: URL.createObjectURL(file) })
+      nextReferenceCount += 1
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
-  }, [referenceImages.length, addReferenceImage])
+  }, [referenceImages.length, maxReferenceImages, addReferenceImage])
 
   const handleSelectCompanyAImage = useCallback(async (url: string) => {
-    if (referenceImages.length >= MAX_REF_IMAGES) {
-      toast.error(`最多添加 ${MAX_REF_IMAGES} 张参考图`)
+    if (referenceImages.length >= maxReferenceImages) {
+      toast.error(`当前模型最多添加 ${maxReferenceImages} 张参考图`)
       return
     }
     addReferenceImage({ id: generateUUID(), previewUrl: url })
     toast.success('已添加参考图，提交时会自动加载原图')
-  }, [referenceImages.length, addReferenceImage])
+  }, [referenceImages.length, maxReferenceImages, addReferenceImage])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -211,7 +216,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
                 <ImagePlus className="h-6 w-6 text-primary shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-primary leading-tight">上传参考图</div>
-                  <div className="text-[11px] text-primary/60 leading-tight mt-0.5">点击或拖拽 · 最多 {MAX_REF_IMAGES} 张</div>
+                  <div className="text-[11px] text-primary/60 leading-tight mt-0.5">点击或拖拽 · 最多 {maxReferenceImages} 张</div>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); setCompanyAPickerOpen(true) }}
                   className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-medium transition-colors mr-2">
@@ -224,7 +229,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
                 <ImagePlus className="h-6 w-6 text-primary shrink-0" />
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-primary leading-tight">上传参考图</div>
-                  <div className="text-[11px] text-primary/60 leading-tight mt-0.5">最多 {MAX_REF_IMAGES} 张 · 支持拖拽</div>
+                  <div className="text-[11px] text-primary/60 leading-tight mt-0.5">最多 {maxReferenceImages} 张 · 支持拖拽</div>
                 </div>
               </div>
             )}
@@ -269,7 +274,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>参考图片管理</DialogTitle></DialogHeader>
-          <div className="mt-4"><ReferenceImageUploadCompact expanded /></div>
+          <div className="mt-4"><ReferenceImageUploadCompact expanded maxImages={maxReferenceImages} /></div>
         </DialogContent>
       </Dialog>
 

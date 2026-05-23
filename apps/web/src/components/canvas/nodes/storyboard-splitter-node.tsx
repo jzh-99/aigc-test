@@ -6,6 +6,7 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { X, Clapperboard, Loader2, CheckCircle2, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData, StoryboardSplitterConfig } from '@/lib/canvas/types'
 import { normalizeStoryboardShots } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
@@ -30,6 +31,7 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
   const isDone = submissionStatus === 'completed'
   const previewShots = shots.slice(0, PREVIEW_SHOT_COUNT)
   const remaining = shots.length - previewShots.length
+  const theme = getCanvasNodeTheme('storyboard_splitter')
 
   return (
     <>
@@ -52,8 +54,8 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
           <X size={11} />
         </button>
 
-        <div className="flex items-center gap-1.5 rounded-t-xl border-b border-border bg-muted px-3 py-1.5">
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/10 text-violet-500">
+        <div className={cn('flex items-center gap-1.5 rounded-t-xl border-b border-border px-3 py-1.5', theme.headerClassName)}>
+          <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-current/10', theme.iconClassName)}>
             <Clapperboard size={12} />
           </span>
           <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />

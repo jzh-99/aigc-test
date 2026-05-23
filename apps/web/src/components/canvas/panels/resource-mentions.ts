@@ -13,20 +13,6 @@ export interface CanvasReferenceMentionResource {
   duration?: number
 }
 
-const RESOURCE_PROMPT_PREFIX: Record<ReferenceMentionType, string> = {
-  image: '图片参考',
-  video: '视频参考',
-  audio: '音频参考',
-}
-
-const RESOURCE_DEFAULT_TARGET: Record<ReferenceMentionType, string> = {
-  image: '主体/角色',
-  video: '动作/运镜/风格/音效',
-  audio: '音色',
-}
-
-const RESOURCE_TYPE_ORDER: ReferenceMentionType[] = ['image', 'video', 'audio']
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -37,6 +23,41 @@ function normalizePromptLine(line: string): string {
 
 export function limitPromptLength(value: string): string {
   return Array.from(value).slice(0, PROMPT_MAX_LENGTH).join('')
+}
+
+function buildMentionPattern(label: string): RegExp {
+  return new RegExp(`@${escapeRegExp(label)}(?!\\d)`, 'g')
+}
+
+export function removeResourceReferenceFromPrompt(
+  promptDraft: string,
+  resources: CanvasReferenceMentionResource[],
+  removedResourceId: string,
+): string {
+  const removedResource = resources.find((resource) => resource.id === removedResourceId)
+  if (!removedResource) return promptDraft
+
+  const typeCounts: Record<ReferenceMentionType, number> = { image: 0, video: 0, audio: 0 }
+  // 删除连线后同类型资源会重新编号，这里先按剩余资源顺序生成旧名到新名的映射。
+  const renamePairs = resources
+    .filter((resource) => resource.id !== removedResourceId)
+    .map((resource) => {
+      typeCounts[resource.type] += 1
+      return {
+        from: resource.mentionLabel,
+        to: `${resource.type === 'video' ? '视频' : resource.type === 'audio' ? '音频' : '图片'}${typeCounts[resource.type]}`,
+      }
+    })
+    .filter((pair) => pair.from !== pair.to)
+    .sort((a, b) => b.from.length - a.from.length)
+
+  return promptDraft
+    .split(/\r?\n/)
+    .map((line) => renamePairs.reduce(
+      (nextLine, pair) => nextLine.replace(buildMentionPattern(pair.from), `@${pair.to}`),
+      line.replace(buildMentionPattern(removedResource.mentionLabel), ''),
+    ))
+    .join('\n')
 }
 
 export function buildPromptWithResourceMentions(
@@ -52,8 +73,6 @@ export function buildPromptWithResourceMentions(
     ? new RegExp(`@(${mentionLabels.map(escapeRegExp).join('|')})`, 'g')
     : null
 
-  const referencedResources: CanvasReferenceMentionResource[] = []
-  const referencedIds = new Set<string>()
   const promptLines = promptDraft
     .split(/\r?\n/)
     .map(normalizePromptLine)
@@ -64,31 +83,11 @@ export function buildPromptWithResourceMentions(
       const lineWithMentions = line.replace(resourcePattern, (matched, label: string) => {
         const resource = resourceByLabel.get(label)
         if (!resource) return matched
-        if (!referencedIds.has(resource.id)) {
-          referencedIds.add(resource.id)
-          referencedResources.push(resource)
-        }
         return ` <${resource.mentionLabel}> `
       })
       return normalizePromptLine(lineWithMentions)
     })
 
-  const referenceLines = RESOURCE_TYPE_ORDER
-    .map((type) => {
-      const typedResources = referencedResources.filter((resource) => resource.type === type)
-      if (typedResources.length === 0) return null
-
-      const references = typedResources
-        .map((resource) => `参考<${resource.mentionLabel}>中的${RESOURCE_DEFAULT_TARGET[type]}`)
-        .join('，')
-      return `${RESOURCE_PROMPT_PREFIX[type]}：${references}。`
-    })
-    .filter((line): line is string => Boolean(line))
-
   const normalizedUpstreamTexts = upstreamTexts.map(normalizePromptLine).filter(Boolean)
-  if (referenceLines.length === 0) {
-    return [...normalizedUpstreamTexts, ...promptLines].join('\n')
-  }
-
-  return [...normalizedUpstreamTexts, ...referenceLines, ...promptLines.map((line) => `生成：${line}`)].join('\n')
+  return [...normalizedUpstreamTexts, ...promptLines].join('\n')
 }

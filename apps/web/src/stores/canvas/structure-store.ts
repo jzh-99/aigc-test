@@ -9,8 +9,8 @@ import {
 } from 'reactflow'
 import type { AppNode, AppEdge, CanvasNodeConfig, VideoMode } from '@/lib/canvas/types'
 import type { AgentWorkflow } from '@/lib/canvas/agent-types'
-import { DEFAULT_VIDEO_CATEGORY_LIMITS, isAssetConfig, isVideoGenConfig } from '@/lib/canvas/types'
-import { parseVideoCategories } from '@aigc/types'
+import { DEFAULT_IMAGE_CATEGORY_LIMITS, DEFAULT_VIDEO_CATEGORY_LIMITS, isAssetConfig, isImageGenConfig, isVideoGenConfig } from '@/lib/canvas/types'
+import { ACTIVE_IMAGE_CATEGORY, parseImageCategories, parseVideoCategories } from '@aigc/types'
 import { hasCycle } from '@/lib/canvas/dag'
 import { nodeRegistry } from '@/lib/canvas/registry'
 import {
@@ -44,6 +44,7 @@ interface CanvasStructureState {
   addNodeAndConnect: (sourceNodeIds: string[], type: string, position: { x: number; y: number }) => string[]
   addNodesWithEdges: (newNodes: AppNode[], newEdges: AppEdge[]) => string[]
   removeNodes: (nodeIds: string[]) => void
+  removeEdgeById: (edgeId: string) => void
   removeEdgesByTarget: (nodeId: string, handleIds: string[]) => void
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
   applyAgentWorkflow: (workflow: AgentWorkflow) => void
@@ -146,6 +147,17 @@ function getVideoCategoryLimits(node: AppNode | undefined) {
   return parsed
 }
 
+function getImageCategoryLimits(node: AppNode | undefined) {
+  if (!node || node.type !== 'image_gen' || !isImageGenConfig(node.data.config)) {
+    return DEFAULT_IMAGE_CATEGORY_LIMITS
+  }
+  const parsed = parseImageCategories(node.data.config.imageCategoryLimits)
+  if (Object.keys(parsed).length === 0) {
+    return DEFAULT_IMAGE_CATEGORY_LIMITS
+  }
+  return parsed
+}
+
 function getReferenceKind(node: AppNode | undefined): 'image' | 'video' | 'audio' | null {
   if (!node || node.type === 'text_input') return null
   if (node.type === 'image_gen') return 'image'
@@ -182,6 +194,18 @@ function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Conn
 
   if (targetNode?.type === 'image_gen' && sourceMime && (sourceMime.startsWith('video') || sourceMime.startsWith('audio'))) {
     return '视频/音频素材不能连接到 AI 生图节点'
+  }
+
+  if (targetNode?.type === 'image_gen' && sourceKind === 'image') {
+    const existingImageRefs = edges.filter((e) => {
+      if (e.target !== connection.target) return false
+      const src = nodes.find((n) => n.id === e.source)
+      return getReferenceKind(src) === 'image'
+    })
+    const maxImages = getImageCategoryLimits(targetNode)[ACTIVE_IMAGE_CATEGORY]?.limits.image.max ?? 0
+    if (existingImageRefs.length >= maxImages) {
+      return `图生图最多连接 ${maxImages} 张参考图`
+    }
   }
 
   if (connection.targetHandle === 'any-in' || !connection.targetHandle) {
@@ -386,6 +410,13 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
       nodes: nodes.filter((n) => !nodeIds.includes(n.id)),
       edges: edges.filter((e) => !nodeIds.includes(e.source) && !nodeIds.includes(e.target)),
     })
+  },
+
+  removeEdgeById: (edgeId) => {
+    const { nodes, edges } = get()
+    if (!edges.some((edge) => edge.id === edgeId)) return
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({ edges: edges.filter((edge) => edge.id !== edgeId) })
   },
 
   removeEdgesByTarget: (nodeId, handleIds) => {

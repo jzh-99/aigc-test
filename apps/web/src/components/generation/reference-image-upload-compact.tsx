@@ -9,16 +9,17 @@ import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { toast } from 'sonner'
 
-const MAX_IMAGES = 10
+const DEFAULT_MAX_IMAGES = 10
 const MAX_SIZE_MB = 20
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const ALLOWED_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
 interface ReferenceImageUploadCompactProps {
   expanded?: boolean
+  maxImages?: number
 }
 
-export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImageUploadCompactProps) {
+export function ReferenceImageUploadCompact({ expanded = false, maxImages = DEFAULT_MAX_IMAGES }: ReferenceImageUploadCompactProps) {
   const { referenceImages, addReferenceImage, removeReferenceImage, clearReferenceImages } = useGenerationStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -27,9 +28,10 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
+    let nextReferenceCount = referenceImages.length
     for (const file of Array.from(files)) {
-      if (referenceImages.length >= MAX_IMAGES) {
-        toast.error(`最多添加 ${MAX_IMAGES} 张参考图`)
+      if (nextReferenceCount >= maxImages) {
+        toast.error(`最多添加 ${maxImages} 张参考图`)
         break
       }
 
@@ -51,9 +53,10 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
         file,
         previewUrl,
       })
+      nextReferenceCount += 1
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
-  }, [referenceImages.length, addReferenceImage])
+  }, [referenceImages.length, maxImages, addReferenceImage])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -99,7 +102,7 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
 
         <div className={cn('grid grid-cols-4 gap-3 mb-4', isDragging && 'opacity-30')}>
           {/* 上传按钮格 */}
-          {referenceImages.length < MAX_IMAGES && (
+          {referenceImages.length < maxImages && (
             <div
               onClick={() => fileInputRef.current?.click()}
               className={cn(
@@ -148,7 +151,7 @@ export function ReferenceImageUploadCompact({ expanded = false }: ReferenceImage
 
         <div className={cn('flex items-center justify-between', isDragging && 'opacity-30')}>
           <p className="text-xs text-muted-foreground">
-            支持 JPG / PNG · 最多 {MAX_IMAGES} 张 · 单张不超过 {MAX_SIZE_MB}MB · 可直接拖拽到此处
+            支持 JPG / PNG · 最多 {maxImages} 张 · 单张不超过 {MAX_SIZE_MB}MB · 可直接拖拽到此处
           </p>
           {referenceImages.length > 0 && (
             <Button

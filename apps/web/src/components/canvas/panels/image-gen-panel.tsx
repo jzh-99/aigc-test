@@ -1,22 +1,19 @@
-import { Loader2, Play } from 'lucide-react'
+import { Loader2, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
 import { ASPECT_RATIOS_IMAGE } from './panel-constants'
 import { ResourceMentionTextarea } from './resource-mention-textarea'
+import { getMaxImageReferenceCount } from '@/lib/image-categories'
 import type { CanvasReferenceMentionResource } from './resource-mentions'
 import type { ModelType, Resolution } from './panel-constants'
 import type { ModelItem } from '@aigc/types'
-
-interface OrderedImageRef {
-  url: string
-}
 
 interface ImageGenPanelProps {
   promptDraft: string
   setPromptDraft: (value: string) => void
   flushPromptDraft: () => void
   upstreamTextNodeLabels: string[]
-  orderedImageRefs: OrderedImageRef[]
+  orderedImageRefs: CanvasReferenceMentionResource[]
   mentionResources: CanvasReferenceMentionResource[]
   modelType: ModelType
   resolution: Resolution
@@ -28,6 +25,7 @@ interface ImageGenPanelProps {
   modelsReady?: boolean
   onModelChange: (value: ModelType) => void
   onUpdateCfg: (patch: Record<string, unknown>) => void
+  onRemoveReference: (resourceId: string) => void
   onExecute: () => void
 }
 
@@ -47,6 +45,7 @@ export function ImageGenPanel({
   models,
   onModelChange,
   onUpdateCfg,
+  onRemoveReference,
   onExecute,
 }: ImageGenPanelProps) {
   const currentDbModel = models?.find((m) => m.code === modelType)
@@ -87,9 +86,22 @@ export function ImageGenPanel({
             <label className="text-[10px] text-muted-foreground mb-1 block">参考图（按引脚顺序）</label>
             <div className="flex gap-1 flex-wrap">
               {orderedImageRefs.map((ref, i) => (
-                <div key={i} className="relative">
-                  <img src={ref.url} alt="" className="w-10 h-10 object-cover rounded border border-border" />
+                <div key={ref.id} data-testid={`canvas-reference-preview-${ref.mentionLabel}`} className="group/reference relative">
+                  <img src={ref.url} alt={ref.mentionLabel} className="w-10 h-10 object-cover rounded border border-border" loading="lazy" />
                   <span className="absolute -top-1 -left-1 text-[8px] bg-primary text-primary-foreground rounded px-0.5 font-bold">参{i + 1}</span>
+                  <button
+                    type="button"
+                    data-testid={`canvas-reference-remove-${ref.mentionLabel}`}
+                    aria-label="取消引用"
+                    title={`取消引用${ref.mentionLabel}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onRemoveReference(ref.id)
+                    }}
+                    className="pointer-events-none absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-background text-muted-foreground opacity-0 shadow ring-1 ring-border transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -103,18 +115,27 @@ export function ImageGenPanel({
           {(models ?? []).map((m) => {
             const isActive = modelType === m.code
             const modelCredits = m.params_pricing[0]?.unit_price ?? m.credit_cost ?? 5
+            const maxReferenceImages = getMaxImageReferenceCount(m)
+            const isReferenceOverLimit = !isActive && orderedImageRefs.length > maxReferenceImages
             return (
               <button
                 key={m.code}
+                type="button"
+                disabled={isReferenceOverLimit}
+                title={isReferenceOverLimit ? `当前已连接 ${orderedImageRefs.length} 张参考图，该模型最多支持 ${maxReferenceImages} 张` : undefined}
                 onClick={() => onModelChange(m.code as ModelType)}
                 className={cn(
                   'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
-                  isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
+                  isActive
+                    ? 'bg-primary/10 border-primary/40 text-primary font-medium'
+                    : isReferenceOverLimit
+                      ? 'bg-muted/20 border-transparent text-muted-foreground/50 cursor-not-allowed opacity-60'
+                      : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
                 )}
               >
                 <span className="flex-1 truncate">{m.name}</span>
-                <span className={cn('text-[10px]', isActive ? 'text-primary/70' : 'text-muted-foreground')}>
-                  {modelCredits}
+                <span className={cn('text-[10px]', isActive ? 'text-primary/70' : isReferenceOverLimit ? 'text-muted-foreground/50' : 'text-muted-foreground')}>
+                  {isReferenceOverLimit ? `最多${maxReferenceImages}` : modelCredits}
                 </span>
               </button>
             )

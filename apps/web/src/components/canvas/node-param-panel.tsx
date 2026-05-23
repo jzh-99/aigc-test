@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { CanvasApiError, executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
+import { getImageCategoriesForModel, validateImageReferencesForModel } from '@/lib/image-categories'
 import { useModels } from '@/hooks/use-models'
 import { getModelResolutions, extractSchemaEnums } from '@/components/generation/shared/schema-utils'
 import { parseVideoCategories, validateVideoReferenceLimits, type ModelItem, type VideoCategory, type VideoReferenceCounts } from '@aigc/types'
@@ -24,6 +25,7 @@ import type {
   StoryboardSplitterConfig,
 } from '@/lib/canvas/types'
 import {
+  DEFAULT_IMAGE_CATEGORY_LIMITS,
   DEFAULT_VIDEO_CATEGORY_LIMITS,
   isAssetConfig,
   isImageGenConfig,
@@ -46,7 +48,11 @@ import { VideoGenPanel } from './panels/video-gen-panel'
 import { ScriptWriterPanel } from './panels/script-writer-panel'
 import { StoryboardSplitterPanel } from './panels/storyboard-splitter-panel'
 import { VideoStitchPanel } from './panels/video-stitch-panel'
-import { buildPromptWithResourceMentions, PROMPT_MAX_LENGTH } from './panels/resource-mentions'
+import {
+  buildPromptWithResourceMentions,
+  PROMPT_MAX_LENGTH,
+  removeResourceReferenceFromPrompt,
+} from './panels/resource-mentions'
 
 interface Props {
   node: AppNode
@@ -63,6 +69,7 @@ const DEFAULT_IMAGE_CONFIG: ImageGenConfig = {
   aspectRatio: '1:1',
   quantity: 1,
   watermark: false,
+  imageCategoryLimits: DEFAULT_IMAGE_CATEGORY_LIMITS,
 }
 
 const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
@@ -104,6 +111,7 @@ function normalizeImageConfig(config: unknown, models?: ModelItem[]): ImageGenCo
   const modelCode = dbModel.code
   const resolutions = extractSchemaEnums(dbModel.params_schema, 'resolution').map((e) => e.value)
   const resolution = raw.resolution && resolutions.includes(raw.resolution) ? raw.resolution : (resolutions[0] ?? '2k')
+  const imageCategoryLimits = getImageCategoriesForModel(dbModel)
 
   return {
     ...DEFAULT_IMAGE_CONFIG,
@@ -111,6 +119,7 @@ function normalizeImageConfig(config: unknown, models?: ModelItem[]): ImageGenCo
     modelType: modelCode,
     resolution,
     quantity: 1,
+    imageCategoryLimits,
   }
 }
 
@@ -133,6 +142,7 @@ function normalizeVideoConfig(config: unknown): VideoGenConfig {
 
 export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboardExpandedRef }: Props) {
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
+  const removeEdgeById = useCanvasStructureStore((s) => s.removeEdgeById)
   const token = useAuthStore((s) => s.accessToken)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const setNodeStatus = useCanvasExecutionStore((s) => s.setNodeStatus)
@@ -235,8 +245,19 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     // 优先从 DB 模型列表获取新模型的首个可用分辨率
     const nextResolutions = getModelResolutions(val, imageModels)
     const nextResolution = nextResolutions.includes(resolution) ? resolution : (nextResolutions[0] ?? resolution)
-    updateCfg({ modelType: val, resolution: nextResolution })
+    const nextModel = imageModels.find((m) => m.code === val)
+    updateCfg({ modelType: val, resolution: nextResolution, imageCategoryLimits: getImageCategoriesForModel(nextModel) })
   }, [resolution, updateCfg, imageModels])
+
+  // 确保图片节点配置中的 imageCategoryLimits 始终与当前模型数据同步，供画布连线限制使用。
+  useEffect(() => {
+    if (!isImageGen || !imageModelsReady) return
+    const currentImageDbModel = imageModels.find((m) => m.code === modelType)
+    const parsed = getImageCategoriesForModel(currentImageDbModel)
+    if (JSON.stringify(parsed) !== JSON.stringify(imageCfg.imageCategoryLimits)) {
+      updateCfg({ imageCategoryLimits: parsed })
+    }
+  }, [imageCfg.imageCategoryLimits, imageModels, imageModelsReady, isImageGen, modelType, updateCfg])
 
   // 确保节点配置中的 videoCategoryLimits 始终与模型数据同步
   useEffect(() => {
@@ -265,6 +286,12 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     })()
     if (!modelCode) {
       toast.error('模型配置错误')
+      return
+    }
+
+    const imageLimitResult = validateImageReferencesForModel(dbModel, orderedImageRefs.length)
+    if (!imageLimitResult.valid) {
+      toast.error(imageLimitResult.message ?? '当前参考图数量不符合模型限制')
       return
     }
 
@@ -387,6 +414,13 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const handleVideoResolutionChange = useCallback((val: string) => {
     updateCfg({ resolution: val })
   }, [updateCfg])
+
+  const handleRemoveReference = useCallback((resourceId: string) => {
+    const nextPrompt = removeResourceReferenceFromPrompt(promptDraft, orderedImageRefs, resourceId)
+    setPromptDraft(nextPrompt)
+    updateCfg({ prompt: nextPrompt })
+    removeEdgeById(resourceId)
+  }, [orderedImageRefs, promptDraft, removeEdgeById, setPromptDraft, updateCfg])
 
   const handleExecuteVideo = useCallback(async () => {
     if (Array.from(promptDraft).length > PROMPT_MAX_LENGTH) {
@@ -535,6 +569,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           models={imageModels}
           onModelChange={handleModelChange}
           onUpdateCfg={updateCfg}
+          onRemoveReference={handleRemoveReference}
           onExecute={handleExecuteImage}
         />
       )}
@@ -568,6 +603,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           onVideoModelChange={handleVideoModelChange}
           onVideoModeChange={handleVideoModeChange}
           onUpdateCfg={updateCfg}
+          onRemoveReference={handleRemoveReference}
           onExecute={handleExecuteVideo}
         />
       )}

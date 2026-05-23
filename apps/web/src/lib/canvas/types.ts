@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
-import type { VideoCategories } from '@aigc/types'
+import type { ImageCategories, VideoCategories } from '@aigc/types'
 
 export type HandleType = 'image' | 'text' | 'video' | 'audio' | 'any'
 
@@ -38,6 +38,21 @@ export const CANVAS_VIDEO_MODE_TO_CATEGORY = {
   keyframe: 'frames',
 } as const satisfies Record<VideoMode, keyof VideoCategories>
 
+export const DEFAULT_IMAGE_CATEGORY_LIMITS = {
+  text_to_image: {
+    label: '文生图',
+    limits: {
+      image: { min: 0, max: 0 },
+    },
+  },
+  image_to_image: {
+    label: '图生图',
+    limits: {
+      image: { min: 0, max: 10 },
+    },
+  },
+} as const satisfies ImageCategories
+
 // 保留 union 类型供静态 fallback 使用，实际存储和运行时用 string
 export type ImageModelType = string
 export type ImageResolution = string
@@ -53,6 +68,7 @@ export interface ImageGenConfig {
   aspectRatio: string
   quantity: number
   watermark: boolean
+  imageCategoryLimits?: ImageCategories
 }
 
 export interface VideoGenConfig {

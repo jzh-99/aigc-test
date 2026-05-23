@@ -1,5 +1,79 @@
 # 任务日志：画布参数面板 @ 资源引用
 
+## 2026-05-23 图片模型 image_categories 限制
+
+- 需求目标：参照 `provider_models.video_categories`，为图片模型新增 `image_categories`，用于表达文生图/图生图的参考图片数量限制。
+- 用户确认字段名使用 `image_categories`。
+- 限制规则：
+  - 文生图：图片最少 0 张，最多 0 张。
+  - 图生图：图片最少 0 张，最多按模型族区分。
+  - `gpt-image-2`、`nano-banana-2`、`gemini-3.1-flash-image-preview` 三个模型图生图最多 6 张。
+  - `seedream-*` 相关图片模型图生图最多 14 张。
+- 当前代码定位：
+  - `packages/types/src/api.ts` 已有 `VideoCategories`、`parseVideoCategories`、`validateVideoReferenceLimits`，适合平行新增图片限制工具。
+  - `packages/db/src/schema.ts` 的 `ProviderModelsTable` 仅有 `video_categories`，需要新增 `image_categories`。
+  - `/api/v1/models` 当前只返回 `video_categories`，需要同步返回 `image_categories`。
+  - `/api/v1/generate/image` 当前只对 `params.image` 做白名单、数组最多截断到 10 项，没有按模型校验，也会让 seedream 的 14 张上限被截断。
+  - 前端生成页和画布图片节点目前只依赖固定 `MAX_REF_IMAGES = 10`。
+- 方案取舍：
+  - 采用与视频字段相似的 JSON 结构，但图片只限制 `image` 一类资源，避免引入无意义的 audio/video 限制。
+  - 后端根据 `params.image` 数量自动选择 `text_to_image` 或 `image_to_image` 校验；未配置 `image_categories` 的历史模型按兼容默认最多 10 张处理，避免旧数据突然不可用。
+  - seed 明确拆两个常量：`SIX_IMAGE_CATEGORIES` 和 `SEEDREAM_IMAGE_CATEGORIES`，模型对象直接声明使用哪个常量，避免通过字符串前缀隐式推断导致后续模型误配。
+- TDD 计划：
+  - 先在 `packages/types/src/api.test.ts` 增加图片类别解析/校验测试并确认 RED。
+  - 再实现共享类型工具，随后接入 DB、seed、API 和前端。
+- 实现结果：
+  - `packages/types/src/api.ts` 新增 `ImageCategory`、`ImageCategories`、`parseImageCategories`、`validateImageReferenceLimits`。
+  - 新增迁移 `packages/db/migrations/037_provider_models_image_categories.ts`，为 `provider_models` 增加 `image_categories jsonb`。
+  - `packages/db/scripts/seed.ts` 增加 `SIX_IMAGE_CATEGORIES` 和 `SEEDREAM_IMAGE_CATEGORIES` 两个显式常量：
+    - `gemini-3.1-flash-image-preview`、`gpt-image-2`、`nano-banana-2` 使用图生图 0-6 张。
+    - `seedream-5.0-lite`、`seedream-4.5`、`seedream-4.0` 使用图生图 0-14 张。
+  - `/api/v1/models`、`/api/v1/admin/models`、`/api/v1/admin/models/:id` 返回 `image_categories`。
+  - `/api/v1/generate/image` 查询模型后按 `params.image` 原始数量校验；未配置旧模型按兼容默认图生图最多 10 张处理；错误码为 `INVALID_IMAGE_REFERENCES`。
+  - 图片生成页按当前模型显示和限制可上传参考图数量；批量拖入时使用局部计数，避免一次拖入超过模型上限。
+  - 画布图片节点提交前同样按当前模型校验上游参考图数量。
+- 验证结果：
+  - RED：`pnpm --filter @aigc/api exec tsx --test ..\..\packages\types\src\api.test.ts` 最初因 `parseImageCategories` 未导出失败，符合预期。
+  - `pnpm --filter @aigc/api exec tsx --test ..\..\packages\types\src\api.test.ts` 通过，4 个测试全部通过。
+  - `pnpm --filter @aigc/types build` 通过。
+  - `pnpm --filter @aigc/db build` 通过。
+  - `pnpm --filter @aigc/api build` 通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web build` 通过。
+  - `pnpm lint` 执行成功，但 turbo 报告没有实际 lint task。
+  - `pnpm exec prettier --check ...` 失败：当前项目未安装 `prettier` 命令。
+
+## 2026-05-23 图片生成默认图生图模式
+
+- 用户补充：创作生成和画布图片节点都默认采用图生图模式，文生图暂时未启用；限制也应按图生图配置执行。
+- 实现内容：
+  - `packages/types/src/api.ts` 新增 `ACTIVE_IMAGE_CATEGORY = 'image_to_image'`，作为前后端统一的图片生成活动模式。
+  - `/api/v1/generate/image` 不再按参考图数量推断文生图/图生图，统一用 `image_to_image` 校验 `image_categories`。
+  - `apps/web/src/lib/image-categories.ts` 的前端提交校验同样固定使用 `image_to_image`。
+  - 画布图片节点配置新增 `imageCategoryLimits`，在参数面板按当前模型同步缓存。
+  - 画布连线层在连接图片参考到 `image_gen` 节点时读取 `imageCategoryLimits.image_to_image.limits.image.max`，超限时阻止连线。
+- 验证结果：
+  - `pnpm --filter @aigc/api exec tsx --test ..\..\packages\types\src\api.test.ts` 通过，5 个测试全部通过。
+  - `pnpm --filter @aigc/types build` 通过。
+  - `pnpm --filter @aigc/api build` 通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web build` 通过。
+  - `pnpm --filter @aigc/db build` 通过。
+
+## 2026-05-23 画布图片节点模型切换限制
+
+- 用户补充：画布中图片节点已连接参考图片时，如果其他图片模型的图生图参考图上限小于当前连接数量，则该模型不能切换，并在模型列表中置灰。
+- 实现内容：
+  - `image-gen-panel.tsx` 渲染模型按钮时读取每个模型的 `image_to_image.max`。
+  - 当 `orderedImageRefs.length > max` 且目标模型不是当前模型时，按钮设置 `disabled`、置灰、显示 `最多N`，并通过 `title` 说明当前已连接数量与模型上限。
+  - E2E fixture 增加一个 `single-reference-image` 模型，图生图最多 1 张参考图。
+  - 新增 E2E：当前图片节点已有 2 张参考图时，`单参考图片` 模型按钮置灰禁用，点击后仍停留在原模型。
+- 验证结果：
+  - `pnpm --filter @aigc/web exec playwright test e2e/canvas/image-submit.spec.ts` 通过，3 个测试全部通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web build` 通过。
+  - `pnpm --filter @aigc/types build` 通过。
+
 ## 2026-05-22 初步上下文梳理
 
 - 需求目标：在画布图片、视频节点参数面板的提示词输入中支持 `@` 资源选择；用户从当前节点上游已连接的图片、视频、音频参考资源中选择后，可针对单个资源写约束；提交接口时将局部约束转换为结构化中文提示词，并与原有整体提示词逻辑合并。
@@ -184,6 +258,41 @@
   - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
   - `pnpm --filter @aigc/web test:e2e -- canvas/video-submit.spec.ts` 通过，3 个测试全部通过，并断言图片/视频/音频预览卡片可见。
   - `pnpm --filter @aigc/web test:e2e -- canvas/image-submit.spec.ts` 通过，1 个测试通过。
+
+## 2026-05-23 画布参考资源取消引用
+
+- 需求确认：图片和视频配置面板的参考资源预览右上角增加关闭图标，点击后取消引用；同时删除参考节点到当前节点的连线，并删除提示词中相关 `@图片N/@视频N` 文本。删除后同类型引用编号会变化，提示词内保留下来的引用也要同步重命名。
+- 代码定位：
+  - `use-node-topology.ts` 生成 `orderedImageRefs` / `mentionResources`，其中 `id` 是 `edge.id`，可作为取消引用的精确定位键。
+  - `image-gen-panel.tsx` 展示图片参考预览；`video-gen-panel.tsx` 展示图片/视频/音频分组预览。
+  - `node-param-panel.tsx` 持有 `promptDraft`、`updateCfg`、`orderedImageRefs`，最适合作为“删除边 + 重写 prompt”的协调层。
+  - `structure-store.ts` 目前支持按 target handle 删除边，但缺少按单条 edge id 删除边的公开方法。
+- 方案取舍：
+  - 新增按 `edgeId` 删除连线，避免按 source 或 type 误删同源多连线。
+  - 提示词清理在删除前用当前 `orderedImageRefs` 计算删除后的同类型编号映射：被删资源的 `@旧名` 删除，保留资源的 `@旧名` 替换为 `@新名`。
+  - 预览关闭按钮只阻止面板内点击冒泡，不影响 ReactFlow 选中状态；删除操作进入 undo 历史。
+- TDD 计划：
+  - 先在现有 `canvas/image-submit.spec.ts` 和 `canvas/video-submit.spec.ts` 增加失败用例。
+  - RED 验证后再实现 store、面板回调、提示词重写和关闭按钮。
+- 实现结果：
+  - `structure-store.ts` 新增 `removeEdgeById`，按单条连线 id 删除并写入 undo 历史。
+  - `resource-mentions.ts` 新增 `removeResourceReferenceFromPrompt`，删除被取消引用所在提示词行，并按剩余同类型资源顺序重命名 `@图片N/@视频N/@音频N`。
+  - `node-param-panel.tsx` 统一协调“改 prompt + 删除 edge”，图片面板和视频面板复用同一回调。
+  - `image-gen-panel.tsx` 的参考图缩略图、`video-gen-panel.tsx` 的多模态参考预览和首尾帧预览均增加关闭按钮。
+- 验证结果：
+  - RED：新增图片/视频取消引用 E2E 最初均因 `canvas-reference-remove-*` 按钮不存在失败，符合预期。
+  - `pnpm --filter @aigc/web exec playwright test e2e/canvas/image-submit.spec.ts -g "removes an image reference"` 通过。
+  - `pnpm --filter @aigc/web exec playwright test e2e/canvas/video-submit.spec.ts -g "removes a video reference"` 通过。
+  - `pnpm --filter @aigc/web exec playwright test e2e/canvas/image-submit.spec.ts e2e/canvas/video-submit.spec.ts` 通过，6 个测试全部通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web exec tsx --test src/components/canvas/panels/resource-mentions.test.ts` 通过，3 个测试全部通过。
+  - `pnpm lint` 执行成功，但 turbo 报告没有实际 lint task。
+  - `pnpm --filter @aigc/web exec prettier --check ...` 失败：项目未安装 `prettier` 命令。
+- 追加反馈修正：
+  - 关闭按钮默认改为 `opacity: 0` 且禁止点击，预览卡片 hover/focus 时才显示和可点击，避免遮挡资源预览。
+  - 取消引用时不再删除整行提示词，只删除被移除资源对应的 `@资源N` token；例如 `@图片1和@图片2是好朋友。` 删除图片 2 后保留为 `@图片1和是好朋友。`。
+  - mention 匹配放宽为允许中文连写，避免 `@图片1和...` 因缺少空格无法识别。
+  - 验证：图片/视频取消引用定向 E2E 均通过；`image-submit.spec.ts` + `video-submit.spec.ts` 共 6 个 E2E 全部通过；`tsc --noEmit` 和 `resource-mentions.test.ts` 通过。
 
 ## 2026-05-22 视频参考缩略图优先级调整
 

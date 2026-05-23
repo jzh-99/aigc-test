@@ -101,13 +101,13 @@ test.describe('canvas video submit', () => {
 
     expect(payload.prompt).toContain('一只猫在太空站行走')
     expect(payload.prompt).toContain('整体生成一个暖色调广告短片')
-    expect(payload.prompt).toContain('图片参考：参考<图片1>中的主体/角色。')
-    expect(payload.prompt).toContain('视频参考：参考<视频1>中的动作/运镜/风格/音效。')
-    expect(payload.prompt).toContain('音频参考：参考<音频1>中的音色。')
-    expect(payload.prompt).toContain('生成：整体生成一个暖色调广告短片')
     expect(payload.prompt).toContain('<图片1> 保持人物主体一致')
     expect(payload.prompt).toContain('<视频1> 参考运镜节奏')
     expect(payload.prompt).toContain('<音频1> 参考温柔女声音色')
+    expect(payload.prompt).not.toContain('图片参考')
+    expect(payload.prompt).not.toContain('视频参考')
+    expect(payload.prompt).not.toContain('音频参考')
+    expect(payload.prompt).not.toContain('生成：')
     expect(payload.video_category).toBe('multimodal')
     expect(payload.reference_images).toEqual(['https://cdn.test/ref-image-1.jpg'])
     expect(payload.reference_videos).toEqual(['https://cdn.test/ref-video-1.mp4'])
@@ -160,6 +160,85 @@ test.describe('canvas video submit', () => {
     await expect(token).toHaveCount(0)
     await expect(editor).not.toContainText('@视频1')
     await expect(editor).toContainText('参考奔跑动作')
+  })
+
+  test('removes a video reference from preview, edges, and prompt mentions', async ({ page }) => {
+    const canvasId = 'canvas-video-remove-reference'
+    const submissions: Array<Record<string, unknown>> = []
+
+    await mockCanvasEditor(page, {
+      canvasId,
+      nodes: [
+        createAssetNode({
+          id: 'asset-video-1',
+          label: '旧动作参考',
+          url: 'https://cdn.test/action-old.mp4',
+          mimeType: 'video/mp4',
+          thumbnailUrl: 'https://cdn.test/action-old-thumb.jpg',
+          duration: 2,
+          position: { x: 360, y: 260 },
+        }),
+        createAssetNode({
+          id: 'asset-video-2',
+          label: '新动作参考',
+          url: 'https://cdn.test/action-new.mp4',
+          mimeType: 'video/mp4',
+          thumbnailUrl: 'https://cdn.test/action-new-thumb.jpg',
+          duration: 3,
+          position: { x: 360, y: 380 },
+        }),
+        createVideoNode({
+          id: 'video-1',
+          label: '视频节点',
+          prompt: '@视频1和@视频2是好朋友。',
+          videoMode: 'multiref',
+        }),
+      ],
+      edges: [
+        createEdge({ id: 'e-video-old-video', source: 'asset-video-1', target: 'video-1', targetHandle: 'any-in' }),
+        createEdge({ id: 'e-video-new-video', source: 'asset-video-2', target: 'video-1', targetHandle: 'any-in' }),
+      ],
+      onVideoGenerate: async (body, route) => {
+        submissions.push(body as Record<string, unknown>)
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'batch-video-remove-ref', quantity: 1, estimated_credits: 20 }),
+        })
+      },
+    })
+
+    await page.goto(`/canvas/editor/${canvasId}`)
+    await expect(page.getByRole('button', { name: '记录' })).toBeVisible()
+
+    await page.locator('.react-flow__node', { hasText: '视频节点' }).first().click()
+    await expect(page.getByText('视频节点 · 参数')).toBeVisible()
+
+    const promptInput = page.getByTestId('resource-mention-editor')
+    await expect(promptInput).toContainText('@视频1')
+    await expect(promptInput).toContainText('@视频2')
+
+    await expect(page.getByTestId('canvas-reference-remove-视频2')).toHaveCSS('opacity', '0')
+    await page.getByTestId('canvas-reference-preview-视频2').hover()
+    await expect(page.getByTestId('canvas-reference-remove-视频2')).toHaveCSS('opacity', '1')
+    await page.getByTestId('canvas-reference-remove-视频2').click()
+
+    await expect(promptInput).not.toContainText('@视频2')
+    await expect(promptInput).toContainText('@视频1和是好朋友。')
+    await expect(page.getByTestId('canvas-reference-preview-视频1').locator('img')).toHaveAttribute('src', /action-old-thumb\.jpg/)
+
+    await page.getByTestId('canvas-execute-video').scrollIntoViewIfNeeded()
+    await page.getByTestId('canvas-execute-video').click({ force: true })
+
+    await expect.poll(() => submissions.length).toBe(1)
+    const payload = submissions[0]
+
+    expect(payload.reference_videos).toEqual(['https://cdn.test/action-old.mp4'])
+    expect(payload.reference_video_durations).toEqual([2])
+    expect(payload.prompt).toContain('<视频1> 和是好朋友。')
+    expect(payload.prompt).not.toContain('视频参考')
+    expect(payload.prompt).not.toContain('生成：')
+    expect(payload.prompt).not.toContain('视频2')
   })
 
   test('submits keyframe payload and supports swapping frames', async ({ page }) => {

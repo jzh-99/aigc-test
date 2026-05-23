@@ -5,6 +5,7 @@ import { apiPost, ApiError, reportClientSubmissionError } from '@/lib/api-client
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { generateUUID } from '@/lib/utils'
+import { validateImageReferencesForModel } from '@/lib/image-categories'
 import type { BatchResponse, GenerateImageRequest } from '@aigc/types'
 
 async function fileToDataUrl(file: File): Promise<string> {
@@ -51,18 +52,24 @@ async function imageUrlToDataUrl(url: string): Promise<string> {
 }
 
 export function useGenerate() {
-  const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, setIsGenerating, setActiveBatchId } = useGenerationStore()
+  const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, imageModels, setIsGenerating, setActiveBatchId } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
 
   const generate = useCallback(async (): Promise<BatchResponse | null> => {
     if (!prompt.trim()) return null
 
     let resolvedModel: string | undefined
+    const model = modelType
+    const currentModel = imageModels.find((item) => item.code === model)
+    const limitResult = validateImageReferencesForModel(currentModel, referenceImages.length)
+    if (!limitResult.valid) {
+      throw new Error(limitResult.message ?? '参考图数量不符合当前模型限制')
+    }
+
     setIsGenerating(true)
     try {
       // 直接用 modelType（DB code）作为 model 发给后端
       // API 侧会根据 params.resolution 从 params_pricing 查实际调用的底层 model code
-      const model = modelType
       resolvedModel = model
 
       const params: Record<string, unknown> = {
@@ -116,7 +123,7 @@ export function useGenerate() {
     } finally {
       setIsGenerating(false)
     }
-  }, [prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, activeWorkspaceId, setIsGenerating, setActiveBatchId])
+  }, [prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, imageModels, activeWorkspaceId, setIsGenerating, setActiveBatchId])
 
   return { generate }
 }

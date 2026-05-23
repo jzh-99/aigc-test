@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData, ImageGenConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
@@ -70,6 +71,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
   const currentImageUrl = selectedOutput?.url
   const currentIndex = outputs.findIndex((o) => o.id === selectedOutputId)
   const elapsed = useElapsedTimer(isGenerating ? startedAt : null)
+  const theme = getCanvasNodeTheme('image_gen')
 
   function handlePrev(e: React.MouseEvent) {
     e.stopPropagation()
@@ -142,7 +144,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
       </button>
 
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-muted flex items-center justify-between">
+      <div className={cn('px-3 py-1.5 border-b border-border rounded-t-xl flex items-center justify-between', theme.headerClassName)}>
         <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
         {isGenerating && (
           <div className="flex items-center gap-1">

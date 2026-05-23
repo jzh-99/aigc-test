@@ -1,4 +1,4 @@
-import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory } from './db.js'
+import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory, ImageCategory } from './db.js'
 
 export type VideoReferenceKind = 'image' | 'video' | 'audio'
 
@@ -13,6 +13,16 @@ export interface VideoCategoryConfig {
 }
 
 export type VideoCategories = Partial<Record<VideoCategory, VideoCategoryConfig>>
+
+export interface ImageCategoryConfig {
+  label: string
+  limits: {
+    image: VideoCategoryLimit
+  }
+}
+
+export type ImageCategories = Partial<Record<ImageCategory, ImageCategoryConfig>>
+export const ACTIVE_IMAGE_CATEGORY: ImageCategory = 'image_to_image'
 
 export interface VideoReferenceCounts {
   image: number
@@ -71,6 +81,11 @@ function isCategoryConfig(value: unknown): value is VideoCategoryConfig {
   return VIDEO_REFERENCE_KINDS.every((kind) => isLimit(limits[kind]))
 }
 
+function isImageCategoryConfig(value: unknown): value is ImageCategoryConfig {
+  if (!isPlainObject(value) || typeof value.label !== 'string' || !isPlainObject(value.limits)) return false
+  return isLimit(value.limits.image)
+}
+
 export function parseVideoCategories(raw: unknown): VideoCategories {
   const value = typeof raw === 'string'
     ? (() => {
@@ -87,6 +102,25 @@ export function parseVideoCategories(raw: unknown): VideoCategories {
   const out: VideoCategories = {}
   if (isCategoryConfig(value.multimodal)) out.multimodal = value.multimodal
   if (isCategoryConfig(value.frames)) out.frames = value.frames
+  return out
+}
+
+export function parseImageCategories(raw: unknown): ImageCategories {
+  const value = typeof raw === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(raw) as unknown
+        } catch {
+          return null
+        }
+      })()
+    : raw
+
+  if (!isPlainObject(value)) return {}
+
+  const out: ImageCategories = {}
+  if (isImageCategoryConfig(value.text_to_image)) out.text_to_image = value.text_to_image
+  if (isImageCategoryConfig(value.image_to_image)) out.image_to_image = value.image_to_image
   return out
 }
 
@@ -121,6 +155,21 @@ export function validateVideoReferenceLimits(
     if (count < limit.min) return { valid: false, message: `${config.label}至少需要 ${limit.min} 个${label}参考素材` }
     if (count > limit.max) return { valid: false, message: `${config.label}最多允许 ${limit.max} 个${label}参考素材` }
   }
+
+  return { valid: true }
+}
+
+export function validateImageReferenceLimits(
+  categories: ImageCategories,
+  category: ImageCategory,
+  imageCount: number,
+): VideoLimitValidationResult {
+  const config = categories[category]
+  if (!config) return { valid: false, message: '当前模型不支持该图片生成模式' }
+
+  const limit = config.limits.image
+  if (imageCount < limit.min) return { valid: false, message: `${config.label}至少需要 ${limit.min} 张参考图` }
+  if (imageCount > limit.max) return { valid: false, message: `${config.label}最多允许 ${limit.max} 张参考图` }
 
   return { valid: true }
 }
@@ -321,6 +370,7 @@ export interface ModelItem {
   description: string | null
   module: AigcModule
   video_categories: VideoCategories | unknown  // 视频模型支持的模式与参考素材数量限制
+  image_categories: ImageCategories | unknown  // 图片模型支持的模式与参考图片数量限制
   credit_cost: number
   params_pricing: ParamsPricingRule[]
   params_schema: unknown  // JSON Schema for frontend dynamic form rendering

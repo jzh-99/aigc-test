@@ -9,6 +9,7 @@ import { uploadAssetFile } from '@/lib/canvas/canvas-api'
 import { Image as ImageIcon, X, FileVideo, Music, Upload, Play, Pause, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 
@@ -85,6 +86,7 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
   const TypeIcon = isVideo ? FileVideo : isAudio ? Music : ImageIcon
   const displayRatio = isVideo && videoSize ? `${videoSize.w} / ${videoSize.h}` : '16 / 9'
   const nodeWidth = isVideo && videoSize ? nodeWidthFromRatio(videoSize.w, videoSize.h) : 160
+  const theme = getCanvasNodeTheme('asset')
   return (
     <div
       className={cn(
@@ -105,8 +107,8 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
       </button>
 
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-muted flex items-center gap-1.5">
-        <TypeIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+      <div className={cn('px-3 py-1.5 border-b border-border rounded-t-xl flex items-center gap-1.5', theme.headerClassName)}>
+        <TypeIcon className={cn('w-3 h-3 shrink-0', theme.iconClassName)} />
         <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase truncate cursor-text select-none" />
       </div>
 

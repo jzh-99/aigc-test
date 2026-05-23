@@ -7,6 +7,7 @@ import { AlertCircle, Check, Film, Loader2, Pause, Play, X } from 'lucide-react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore, useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { cn } from '@/lib/utils'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData, VideoStitchConfig } from '@/lib/canvas/types'
 import { isAssetConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
@@ -79,6 +80,7 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
     : Math.round(220 * (16 / 9))
   const canPreview = !!currentUrl
   const isSequencePreview = !stitchedUrl && previewVideos.length > 0
+  const theme = getCanvasNodeTheme('video_stitch')
 
   currentIdxRef.current = currentIdx
 
@@ -130,9 +132,9 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
         <X size={11} />
       </button>
 
-      <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-muted flex items-center justify-between">
+      <div className={cn('px-3 py-1.5 border-b border-border rounded-t-xl flex items-center justify-between', theme.headerClassName)}>
         <div className="flex items-center gap-1.5 min-w-0">
-          <Film className="w-3 h-3 text-red-400 shrink-0" />
+          <Film className={cn('w-3 h-3 shrink-0', theme.iconClassName)} />
           <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
         </div>
         <div className="flex items-center gap-1 shrink-0">

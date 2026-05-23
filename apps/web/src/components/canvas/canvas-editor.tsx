@@ -28,6 +28,7 @@ import type { AppNode, AppEdge } from '@/lib/canvas/types'
 import { getUpstreamNodeIds } from '@/lib/canvas/dag'
 import { generateUUID } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
+import { getCanvasNodeMiniMapColor, getCanvasNodeMiniMapStrokeColor, getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import {
   getCanvasUploadMediaKind,
   getNodeUploadRule,
@@ -56,7 +57,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     label: '文本',
     baseType: 'text_input',
     baseLabel: '文本',
-    colorClass: 'bg-muted hover:bg-accent text-foreground border border-border',
+    colorClass: getCanvasNodeTheme('text_input').menuButtonClassName,
     testId: 'canvas-add-node-text',
     items: []
     // items: [
@@ -69,7 +70,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     label: '图片',
     baseType: 'image_gen',
     baseLabel: '图片',
-    colorClass: 'bg-blue-600 hover:bg-blue-500 text-white shadow',
+    colorClass: getCanvasNodeTheme('image_gen').menuButtonClassName,
     testId: 'canvas-add-node-image',
     items: [],
   },
@@ -78,7 +79,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     label: '视频',
     baseType: 'video_gen',
     baseLabel: '视频',
-    colorClass: 'bg-violet-600 hover:bg-violet-500 text-white shadow',
+    colorClass: getCanvasNodeTheme('video_gen').menuButtonClassName,
     testId: 'canvas-add-node-video',
     items: [
       // { type: 'video_stitch', label: '视频拼接', testId: 'canvas-add-node-video-stitch' },
@@ -89,7 +90,7 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     label: '脚本',
     baseType: 'storyboard_splitter',
     baseLabel: '脚本',
-    colorClass: 'bg-lavender hover:bg-lavender text-foreground border border-border',
+    colorClass: getCanvasNodeTheme('storyboard_splitter').menuButtonClassName,
     testId: 'canvas-add-node-storyboard',
     items: [],
   },
@@ -869,16 +870,9 @@ function Flow({
           className="!bg-card !border-border [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-muted-foreground [&>button:hover]:!bg-muted [&>button:hover]:!text-foreground"
         />
         <MiniMap
-          nodeColor={(node) => {
-            if (node.type === 'image_gen') return '#3b82f6'
-            if (node.type === 'video_gen') return '#7c3aed'
-            if (node.type === 'text_input') return '#6b7280'
-            if (node.type === 'asset') return '#10b981'
-            if (node.type === 'script_writer') return '#f59e0b'
-            if (node.type === 'storyboard_splitter') return '#0d9488'
-            if (node.type === 'video_stitch') return '#ef4444'
-            return '#d4d4d8'
-          }}
+          nodeColor={(node) => getCanvasNodeMiniMapColor(node.type)}
+          nodeStrokeColor={(node) => getCanvasNodeMiniMapStrokeColor(node.type)}
+          nodeBorderRadius={4}
           maskColor="rgba(0,0,0,0.06)"
           className="!bg-card/90 !border-border !rounded-xl"
           style={{ width: 140, height: 90 }}

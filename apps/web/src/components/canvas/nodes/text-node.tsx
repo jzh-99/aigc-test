@@ -5,8 +5,9 @@ import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useShallow } from 'zustand/react/shallow'
-import { X } from 'lucide-react'
+import { Type, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 
@@ -15,6 +16,7 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const { isGenerating } = useNodeExecutionState(id)
   const isUpstream = useNodeHighlighted(id)
+  const theme = getCanvasNodeTheme('text_input')
 
   // Upstream text nodes connected via any-in
   const upstreamTextLabels = useCanvasStructureStore(
@@ -76,7 +78,10 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
         <X size={11} />
       </button>
 
-      <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-muted">
+      <div className={cn('flex items-center gap-1.5 px-3 py-1.5 border-b border-border rounded-t-xl', theme.headerClassName)}>
+        <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-current/10', theme.iconClassName)}>
+          <Type size={12} />
+        </span>
         <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
       </div>
 
@@ -101,7 +106,7 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
       </div>
 
       <Handle type="target" position={Position.Left} id="any-in"
-        className="!w-2 !h-2 !bg-border !border !border-border/80 !-left-1 hover:!bg-blue-400 transition-colors" />
+        className="!w-2 !h-2 !bg-border !border !border-border/80 !-left-1 hover:!bg-indigo-400 transition-colors" />
       <Handle type="source" position={Position.Right} id="text-out"
         className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all" />
     </div>

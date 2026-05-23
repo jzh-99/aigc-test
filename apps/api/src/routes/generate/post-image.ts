@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import type { GenerateImageRequest } from '@aigc/types'
+import type { GenerateImageRequest, ImageCategories } from '@aigc/types'
+import { ACTIVE_IMAGE_CATEGORY, parseImageCategories, validateImageReferenceLimits } from '@aigc/types'
 import { checkPrompt } from '../../services/prompt-filter.js'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getImageQueue } from '../../lib/queue.js'
@@ -10,6 +11,22 @@ import rateLimit from '@fastify/rate-limit'
 
 // 每个用户最多同时处于 pending/processing 状态的批次数
 const MAX_PENDING_BATCHES = 20
+const MAX_IMAGE_REFERENCE_PARAMS = 14
+
+const FALLBACK_IMAGE_CATEGORIES: ImageCategories = {
+  text_to_image: {
+    label: '文生图',
+    limits: {
+      image: { min: 0, max: 0 },
+    },
+  },
+  image_to_image: {
+    label: '图生图',
+    limits: {
+      image: { min: 0, max: 10 },
+    },
+  },
+}
 
 // 图片生成允许的 params 键白名单
 const ALLOWED_PARAM_KEYS = new Set([
@@ -34,8 +51,8 @@ function sanitizeParams(raw: Record<string, unknown>): Record<string, unknown> {
     } else if (typeof value === 'number' || typeof value === 'boolean') {
       sanitized[key] = value
     } else if (Array.isArray(value)) {
-      // 数组（如参考图）：最多保留 10 项，字符串截断（图片数据键除外）
-      sanitized[key] = value.slice(0, 10).map(v =>
+      // 数组（如参考图）：最多保留平台支持的最大参考图数量，字符串截断（图片数据键除外）
+      sanitized[key] = value.slice(0, MAX_IMAGE_REFERENCE_PARAMS).map(v =>
         typeof v === 'string' && !isImageKey ? v.slice(0, 2000) : v
       )
     }
@@ -87,6 +104,11 @@ function resolveProxyUrls(params: Record<string, unknown>): Record<string, unkno
   return { ...params, image: resolved }
 }
 
+function countImageReferences(rawParams: Record<string, unknown>): number {
+  const images = rawParams.image
+  return Array.isArray(images) ? images.length : 0
+}
+
 const route: FastifyPluginAsync = async (app) => {
   // 每用户生成限速：每分钟 10 次
   await app.register(rateLimit, {
@@ -132,6 +154,7 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     // 清洗 params：白名单键 + 类型校验
+    const imageReferenceCount = countImageReferences(rawParams)
     const params = resolveProxyUrls(sanitizeParams(rawParams))
 
     // 从存入 DB 的 params 中剥离图片数据（base64 data URI 可能数百 MB，
@@ -351,6 +374,7 @@ const route: FastifyPluginAsync = async (app) => {
         'provider_models.id as modelId',
         'provider_models.credit_cost',
         'provider_models.params_pricing',
+        'provider_models.image_categories',
         'providers.code as providerCode',
         'providers.id as providerId',
       ])
@@ -371,6 +395,24 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({
         success: false,
         error: { code: 'NOT_FOUND', message: `模型 "${model}" 未找到或已停用` },
+      })
+    }
+
+    const imageCategories = parseImageCategories(providerModel.image_categories)
+    const effectiveImageCategories = Object.keys(imageCategories).length > 0 ? imageCategories : FALLBACK_IMAGE_CATEGORIES
+    const limitResult = validateImageReferenceLimits(effectiveImageCategories, ACTIVE_IMAGE_CATEGORY, imageReferenceCount)
+    if (!limitResult.valid) {
+      logGenerateSubmissionError(app, {
+        userId,
+        errorCode: 'INVALID_IMAGE_REFERENCES',
+        httpStatus: 400,
+        detail: `category=${ACTIVE_IMAGE_CATEGORY};image_count=${imageReferenceCount};message=${limitResult.message ?? ''}`,
+        model,
+        canvasId: canvas_id,
+      })
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_IMAGE_REFERENCES', message: limitResult.message ?? '参考图数量不符合当前模型限制' },
       })
     }
 

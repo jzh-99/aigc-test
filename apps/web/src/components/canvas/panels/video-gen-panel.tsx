@@ -1,4 +1,4 @@
-import { Film, ImageIcon, Loader2, Music, Play } from 'lucide-react'
+import { Film, ImageIcon, Loader2, Music, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { VideoMode } from '@/lib/canvas/types'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
@@ -22,7 +22,13 @@ function getReferenceBadgeClass(resource: CanvasReferenceMentionResource): strin
   return 'bg-blue-600 text-white'
 }
 
-function ReferencePreviewItem({ resource }: { resource: CanvasReferenceMentionResource }) {
+function ReferencePreviewItem({
+  resource,
+  onRemoveReference,
+}: {
+  resource: CanvasReferenceMentionResource
+  onRemoveReference: (resourceId: string) => void
+}) {
   const isImage = resource.type === 'image'
   const isVideo = resource.type === 'video'
   const isAudio = resource.type === 'audio'
@@ -31,7 +37,7 @@ function ReferencePreviewItem({ resource }: { resource: CanvasReferenceMentionRe
   return (
     <div
       data-testid={`canvas-reference-preview-${resource.mentionLabel}`}
-      className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border bg-muted/40"
+      className="group/reference relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border bg-muted/40"
       title={`${resource.mentionLabel} · ${resource.sourceLabel}`}
     >
       {(isImage || (isVideo && previewImageUrl)) && (
@@ -67,6 +73,19 @@ function ReferencePreviewItem({ resource }: { resource: CanvasReferenceMentionRe
       <span className={cn('absolute left-1 top-1 rounded px-1 text-[9px] font-bold leading-4 shadow', getReferenceBadgeClass(resource))}>
         @{resource.mentionLabel}
       </span>
+      <button
+        type="button"
+        data-testid={`canvas-reference-remove-${resource.mentionLabel}`}
+        aria-label="取消引用"
+        title={`取消引用${resource.mentionLabel}`}
+        onClick={(event) => {
+          event.stopPropagation()
+          onRemoveReference(resource.id)
+        }}
+        className="pointer-events-none absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-background/95 text-muted-foreground opacity-0 shadow transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
+      >
+        <X className="h-2.5 w-2.5" />
+      </button>
     </div>
   )
 }
@@ -76,11 +95,13 @@ function ReferencePreviewGroup({
   count,
   type,
   resources,
+  onRemoveReference,
 }: {
   title: string
   count: number
   type: CanvasReferenceMentionResource['type']
   resources: CanvasReferenceMentionResource[]
+  onRemoveReference: (resourceId: string) => void
 }) {
   if (resources.length === 0) return null
 
@@ -97,7 +118,13 @@ function ReferencePreviewGroup({
         data-testid={`canvas-reference-preview-list-${type}`}
         className="flex max-w-full gap-1.5 overflow-x-auto pb-1"
       >
-        {resources.map((resource) => <ReferencePreviewItem key={resource.id} resource={resource} />)}
+        {resources.map((resource) => (
+          <ReferencePreviewItem
+            key={resource.id}
+            resource={resource}
+            onRemoveReference={onRemoveReference}
+          />
+        ))}
       </div>
     </div>
   )
@@ -131,6 +158,7 @@ interface VideoGenPanelProps {
   onVideoModelChange: (value: string) => void
   onVideoModeChange: (value: VideoMode) => void
   onUpdateCfg: (patch: Record<string, unknown>) => void
+  onRemoveReference: (resourceId: string) => void
   onExecute: () => void
 }
 
@@ -161,6 +189,7 @@ export function VideoGenPanel({
   onVideoModelChange,
   onVideoModeChange,
   onUpdateCfg,
+  onRemoveReference,
   onExecute,
 }: VideoGenPanelProps) {
   const currentDbModel = models?.find((m) => m.code === videoModel)
@@ -249,9 +278,9 @@ export function VideoGenPanel({
               </div>
             ) : (
               <div className="space-y-2">
-                <ReferencePreviewGroup title="图片" count={multirefImages.length} type="image" resources={imageMentionResources} />
-                <ReferencePreviewGroup title="视频" count={multirefVideos.length} type="video" resources={videoMentionResources} />
-                <ReferencePreviewGroup title="音频" count={multirefAudios.length} type="audio" resources={audioMentionResources} />
+                <ReferencePreviewGroup title="图片" count={multirefImages.length} type="image" resources={imageMentionResources} onRemoveReference={onRemoveReference} />
+                <ReferencePreviewGroup title="视频" count={multirefVideos.length} type="video" resources={videoMentionResources} onRemoveReference={onRemoveReference} />
+                <ReferencePreviewGroup title="音频" count={multirefAudios.length} type="audio" resources={audioMentionResources} onRemoveReference={onRemoveReference} />
               </div>
             )}
           </div>
@@ -283,13 +312,26 @@ export function VideoGenPanel({
                     key={idx}
                     className={cn(
                       'relative w-14 h-14 rounded border flex items-center justify-center text-[10px] text-muted-foreground font-medium',
-                      frame ? 'border-border' : 'border-dashed border-muted-foreground/30 bg-muted/20'
+                      frame ? 'group/reference border-border' : 'border-dashed border-muted-foreground/30 bg-muted/20'
                     )}
                   >
                     {frame ? (
                       <>
                         <img src={frame.url} alt="" className="w-full h-full object-cover rounded" />
                         <span className="absolute -top-1 -left-1 text-[9px] bg-amber-500 text-white rounded px-1 font-bold">{label}</span>
+                        <button
+                          type="button"
+                          data-testid={`canvas-keyframe-remove-${idx}`}
+                          aria-label="取消引用"
+                          title={`取消引用${label}帧`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onRemoveReference(frame.edgeId)
+                          }}
+                          className="pointer-events-none absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-background text-muted-foreground opacity-0 shadow ring-1 ring-border transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
                       </>
                     ) : (
                       <span>{label}帧</span>

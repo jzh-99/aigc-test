@@ -6,6 +6,7 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { X, FileText, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData } from '@/lib/canvas/types'
 import type { ScriptWriterConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
@@ -25,6 +26,7 @@ export const ScriptWriterNode = memo(function ScriptWriterNode({
   const script = (outputs[0]?.paramsSnapshot as { script?: string } | undefined)?.script ?? ''
   const preview = script ? script.slice(0, 80) + (script.length > 80 ? '…' : '') : ''
   const isDone = submissionStatus === 'completed'
+  const theme = getCanvasNodeTheme('script_writer')
 
   return (
     <div
@@ -47,8 +49,8 @@ export const ScriptWriterNode = memo(function ScriptWriterNode({
         <X size={11} />
       </button>
 
-      <div className="px-3 py-1.5 border-b border-border rounded-t-xl bg-amber-50 dark:bg-amber-950/30 flex items-center gap-1.5">
-        <FileText size={12} className="text-amber-500 shrink-0" />
+      <div className={cn('px-3 py-1.5 border-b border-border rounded-t-xl flex items-center gap-1.5', theme.headerClassName)}>
+        <FileText size={12} className={cn('shrink-0', theme.iconClassName)} />
         <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
       </div>
 

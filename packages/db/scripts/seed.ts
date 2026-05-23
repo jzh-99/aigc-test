@@ -345,6 +345,31 @@ async function main() {
   const provider = providerResult[0]
   console.log('  providers seeded (comfly)')
 
+  const SIX_IMAGE_CATEGORIES = {
+    text_to_image: {
+      label: '文生图',
+      limits: {
+        image: { min: 0, max: 0 },
+      },
+    },
+    image_to_image: {
+      label: '图生图',
+      limits: {
+        image: { min: 0, max: 6 },
+      },
+    },
+  }
+
+  const SEEDREAM_IMAGE_CATEGORIES = {
+    text_to_image: SIX_IMAGE_CATEGORIES.text_to_image,
+    image_to_image: {
+      label: '图生图',
+      limits: {
+        image: { min: 0, max: 14 },
+      },
+    },
+  }
+
   // 10. Provider models: comfly 图片模型 — upsert by code
   const imageModels = [
     // {
@@ -368,6 +393,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
+      image_categories: SIX_IMAGE_CATEGORIES,
     },
     {
       code: 'gpt-image-2',
@@ -382,6 +408,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
+      image_categories: SIX_IMAGE_CATEGORIES,
     },
     {
       code: 'nano-banana-2',
@@ -398,6 +425,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
+      image_categories: SIX_IMAGE_CATEGORIES,
     },
   ]
 
@@ -416,6 +444,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'image',
+        image_categories: JSON.stringify(m.image_categories),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify((m.params_pricing ?? [])),
         params_schema: JSON.stringify(m.params_schema),
@@ -425,6 +454,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'image',
+        image_categories: JSON.stringify(m.image_categories),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing ?? []),
         params_schema: JSON.stringify(m.params_schema),
@@ -437,7 +467,7 @@ async function main() {
   // 10b. veo3.1 视频模型 — 挂在 nano-banana provider 下
   const aspectRatioDefaultArr = [{label: '自适应', value : 'adaptive'}, '16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
   const timeDefaultArr = [
-    { label: '自动', value: -1 },
+    // { label: '自动', value: -1 },
     { label: '4秒', value: 4 },
     { label: '5秒', value: 5 },
     { label: '6秒', value: 6 },
@@ -474,25 +504,25 @@ async function main() {
     frames: FRAMES_VIDEO_CATEGORIES.frames,
   }
 
-  const veoVideoModels = [
-    {
-      code: 'veo3.1-fast',
-      name: '全能视频3.1 Fast',
-      description: '快速高质量视频生成',
-      credit_cost: 10,
-      video_categories: FRAMES_VIDEO_CATEGORIES,
-      params_pricing: [
-        { resolution: '720p', model: 'veo3.1-fast', unit_price: 4 },
-        { resolution: '1080p', model: 'veo3.1-fast', unit_price: 4 },
-      ],
-      params_schema: JSON.stringify({
-        aspect_ratio: aspectRatioDefaultArr,
-        resolution: ['720p', '1080p'],
-        time_length: timeDefaultArr,
-        video_voice: videoVoiceDefaultArr,
-        image: [],
-      }),
-    },
+  // const veoVideoModels = [
+    // {
+    //   code: 'veo3.1-fast',
+    //   name: '全能视频3.1 Fast',
+    //   description: '快速高质量视频生成',
+    //   credit_cost: 10,
+    //   video_categories: FRAMES_VIDEO_CATEGORIES,
+    //   params_pricing: [
+    //     { resolution: '720p', model: 'veo3.1-fast', unit_price: 4 },
+    //     { resolution: '1080p', model: 'veo3.1-fast', unit_price: 4 },
+    //   ],
+    //   params_schema: JSON.stringify({
+    //     aspect_ratio: aspectRatioDefaultArr,
+    //     resolution: ['720p', '1080p'],
+    //     time_length: timeDefaultArr,
+    //     video_voice: videoVoiceDefaultArr,
+    //     image: [],
+    //   }),
+    // },
     // {
     //   code: 'veo3.1-components',
     //   name: '全能视频3.1',
@@ -506,35 +536,35 @@ async function main() {
     //     },
     //   }),
     // },
-  ]
+  // ]
 
-  for (const m of veoVideoModels) {
-    await db
-      .insertInto('provider_models')
-      .values({
-        provider_id: provider.id,
-        code: m.code,
-        name: m.name,
-        description: m.description,
-        module: 'video',
-        video_categories: JSON.stringify(m.video_categories),
-        credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify(m.params_pricing ?? []),
-        params_schema: m.params_schema,
-        is_active: true,
-      })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
-        name: m.name,
-        description: m.description,
-        video_categories: JSON.stringify(m.video_categories),
-        credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify(m.params_pricing ?? []),
-        params_schema: m.params_schema,
-        is_active: true,
-      }))
-      .execute()
-    console.log(`  provider_models seeded (${m.code})`)
-  }
+  // for (const m of veoVideoModels) {
+  //   await db
+  //     .insertInto('provider_models')
+  //     .values({
+  //       provider_id: provider.id,
+  //       code: m.code,
+  //       name: m.name,
+  //       description: m.description,
+  //       module: 'video',
+  //       video_categories: JSON.stringify(m.video_categories),
+  //       credit_cost: m.credit_cost,
+  //       params_pricing: JSON.stringify(m.params_pricing ?? []),
+  //       params_schema: m.params_schema,
+  //       is_active: true,
+  //     })
+  //     .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+  //       name: m.name,
+  //       description: m.description,
+  //       video_categories: JSON.stringify(m.video_categories),
+  //       credit_cost: m.credit_cost,
+  //       params_pricing: JSON.stringify(m.params_pricing ?? []),
+  //       params_schema: m.params_schema,
+  //       is_active: true,
+  //     }))
+  //     .execute()
+  //   console.log(`  provider_models seeded (${m.code})`)
+  // }
 
   // 11. Volcengine provider + models
   const volcResult = await db
@@ -575,6 +605,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
+      image_categories: SEEDREAM_IMAGE_CATEGORIES,
     },
     {
       code: 'seedream-4.5',
@@ -590,6 +621,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
+      image_categories: SEEDREAM_IMAGE_CATEGORIES,
     },
     {
       code: 'seedream-4.0',
@@ -606,6 +638,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
+      image_categories: SEEDREAM_IMAGE_CATEGORIES,
     },
   ]
 
@@ -618,6 +651,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'image',
+        image_categories: JSON.stringify(m.image_categories),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
@@ -627,6 +661,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'image',
+        image_categories: JSON.stringify(m.image_categories),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
@@ -638,7 +673,7 @@ async function main() {
 
   const volcAspectRatioArr = [{ label: '自适应', value: 'adaptive' }, '16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
   const volcTimeLengthArr = [
-    { label: '自动', value: -1 },
+    // { label: '自动', value: -1 },
     { label: '4秒', value: 4 },
     { label: '5秒', value: 5 },
     { label: '6秒', value: 6 },
