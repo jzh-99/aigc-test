@@ -396,3 +396,88 @@
   - `pnpm --filter @aigc/web build` 通过。
   - 新增 `apps/web/e2e/canvas/context-menu-upload.spec.ts`，并用 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:6008 pnpm --filter @aigc/web test:e2e -- canvas/context-menu-upload.spec.ts` 验证通过，1 个测试通过。
   - 临时 6008 dev server 已关闭。
+
+## 2026-05-23 画布音频节点
+
+- 需求确认：新增类似图片/视频节点的音频节点，规则读取 `category_references`、`params_pricing`、`params_schema`，面板支持模型切换、文本、停顿、语气词、音色列表、音色 demo、语速、音调、音量和千字价格估算。
+- 现有基础：仓库已有 MiniMax provider、TTS 模型 seed、`provider_system_voices` 迁移、音色 demo 路由和 `generateMiniMaxTtsAudio` 服务雏形。
+- 官方规则核对：MiniMax T2A HTTP 单次文本必须小于 10000 字；超过 3000 字推荐流式；停顿控制使用 `<#x#>`；语气词如 `(laughs)` / `(sighs)` 支持 `speech-2.8-hd` 与 `speech-2.8-turbo`；流式仅支持 mp3。
+- 方案取舍：采用完整 MVP。后端新增 `/tts/generate`，3000 字以内非流式、3000 字以上服务端流式汇总后上传；前端新增 `audio_gen` 节点和面板，输出作为 `audio` 资产，可继续被视频节点引用。
+- TDD 记录：
+  - `apps/api/src/services/minimax-tts.test.ts` 先因缺少导出失败，随后实现流式判定、hex/base64 解码、SSE 分片汇总并通过 3 个测试。
+  - `apps/web/src/components/canvas/panels/audio-tts-utils.test.ts` 先因模块不存在失败，随后实现字数统计、千字计费、流式提示、光标插入、范围归一并通过 5 个测试。
+  - `apps/web/src/lib/canvas/media-upload-rules.test.ts` 扩展音频上传场景，覆盖空白画布和音频节点上传规则。
+- 实现内容：
+  - 后端新增 `/tts/generate`：校验工作区、模型、团队开关、系统音色和 provider 配置；按 `Math.ceil(字数 / 1000) * unit_price` 冻结积分；成功后上传 mp3，写入 `task_batches`、`tasks`、`assets`、`canvas_node_outputs` 并确认积分；失败退回积分。
+  - 模型接口新增 `/models/system-voices`，返回活跃系统音色与已生成 demo 的签名 URL，保留单个音色 demo 生成接口。
+  - 前端新增 `audio_gen` 类型、节点注册、主题、节点卡片、画布添加入口、上传音频入口、轮询音频输出识别和 `executeAudioNode`。
+  - 音频面板包含模型、文本、停顿/语气词、音色列表、音色 demo、语速、音调、音量、情绪、字数、3000 字流式提示和千字积分估算。
+  - 修复浮层定位：参数面板按 `maxHeight` 夹到视口内，避免底部节点面板控件落出视口。
+- 验证结果：
+  - `pnpm --filter @aigc/types build` 通过。
+  - `pnpm --filter @aigc/api build` 通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web build` 通过。
+  - `pnpm --filter @aigc/api exec tsx --test src/services/minimax-tts.test.ts` 通过，3 个测试。
+  - `pnpm --filter @aigc/web exec tsx --test src/components/canvas/panels/audio-tts-utils.test.ts src/lib/canvas/media-upload-rules.test.ts` 通过，8 个测试。
+  - `pnpm --filter @aigc/web exec tsx --test src/components/canvas/floating-param-panel-position.test.ts` 通过，2 个测试。
+  - `pnpm --filter @aigc/web test:e2e -- canvas/image-submit.spec.ts canvas/video-submit.spec.ts canvas/audio-submit.spec.ts` 通过，8 个 E2E。
+
+## 2026-05-23 音频节点面板反馈修正
+
+- 用户反馈：
+  - 音频参数面板位置不合适。
+  - 停顿和语气词需要像视频节点 `@` 引用一样作为整体 token 展示。
+  - 停顿和语气词改为下拉选择；停顿支持 0.01 到 99.99 秒、最多两位小数；语气词按 MiniMax 列表补齐。
+  - 同步/流式是调用规则，不在 UI 展示。
+  - 音色在面板内只展示当前单条，点击按钮打开分页音色选择对话框。
+  - 移除情绪设置。
+- 实现内容：
+  - `audio-tts-utils.ts` 新增停顿校验、停顿 tag 生成、音频 tag 分段解析和完整语气词选项。
+  - `audio-gen-panel.tsx` 重构为 contenteditable 音频 tag 编辑器，停顿/语气词渲染为不可拆分 token。
+  - 面板内音色改为单条摘要卡片，音色库用 portal 弹窗分页展示，支持搜索、语言筛选、试听和选择。
+  - 移除同步/流式提示文案和情绪下拉。
+  - 音频参数面板浮层宽度调整为 780，避免控件挤压和位置异常。
+- 验证结果：
+  - `pnpm --filter @aigc/web exec tsx --test src/components/canvas/panels/audio-tts-utils.test.ts` 通过，8 个测试。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web test:e2e -- canvas/audio-submit.spec.ts` 通过。
+  - `pnpm --filter @aigc/web test:e2e -- canvas/image-submit.spec.ts canvas/video-submit.spec.ts canvas/audio-submit.spec.ts` 通过，8 个 E2E。
+  - `pnpm --filter @aigc/web exec tsx --test src/components/canvas/panels/audio-tts-utils.test.ts src/components/canvas/floating-param-panel-position.test.ts` 通过，10 个测试。
+  - `pnpm --filter @aigc/web build` 通过。
+
+## 2026-05-23 音频节点下拉裁剪与定位修正
+
+- 用户反馈：
+  - 停顿和语气词下拉在参数面板底部被遮住。
+  - 音量默认值应为 1。
+  - 参数面板位置仍有偏差。
+- 排查结论：
+  - 停顿/语气词下拉当前在 `AudioGenPanel` 内部用 `absolute` 展开，而 `FloatingParamPanel` 外层为了避免超出视口设置了 `overflowY: auto`，导致底部下拉被滚动容器裁剪。
+  - 音量默认值分别存在于 `node-param-panel.tsx`、`registry.ts` 和 E2E fixture，需要统一修改，避免新节点、旧节点兜底和测试数据不一致。
+  - 面板位置使用固定 `PANEL_MAX_H=560` 估算，音频面板实际高度变化时会出现过度夹取或贴边不自然；应以真实 DOM 高度计算，空间不足时再上翻或夹到视口内。
+- 本轮方案：
+  - 增加定位函数测试，覆盖“下方空间足够时使用节点下方”和“下方空间不足时上翻”。
+  - 下拉菜单通过 `createPortal` 渲染到 `document.body`，按按钮 `getBoundingClientRect` 定位，并根据视口空间决定向上或向下展开。
+  - `FloatingParamPanel` 增加容器 ref，测量实际高度传入定位函数，保留最大高度作为兜底。
+- 实现进展：
+  - `floating-param-panel-position.test.ts` 先新增节点下方空间足够/不足两个场景；不足场景红测显示旧逻辑仍返回下方位置。
+  - `computeFloatingParamPanelPosition` 增加可选 `panelHeight`，传入真实高度时按下方优先、不足上翻、最终夹入视口；未传入高度时保持旧调用兼容。
+  - `FloatingParamPanel` 通过 `ResizeObserver` 测量实际高度，音频面板首次渲染使用 470px 估算值，避免固定 560px 造成定位误差。
+  - `DropdownButton` 改为 portal 菜单，监听窗口滚动和 resize 实时重算位置，不再被外层 `overflowY: auto` 裁剪。
+  - 音量默认值在节点注册、参数面板兜底和 E2E fixture 中统一为 1。
+- 验证结果：
+  - `pnpm --filter @aigc/web exec tsx --test src/components/canvas/floating-param-panel-position.test.ts src/components/canvas/panels/audio-tts-utils.test.ts` 通过，12 个测试。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web test:e2e -- canvas/audio-submit.spec.ts` 通过，1 个 E2E。
+  - `pnpm --filter @aigc/web build` 通过。
+  - `pnpm lint` 执行成功，但 Turborepo 提示当前没有实际 lint 任务被执行。
+
+## 2026-05-23 音频面板精简
+
+- 用户反馈：
+  - 音色选择弹窗不需要“我的音色”“收藏音色”和“筛选”功能。
+  - 音频节点卡片不需要“定稿”按钮。
+- 排查结论：
+  - 音色弹窗中的“我的音色”“收藏音色”为 disabled 占位入口；“全部”语言下拉和“筛选”按钮都属于筛选能力，本轮一并移除，只保留搜索。
+  - 音频节点卡片的“定稿”按钮调用 `selectNodeOutputForCanvas`，图片/视频节点仍保留原有定稿能力，本轮只移除音频节点上的定稿操作，输出分页本地切换仍保留。

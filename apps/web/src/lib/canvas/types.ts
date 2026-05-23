@@ -11,7 +11,7 @@ export type HandleRole =
   | 'frame-start' | 'frame-end'           // keyframe: first/last frame
   | 'text-in' | 'image-out' | 'video-out' // generic I/O
 
-export type CanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'asset' | 'script_writer' | 'storyboard_splitter' | 'video_stitch'
+export type CanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'audio_gen' | 'asset' | 'script_writer' | 'storyboard_splitter' | 'video_stitch'
 export type VideoMode = 'multiref' | 'keyframe'
 
 export const DEFAULT_VIDEO_CATEGORY_LIMITS = {
@@ -87,6 +87,17 @@ export interface VideoGenConfig {
   categoryReferences?: CategoryReferences
   /** 视频分辨率，可选，如 '720p'、'1080p' 等 */
   resolution?: string
+}
+
+export interface AudioGenConfig {
+  text: string
+  model: string
+  voiceId: string
+  voiceSourceId?: string
+  speed: number
+  pitch: number
+  volume: number
+  emotion: string
 }
 
 export interface AssetConfig {
@@ -180,6 +191,7 @@ export interface CanvasNodeConfigMap {
   text_input: TextInputConfig
   image_gen: ImageGenConfig
   video_gen: VideoGenConfig
+  audio_gen: AudioGenConfig
   asset: AssetConfig
   script_writer: ScriptWriterConfig
   storyboard_splitter: StoryboardSplitterConfig
@@ -214,7 +226,7 @@ export type AppEdge = ReactFlowEdge
 
 export function isCanvasNodeType(type: string): type is CanvasNodeType {
   return type === 'text_input' || type === 'image_gen' || type === 'video_gen' || type === 'asset'
-    || type === 'script_writer' || type === 'storyboard_splitter' || type === 'video_stitch'
+    || type === 'audio_gen' || type === 'script_writer' || type === 'storyboard_splitter' || type === 'video_stitch'
 }
 
 export function isTextInputConfig(config: unknown): config is TextInputConfig {
@@ -229,6 +241,11 @@ export function isImageGenConfig(config: unknown): config is ImageGenConfig {
 export function isVideoGenConfig(config: unknown): config is VideoGenConfig {
   const c = config as Partial<VideoGenConfig> | null | undefined
   return typeof c?.prompt === 'string' && typeof c?.model === 'string' && (c?.videoMode === 'multiref' || c?.videoMode === 'keyframe')
+}
+
+export function isAudioGenConfig(config: unknown): config is AudioGenConfig {
+  const c = config as Partial<AudioGenConfig> | null | undefined
+  return typeof c?.text === 'string' && typeof c?.model === 'string'
 }
 
 export function isAssetConfig(config: unknown): config is AssetConfig {

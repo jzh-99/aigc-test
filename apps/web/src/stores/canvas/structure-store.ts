@@ -162,6 +162,7 @@ function getReferenceKind(node: AppNode | undefined): 'image' | 'video' | 'audio
   if (!node || node.type === 'text_input') return null
   if (node.type === 'image_gen') return 'image'
   if (node.type === 'video_gen' || node.type === 'video_stitch') return 'video'
+  if (node.type === 'audio_gen') return 'audio'
   if (!isAssetConfig(node.data.config)) return null
 
   const mimeType = node.data.config.mimeType ?? ''

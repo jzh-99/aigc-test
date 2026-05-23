@@ -347,6 +347,35 @@ export interface ModelItem {
   provider_code: string
 }
 
+export interface SystemVoiceDemoResponse {
+  voice_id: string
+  demo_audio_url: string
+}
+
+export interface SystemVoiceItem {
+  id: string
+  voice_id: string
+  name: string
+  language: string
+  demo_audio_url: string | null
+  provider_code: string
+}
+
+export interface GenerateTtsRequest {
+  idempotency_key?: string
+  workspace_id: string
+  model: string
+  text: string
+  voice_id: string
+  voice_source_id?: string
+  speed?: number
+  volume?: number
+  pitch?: number
+  emotion?: string
+  canvas_id?: string
+  canvas_node_id?: string
+}
+
 export interface TeamModelConfig {
   model_id: string
   is_active: boolean

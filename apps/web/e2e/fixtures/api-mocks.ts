@@ -86,6 +86,41 @@ const IMAGE_MODEL_FIXTURE = {
   },
 }
 
+const TTS_MODEL_FIXTURE = {
+  id: 'model-minimax-tts',
+  code: 'speech-2.8-turbo',
+  name: 'MiniMax Speech 2.8 Turbo',
+  description: null,
+  module: 'tts',
+  provider_code: 'minimax',
+  credit_cost: 1,
+  resolution: null,
+  is_active: true,
+  params_pricing: [
+    { model: 'speech-2.8-turbo', resolution: 'default', unit_price: 1 },
+  ],
+  params_schema: {
+    voice_id: [],
+    speed: [0.5, 1, 1.5, 2],
+    volume: [1, 5, 10],
+    pitch: [-12, 0, 12],
+    emotion: [
+      { label: '高兴', value: 'happy' },
+      { label: '生动', value: 'fluent' },
+    ],
+  },
+  category_references: null,
+}
+
+const SYSTEM_VOICE_FIXTURE = {
+  id: 'voice-yujie',
+  voice_id: 'female-yujie',
+  name: '御姐音色',
+  language: '中文 (普通话)',
+  demo_audio_url: 'https://cdn.test/voice-yujie-demo.mp3',
+  provider_code: 'minimax',
+}
+
 const SINGLE_REFERENCE_IMAGE_MODEL_FIXTURE = {
   ...IMAGE_MODEL_FIXTURE,
   id: 'model-single-reference',
@@ -118,6 +153,7 @@ interface MockCanvasEditorOptions {
   videoAssets?: unknown[]
   onImageGenerate?: (body: any, route: Route) => Promise<void> | void
   onVideoGenerate?: (body: any, route: Route) => Promise<void> | void
+  onAudioGenerate?: (body: any, route: Route) => Promise<void> | void
 }
 
 function buildCursorPayload(items: unknown[], nextCursor: string | null = null) {
@@ -153,11 +189,40 @@ export async function mockCanvasEditor(page: Page, options: MockCanvasEditorOpti
 
   await page.route('**/api/v1/models**', async (route, request) => {
     const url = new URL(request.url())
+    if (url.pathname.includes('/models/system-voices')) {
+      if (url.pathname.endsWith('/demo')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            voice_id: SYSTEM_VOICE_FIXTURE.voice_id,
+            demo_audio_url: SYSTEM_VOICE_FIXTURE.demo_audio_url,
+          }),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([SYSTEM_VOICE_FIXTURE]),
+      })
+      return
+    }
+
     const module = url.searchParams.get('module')
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(module === 'video' ? [VIDEO_MODEL_FIXTURE] : module === 'image' ? [IMAGE_MODEL_FIXTURE, SINGLE_REFERENCE_IMAGE_MODEL_FIXTURE] : []),
+      body: JSON.stringify(
+        module === 'video'
+          ? [VIDEO_MODEL_FIXTURE]
+          : module === 'image'
+          ? [IMAGE_MODEL_FIXTURE, SINGLE_REFERENCE_IMAGE_MODEL_FIXTURE]
+          : module === 'tts'
+          ? [TTS_MODEL_FIXTURE]
+          : [],
+      ),
     })
   })
 
@@ -284,6 +349,26 @@ export async function mockCanvasEditor(page: Page, options: MockCanvasEditorOpti
         id: `batch-${Date.now()}`,
         quantity: 1,
         estimated_credits: 5,
+      }),
+    })
+  })
+
+  await page.route('**/api/v1/tts/generate', async (route, request) => {
+    const body = readJson(request.postData())
+
+    if (cfg.onAudioGenerate) {
+      await cfg.onAudioGenerate(body, route)
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: `batch-audio-${Date.now()}`,
+        output_id: 'output-audio-1',
+        output_url: 'https://cdn.test/generated-audio.mp3',
+        estimated_credits: 1,
       }),
     })
   })

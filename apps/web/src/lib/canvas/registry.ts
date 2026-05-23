@@ -5,6 +5,7 @@ import { TextNode } from '@/components/canvas/nodes/text-node'
 import { ImageGenNode } from '@/components/canvas/nodes/image-gen-node'
 import { AssetNode } from '@/components/canvas/nodes/asset-node'
 import { VideoGenNode } from '@/components/canvas/nodes/video-gen-node'
+import { AudioGenNode } from '@/components/canvas/nodes/audio-gen-node'
 import { ScriptWriterNode } from '@/components/canvas/nodes/script-writer-node'
 import { StoryboardSplitterNode } from '@/components/canvas/nodes/storyboard-splitter-node'
 import { VideoStitchNode } from '@/components/canvas/nodes/video-stitch-node'
@@ -66,6 +67,23 @@ export class NodeRegistry {
         cameraFixed: false,
         watermark: false,
         categoryReferences: DEFAULT_VIDEO_CATEGORY_LIMITS,
+      },
+    })
+
+    this.register({
+      type: 'audio_gen',
+      label: '音频',
+      CanvasComponent: AudioGenNode as any,
+      inputs: [{ id: 'text-in', type: 'text', position: 'left' }],
+      outputs: [{ id: 'audio-out', type: 'audio', position: 'right' }],
+      defaultConfig: {
+        text: '',
+        model: 'speech-2.8-turbo',
+        voiceId: 'female-yujie',
+        speed: 1,
+        pitch: 0,
+        volume: 1,
+        emotion: '',
       },
     })
 

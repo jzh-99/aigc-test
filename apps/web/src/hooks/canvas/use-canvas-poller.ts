@@ -49,9 +49,11 @@ export function useCanvasPoller(canvasId: string | null) {
       const latest = outputs[outputs.length - 1]
       const url = latest.output_urls?.[0]
       if (url) {
-        const type: 'video' | 'image' = latest.asset_type === 'video'
+        const type: 'video' | 'image' | 'audio' = latest.asset_type === 'audio'
+          ? 'audio'
+          : latest.asset_type === 'video'
           ? 'video'
-          : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
+          : /\.(mp3|wav|ogg|aac|flac|m4a)(\?|$)/i.test(url) ? 'audio' : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
         store.replaceNodeOutput(nodeId, { id: latest.id, url, type, thumbnailUrl: latest.thumbnail_url ?? undefined })
       } else if (latest.params_snapshot) {
         // storyboard_splitter 等无 URL 输出的节点，通过 params_snapshot 传递结构化数据
@@ -82,9 +84,11 @@ export function useCanvasPoller(canvasId: string | null) {
         const target = outputs.find((o) => o.is_selected) ?? outputs[outputs.length - 1]
         const url = target.output_urls?.[0]
         if (url) {
-          const type: 'video' | 'image' = target.asset_type === 'video'
+          const type: 'video' | 'image' | 'audio' = target.asset_type === 'audio'
+            ? 'audio'
+            : target.asset_type === 'video'
             ? 'video'
-            : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
+            : /\.(mp3|wav|ogg|aac|flac|m4a)(\?|$)/i.test(url) ? 'audio' : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
           store.replaceNodeOutput(nodeId, { id: target.id, url, type, thumbnailUrl: target.thumbnail_url ?? undefined })
           store.selectNodeOutput(nodeId, target.id)
         } else if (target.params_snapshot) {

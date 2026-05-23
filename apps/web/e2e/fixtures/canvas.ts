@@ -1,4 +1,4 @@
-export type E2ECanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'asset'
+export type E2ECanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'audio_gen' | 'asset'
 
 export interface E2ECanvasNode {
   id: string
@@ -84,6 +84,33 @@ export function createVideoNode(params: {
         generateAudio: true,
         cameraFixed: false,
         watermark: false,
+      },
+    },
+  }
+}
+
+export function createAudioNode(params: {
+  id: string
+  label?: string
+  text?: string
+  model?: string
+  voiceId?: string
+  position?: { x: number; y: number }
+}): E2ECanvasNode {
+  return {
+    id: params.id,
+    type: 'audio_gen',
+    position: params.position ?? { x: 620, y: 140 },
+    data: {
+      label: params.label ?? 'AI 音频',
+      config: {
+        text: params.text ?? '',
+        model: params.model ?? 'speech-2.8-turbo',
+        voiceId: params.voiceId ?? 'female-yujie',
+        speed: 1,
+        pitch: 0,
+        volume: 1,
+        emotion: '',
       },
     },
   }

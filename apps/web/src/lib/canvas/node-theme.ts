@@ -38,6 +38,13 @@ export const CANVAS_NODE_THEMES = {
     iconClassName: 'text-violet-500 dark:text-violet-300',
     menuButtonClassName: 'bg-gradient-to-r from-violet-600 to-fuchsia-500 hover:from-violet-500 hover:to-fuchsia-400 text-white shadow-sm shadow-violet-500/20',
   },
+  audio_gen: {
+    miniMapColor: '#10b981',
+    miniMapStrokeColor: '#047857',
+    headerClassName: 'bg-gradient-to-r from-emerald-50 to-lime-50 dark:from-emerald-950/45 dark:to-lime-950/30',
+    iconClassName: 'text-emerald-500 dark:text-emerald-300',
+    menuButtonClassName: 'bg-gradient-to-r from-emerald-600 to-lime-500 hover:from-emerald-500 hover:to-lime-400 text-white shadow-sm shadow-emerald-500/20',
+  },
   asset: {
     miniMapColor: '#059669',
     miniMapStrokeColor: '#047857',

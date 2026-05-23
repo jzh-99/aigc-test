@@ -5,6 +5,7 @@
 
 import { apiGet, apiPost } from '@/lib/api-client'
 import type {
+  AudioGenConfig,
   ImageGenConfig,
   ShotItem,
   TaskBatchStatus,
@@ -66,6 +67,14 @@ export interface ExecuteVideoNodeParams {
   // keyframe mode: first and last frame
   frameStart?: string
   frameEnd?: string
+}
+
+export interface ExecuteAudioNodeParams {
+  canvasId: string
+  canvasNodeId: string
+  workspaceId?: string
+  idempotencyKey?: string
+  config: AudioGenConfig
 }
 
 export interface VideoConcatSegment {
@@ -498,6 +507,43 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
   if (!res.ok) {
     const error = await res.json().catch(() => ({}))
     throw toCanvasApiError('视频生成任务提交失败', res.status, error)
+  }
+
+  return await res.json()
+}
+
+export async function executeAudioNode(params: ExecuteAudioNodeParams, token?: string) {
+  if (!params.workspaceId) {
+    throw new Error('缺少工作区信息，请刷新页面后重试')
+  }
+
+  const body = {
+    idempotency_key: params.idempotencyKey ?? `ca_${(params.canvasNodeId ?? '').slice(-8)}_${Date.now()}`,
+    workspace_id: params.workspaceId,
+    model: params.config.model,
+    text: params.config.text,
+    voice_id: params.config.voiceId,
+    voice_source_id: params.config.voiceSourceId,
+    speed: params.config.speed,
+    volume: params.config.volume,
+    pitch: params.config.pitch,
+    emotion: params.config.emotion || undefined,
+    canvas_id: params.canvasId,
+    canvas_node_id: params.canvasNodeId,
+  }
+
+  const res = await fetch('/api/v1/tts/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw toCanvasApiError('音频生成任务提交失败', res.status, error)
   }
 
   return await res.json()

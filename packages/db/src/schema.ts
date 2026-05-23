@@ -285,6 +285,18 @@ export interface TeamModelConfigsTable {
   updated_at: Generated<Date>
 }
 
+export interface ProviderSystemVoicesTable {
+  id: Generated<string>
+  provider_id: string
+  voice_id: string
+  name: string
+  language: string
+  metadata: ColumnType<unknown, string, string>
+  demo_audio_url: string | null
+  is_active: Generated<boolean>
+  created_at: Generated<Date>
+}
+
 export interface VoiceProfilesTable {
   id: Generated<string>
   user_id: string
@@ -406,6 +418,7 @@ export interface Database {
   payment_orders: PaymentOrdersTable
   providers: ProvidersTable
   provider_models: ProviderModelsTable
+  provider_system_voices: ProviderSystemVoicesTable
   team_model_configs: TeamModelConfigsTable
   voice_profiles: VoiceProfilesTable
   prompt_filter_rules: PromptFilterRulesTable

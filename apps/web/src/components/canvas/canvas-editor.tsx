@@ -42,7 +42,7 @@ const nodeTypes = nodeRegistry.getReactFlowTypesMapping()
 
 
 type NodeMenuCategory = {
-  id: 'text' | 'image' | 'video' | 'asset' | 'storyboard_splitter'
+  id: 'text' | 'image' | 'video' | 'audio' | 'asset' | 'storyboard_splitter'
   label: string
   baseType: string
   baseLabel: string
@@ -84,6 +84,15 @@ const NODE_MENU_CATEGORIES: NodeMenuCategory[] = [
     items: [
       // { type: 'video_stitch', label: '视频拼接', testId: 'canvas-add-node-video-stitch' },
     ],
+  },
+  {
+    id: 'audio',
+    label: '音频',
+    baseType: 'audio_gen',
+    baseLabel: '音频',
+    colorClass: getCanvasNodeTheme('audio_gen').menuButtonClassName,
+    testId: 'canvas-add-node-audio',
+    items: [],
   },
   {
     id: 'storyboard_splitter',
@@ -226,6 +235,7 @@ const NODE_CANVAS_H: Record<string, number> = {
   text_input: 130,
   asset: 200,
   video_gen: 220,
+  audio_gen: 160,
   script_writer: 100,
   storyboard_splitter: 100,
   video_stitch: 220,
@@ -236,6 +246,7 @@ const NODE_CANVAS_W: Record<string, number> = {
   text_input: 240,
   asset: 160,
   video_gen: 280,
+  audio_gen: 240,
   script_writer: 240,
   storyboard_splitter: 280,
   video_stitch: 280,
@@ -257,9 +268,30 @@ function FloatingParamPanel({
   onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
 }) {
   const [tx, ty, zoom] = useStore((s) => s.transform)
-  const PANEL_W = ['script_writer', 'storyboard_splitter'].includes(node.type ?? '') ? 320 : 640
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const [measuredPanelHeight, setMeasuredPanelHeight] = useState<number | undefined>(undefined)
+  const PANEL_W = ['script_writer', 'storyboard_splitter'].includes(node.type ?? '')
+    ? 320
+    : node.type === 'audio_gen'
+    ? 780
+    : 640
   const PANEL_MAX_H = 560
+  const PANEL_ESTIMATED_H = node.type === 'audio_gen' ? 470 : PANEL_MAX_H
   const GAP = 8
+
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+
+    const updatePanelHeight = () => {
+      setMeasuredPanelHeight(Math.min(panel.getBoundingClientRect().height, PANEL_MAX_H))
+    }
+    updatePanelHeight()
+
+    const resizeObserver = new ResizeObserver(updatePanelHeight)
+    resizeObserver.observe(panel)
+    return () => resizeObserver.disconnect()
+  }, [PANEL_MAX_H, node.id])
 
   const rect = wrapperRef.current?.getBoundingClientRect()
   if (!rect) return null
@@ -267,8 +299,9 @@ function FloatingParamPanel({
   const domNode = wrapperRef.current?.querySelector(`[data-id="${node.id}"]`) as HTMLElement | null
   const nodeRect = domNode?.getBoundingClientRect()
   // 参数面板必须跟随节点的实际 DOM 中心，避免动态宽度节点出现视觉偏移。
-  const { top, left } = computeFloatingParamPanelPosition({
+  const { top: rawTop, left } = computeFloatingParamPanelPosition({
     panelWidth: PANEL_W,
+    panelHeight: measuredPanelHeight ?? PANEL_ESTIMATED_H,
     viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
     gap: GAP,
@@ -288,9 +321,11 @@ function FloatingParamPanel({
         }
       : undefined,
   })
+  const top = rawTop
 
   return createPortal(
     <div
+      ref={panelRef}
       className="fixed z-40 drop-shadow-2xl"
       style={{ top, left, width: PANEL_W, maxHeight: PANEL_MAX_H, overflowY: 'auto' }}
     >
@@ -487,10 +522,12 @@ function Flow({
     const target = uploadMenuTargetRef.current ?? { kind: 'canvas' as const }
     if (!isFileAllowedForUploadTarget(file, target)) {
       const acceptText = target.kind === 'canvas'
-        ? '请选择图片或视频文件'
+        ? '请选择图片、视频或音频文件'
         : target.mediaKind === 'image'
         ? '当前节点只能上传图片文件'
-        : '当前节点只能上传视频文件'
+        : target.mediaKind === 'video'
+        ? '当前节点只能上传视频文件'
+        : '当前节点只能上传音频文件'
       toast.error(acceptText)
       return
     }
@@ -498,7 +535,7 @@ function Flow({
     const position = uploadMenuPositionRef.current ?? { x: 200, y: 200 }
     const mediaKind = getCanvasUploadMediaKind(file)
     if (!mediaKind) {
-      toast.error('请选择图片或视频文件')
+      toast.error('请选择图片、视频或音频文件')
       return
     }
 
@@ -507,7 +544,7 @@ function Flow({
       const url = await uploadAssetFile(file, token)
       if (target.kind === 'canvas') {
         const nodeId = `node_${generateUUID()}`
-        const nodeType = mediaKind === 'video' ? 'video_gen' : 'image_gen'
+        const nodeType = mediaKind === 'video' ? 'video_gen' : mediaKind === 'audio' ? 'audio_gen' : 'image_gen'
         addNodeWithConfig(nodeType, position, {}, nodeId)
         const outputId = await createNodeOutput(canvasId, nodeId, url, token)
         initNodeState(nodeId)

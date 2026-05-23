@@ -9,7 +9,7 @@ import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
-import { CanvasApiError, executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
+import { CanvasApiError, executeAudioNode, executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
 import { getCategoryReferencesForModel, validateImageReferencesForModel } from '@/lib/image-categories'
 import { useModels } from '@/hooks/use-models'
 import { getModelResolutions, extractSchemaEnums } from '@/components/generation/shared/schema-utils'
@@ -17,6 +17,7 @@ import { parseCategoryReferences, validateCategoryReferenceLimits, type ModelIte
 import type {
   AppNode,
   AssetConfig,
+  AudioGenConfig,
   ImageGenConfig,
   TextInputConfig,
   VideoGenConfig,
@@ -28,6 +29,7 @@ import {
   DEFAULT_IMAGE_CATEGORY_LIMITS,
   DEFAULT_VIDEO_CATEGORY_LIMITS,
   isAssetConfig,
+  isAudioGenConfig,
   isImageGenConfig,
   isTextInputConfig,
   isVideoGenConfig,
@@ -36,6 +38,7 @@ import {
   isStoryboardSplitterConfig,
 } from '@/lib/canvas/types'
 import { AssetPanel } from './panels/asset-panel'
+import { AudioGenPanel } from './panels/audio-gen-panel'
 import { ImageGenPanel } from './panels/image-gen-panel'
 import {
   type ModelType,
@@ -86,6 +89,15 @@ const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
 
 const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '' }
 const DEFAULT_ASSET_CONFIG: AssetConfig = { url: '', name: '', mimeType: 'image/jpeg' }
+const DEFAULT_AUDIO_CONFIG: AudioGenConfig = {
+  text: '',
+  model: 'speech-2.8-turbo',
+  voiceId: 'female-yujie',
+  speed: 1,
+  pitch: 0,
+  volume: 1,
+  emotion: '',
+}
 const DEFAULT_SCRIPT_WRITER_CONFIG: ScriptWriterConfig = { description: '', style: '现代都市', duration: 60 }
 const DEFAULT_STORYBOARD_SPLITTER_CONFIG: StoryboardSplitterConfig = { shotCount: 0 }
 const DEFAULT_VIDEO_STITCH_CONFIG: VideoStitchConfig = { inputOrder: [] }
@@ -140,6 +152,20 @@ function normalizeVideoConfig(config: unknown): VideoGenConfig {
   }
 }
 
+function normalizeAudioConfig(config: unknown, models?: ModelItem[]): AudioGenConfig {
+  const raw = (config && typeof config === 'object' ? config : {}) as Partial<AudioGenConfig>
+  const dbModel = models?.find((m) => m.code === raw.model) ?? models?.[0]
+  return {
+    ...DEFAULT_AUDIO_CONFIG,
+    ...raw,
+    model: dbModel?.code ?? raw.model ?? DEFAULT_AUDIO_CONFIG.model,
+    speed: typeof raw.speed === 'number' ? raw.speed : DEFAULT_AUDIO_CONFIG.speed,
+    pitch: typeof raw.pitch === 'number' ? raw.pitch : DEFAULT_AUDIO_CONFIG.pitch,
+    volume: typeof raw.volume === 'number' ? raw.volume : DEFAULT_AUDIO_CONFIG.volume,
+    emotion: raw.emotion ?? DEFAULT_AUDIO_CONFIG.emotion,
+  }
+}
+
 export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboardExpandedRef }: Props) {
   const workspaceId = useCanvasStructureStore((s) => s.workspaceId)
   const removeEdgeById = useCanvasStructureStore((s) => s.removeEdgeById)
@@ -147,17 +173,21 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const setNodeStatus = useCanvasExecutionStore((s) => s.setNodeStatus)
   const setNodeError = useCanvasExecutionStore((s) => s.setNodeError)
+  const replaceNodeOutput = useCanvasExecutionStore((s) => s.replaceNodeOutput)
+  const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
   const [executing, setExecuting] = useState(false)
   const globalWatermark = useGenerationStore((s) => s.watermark)
 
   // 动态模型列表，与创作生成板块共用同一 API
   const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
   const { models: videoModels, isReady: videoModelsReady } = useModels('video', activeWorkspaceId)
+  const { models: audioModels, isReady: audioModelsReady } = useModels('tts', activeWorkspaceId)
 
   const isImageGen = node.type === 'image_gen'
   const isTextInput = node.type === 'text_input'
   const isAsset = node.type === 'asset'
   const isVideoGen = node.type === 'video_gen'
+  const isAudioGen = node.type === 'audio_gen'
   const isVideoStitch = node.type === 'video_stitch'
   const isScriptWriter = node.type === 'script_writer'
   const isStoryboardSplitter = node.type === 'storyboard_splitter'
@@ -174,6 +204,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const assetCfg = isAsset && isAssetConfig(node.data.config)
     ? node.data.config
     : DEFAULT_ASSET_CONFIG
+  const audioCfg = isAudioGen && isAudioGenConfig(node.data.config)
+    ? normalizeAudioConfig(node.data.config, audioModelsReady ? audioModels : undefined)
+    : DEFAULT_AUDIO_CONFIG
   const scriptWriterCfg = isScriptWriter && isScriptWriterConfig(node.data.config)
     ? node.data.config
     : DEFAULT_SCRIPT_WRITER_CONFIG
@@ -202,7 +235,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [keyframeImages, keyframeSwapped])
 
   const promptFromConfig = isImageGen ? imageCfg.prompt : isVideoGen ? videoCfg.prompt : ''
-  const textFromConfig = isTextInput ? textCfg.text : ''
+  const textFromConfig = isTextInput ? textCfg.text : isAudioGen ? audioCfg.text : ''
 
   const {
     textDraft,
@@ -214,7 +247,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     updateCfg,
   } = useNodeConfigDraft({
     nodeId: node.id,
-    isTextInput,
+    isTextInput: isTextInput || isAudioGen,
     isPromptNode: isImageGen || isVideoGen,
     textFromConfig,
     promptFromConfig,
@@ -415,6 +448,10 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     updateCfg({ resolution: val })
   }, [updateCfg])
 
+  const handleAudioModelChange = useCallback((val: string) => {
+    updateCfg({ model: val })
+  }, [updateCfg])
+
   const handleRemoveReference = useCallback((resourceId: string) => {
     const nextPrompt = removeResourceReferenceFromPrompt(promptDraft, orderedImageRefs, resourceId)
     setPromptDraft(nextPrompt)
@@ -529,6 +566,82 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     workspaceId,
   ])
 
+  const handleExecuteAudio = useCallback(async () => {
+    const finalText = textDraft.trim()
+    if (!finalText) {
+      toast.error('请先输入要合成的文本')
+      return
+    }
+    if (!audioCfg.voiceId) {
+      toast.error('请先选择音色')
+      return
+    }
+
+    setExecuting(true)
+    setNodeStatus(node.id, 'pending', { progress: 0 })
+
+    try {
+      const result = await executeAudioNode(
+        {
+          canvasId,
+          canvasNodeId: node.id,
+          workspaceId: workspaceId ?? undefined,
+          config: { ...audioCfg, text: finalText },
+        },
+        token ?? undefined,
+      ) as { id: string; output_id?: string | null; output_url?: string; estimated_credits?: number }
+
+      if (result.output_url) {
+        const outputId = result.output_id ?? result.id
+        replaceNodeOutput(node.id, { id: outputId, url: result.output_url, type: 'audio' })
+        selectNodeOutput(node.id, outputId)
+      }
+      setNodeStatus(node.id, 'completed', { progress: 100 })
+
+      useCanvasSidebarDataStore.getState().prependHistoryItem(canvasId, {
+        id: result.id,
+        canvas_node_id: node.id,
+        model: audioCfg.model,
+        prompt: finalText,
+        quantity: 1,
+        completed_count: 1,
+        failed_count: 0,
+        status: 'completed',
+        actual_credits: result.estimated_credits ?? 0,
+        created_at: new Date().toISOString(),
+        module: 'tts',
+      })
+
+      const activeTeamId = useAuthStore.getState().activeTeamId
+      if (activeTeamId) mutate(`/teams/${activeTeamId}`)
+
+      toast.success('音频生成完成')
+      onExecuted()
+    } catch (err: unknown) {
+      const activeTeamId = useAuthStore.getState().activeTeamId
+      if (activeTeamId) mutate(`/teams/${activeTeamId}`)
+
+      const message = err instanceof Error ? err.message : '音频生成失败'
+      const code = err instanceof CanvasApiError ? err.code : undefined
+      toast.error(message)
+      setNodeError(node.id, message, code)
+    } finally {
+      setExecuting(false)
+    }
+  }, [
+    audioCfg,
+    canvasId,
+    node.id,
+    onExecuted,
+    replaceNodeOutput,
+    selectNodeOutput,
+    setNodeError,
+    setNodeStatus,
+    textDraft,
+    token,
+    workspaceId,
+  ])
+
   const hasImagePrompt = promptDraft.trim() || upstreamTexts.length > 0
   const hasVideoPrompt = promptDraft.trim() || upstreamTexts.length > 0
 
@@ -605,6 +718,24 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           onUpdateCfg={updateCfg}
           onRemoveReference={handleRemoveReference}
           onExecute={handleExecuteVideo}
+        />
+      )}
+
+      {isAudioGen && (
+        <AudioGenPanel
+          textDraft={textDraft}
+          setTextDraft={setTextDraft}
+          flushTextDraft={flushTextDraft}
+          model={audioCfg.model}
+          voiceId={audioCfg.voiceId}
+          speed={audioCfg.speed}
+          pitch={audioCfg.pitch}
+          volume={audioCfg.volume}
+          executing={executing}
+          models={audioModels}
+          onModelChange={handleAudioModelChange}
+          onUpdateCfg={updateCfg}
+          onExecute={handleExecuteAudio}
         />
       )}
 

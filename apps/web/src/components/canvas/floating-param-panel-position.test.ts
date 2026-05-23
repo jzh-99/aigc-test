@@ -36,4 +36,40 @@ describe('computeFloatingParamPanelPosition', () => {
     assert.equal(position.left, 310)
     assert.equal(position.top, 358)
   })
+
+  test('传入真实面板高度时，下方空间足够则显示在节点下方', () => {
+    const position = computeFloatingParamPanelPosition({
+      panelWidth: 780,
+      panelHeight: 460,
+      viewportWidth: 1466,
+      viewportHeight: 900,
+      gap: 14,
+      wrapperRect: { left: 0, top: 0 },
+      transform: { x: 0, y: 0, zoom: 1 },
+      nodePosition: { x: 480, y: 90 },
+      fallbackNodeSize: { width: 240, height: 160 },
+      nodeRect: { left: 462, top: 92, width: 484, height: 218 },
+    })
+
+    assert.equal(position.left, 314)
+    assert.equal(position.top, 324)
+  })
+
+  test('下方空间不足时，面板上翻并保持视口内边距', () => {
+    const position = computeFloatingParamPanelPosition({
+      panelWidth: 780,
+      panelHeight: 460,
+      viewportWidth: 1466,
+      viewportHeight: 900,
+      gap: 14,
+      wrapperRect: { left: 0, top: 0 },
+      transform: { x: 0, y: 0, zoom: 1 },
+      nodePosition: { x: 480, y: 600 },
+      fallbackNodeSize: { width: 240, height: 160 },
+      nodeRect: { left: 462, top: 620, width: 484, height: 218 },
+    })
+
+    assert.equal(position.left, 314)
+    assert.equal(position.top, 146)
+  })
 })
