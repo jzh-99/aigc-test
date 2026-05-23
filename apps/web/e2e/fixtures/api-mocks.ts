@@ -28,7 +28,7 @@ const VIDEO_MODEL_FIXTURE = {
       },
     },
   },
-  video_categories: {
+  category_references: {
     multimodal: {
       label: '全能参考',
       limits: {
@@ -74,18 +74,13 @@ const IMAGE_MODEL_FIXTURE = {
       },
     },
   },
-  video_categories: {},
-  image_categories: {
-    text_to_image: {
-      label: '文生图',
-      limits: {
-        image: { min: 0, max: 0 },
-      },
-    },
+  category_references: {
     image_to_image: {
       label: '图生图',
       limits: {
         image: { min: 0, max: 6 },
+        video: { min: 0, max: 0 },
+        audio: { min: 0, max: 0 },
       },
     },
   },
@@ -99,17 +94,13 @@ const SINGLE_REFERENCE_IMAGE_MODEL_FIXTURE = {
   params_pricing: [
     { model: 'single-reference-image', resolution: '2k', unit_price: 3 },
   ],
-  image_categories: {
-    text_to_image: {
-      label: '文生图',
-      limits: {
-        image: { min: 0, max: 0 },
-      },
-    },
+  category_references: {
     image_to_image: {
       label: '图生图',
       limits: {
         image: { min: 0, max: 1 },
+        video: { min: 0, max: 0 },
+        audio: { min: 0, max: 0 },
       },
     },
   },

@@ -10,7 +10,7 @@ import {
 import type { AppNode, AppEdge, CanvasNodeConfig, VideoMode } from '@/lib/canvas/types'
 import type { AgentWorkflow } from '@/lib/canvas/agent-types'
 import { DEFAULT_IMAGE_CATEGORY_LIMITS, DEFAULT_VIDEO_CATEGORY_LIMITS, isAssetConfig, isImageGenConfig, isVideoGenConfig } from '@/lib/canvas/types'
-import { ACTIVE_IMAGE_CATEGORY, parseImageCategories, parseVideoCategories } from '@aigc/types'
+import { ACTIVE_IMAGE_CATEGORY, parseCategoryReferences } from '@aigc/types'
 import { hasCycle } from '@/lib/canvas/dag'
 import { nodeRegistry } from '@/lib/canvas/registry'
 import {
@@ -138,8 +138,8 @@ function getVideoCategoryLimits(node: AppNode | undefined) {
   if (!node || node.type !== 'video_gen' || !isVideoGenConfig(node.data.config)) {
     return DEFAULT_VIDEO_CATEGORY_LIMITS
   }
-  // 使用 parseVideoCategories 确保数据格式正确
-  const parsed = parseVideoCategories(node.data.config.videoCategoryLimits)
+  // 使用 parseCategoryReferences 确保数据格式正确
+  const parsed = parseCategoryReferences(node.data.config.categoryReferences)
   // 如果解析结果为空对象，返回默认值
   if (Object.keys(parsed).length === 0) {
     return DEFAULT_VIDEO_CATEGORY_LIMITS
@@ -151,7 +151,7 @@ function getImageCategoryLimits(node: AppNode | undefined) {
   if (!node || node.type !== 'image_gen' || !isImageGenConfig(node.data.config)) {
     return DEFAULT_IMAGE_CATEGORY_LIMITS
   }
-  const parsed = parseImageCategories(node.data.config.imageCategoryLimits)
+  const parsed = parseCategoryReferences(node.data.config.categoryReferences)
   if (Object.keys(parsed).length === 0) {
     return DEFAULT_IMAGE_CATEGORY_LIMITS
   }

@@ -10,8 +10,8 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import {
   getVideoCategoryKeys,
-  parseVideoCategories,
-  validateVideoReferenceLimits,
+  parseCategoryReferences,
+  validateCategoryReferenceLimits,
   type VideoCategory,
   type VideoReferenceCounts,
 } from '@aigc/types'
@@ -60,16 +60,16 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const [multimodalAudios, setMultimodalAudios] = useState<MultimodalAudio[]>([])
 
   const currentVideoModel = videoModels.find((m) => m.code === videoModel)
-  const currentVideoCategories = useMemo(
-    () => parseVideoCategories(currentVideoModel?.video_categories),
-    [currentVideoModel?.video_categories],
+  const currentCategoryReferences = useMemo(
+    () => parseCategoryReferences(currentVideoModel?.category_references),
+    [currentVideoModel?.category_references],
   )
-  const availableVideoModes = useMemo(() => getVideoCategoryKeys(currentVideoCategories), [currentVideoCategories])
+  const availableVideoModes = useMemo(() => getVideoCategoryKeys(currentCategoryReferences), [currentCategoryReferences])
   const multimodalReferenceLimits = useMemo<VideoReferenceCounts>(() => ({
-    image: currentVideoCategories.multimodal?.limits.image.max ?? 0,
-    video: currentVideoCategories.multimodal?.limits.video.max ?? 0,
-    audio: currentVideoCategories.multimodal?.limits.audio.max ?? 0,
-  }), [currentVideoCategories])
+    image: currentCategoryReferences.multimodal?.limits.image.max ?? 0,
+    video: currentCategoryReferences.multimodal?.limits.video.max ?? 0,
+    audio: currentCategoryReferences.multimodal?.limits.audio.max ?? 0,
+  }), [currentCategoryReferences])
   const getResourceCounts = useCallback((mode: VideoMode): VideoReferenceCounts => {
     if (mode === 'frames') {
       return { image: [firstFrame, lastFrame].filter(Boolean).length, video: 0, audio: 0 }
@@ -83,14 +83,14 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   }, [firstFrame, lastFrame, multimodalAudios.length, multimodalImages.length, multimodalVideos.length])
 
   const validateModeResources = useCallback((mode: VideoMode): boolean => {
-    const result = validateVideoReferenceLimits(currentVideoCategories, mode, getResourceCounts(mode))
+    const result = validateCategoryReferenceLimits(currentCategoryReferences, mode, getResourceCounts(mode))
     if (!result.valid) toast.error(result.message ?? '当前参考素材不符合模型限制')
     return result.valid
-  }, [currentVideoCategories, getResourceCounts])
+  }, [currentCategoryReferences, getResourceCounts])
 
   useEffect(() => {
     if (!videoModelsReady || videoModels.length === 0) return
-    const nextModel = videoModels.find((m) => getVideoCategoryKeys(parseVideoCategories(m.video_categories)).length > 0)
+    const nextModel = videoModels.find((m) => getVideoCategoryKeys(parseCategoryReferences(m.category_references)).length > 0)
     const isValid = videoModels.some((m) => m.code === videoModel)
     if (!isValid && nextModel) setVideoModel(nextModel.code)
   }, [videoModelsReady, videoModels, videoModel])
@@ -242,7 +242,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         <div className="flex gap-2 shrink-0">
           {availableVideoModes.map((mode) => (
             <button key={mode} onClick={() => switchMode(mode)} className={modeBtnCls(videoMode === mode)}>
-              {currentVideoCategories[mode]?.label ?? mode}
+              {currentCategoryReferences[mode]?.label ?? mode}
             </button>
           ))}
         </div>
@@ -259,7 +259,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
             onFileRead={readFrameFile}
           />
         )}
-        {videoMode === 'multimodal' && currentVideoCategories.multimodal && (
+        {videoMode === 'multimodal' && currentCategoryReferences.multimodal && (
           <VideoMultimodalZone
             images={multimodalImages}
             videos={multimodalVideos}

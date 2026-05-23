@@ -1,27 +1,18 @@
-import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory, ImageCategory } from './db.js'
+import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory, ImageCategory, CategoryReferenceKey } from './db.js'
 
-export type VideoReferenceKind = 'image' | 'video' | 'audio'
+export type ReferenceKind = 'image' | 'video' | 'audio'
 
-export interface VideoCategoryLimit {
+export interface CategoryReferenceLimit {
   min: number
   max: number
 }
 
-export interface VideoCategoryConfig {
+export interface CategoryReferenceConfig {
   label: string
-  limits: Record<VideoReferenceKind, VideoCategoryLimit>
+  limits: Record<ReferenceKind, CategoryReferenceLimit>
 }
 
-export type VideoCategories = Partial<Record<VideoCategory, VideoCategoryConfig>>
-
-export interface ImageCategoryConfig {
-  label: string
-  limits: {
-    image: VideoCategoryLimit
-  }
-}
-
-export type ImageCategories = Partial<Record<ImageCategory, ImageCategoryConfig>>
+export type CategoryReferences = Partial<Record<CategoryReferenceKey, CategoryReferenceConfig>>
 export const ACTIVE_IMAGE_CATEGORY: ImageCategory = 'image_to_image'
 
 export interface VideoReferenceCounts {
@@ -62,31 +53,26 @@ export interface VideoLimitValidationResult {
   message?: string
 }
 
-const VIDEO_REFERENCE_KINDS: VideoReferenceKind[] = ['image', 'video', 'audio']
+const REFERENCE_KINDS: ReferenceKind[] = ['image', 'video', 'audio']
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isLimit(value: unknown): value is VideoCategoryLimit {
+function isLimit(value: unknown): value is CategoryReferenceLimit {
   if (!isPlainObject(value)) return false
   const min = value.min
   const max = value.max
   return typeof min === 'number' && typeof max === 'number' && Number.isInteger(min) && Number.isInteger(max) && min >= 0 && max >= min
 }
 
-function isCategoryConfig(value: unknown): value is VideoCategoryConfig {
+function isCategoryConfig(value: unknown): value is CategoryReferenceConfig {
   if (!isPlainObject(value) || typeof value.label !== 'string' || !isPlainObject(value.limits)) return false
   const limits = value.limits
-  return VIDEO_REFERENCE_KINDS.every((kind) => isLimit(limits[kind]))
+  return REFERENCE_KINDS.every((kind) => isLimit(limits[kind]))
 }
 
-function isImageCategoryConfig(value: unknown): value is ImageCategoryConfig {
-  if (!isPlainObject(value) || typeof value.label !== 'string' || !isPlainObject(value.limits)) return false
-  return isLimit(value.limits.image)
-}
-
-export function parseVideoCategories(raw: unknown): VideoCategories {
+export function parseCategoryReferences(raw: unknown): CategoryReferences {
   const value = typeof raw === 'string'
     ? (() => {
         try {
@@ -99,38 +85,21 @@ export function parseVideoCategories(raw: unknown): VideoCategories {
 
   if (!isPlainObject(value)) return {}
 
-  const out: VideoCategories = {}
+  const out: CategoryReferences = {}
+  if (isCategoryConfig(value.image_to_image)) out.image_to_image = value.image_to_image
+  if (isCategoryConfig(value.text_to_image)) out.text_to_image = value.text_to_image
   if (isCategoryConfig(value.multimodal)) out.multimodal = value.multimodal
   if (isCategoryConfig(value.frames)) out.frames = value.frames
   return out
 }
 
-export function parseImageCategories(raw: unknown): ImageCategories {
-  const value = typeof raw === 'string'
-    ? (() => {
-        try {
-          return JSON.parse(raw) as unknown
-        } catch {
-          return null
-        }
-      })()
-    : raw
-
-  if (!isPlainObject(value)) return {}
-
-  const out: ImageCategories = {}
-  if (isImageCategoryConfig(value.text_to_image)) out.text_to_image = value.text_to_image
-  if (isImageCategoryConfig(value.image_to_image)) out.image_to_image = value.image_to_image
-  return out
+export function getVideoCategoryKeys(categoryReferences: CategoryReferences): VideoCategory[] {
+  return (['multimodal', 'frames'] as const).filter((key) => !!categoryReferences[key])
 }
 
-export function getVideoCategoryKeys(categories: VideoCategories): VideoCategory[] {
-  return (['multimodal', 'frames'] as const).filter((key) => !!categories[key])
-}
-
-export function getMaxVideoReferenceLimits(categories: VideoCategories): VideoReferenceCounts {
-  return getVideoCategoryKeys(categories).reduce<VideoReferenceCounts>((acc, key) => {
-    const limits = categories[key]?.limits
+export function getMaxVideoReferenceLimits(categoryReferences: CategoryReferences): VideoReferenceCounts {
+  return getVideoCategoryKeys(categoryReferences).reduce<VideoReferenceCounts>((acc, key) => {
+    const limits = categoryReferences[key]?.limits
     if (!limits) return acc
     return {
       image: Math.max(acc.image, limits.image.max),
@@ -140,15 +109,15 @@ export function getMaxVideoReferenceLimits(categories: VideoCategories): VideoRe
   }, { image: 0, video: 0, audio: 0 })
 }
 
-export function validateVideoReferenceLimits(
-  categories: VideoCategories,
-  category: VideoCategory,
+export function validateCategoryReferenceLimits(
+  categoryReferences: CategoryReferences,
+  category: CategoryReferenceKey,
   counts: VideoReferenceCounts,
 ): VideoLimitValidationResult {
-  const config = categories[category]
-  if (!config) return { valid: false, message: '当前模型不支持该视频生成模式' }
+  const config = categoryReferences[category]
+  if (!config) return { valid: false, message: '当前模型不支持该生成模式' }
 
-  for (const kind of VIDEO_REFERENCE_KINDS) {
+  for (const kind of REFERENCE_KINDS) {
     const count = counts[kind]
     const limit = config.limits[kind]
     const label = kind === 'image' ? '图片' : kind === 'video' ? '视频' : '音频'
@@ -160,11 +129,11 @@ export function validateVideoReferenceLimits(
 }
 
 export function validateImageReferenceLimits(
-  categories: ImageCategories,
+  categoryReferences: CategoryReferences,
   category: ImageCategory,
   imageCount: number,
 ): VideoLimitValidationResult {
-  const config = categories[category]
+  const config = categoryReferences[category]
   if (!config) return { valid: false, message: '当前模型不支持该图片生成模式' }
 
   const limit = config.limits.image
@@ -369,8 +338,7 @@ export interface ModelItem {
   name: string
   description: string | null
   module: AigcModule
-  video_categories: VideoCategories | unknown  // 视频模型支持的模式与参考素材数量限制
-  image_categories: ImageCategories | unknown  // 图片模型支持的模式与参考图片数量限制
+  category_references: CategoryReferences | unknown  // 模型支持的生成模式与参考素材数量限制
   credit_cost: number
   params_pricing: ParamsPricingRule[]
   params_schema: unknown  // JSON Schema for frontend dynamic form rendering

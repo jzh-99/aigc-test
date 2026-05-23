@@ -10,10 +10,10 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { CanvasApiError, executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
-import { getImageCategoriesForModel, validateImageReferencesForModel } from '@/lib/image-categories'
+import { getCategoryReferencesForModel, validateImageReferencesForModel } from '@/lib/image-categories'
 import { useModels } from '@/hooks/use-models'
 import { getModelResolutions, extractSchemaEnums } from '@/components/generation/shared/schema-utils'
-import { parseVideoCategories, validateVideoReferenceLimits, type ModelItem, type VideoCategory, type VideoReferenceCounts } from '@aigc/types'
+import { parseCategoryReferences, validateCategoryReferenceLimits, type ModelItem, type VideoCategory, type VideoReferenceCounts } from '@aigc/types'
 import type {
   AppNode,
   AssetConfig,
@@ -69,7 +69,7 @@ const DEFAULT_IMAGE_CONFIG: ImageGenConfig = {
   aspectRatio: '1:1',
   quantity: 1,
   watermark: false,
-  imageCategoryLimits: DEFAULT_IMAGE_CATEGORY_LIMITS,
+  categoryReferences: DEFAULT_IMAGE_CATEGORY_LIMITS,
 }
 
 const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
@@ -81,7 +81,7 @@ const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
   generateAudio: true,
   cameraFixed: false,
   watermark: false,
-  videoCategoryLimits: DEFAULT_VIDEO_CATEGORY_LIMITS,
+  categoryReferences: DEFAULT_VIDEO_CATEGORY_LIMITS,
 }
 
 const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '' }
@@ -111,7 +111,7 @@ function normalizeImageConfig(config: unknown, models?: ModelItem[]): ImageGenCo
   const modelCode = dbModel.code
   const resolutions = extractSchemaEnums(dbModel.params_schema, 'resolution').map((e) => e.value)
   const resolution = raw.resolution && resolutions.includes(raw.resolution) ? raw.resolution : (resolutions[0] ?? '2k')
-  const imageCategoryLimits = getImageCategoriesForModel(dbModel)
+  const categoryReferences = getCategoryReferencesForModel(dbModel)
 
   return {
     ...DEFAULT_IMAGE_CONFIG,
@@ -119,7 +119,7 @@ function normalizeImageConfig(config: unknown, models?: ModelItem[]): ImageGenCo
     modelType: modelCode,
     resolution,
     quantity: 1,
-    imageCategoryLimits,
+    categoryReferences,
   }
 }
 
@@ -127,16 +127,16 @@ function normalizeVideoConfig(config: unknown): VideoGenConfig {
   const raw = (config && typeof config === 'object' ? config : {}) as Partial<VideoGenConfig>
   const videoMode = raw.videoMode === 'keyframe' || raw.videoMode === 'multiref' ? raw.videoMode : DEFAULT_VIDEO_CONFIG.videoMode
   const duration = typeof raw.duration === 'number' ? raw.duration : DEFAULT_VIDEO_CONFIG.duration
-  // 使用 parseVideoCategories 确保数据格式正确
-  const parsed = parseVideoCategories(raw.videoCategoryLimits)
-  const videoCategoryLimits = Object.keys(parsed).length > 0 ? parsed : DEFAULT_VIDEO_CATEGORY_LIMITS
+  // 使用 parseCategoryReferences 确保数据格式正确
+  const parsed = parseCategoryReferences(raw.categoryReferences)
+  const categoryReferences = Object.keys(parsed).length > 0 ? parsed : DEFAULT_VIDEO_CATEGORY_LIMITS
 
   return {
     ...DEFAULT_VIDEO_CONFIG,
     ...raw,
     videoMode,
     duration,
-    videoCategoryLimits,
+    categoryReferences,
   }
 }
 
@@ -236,9 +236,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   // 视频分辨率（可选）
   const videoResolution = videoCfg.resolution ?? ''
   const currentVideoDbModel = videoModels.find((m) => m.code === videoModel)
-  const currentVideoCategories = useMemo(
-    () => parseVideoCategories(currentVideoDbModel?.video_categories),
-    [currentVideoDbModel?.video_categories],
+  const currentCategoryReferences = useMemo(
+    () => parseCategoryReferences(currentVideoDbModel?.category_references),
+    [currentVideoDbModel?.category_references],
   )
 
   const handleModelChange = useCallback((val: ModelType) => {
@@ -246,28 +246,28 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     const nextResolutions = getModelResolutions(val, imageModels)
     const nextResolution = nextResolutions.includes(resolution) ? resolution : (nextResolutions[0] ?? resolution)
     const nextModel = imageModels.find((m) => m.code === val)
-    updateCfg({ modelType: val, resolution: nextResolution, imageCategoryLimits: getImageCategoriesForModel(nextModel) })
+    updateCfg({ modelType: val, resolution: nextResolution, categoryReferences: getCategoryReferencesForModel(nextModel) })
   }, [resolution, updateCfg, imageModels])
 
-  // 确保图片节点配置中的 imageCategoryLimits 始终与当前模型数据同步，供画布连线限制使用。
+  // 确保图片节点配置中的 categoryReferences 始终与当前模型数据同步，供画布连线限制使用。
   useEffect(() => {
     if (!isImageGen || !imageModelsReady) return
     const currentImageDbModel = imageModels.find((m) => m.code === modelType)
-    const parsed = getImageCategoriesForModel(currentImageDbModel)
-    if (JSON.stringify(parsed) !== JSON.stringify(imageCfg.imageCategoryLimits)) {
-      updateCfg({ imageCategoryLimits: parsed })
+    const parsed = getCategoryReferencesForModel(currentImageDbModel)
+    if (JSON.stringify(parsed) !== JSON.stringify(imageCfg.categoryReferences)) {
+      updateCfg({ categoryReferences: parsed })
     }
-  }, [imageCfg.imageCategoryLimits, imageModels, imageModelsReady, isImageGen, modelType, updateCfg])
+  }, [imageCfg.categoryReferences, imageModels, imageModelsReady, isImageGen, modelType, updateCfg])
 
-  // 确保节点配置中的 videoCategoryLimits 始终与模型数据同步
+  // 确保节点配置中的 categoryReferences 始终与模型数据同步
   useEffect(() => {
     if (!isVideoGen || !videoModelsReady || !currentVideoDbModel) return
-    const parsed = parseVideoCategories(currentVideoDbModel.video_categories)
+    const parsed = parseCategoryReferences(currentVideoDbModel.category_references)
     // 只有当确实有变化时才更新，避免无限循环
-    if (JSON.stringify(parsed) !== JSON.stringify(videoCfg.videoCategoryLimits)) {
-      updateCfg({ videoCategoryLimits: parsed })
+    if (JSON.stringify(parsed) !== JSON.stringify(videoCfg.categoryReferences)) {
+      updateCfg({ categoryReferences: parsed })
     }
-  }, [currentVideoDbModel, isVideoGen, updateCfg, videoModelsReady, videoCfg.videoCategoryLimits])
+  }, [currentVideoDbModel, isVideoGen, updateCfg, videoModelsReady, videoCfg.categoryReferences])
 
   const handleExecuteImage = useCallback(async () => {
     if (Array.from(promptDraft).length > PROMPT_MAX_LENGTH) {
@@ -375,7 +375,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const handleVideoModelChange = useCallback((val: string) => {
     const dbModel = videoModels.find((m) => m.code === val)
     const isSeedanceModel = val.startsWith('seedance-')
-    const categories = parseVideoCategories(dbModel?.video_categories)
+    const categories = parseCategoryReferences(dbModel?.category_references)
     const targetCategory = CANVAS_MODE_TO_CATEGORY[videoMode]
     const nextCategory = categories[targetCategory]
       ? targetCategory
@@ -386,7 +386,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
       model: val,
       videoMode: CATEGORY_TO_CANVAS_MODE[nextCategory],
       aspectRatio: newAspect,
-      videoCategoryLimits: categories,
+      categoryReferences: categories,
     })
   }, [updateCfg, videoAspect, videoMode, videoModels])
 
@@ -401,14 +401,14 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const handleVideoModeChange = useCallback((newMode: VideoGenConfig['videoMode']) => {
     if (newMode === videoMode) return
     const category = CANVAS_MODE_TO_CATEGORY[newMode]
-    const validation = validateVideoReferenceLimits(currentVideoCategories, category, getCanvasVideoCounts(newMode))
+    const validation = validateCategoryReferenceLimits(currentCategoryReferences, category, getCanvasVideoCounts(newMode))
     if (!validation.valid) {
       toast.error(validation.message ?? '当前连线不符合目标模式限制')
       return
     }
     updateCfg({ videoMode: newMode })
     setKeyframeSwapped(false)
-  }, [currentVideoCategories, getCanvasVideoCounts, updateCfg, videoMode])
+  }, [currentCategoryReferences, getCanvasVideoCounts, updateCfg, videoMode])
 
   // 视频分辨率变更回调
   const handleVideoResolutionChange = useCallback((val: string) => {
@@ -435,7 +435,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     }
 
     const category = CANVAS_MODE_TO_CATEGORY[videoMode]
-    const validation = validateVideoReferenceLimits(currentVideoCategories, category, getCanvasVideoCounts(videoMode))
+    const validation = validateCategoryReferenceLimits(currentCategoryReferences, category, getCanvasVideoCounts(videoMode))
     if (!validation.valid) {
       toast.error(validation.message ?? '当前参考素材不符合模型限制')
       return
@@ -504,7 +504,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [
     cameraFixed,
     canvasId,
-    currentVideoCategories,
+    currentCategoryReferences,
     displayedKeyframes,
     generateAudio,
     getCanvasVideoCounts,

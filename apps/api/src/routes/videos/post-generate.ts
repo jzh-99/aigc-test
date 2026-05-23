@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import {
-  parseVideoCategories,
-  validateVideoReferenceLimits,
+  parseCategoryReferences,
+  validateCategoryReferenceLimits,
   calculateVideoEstimatedCredits,
   type VideoCategory,
   type VideoReferenceCounts,
@@ -163,7 +163,7 @@ const route: FastifyPluginAsync = async (app) => {
         'provider_models.id as modelId',
         'provider_models.credit_cost',
         'provider_models.params_pricing',
-        'provider_models.video_categories',
+        'provider_models.category_references',
         'providers.code as providerCode',
       ])
       .where('provider_models.code', '=', model)
@@ -175,14 +175,14 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: `模型 "${model}" 未找到或已停用` } })
     }
 
-    const categories = parseVideoCategories(providerModel.video_categories)
+    const categoryReferences = parseCategoryReferences(providerModel.category_references)
     const requestCategory = resolveRequestCategory(request.body)
 
     if ('error' in requestCategory) {
       return reply.status(400).send({ success: false, error: { code: 'INVALID_VIDEO_REFERENCES', message: requestCategory.error } })
     }
 
-    const validation = validateVideoReferenceLimits(categories, requestCategory.category, requestCategory.counts)
+    const validation = validateCategoryReferenceLimits(categoryReferences, requestCategory.category, requestCategory.counts)
     if (!validation.valid) {
       return reply.status(400).send({
         success: false,

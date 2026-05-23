@@ -268,8 +268,7 @@ export interface ProviderModelsTable {
   name: string
   description: string | null
   module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
-  video_categories: ColumnType<unknown, string, string> | null
-  image_categories: ColumnType<unknown, string, string> | null
+  category_references: ColumnType<unknown, string, string> | null
   credit_cost: number
   params_pricing: ColumnType<unknown, string, string>
   params_schema: ColumnType<unknown, string, string>

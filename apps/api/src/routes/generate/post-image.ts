@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import type { GenerateImageRequest, ImageCategories } from '@aigc/types'
-import { ACTIVE_IMAGE_CATEGORY, parseImageCategories, validateImageReferenceLimits } from '@aigc/types'
+import type { CategoryReferences, GenerateImageRequest } from '@aigc/types'
+import { ACTIVE_IMAGE_CATEGORY, parseCategoryReferences, validateImageReferenceLimits } from '@aigc/types'
 import { checkPrompt } from '../../services/prompt-filter.js'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getImageQueue } from '../../lib/queue.js'
@@ -13,17 +13,21 @@ import rateLimit from '@fastify/rate-limit'
 const MAX_PENDING_BATCHES = 20
 const MAX_IMAGE_REFERENCE_PARAMS = 14
 
-const FALLBACK_IMAGE_CATEGORIES: ImageCategories = {
+const FALLBACK_CATEGORY_REFERENCES: CategoryReferences = {
   text_to_image: {
     label: '文生图',
     limits: {
-      image: { min: 0, max: 0 },
+        image: { min: 0, max: 0 },
+        video: { min: 0, max: 0 },
+        audio: { min: 0, max: 0 },
     },
   },
   image_to_image: {
     label: '图生图',
     limits: {
-      image: { min: 0, max: 10 },
+        image: { min: 0, max: 10 },
+        video: { min: 0, max: 0 },
+        audio: { min: 0, max: 0 },
     },
   },
 }
@@ -374,7 +378,7 @@ const route: FastifyPluginAsync = async (app) => {
         'provider_models.id as modelId',
         'provider_models.credit_cost',
         'provider_models.params_pricing',
-        'provider_models.image_categories',
+        'provider_models.category_references',
         'providers.code as providerCode',
         'providers.id as providerId',
       ])
@@ -398,9 +402,9 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    const imageCategories = parseImageCategories(providerModel.image_categories)
-    const effectiveImageCategories = Object.keys(imageCategories).length > 0 ? imageCategories : FALLBACK_IMAGE_CATEGORIES
-    const limitResult = validateImageReferenceLimits(effectiveImageCategories, ACTIVE_IMAGE_CATEGORY, imageReferenceCount)
+    const categoryReferences = parseCategoryReferences(providerModel.category_references)
+    const effectiveCategoryReferences = Object.keys(categoryReferences).length > 0 ? categoryReferences : FALLBACK_CATEGORY_REFERENCES
+    const limitResult = validateImageReferenceLimits(effectiveCategoryReferences, ACTIVE_IMAGE_CATEGORY, imageReferenceCount)
     if (!limitResult.valid) {
       logGenerateSubmissionError(app, {
         userId,

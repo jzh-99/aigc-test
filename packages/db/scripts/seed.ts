@@ -345,27 +345,35 @@ async function main() {
   const provider = providerResult[0]
   console.log('  providers seeded (comfly)')
 
-  const SIX_IMAGE_CATEGORIES = {
+  const ZERO_REFERENCE_LIMIT = { min: 0, max: 0 }
+
+  const SIX_IMAGE_CATEGORY_REFERENCES = {
     text_to_image: {
       label: '文生图',
       limits: {
-        image: { min: 0, max: 0 },
+        image: ZERO_REFERENCE_LIMIT,
+        video: ZERO_REFERENCE_LIMIT,
+        audio: ZERO_REFERENCE_LIMIT,
       },
     },
     image_to_image: {
       label: '图生图',
       limits: {
         image: { min: 0, max: 6 },
+        video: ZERO_REFERENCE_LIMIT,
+        audio: ZERO_REFERENCE_LIMIT,
       },
     },
   }
 
-  const SEEDREAM_IMAGE_CATEGORIES = {
-    text_to_image: SIX_IMAGE_CATEGORIES.text_to_image,
+  const SEEDREAM_IMAGE_CATEGORY_REFERENCES = {
+    text_to_image: SIX_IMAGE_CATEGORY_REFERENCES.text_to_image,
     image_to_image: {
       label: '图生图',
       limits: {
         image: { min: 0, max: 14 },
+        video: ZERO_REFERENCE_LIMIT,
+        audio: ZERO_REFERENCE_LIMIT,
       },
     },
   }
@@ -393,7 +401,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
-      image_categories: SIX_IMAGE_CATEGORIES,
+      category_references: SIX_IMAGE_CATEGORY_REFERENCES,
     },
     {
       code: 'gpt-image-2',
@@ -408,7 +416,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
-      image_categories: SIX_IMAGE_CATEGORIES,
+      category_references: SIX_IMAGE_CATEGORY_REFERENCES,
     },
     {
       code: 'nano-banana-2',
@@ -425,7 +433,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
-      image_categories: SIX_IMAGE_CATEGORIES,
+      category_references: SIX_IMAGE_CATEGORY_REFERENCES,
     },
   ]
 
@@ -444,7 +452,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'image',
-        image_categories: JSON.stringify(m.image_categories),
+        category_references: JSON.stringify(m.category_references),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify((m.params_pricing ?? [])),
         params_schema: JSON.stringify(m.params_schema),
@@ -454,7 +462,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'image',
-        image_categories: JSON.stringify(m.image_categories),
+        category_references: JSON.stringify(m.category_references),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing ?? []),
         params_schema: JSON.stringify(m.params_schema),
@@ -481,7 +489,7 @@ async function main() {
     { label: '有声', value: true, default: true },
     { label: '无声', value: false, default: true },
   ]
-  const FRAMES_VIDEO_CATEGORIES = {
+  const FRAMES_CATEGORY_REFERENCES = {
     frames: {
       label: '首尾帧',
       limits: {
@@ -492,7 +500,7 @@ async function main() {
     },
   }
 
-  const MULTIMODAL_AND_FRAMES_VIDEO_CATEGORIES = {
+  const MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES = {
     multimodal: {
       label: '全能参考',
       limits: {
@@ -501,7 +509,7 @@ async function main() {
         audio: { min: 0, max: 3 },
       },
     },
-    frames: FRAMES_VIDEO_CATEGORIES.frames,
+    frames: FRAMES_CATEGORY_REFERENCES.frames,
   }
 
   // const veoVideoModels = [
@@ -510,7 +518,7 @@ async function main() {
     //   name: '全能视频3.1 Fast',
     //   description: '快速高质量视频生成',
     //   credit_cost: 10,
-    //   video_categories: FRAMES_VIDEO_CATEGORIES,
+    //   category_references: FRAMES_CATEGORY_REFERENCES,
     //   params_pricing: [
     //     { resolution: '720p', model: 'veo3.1-fast', unit_price: 4 },
     //     { resolution: '1080p', model: 'veo3.1-fast', unit_price: 4 },
@@ -547,7 +555,7 @@ async function main() {
   //       name: m.name,
   //       description: m.description,
   //       module: 'video',
-  //       video_categories: JSON.stringify(m.video_categories),
+  //       category_references: JSON.stringify(m.category_references),
   //       credit_cost: m.credit_cost,
   //       params_pricing: JSON.stringify(m.params_pricing ?? []),
   //       params_schema: m.params_schema,
@@ -556,7 +564,7 @@ async function main() {
   //     .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
   //       name: m.name,
   //       description: m.description,
-  //       video_categories: JSON.stringify(m.video_categories),
+  //       category_references: JSON.stringify(m.category_references),
   //       credit_cost: m.credit_cost,
   //       params_pricing: JSON.stringify(m.params_pricing ?? []),
   //       params_schema: m.params_schema,
@@ -605,7 +613,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
-      image_categories: SEEDREAM_IMAGE_CATEGORIES,
+      category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
     },
     {
       code: 'seedream-4.5',
@@ -621,7 +629,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
-      image_categories: SEEDREAM_IMAGE_CATEGORIES,
+      category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
     },
     {
       code: 'seedream-4.0',
@@ -638,7 +646,7 @@ async function main() {
         aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
         image: [],
       },
-      image_categories: SEEDREAM_IMAGE_CATEGORIES,
+      category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
     },
   ]
 
@@ -651,7 +659,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'image',
-        image_categories: JSON.stringify(m.image_categories),
+        category_references: JSON.stringify(m.category_references),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
@@ -661,7 +669,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'image',
-        image_categories: JSON.stringify(m.image_categories),
+        category_references: JSON.stringify(m.category_references),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
@@ -694,7 +702,7 @@ async function main() {
       name: 'Seedance 1.5 Pro',
       description: '有声视频生成，支持首尾帧',
       credit_cost: 15,
-      video_categories: FRAMES_VIDEO_CATEGORIES,
+      category_references: FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-1.5-pro', unit_price: 5 },
         { resolution: '720p', model: 'seedance-1.5-pro', unit_price: 10 },
@@ -713,7 +721,7 @@ async function main() {
       name: 'Seedance 2.0',
       description: '新一代有声视频，支持首尾帧',
       credit_cost: 15,
-      video_categories: MULTIMODAL_AND_FRAMES_VIDEO_CATEGORIES,
+      category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-2.0', unit_price: 7 },
         { resolution: '720p', model: 'seedance-2.0', unit_price: 15 },
@@ -732,7 +740,7 @@ async function main() {
       name: 'Seedance 2.0 Fast',
       description: '新一代有声视频，支持首尾帧',
       credit_cost: 15,
-      video_categories: MULTIMODAL_AND_FRAMES_VIDEO_CATEGORIES,
+      category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-2.0-fast', unit_price: 5 },
         { resolution: '720p', model: 'seedance-2.0-fast', unit_price: 12 },
@@ -756,7 +764,7 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'video',
-        video_categories: JSON.stringify(m.video_categories),
+        category_references: JSON.stringify(m.category_references),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,
@@ -765,7 +773,7 @@ async function main() {
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
         name: m.name,
         description: m.description,
-        video_categories: JSON.stringify(m.video_categories),
+        category_references: JSON.stringify(m.category_references),
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,

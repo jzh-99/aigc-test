@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Sparkles, Loader2, Coins, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
-import { calculateReferenceVideoDurationSeconds, parseVideoCategories, type ModelItem, type VideoCategory } from '@aigc/types'
+import { calculateReferenceVideoDurationSeconds, parseCategoryReferences, type ModelItem, type VideoCategory } from '@aigc/types'
 
 type VideoMode = VideoCategory
 
@@ -51,7 +51,7 @@ export function VideoParams({
   const isDisabled = isGenerating || isUploading || !!disabled
 
   const availableModels = (models ?? []).filter((m) => {
-    const categories = parseVideoCategories(m.video_categories)
+    const categories = parseCategoryReferences(m.category_references)
     return Boolean(categories[videoMode])
   })
 

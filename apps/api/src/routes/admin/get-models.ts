@@ -10,7 +10,7 @@ const route: FastifyPluginAsync = async (app) => {
       .innerJoin('providers as p', 'p.id', 'pm.provider_id')
       .select([
         'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
-        'pm.video_categories', 'pm.image_categories',
+        'pm.category_references',
         'pm.credit_cost', 'pm.params_pricing', 'pm.params_schema', 'pm.resolution', 'pm.is_active',
         'p.code as provider_code',
       ])

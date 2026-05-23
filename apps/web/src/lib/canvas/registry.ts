@@ -65,7 +65,7 @@ export class NodeRegistry {
         generateAudio: true,
         cameraFixed: false,
         watermark: false,
-        videoCategoryLimits: DEFAULT_VIDEO_CATEGORY_LIMITS,
+        categoryReferences: DEFAULT_VIDEO_CATEGORY_LIMITS,
       },
     })
 

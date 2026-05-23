@@ -2,7 +2,7 @@ import { Film, ImageIcon, Loader2, Music, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { VideoMode } from '@/lib/canvas/types'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
-import { calculateReferenceVideoDurationSeconds, getVideoCategoryKeys, parseVideoCategories, type ModelItem, type VideoCategory } from '@aigc/types'
+import { calculateReferenceVideoDurationSeconds, getVideoCategoryKeys, parseCategoryReferences, type ModelItem, type VideoCategory } from '@aigc/types'
 import { ResourceMentionTextarea } from './resource-mention-textarea'
 import type { CanvasReferenceMentionResource } from './resource-mentions'
 
@@ -196,11 +196,11 @@ export function VideoGenPanel({
   const isSeedance = currentDbModel ? currentDbModel.code.startsWith('seedance-') : false
 
   const filteredModels = (models ?? []).filter((m) => {
-    const categories = parseVideoCategories(m.video_categories)
+    const categories = parseCategoryReferences(m.category_references)
     return Boolean(categories[VIDEO_MODE_TO_CATEGORY[videoMode]])
   })
 
-  const currentCategories = parseVideoCategories(currentDbModel?.video_categories)
+  const currentCategories = parseCategoryReferences(currentDbModel?.category_references)
   const availableModes = getVideoCategoryKeys(currentCategories)
 
   const aspectRatioOptions = extractSchemaEnums(currentDbModel?.params_schema, 'aspect_ratio')

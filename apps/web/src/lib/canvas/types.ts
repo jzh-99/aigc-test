@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
-import type { ImageCategories, VideoCategories } from '@aigc/types'
+import type { CategoryReferences } from '@aigc/types'
 
 export type HandleType = 'image' | 'text' | 'video' | 'audio' | 'any'
 
@@ -31,27 +31,31 @@ export const DEFAULT_VIDEO_CATEGORY_LIMITS = {
       audio: { min: 0, max: 0 },
     },
   },
-} as const satisfies VideoCategories
+} as const satisfies CategoryReferences
 
 export const CANVAS_VIDEO_MODE_TO_CATEGORY = {
   multiref: 'multimodal',
   keyframe: 'frames',
-} as const satisfies Record<VideoMode, keyof VideoCategories>
+} as const satisfies Record<VideoMode, keyof CategoryReferences>
 
 export const DEFAULT_IMAGE_CATEGORY_LIMITS = {
   text_to_image: {
     label: '文生图',
     limits: {
       image: { min: 0, max: 0 },
+      video: { min: 0, max: 0 },
+      audio: { min: 0, max: 0 },
     },
   },
   image_to_image: {
     label: '图生图',
     limits: {
       image: { min: 0, max: 10 },
+      video: { min: 0, max: 0 },
+      audio: { min: 0, max: 0 },
     },
   },
-} as const satisfies ImageCategories
+} as const satisfies CategoryReferences
 
 // 保留 union 类型供静态 fallback 使用，实际存储和运行时用 string
 export type ImageModelType = string
@@ -68,7 +72,7 @@ export interface ImageGenConfig {
   aspectRatio: string
   quantity: number
   watermark: boolean
-  imageCategoryLimits?: ImageCategories
+  categoryReferences?: CategoryReferences
 }
 
 export interface VideoGenConfig {
@@ -80,7 +84,7 @@ export interface VideoGenConfig {
   generateAudio: boolean
   cameraFixed: boolean
   watermark: boolean
-  videoCategoryLimits?: VideoCategories
+  categoryReferences?: CategoryReferences
   /** 视频分辨率，可选，如 '720p'、'1080p' 等 */
   resolution?: string
 }

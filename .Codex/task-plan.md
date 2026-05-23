@@ -2,6 +2,16 @@
 
 # 任务计划：图片模型 image_categories 限制
 
+# 任务计划：统一 category_references 字段
+
+- [已完成] 确认合并策略：以 `video_categories` 的 value 数据结构为准，新增 `provider_models.category_references`，本次直接删除旧字段。
+- [已完成] 新增破坏性迁移：写入 `category_references`，迁移现有图片/视频配置，删除 `video_categories` / `image_categories`。
+- [已完成] 合并共享类型：统一解析和校验 `CategoryReferences`。
+- [已完成] 更新 seed，图片和视频模型统一写 `category_references`。
+- [已完成] 更新 API 模型查询、图片生成和视频生成后端校验。
+- [已完成] 更新 Web 创作生成、画布节点和 E2E fixture。
+- [已完成] 运行测试、类型检查和构建。
+
 - [已完成] 读取 `video_categories` 现有类型、DB schema、模型列表接口、图片生成链路和 seed 结构。
 - [已完成] 先补共享类型测试，覆盖文生图 0 张、图生图 0-6/0-14 张、超限错误。
 - [已完成] 新增 `provider_models.image_categories` 迁移和 Kysely schema 类型。

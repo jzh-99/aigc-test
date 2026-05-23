@@ -1,5 +1,31 @@
 # 任务日志：画布参数面板 @ 资源引用
 
+## 2026-05-23 统一 category_references 字段
+
+- 用户要求：`video_categories` 和 `image_categories` 作用一致，合并并重命名为 `category_references`。
+- 用户确认：本次直接删除旧字段，不兼容旧字段；数据结构以 `video_categories` 为准。
+- 设计取舍：
+  - 统一 value 结构为 `{ label, limits: { image, video, audio } }`。
+  - 图片模型只配置 `image_to_image`，但 limits 仍包含 `image/video/audio` 三类，视频和音频固定 `0-0`。
+  - 视频模型继续配置 `multimodal` / `frames`。
+  - 迁移新增 `category_references` 后，从旧字段迁移一次数据，再 drop `video_categories` 和 `image_categories`。
+- 风险点：
+  - 代码必须全量切到 `category_references`，不能再读取旧字段。
+  - 图片旧结构缺少 `video/audio` limits，迁移和 seed 都要补齐为 `0-0`。
+- 本轮落地：
+  - `packages/types` 统一为 `CategoryReferences`，删除旧字段相关解析入口。
+  - `packages/db` schema、seed、`040` 迁移统一写入 `category_references`。
+  - API 的模型列表、图片生成、视频生成全部读取新字段并共用限制校验。
+  - Web 创作生成、画布图片节点、画布视频节点和 E2E mock 全部切到新字段。
+  - 旧字段名仅保留在历史 migration 和 `040` 迁移对旧列的读取/删除逻辑中。
+- 验证结果：
+  - `pnpm --filter @aigc/api exec tsx --test ..\..\packages\types\src\api.test.ts` 通过，5 个测试全部通过。
+  - `pnpm --filter @aigc/types build`、`pnpm --filter @aigc/db build`、`pnpm --filter @aigc/api build` 通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web exec playwright test e2e/canvas/image-submit.spec.ts e2e/canvas/video-submit.spec.ts` 通过，7 个 E2E 全部通过。
+  - `pnpm --filter @aigc/web build` 通过。
+  - 中途发现本地 Next 包目录异常为空，使用 `pnpm install --force` 恢复依赖；未产生 Git 文件变更。
+
 ## 2026-05-23 图片模型 image_categories 限制
 
 - 需求目标：参照 `provider_models.video_categories`，为图片模型新增 `image_categories`，用于表达文生图/图生图的参考图片数量限制。

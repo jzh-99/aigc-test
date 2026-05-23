@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { ACTIVE_IMAGE_CATEGORY, calculateVideoEstimatedCredits, parseImageCategories, validateImageReferenceLimits } from './api.js'
+import { ACTIVE_IMAGE_CATEGORY, calculateVideoEstimatedCredits, parseCategoryReferences, validateImageReferenceLimits } from './api.js'
 
 describe('calculateVideoEstimatedCredits', () => {
   test('按生成视频时长和参考视频总时长共同计费', () => {
@@ -15,18 +15,22 @@ describe('calculateVideoEstimatedCredits', () => {
   })
 })
 
-describe('image_categories 图片参考限制', () => {
-  const categories = parseImageCategories({
+describe('category_references 图片参考限制', () => {
+  const categories = parseCategoryReferences({
     text_to_image: {
       label: '文生图',
       limits: {
         image: { min: 0, max: 0 },
+        video: { min: 0, max: 0 },
+        audio: { min: 0, max: 0 },
       },
     },
     image_to_image: {
       label: '图生图',
       limits: {
         image: { min: 0, max: 6 },
+        video: { min: 0, max: 0 },
+        audio: { min: 0, max: 0 },
       },
     },
   })
