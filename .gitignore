@@ -15,6 +15,12 @@ dist/
 .claude/settings.local.json
 .claude/worktrees/
 
+.Codex
+
+.codegraph
+
+.mcp.json
+
 # Build artifacts and caches
 *.tsbuildinfo
 apps/docs/out/
