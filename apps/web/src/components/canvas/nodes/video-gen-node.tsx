@@ -86,7 +86,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
           if (!kind) return counts
           return { ...counts, [kind]: counts[kind] + 1 }
         },
-        { image: 0, video: 0, audio: 0 },
+        { image: 0, video: 0, audio: 0, text: 0 },
       )
     })
   )

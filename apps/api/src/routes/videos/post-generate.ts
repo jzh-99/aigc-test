@@ -51,13 +51,14 @@ function resolveRequestCategory(body: VideoGenerateBody): { category: VideoCateg
     image: countArray(body.reference_images),
     video: countArray(body.reference_videos),
     audio: countArray(body.reference_audios),
+    text: 0,
   }
   const hasReferences = referenceCounts.image > 0 || referenceCounts.video > 0 || referenceCounts.audio > 0
 
   if (framesCount > 0 && hasReferences) return { error: '同一次请求不能同时使用首尾帧和全能参考素材' }
-  if (body.video_category === 'frames') return { category: 'frames', counts: { image: framesCount, video: 0, audio: 0 } }
+  if (body.video_category === 'frames') return { category: 'frames', counts: { image: framesCount, video: 0, audio: 0, text: 0 } }
   if (body.video_category === 'multimodal') return { category: 'multimodal', counts: referenceCounts }
-  if (framesCount > 0) return { category: 'frames', counts: { image: framesCount, video: 0, audio: 0 } }
+  if (framesCount > 0) return { category: 'frames', counts: { image: framesCount, video: 0, audio: 0, text: 0 } }
   return { category: 'multimodal', counts: referenceCounts }
 }
 

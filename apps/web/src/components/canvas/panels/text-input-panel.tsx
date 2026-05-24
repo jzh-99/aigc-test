@@ -8,17 +8,13 @@ import { useAuthStore } from '@/stores/auth-store'
 import { CanvasApiError, executeTextGenNode } from '@/lib/canvas/canvas-api'
 
 interface TextInputPanelProps {
-  textDraft: string
   setTextDraft: (value: string) => void
-  flushTextDraft: () => void
-  upstreamTextNodeLabels: string[]
+  commitTextDraft: (value: string) => void
 }
 
 export function TextInputPanel({
-  textDraft,
   setTextDraft,
-  flushTextDraft,
-  upstreamTextNodeLabels,
+  commitTextDraft,
 }: TextInputPanelProps) {
   const token = useAuthStore((s) => s.accessToken)
   const [aiPrompt, setAiPrompt] = useState('')
@@ -37,7 +33,7 @@ export function TextInputPanel({
     setTextDraft('')
 
     try {
-      await executeTextGenNode(
+      const generatedText = await executeTextGenNode(
         { prompt: aiPrompt },
         (delta) => {
           streamingRef.current += delta
@@ -48,18 +44,18 @@ export function TextInputPanel({
         },
         token ?? undefined,
       )
-      // 生成完成后持久化到 store
-      flushTextDraft()
+      const finalText = generatedText || streamingRef.current
+      setTextDraft(finalText)
+      commitTextDraft(finalText)
       toast.success('生成完成')
     } catch (err) {
       const message = err instanceof CanvasApiError ? err.message : '生成失败'
       toast.error(message)
-      // 出错时恢复已生成的部分内容
-      if (streamingRef.current) flushTextDraft()
+      if (streamingRef.current) commitTextDraft(streamingRef.current)
     } finally {
       setGenerating(false)
     }
-  }, [aiPrompt, token, setTextDraft, flushTextDraft])
+  }, [aiPrompt, token, setTextDraft, commitTextDraft])
 
   return (
     <div className="p-3 space-y-3">
@@ -83,27 +79,6 @@ export function TextInputPanel({
           {generating && <Loader2 size={11} className="animate-spin" />}
           {generating ? '生成中…' : '生成'}
         </button>
-      </div>
-
-      {/* 手动输入区 */}
-      <div>
-        <label className="text-[11px] font-medium text-muted-foreground block mb-1">文本内容</label>
-        {upstreamTextNodeLabels.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-1.5">
-            {upstreamTextNodeLabels.map((label, i) => (
-              <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
-                [{label}]+
-              </span>
-            ))}
-          </div>
-        )}
-        <textarea
-          className="w-full h-20 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-          placeholder="输入提示词内容..."
-          value={textDraft}
-          onChange={(e) => setTextDraft(e.target.value)}
-          onBlur={flushTextDraft}
-        />
       </div>
     </div>
   )

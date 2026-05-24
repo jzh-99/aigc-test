@@ -652,6 +652,36 @@ export async function executeTextGenNode(
   const decoder = new TextDecoder()
   let fullText = ''
   let buffer = ''
+  let streamDone = false
+
+  const processLine = (line: string) => {
+    const normalized = line.trim()
+    if (!normalized.startsWith('data:')) return
+
+    const data = normalized.slice(5).trim()
+    if (data === '[DONE]') {
+      streamDone = true
+      return
+    }
+
+    try {
+      const json = JSON.parse(data) as {
+        choices?: Array<{
+          delta?: { content?: string }
+          message?: { content?: string }
+          text?: string
+        }>
+      }
+      const choice = json.choices?.[0]
+      const delta = choice?.delta?.content ?? choice?.message?.content ?? choice?.text ?? ''
+      if (delta) {
+        fullText += delta
+        onChunk(delta)
+      }
+    } catch {
+      // 跳过非 JSON 行
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read()
@@ -663,19 +693,18 @@ export async function executeTextGenNode(
     buffer = lines.pop() ?? ''
 
     for (const line of lines) {
-      if (!line.startsWith('data:')) continue
-      const data = line.slice(5).trim()
-      if (data === '[DONE]') break
-      try {
-        const json = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> }
-        const delta = json.choices?.[0]?.delta?.content ?? ''
-        if (delta) {
-          fullText += delta
-          onChunk(delta)
-        }
-      } catch {
-        // 跳过非 JSON 行
-      }
+      processLine(line)
+      if (streamDone) break
+    }
+
+    if (streamDone) break
+  }
+
+  buffer += decoder.decode()
+  if (!streamDone && buffer.trim()) {
+    for (const line of buffer.split('\n')) {
+      processLine(line)
+      if (streamDone) break
     }
   }
 

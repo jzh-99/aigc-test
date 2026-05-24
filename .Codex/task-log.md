@@ -1,5 +1,95 @@
 # 任务日志：画布参数面板 @ 资源引用
 
+## 2026-05-24 音频节点参考限制
+
+- 用户反馈：音频节点目前可以被其它节点随意参考，参考前需要按 `provider_models.category_references` 增加判断。
+- 根因定位：
+  - 画布连线入口集中在 `apps/web/src/stores/canvas/structure-store.ts` 的 `validateConnection`。
+  - `getReferenceKind` 已把 `audio_gen` 识别为 `audio`，但图片节点旧逻辑只拦截了音频/视频素材 asset 的 MIME，未覆盖 AI 音频节点。
+  - 因此 `audio_gen -> image_gen` 会绕过图片模型 `category_references.image_to_image.limits.audio.max = 0`。
+- 方案取舍：
+  - 不写死“图片节点禁止音频”，而是抽出 `validateReferenceKindLimit`，统一读取目标模型当前 category 的 `image/video/audio` 限制。
+  - 图片节点连接任意参考资源时，都按 `ACTIVE_IMAGE_CATEGORY` 的 `category_references` 校验同类资源数量；音频 max 为 0 时自然禁止。
+  - 保留视频节点原有多模态/首尾帧校验逻辑，避免扩大改动面。
+- TDD 过程：
+  - 先新增 `apps/web/src/lib/canvas/reference-limits.test.ts`，验证图片节点 category 下音频引用 max=0 时返回错误。
+  - RED：首次运行因 `reference-limits` 模块不存在失败。
+  - GREEN：新增纯函数并接入画布连线校验后，测试通过。
+
+## 2026-05-24 视频节点音频参考限制修正
+
+- 用户反馈：视频节点好像没有正确处理音频限制。
+- 根因定位：
+  - 画布视频节点连线分为全能参考和首尾帧两套判断。
+  - 全能参考会按 `sourceKind` 统计 `image/video/audio`，但首尾帧模式旧逻辑只用 asset 的 MIME 判断非图片素材；`audio_gen` 不是 asset，`sourceMime` 为空，因此会漏过音频节点。
+  - `useNodeTopology` 只把 `image_gen/video_gen` 纳入上游输出映射，也漏掉了 `audio_gen`，导致已连接音频节点在面板引用与提交阶段可能拿不到输出 URL 或 MIME 类型。
+- 修复策略：
+  - 视频节点无论当前模式是 `multimodal` 还是 `frames`，连线时都按当前 `category_references[categoryKey].limits[sourceKind]` 统一校验。
+  - `useNodeTopology` 把 `audio_gen` 加入上游生成节点输出映射，并在无执行输出类型时按节点类型回退为 `audio/mpeg`。
+- 验证补充：
+  - 共享规则测试新增“首尾帧禁止音频引用”用例，覆盖 `frames.limits.audio.max = 0`。
+  - `pnpm --filter @aigc/web exec tsx --test src/lib/canvas/reference-limits.test.ts src/lib/canvas/media-upload-rules.test.ts` 通过，5 个测试全部通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web build` 初次失败，原因是本地 Next 依赖目录缺失 `dist/build/webpack-build`；执行 `pnpm install --force` 修复依赖后重跑通过。
+  - `pnpm lint` 执行成功，但 turbo 报告没有实际 lint task。
+
+## 2026-05-24 Qwen 模型 seed
+
+- 用户要求：文本节点、面板使用的 Qwen 模型维护到数据库，并写对应 seed。
+- 实现：
+  - 在 `packages/db/scripts/seed.ts` 新增 `qwen` provider，模块为 `agent`，配置读取 `QWEN_API_URL`，默认兼容 DashScope OpenAI-compatible 地址。
+  - 新增 `provider_models` 记录，模型 code 优先读取 `QWEN_MODEL`，否则使用现有代码默认值 `qwen3-6b-plus`。
+  - `params_schema` 写入文本生成/分镜拆分相关参数：`chat/completions`、流式开关、thinking 开关、max_tokens 和用途标记。
+- 验证：
+  - `pnpm --filter @aigc/db build` 通过。
+  - `pnpm --filter @aigc/types build` 通过。
+
+## 2026-05-24 文本节点引用限制
+
+- 用户要求：文本节点只能引用文本节点，需要调整 seed，同时引入限制。
+- 实现：
+  - `@aigc/types` 的 `category_references` 增加 `text_to_text` 模式和 `text` 参考素材类型。
+  - 为兼容旧图片/视频模型配置，解析函数允许历史 `image/video/audio` 三类结构，并自动补齐 `text: { min: 0, max: 0 }`。
+  - Qwen seed 增加 `category_references.text_to_text`，只允许文本参考，图片/视频/音频均为 0。
+  - 文本节点输入 handle 改为 `text` 类型；画布连线入口增加限制，`text_input` 目标只允许 `text_input` 来源。
+  - 图片/视频默认规则和后端兜底规则补齐 `text` 限制，避免类型扩展后破坏现有模型。
+- 验证：
+  - `pnpm --filter @aigc/api exec tsx --test ..\..\packages\types\src\api.test.ts` 通过，5 个测试全部通过。
+  - `pnpm --filter @aigc/web exec tsx --test src/lib/canvas/reference-limits.test.ts` 通过，3 个测试全部通过。
+  - `pnpm --filter @aigc/types build`、`pnpm --filter @aigc/db build`、`pnpm --filter @aigc/api build` 通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 和 `pnpm --filter @aigc/web build` 通过。
+  - `pnpm lint` 执行成功，但 turbo 报告没有实际 lint task。
+
+## 2026-05-24 文本节点改为使用数据规则
+
+- 用户纠正：文本节点不能引用任何节点；但限制不能写死在前端本地规则里，应使用数据库模型的 `category_references`。当前只暂时指定 Qwen 作为文本模型默认模型。
+- 根因说明：
+  - 之前前端 `text_input` 没有保存模型 code，也没有保存模型的 `categoryReferences`。
+  - 画布连线校验无法知道当前文本节点对应哪个模型，所以误用了 `validateTextNodeSource` 本地硬规则。
+- 修复：
+  - `TextInputConfig` 增加 `model` 和 `categoryReferences`。
+  - 文本节点默认模型为 `qwen3-6b-plus`，默认规则为 `text_to_text` 全部 0。
+  - 参数面板通过 `useModels('agent')` 拉取模型列表，优先同步 Qwen 模型的 `category_references` 到文本节点配置。
+  - 画布连线层删除本地硬规则，文本节点目标改为读取自身 `categoryReferences.text_to_text`，并用 `validateReferenceKindLimit` 判断 `text/image/video/audio` 是否可引用。
+- 验证：
+  - `pnpm --filter @aigc/web exec tsx --test src/lib/canvas/reference-limits.test.ts` 通过，3 个测试全部通过。
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/db build`、`pnpm --filter @aigc/types build`、`pnpm --filter @aigc/api build` 通过。
+  - `pnpm --filter @aigc/web build` 通过。
+  - `pnpm lint` 执行成功，但 turbo 报告没有实际 lint task。
+
+## 2026-05-24 文本面板精简
+
+- 用户要求：文本面板不需要“文本内容”编辑区，生成文本直接回显到节点里。
+- 实现：
+  - 移除 `TextInputPanel` 里的手动“文本内容”区域和相关上游文本标签展示。
+  - 保留 AI 生成输入和按钮；流式生成仍通过 `setTextDraft` 写入节点配置，因此节点卡片会实时回显生成文本。
+  - 精简 `TextInputPanel` props，`NodeParamPanel` 不再传 `textDraft` 和 `upstreamTextNodeLabels`。
+- 验证：
+  - `pnpm --filter @aigc/web build` 通过。
+  - 初次并行运行 `tsc` 与 `next build` 时 `.next/types` 出现生成文件竞争；构建完成后单独重跑 `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm lint` 执行成功，但 turbo 报告没有实际 lint task。
+
 ## 2026-05-23 统一 category_references 字段
 
 - 用户要求：`video_categories` 和 `image_categories` 作用一致，合并并重命名为 `category_references`。
@@ -485,3 +575,24 @@
   - `AudioGenPanel` 的音色弹窗移除“我的音色”“收藏音色”、语言下拉和“筛选”按钮，搜索仍保留。
   - `AudioGenNode` 移除定稿按钮、定稿接口调用、token/canvasId/confirming 状态和相关 toast；左右分页按钮与当前页码保留。
   - `audio-submit.spec.ts` 增加断言，确保音色弹窗不再出现被移除入口，音频输出节点不再出现“定稿”。
+- 验证结果：
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web test:e2e -- canvas/audio-submit.spec.ts` 通过，1 个 E2E。
+  - `pnpm --filter @aigc/web build` 通过。
+
+## 2026-05-24 文本生成回显修复
+
+- 用户反馈：
+  - 文本节点参数面板提示“生成完成”，但生成内容没有回显到文本节点卡片。
+- 排查结论：
+  - `TextInputPanel` 流式生成时只更新了本地 `textDraft`，生成结束后调用旧的 `flushTextDraft` 会读到 hook 闭包里的旧值，最终没有把新文本写入节点配置。
+  - `executeTextGenNode` 只处理换行前的 SSE 行，接口最后一个 `data:` 块如果没有尾随换行，完整返回文本可能为空。
+- 实现内容：
+  - `TextInputPanel` 在生成完成后把 `executeTextGenNode` 返回值或流式累计值直接提交给父级。
+  - `NodeParamPanel` 新增 `commitTextDraft`，直接 `updateCfg({ text })`，避免闭包旧值。
+  - `executeTextGenNode` 补充 SSE 行处理函数，兼容 `delta.content`、`message.content`、`text`，并处理流结束后的剩余 buffer。
+- 验证结果：
+  - `pnpm --filter @aigc/web exec tsc --noEmit` 通过。
+  - `pnpm --filter @aigc/web build` 通过。
+  - `pnpm lint` 执行成功，但 Turborepo 提示当前没有实际 lint 任务被执行。
+  - 首次构建时发现本地 Next 包目录缺失 `dist/build`，执行 `pnpm install --frozen-lockfile --force` 重建依赖后构建通过。

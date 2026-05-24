@@ -45,8 +45,9 @@ function resolveReferenceMimeType(
   }
   if (outputType) return handleTypeToMimeType(outputType)
   // 未执行时按节点类型推断
-  if (sourceNode.type === 'video_gen' || sourceNode.type === 'video_stitch') return 'video/mp4'
   if (sourceNode.type === 'image_gen') return 'image/jpeg'
+  if (sourceNode.type === 'video_gen' || sourceNode.type === 'video_stitch') return 'video/mp4'
+  if (sourceNode.type === 'audio_gen') return 'audio/mpeg'
   const inferred = inferMediaTypeFromUrl(url)
   return inferred ? `${inferred}/x` : undefined
 }
@@ -112,7 +113,7 @@ export function useNodeTopology(nodeId: string) {
 
   const upstreamGenIds = useMemo(
     () => upstreamNodes
-      .filter((n) => n.type === 'image_gen' || n.type === 'video_gen')
+      .filter((n) => n.type === 'image_gen' || n.type === 'video_gen' || n.type === 'audio_gen')
       .map((n) => n.id),
     [upstreamNodes]
   )

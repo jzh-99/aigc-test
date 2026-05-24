@@ -27,50 +27,68 @@ build_and_save() {
   echo "完成：$OUTPUT_DIR/$name.tar.gz ($(du -sh "$OUTPUT_DIR/$name.tar.gz" | cut -f1))"
 }
 
+read_env_value() {
+  local env_file="$1"
+  local key="$2"
+
+  if [ ! -f "$env_file" ]; then
+    return 0
+  fi
+
+  (grep -E "^${key}=" "$env_file" || true) \
+    | tail -n 1 \
+    | cut -d= -f2- \
+    | sed 's/#.*//' \
+    | xargs
+}
+
+build_web() {
+  local web_env="$REPO_ROOT/deploy/web/.env"
+  local api_host_val
+  local api_port_val
+  local storage_host_val
+  local storage_port_val
+
+  api_host_val="$(read_env_value "$web_env" "API_HOST")"
+  api_port_val="$(read_env_value "$web_env" "API_PORT")"
+  storage_host_val="$(read_env_value "$web_env" "NEXT_PUBLIC_STORAGE_HOST")"
+  storage_port_val="$(read_env_value "$web_env" "NEXT_PUBLIC_STORAGE_PORT")"
+
+  api_host_val="${api_host_val:-localhost}"
+  api_port_val="${api_port_val:-7001}"
+  storage_host_val="${storage_host_val:-$(read_env_value "$web_env" "INFRA_HOST")}"
+  storage_port_val="${storage_port_val:-$(read_env_value "$web_env" "MINIO_API_PORT")}"
+  storage_host_val="${storage_host_val:-localhost}"
+  storage_port_val="${storage_port_val:-9000}"
+
+  echo "====== web 构建参数：INTERNAL_API_URL=http://${api_host_val}:${api_port_val} ======"
+  echo "====== web 构建参数：NEXT_PUBLIC_STORAGE_HOST=${storage_host_val}, NEXT_PUBLIC_STORAGE_PORT=${storage_port_val} ======"
+  docker build \
+    --file "$REPO_ROOT/apps/web/Dockerfile" \
+    --tag "aigc-web:latest" \
+    --build-arg "INTERNAL_API_URL=http://${api_host_val}:${api_port_val}" \
+    --build-arg "NEXT_PUBLIC_STORAGE_HOST=${storage_host_val}" \
+    --build-arg "NEXT_PUBLIC_STORAGE_PORT=${storage_port_val}" \
+    "$REPO_ROOT"
+  echo "====== 导出 aigc-web → dist/aigc-web.tar.gz ======"
+  docker save "aigc-web:latest" | gzip > "$OUTPUT_DIR/aigc-web.tar.gz"
+  echo "完成：$OUTPUT_DIR/aigc-web.tar.gz ($(du -sh "$OUTPUT_DIR/aigc-web.tar.gz" | cut -f1))"
+}
+
 case "$TARGET" in
   api)
     build_and_save "aigc-api" "apps/api/Dockerfile"
     ;;
   web)
-    # 从 deploy/web/.env 读取 API_HOST/API_PORT，构建时烧入 routes-manifest.json
-    WEB_ENV="$REPO_ROOT/deploy/web/.env"
-    if [ -f "$WEB_ENV" ]; then
-      API_HOST_VAL=$(grep -E '^API_HOST=' "$WEB_ENV" | cut -d= -f2 | tr -d '[:space:]' | sed 's/#.*//')
-      API_PORT_VAL=$(grep -E '^API_PORT=' "$WEB_ENV" | cut -d= -f2 | tr -d '[:space:]' | sed 's/#.*//')
-    fi
-    API_HOST_VAL="${API_HOST_VAL:-localhost}"
-    API_PORT_VAL="${API_PORT_VAL:-7001}"
-    echo "====== web 构建参数：INTERNAL_API_URL=http://${API_HOST_VAL}:${API_PORT_VAL} ======"
-    docker build \
-      --file "$REPO_ROOT/apps/web/Dockerfile" \
-      --tag "aigc-web:latest" \
-      --build-arg "INTERNAL_API_URL=http://${API_HOST_VAL}:${API_PORT_VAL}" \
-      "$REPO_ROOT"
-    echo "====== 导出 aigc-web → dist/aigc-web.tar.gz ======"
-    docker save "aigc-web:latest" | gzip > "$OUTPUT_DIR/aigc-web.tar.gz"
-    echo "完成：$OUTPUT_DIR/aigc-web.tar.gz ($(du -sh "$OUTPUT_DIR/aigc-web.tar.gz" | cut -f1))"
+    build_web
     ;;
   worker)
     build_and_save "aigc-worker" "apps/worker/Dockerfile"
     ;;
   all)
     build_and_save "aigc-api"    "apps/api/Dockerfile"
-    # web 单独处理，需要传入 INTERNAL_API_URL 构建参数
-    WEB_ENV="$REPO_ROOT/deploy/web/.env"
-    if [ -f "$WEB_ENV" ]; then
-      API_HOST_VAL=$(grep -E '^API_HOST=' "$WEB_ENV" | cut -d= -f2 | tr -d '[:space:]' | sed 's/#.*//')
-      API_PORT_VAL=$(grep -E '^API_PORT=' "$WEB_ENV" | cut -d= -f2 | tr -d '[:space:]' | sed 's/#.*//')
-    fi
-    API_HOST_VAL="${API_HOST_VAL:-localhost}"
-    API_PORT_VAL="${API_PORT_VAL:-7001}"
-    echo "====== web 构建参数：INTERNAL_API_URL=http://${API_HOST_VAL}:${API_PORT_VAL} ======"
-    docker build \
-      --file "$REPO_ROOT/apps/web/Dockerfile" \
-      --tag "aigc-web:latest" \
-      --build-arg "INTERNAL_API_URL=http://${API_HOST_VAL}:${API_PORT_VAL}" \
-      "$REPO_ROOT"
-    docker save "aigc-web:latest" | gzip > "$OUTPUT_DIR/aigc-web.tar.gz"
-    echo "完成：$OUTPUT_DIR/aigc-web.tar.gz ($(du -sh "$OUTPUT_DIR/aigc-web.tar.gz" | cut -f1))"
+    # web 单独处理，需要传入 next.config.mjs 构建期读取的参数
+    build_web
     build_and_save "aigc-worker" "apps/worker/Dockerfile"
     ;;
   *)

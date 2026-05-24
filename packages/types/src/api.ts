@@ -1,6 +1,6 @@
-import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory, ImageCategory, CategoryReferenceKey } from './db.js'
+import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory, ImageCategory, TextCategory, CategoryReferenceKey } from './db.js'
 
-export type ReferenceKind = 'image' | 'video' | 'audio'
+export type ReferenceKind = 'image' | 'video' | 'audio' | 'text'
 
 export interface CategoryReferenceLimit {
   min: number
@@ -14,11 +14,13 @@ export interface CategoryReferenceConfig {
 
 export type CategoryReferences = Partial<Record<CategoryReferenceKey, CategoryReferenceConfig>>
 export const ACTIVE_IMAGE_CATEGORY: ImageCategory = 'image_to_image'
+export const ACTIVE_TEXT_CATEGORY: TextCategory = 'text_to_text'
 
 export interface VideoReferenceCounts {
   image: number
   video: number
   audio: number
+  text: number
 }
 
 export interface VideoBillingInput {
@@ -53,7 +55,7 @@ export interface VideoLimitValidationResult {
   message?: string
 }
 
-const REFERENCE_KINDS: ReferenceKind[] = ['image', 'video', 'audio']
+const REFERENCE_KINDS: ReferenceKind[] = ['image', 'video', 'audio', 'text']
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -69,7 +71,19 @@ function isLimit(value: unknown): value is CategoryReferenceLimit {
 function isCategoryConfig(value: unknown): value is CategoryReferenceConfig {
   if (!isPlainObject(value) || typeof value.label !== 'string' || !isPlainObject(value.limits)) return false
   const limits = value.limits
-  return REFERENCE_KINDS.every((kind) => isLimit(limits[kind]))
+  return ['image', 'video', 'audio'].every((kind) => isLimit(limits[kind]))
+}
+
+function normalizeCategoryConfig(value: CategoryReferenceConfig): CategoryReferenceConfig {
+  return {
+    ...value,
+    limits: {
+      image: value.limits.image,
+      video: value.limits.video,
+      audio: value.limits.audio,
+      text: isLimit(value.limits.text) ? value.limits.text : { min: 0, max: 0 },
+    },
+  }
 }
 
 export function parseCategoryReferences(raw: unknown): CategoryReferences {
@@ -86,10 +100,11 @@ export function parseCategoryReferences(raw: unknown): CategoryReferences {
   if (!isPlainObject(value)) return {}
 
   const out: CategoryReferences = {}
-  if (isCategoryConfig(value.image_to_image)) out.image_to_image = value.image_to_image
-  if (isCategoryConfig(value.text_to_image)) out.text_to_image = value.text_to_image
-  if (isCategoryConfig(value.multimodal)) out.multimodal = value.multimodal
-  if (isCategoryConfig(value.frames)) out.frames = value.frames
+  if (isCategoryConfig(value.image_to_image)) out.image_to_image = normalizeCategoryConfig(value.image_to_image)
+  if (isCategoryConfig(value.text_to_image)) out.text_to_image = normalizeCategoryConfig(value.text_to_image)
+  if (isCategoryConfig(value.multimodal)) out.multimodal = normalizeCategoryConfig(value.multimodal)
+  if (isCategoryConfig(value.frames)) out.frames = normalizeCategoryConfig(value.frames)
+  if (isCategoryConfig(value.text_to_text)) out.text_to_text = normalizeCategoryConfig(value.text_to_text)
   return out
 }
 
@@ -105,8 +120,9 @@ export function getMaxVideoReferenceLimits(categoryReferences: CategoryReference
       image: Math.max(acc.image, limits.image.max),
       video: Math.max(acc.video, limits.video.max),
       audio: Math.max(acc.audio, limits.audio.max),
+      text: Math.max(acc.text, limits.text.max),
     }
-  }, { image: 0, video: 0, audio: 0 })
+  }, { image: 0, video: 0, audio: 0, text: 0 })
 }
 
 export function validateCategoryReferenceLimits(
@@ -120,7 +136,7 @@ export function validateCategoryReferenceLimits(
   for (const kind of REFERENCE_KINDS) {
     const count = counts[kind]
     const limit = config.limits[kind]
-    const label = kind === 'image' ? '图片' : kind === 'video' ? '视频' : '音频'
+    const label = kind === 'image' ? '图片' : kind === 'video' ? '视频' : kind === 'audio' ? '音频' : '文本'
     if (count < limit.min) return { valid: false, message: `${config.label}至少需要 ${limit.min} 个${label}参考素材` }
     if (count > limit.max) return { valid: false, message: `${config.label}最多允许 ${limit.max} 个${label}参考素材` }
   }

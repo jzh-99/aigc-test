@@ -109,7 +109,7 @@ export function AudioGenPanel({
           onChange={updateText}
           onBlur={flushTextDraft}
         />
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/80 bg-background/90 p-2 shadow-sm">
           <DropdownButton
             label="停顿"
             open={pauseOpen}
@@ -283,7 +283,7 @@ function AudioTagEditor({
         aria-label={placeholder}
         contentEditable
         suppressContentEditableWarning
-        className="min-h-[190px] w-full whitespace-pre-wrap break-words rounded-lg border border-border bg-muted/60 p-2 text-xs leading-6 text-foreground outline-none focus:border-primary focus:bg-background focus:ring-1 focus:ring-primary"
+        className="min-h-[190px] w-full whitespace-pre-wrap break-words rounded-xl border border-border/80 bg-background p-3 text-sm leading-7 text-foreground shadow-sm outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
         onFocus={() => setFocused(true)}
         onBlur={() => {
           setFocused(false)
@@ -303,7 +303,7 @@ function AudioTagEditor({
         onKeyDown={handleDeleteToken}
       />
       {value.length === 0 && !focused && (
-        <div className="pointer-events-none absolute left-2 top-2 text-xs text-muted-foreground">{placeholder}</div>
+        <div className="pointer-events-none absolute left-3 top-3 text-sm text-muted-foreground">{placeholder}</div>
       )}
     </div>
   )
@@ -321,10 +321,10 @@ function renderAudioEditorContent(editor: HTMLElement, value: string) {
     token.dataset.testid = 'audio-tag-token'
     token.contentEditable = 'false'
     token.className = cn(
-      'inline-flex items-center rounded border px-1.5 py-0.5 font-semibold align-baseline',
+      'mx-0.5 inline-flex items-center rounded-md border px-2 py-0.5 font-semibold align-baseline shadow-sm',
       segment.type === 'pause'
-        ? 'border-cyan-500/30 bg-cyan-500/15 text-cyan-300'
-        : 'border-violet-500/30 bg-violet-500/15 text-violet-200',
+        ? 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200'
+        : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200',
     )
     token.textContent = segment.type === 'pause' ? `<#${segment.label}#>` : segment.label
     editor.appendChild(token)
@@ -404,15 +404,21 @@ function DropdownButton({
       <button
         ref={buttonRef}
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted/80"
+        className={cn(
+          'inline-flex min-w-24 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition-colors',
+          open
+            ? 'border-primary/45 bg-primary/10 text-primary'
+            : 'border-border bg-background text-foreground hover:border-primary/35 hover:bg-primary/5',
+        )}
       >
         {label}
-        <ChevronsUpDown className="h-3 w-3 text-muted-foreground" />
+        <ChevronsUpDown className={cn('h-4 w-4', open ? 'text-primary' : 'text-muted-foreground')} />
       </button>
       {open && menuStyle && createPortal(
         <div
-          className="fixed z-[120] overflow-y-auto rounded-2xl border border-border bg-popover p-1.5 shadow-xl"
+          className="fixed z-[120] overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl shadow-foreground/10"
           style={menuStyle}
         >
           {items.map((item) => (
@@ -423,7 +429,7 @@ function DropdownButton({
                 item.onSelect()
                 setOpen(false)
               }}
-              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-popover-foreground hover:bg-muted"
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-popover-foreground transition-colors hover:bg-primary/10 hover:text-primary"
             >
               {item.label}
             </button>

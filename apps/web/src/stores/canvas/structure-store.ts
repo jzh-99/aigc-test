@@ -9,10 +9,11 @@ import {
 } from 'reactflow'
 import type { AppNode, AppEdge, CanvasNodeConfig, VideoMode } from '@/lib/canvas/types'
 import type { AgentWorkflow } from '@/lib/canvas/agent-types'
-import { DEFAULT_IMAGE_CATEGORY_LIMITS, DEFAULT_VIDEO_CATEGORY_LIMITS, isAssetConfig, isImageGenConfig, isVideoGenConfig } from '@/lib/canvas/types'
-import { ACTIVE_IMAGE_CATEGORY, parseCategoryReferences } from '@aigc/types'
+import { DEFAULT_IMAGE_CATEGORY_LIMITS, DEFAULT_TEXT_CATEGORY_LIMITS, DEFAULT_VIDEO_CATEGORY_LIMITS, isAssetConfig, isImageGenConfig, isTextInputConfig, isVideoGenConfig } from '@/lib/canvas/types'
+import { ACTIVE_IMAGE_CATEGORY, ACTIVE_TEXT_CATEGORY, parseCategoryReferences } from '@aigc/types'
 import { hasCycle } from '@/lib/canvas/dag'
 import { nodeRegistry } from '@/lib/canvas/registry'
+import { validateReferenceKindLimit } from '@/lib/canvas/reference-limits'
 import {
   type UndoSnapshot,
   loadUndoHistory,
@@ -158,8 +159,20 @@ function getImageCategoryLimits(node: AppNode | undefined) {
   return parsed
 }
 
-function getReferenceKind(node: AppNode | undefined): 'image' | 'video' | 'audio' | null {
-  if (!node || node.type === 'text_input') return null
+function getTextCategoryLimits(node: AppNode | undefined) {
+  if (!node || node.type !== 'text_input' || !isTextInputConfig(node.data.config)) {
+    return DEFAULT_TEXT_CATEGORY_LIMITS
+  }
+  const parsed = parseCategoryReferences(node.data.config.categoryReferences)
+  if (Object.keys(parsed).length === 0) {
+    return DEFAULT_TEXT_CATEGORY_LIMITS
+  }
+  return parsed
+}
+
+function getReferenceKind(node: AppNode | undefined, options: { includeText?: boolean } = {}): 'image' | 'video' | 'audio' | 'text' | null {
+  if (!node) return null
+  if (node.type === 'text_input') return options.includeText ? 'text' : null
   if (node.type === 'image_gen') return 'image'
   if (node.type === 'video_gen' || node.type === 'video_stitch') return 'video'
   if (node.type === 'audio_gen') return 'audio'
@@ -186,6 +199,24 @@ function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Conn
   const sourceMime = getNodeMimeType(sourceNode)
   const sourceKind = getReferenceKind(sourceNode)
 
+  if (targetNode?.type === 'text_input') {
+    const textSourceKind = getReferenceKind(sourceNode, { includeText: true })
+    if (textSourceKind) {
+      const existingRefs = edges.filter((e) => {
+        if (e.target !== connection.target) return false
+        const src = nodes.find((n) => n.id === e.source)
+        return getReferenceKind(src, { includeText: true }) === textSourceKind
+      })
+      const limitError = validateReferenceKindLimit({
+        categoryReferences: getTextCategoryLimits(targetNode),
+        categoryKey: ACTIVE_TEXT_CATEGORY,
+        referenceKind: textSourceKind,
+        existingCount: existingRefs.length,
+      })
+      if (limitError) return limitError
+    }
+  }
+
   if (targetNode?.type === 'video_stitch') {
     const isVideoSource = sourceNode?.type === 'video_gen'
       || sourceNode?.type === 'video_stitch'
@@ -193,25 +224,23 @@ function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Conn
     if (!isVideoSource) return '视频拼接节点只能连接 AI 视频、拼接视频或视频素材'
   }
 
-  if (targetNode?.type === 'image_gen' && sourceMime && (sourceMime.startsWith('video') || sourceMime.startsWith('audio'))) {
-    return '视频/音频素材不能连接到 AI 生图节点'
-  }
-
-  if (targetNode?.type === 'image_gen' && sourceKind === 'image') {
-    const existingImageRefs = edges.filter((e) => {
+  if (targetNode?.type === 'image_gen' && sourceKind && sourceKind !== 'text') {
+    const existingRefs = edges.filter((e) => {
       if (e.target !== connection.target) return false
       const src = nodes.find((n) => n.id === e.source)
-      return getReferenceKind(src) === 'image'
+      return getReferenceKind(src) === sourceKind
     })
-    const maxImages = getImageCategoryLimits(targetNode)[ACTIVE_IMAGE_CATEGORY]?.limits.image.max ?? 0
-    if (existingImageRefs.length >= maxImages) {
-      return `图生图最多连接 ${maxImages} 张参考图`
-    }
+    const limitError = validateReferenceKindLimit({
+      categoryReferences: getImageCategoryLimits(targetNode),
+      categoryKey: ACTIVE_IMAGE_CATEGORY,
+      referenceKind: sourceKind,
+      existingCount: existingRefs.length,
+    })
+    if (limitError) return limitError
   }
 
   if (connection.targetHandle === 'any-in' || !connection.targetHandle) {
     if (targetNode?.type === 'video_gen') {
-      const mimeType = sourceMime
       const videoMode: VideoMode = isVideoGenConfig(targetNode.data.config)
         ? targetNode.data.config.videoMode
         : 'multiref'
@@ -223,17 +252,14 @@ function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Conn
         return getReferenceKind(src) === kind
       }).length
 
-      if (videoMode === 'keyframe') {
-        if (sourceNode?.type !== 'text_input') {
-          if (mimeType && !mimeType.startsWith('image')) return '首尾帧模式只接受图片素材'
-          if (countByKind('image') >= categoryLimits.limits.image.max) return `首尾帧最多连接 ${categoryLimits.limits.image.max} 张图片`
-        }
-      } else if (sourceKind) {
-        if (countByKind(sourceKind) >= categoryLimits.limits[sourceKind].max) {
-          const label = sourceKind === 'image' ? '参考图' : sourceKind === 'video' ? '参考视频' : '参考音频'
-          const unit = sourceKind === 'image' ? '张' : '个'
-          return `${label}最多 ${categoryLimits.limits[sourceKind].max} ${unit}`
-        }
+      if (sourceKind && sourceKind !== 'text') {
+        const limitError = validateReferenceKindLimit({
+          categoryReferences: { [categoryKey]: categoryLimits },
+          categoryKey,
+          referenceKind: sourceKind,
+          existingCount: countByKind(sourceKind),
+        })
+        if (limitError) return limitError
       }
     }
   }

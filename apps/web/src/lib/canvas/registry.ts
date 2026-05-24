@@ -1,5 +1,5 @@
 import type { CanvasNodeDefinition, CanvasNodeData, AppNode, CanvasNodeType } from './types'
-import { DEFAULT_VIDEO_CATEGORY_LIMITS } from './types'
+import { DEFAULT_TEXT_CATEGORY_LIMITS, DEFAULT_VIDEO_CATEGORY_LIMITS } from './types'
 import { generateUUID } from '@/lib/utils'
 import { TextNode } from '@/components/canvas/nodes/text-node'
 import { ImageGenNode } from '@/components/canvas/nodes/image-gen-node'
@@ -23,9 +23,9 @@ export class NodeRegistry {
       type: 'text_input',
       label: '文本输入',
       CanvasComponent: TextNode as any,
-      inputs: [{ id: 'any-in', type: 'any', position: 'left' }],
+      inputs: [{ id: 'any-in', type: 'text', position: 'left' }],
       outputs: [{ id: 'text-out', type: 'text', position: 'right' }],
-      defaultConfig: { text: '' },
+      defaultConfig: { text: '', model: 'qwen3-6b-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS },
     })
 
     this.register({

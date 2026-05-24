@@ -27,6 +27,7 @@ import type {
 } from '@/lib/canvas/types'
 import {
   DEFAULT_IMAGE_CATEGORY_LIMITS,
+  DEFAULT_TEXT_CATEGORY_LIMITS,
   DEFAULT_VIDEO_CATEGORY_LIMITS,
   isAssetConfig,
   isAudioGenConfig,
@@ -87,7 +88,7 @@ const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
   categoryReferences: DEFAULT_VIDEO_CATEGORY_LIMITS,
 }
 
-const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '' }
+const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '', model: 'qwen3-6b-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS }
 const DEFAULT_ASSET_CONFIG: AssetConfig = { url: '', name: '', mimeType: 'image/jpeg' }
 const DEFAULT_AUDIO_CONFIG: AudioGenConfig = {
   text: '',
@@ -132,6 +133,18 @@ function normalizeImageConfig(config: unknown, models?: ModelItem[]): ImageGenCo
     resolution,
     quantity: 1,
     categoryReferences,
+  }
+}
+
+function normalizeTextConfig(config: unknown, models?: ModelItem[]): TextInputConfig {
+  const raw = (config && typeof config === 'object' ? config : {}) as Partial<TextInputConfig>
+  const dbModel = models?.find((m) => m.code === raw.model) ?? models?.find((m) => m.provider_code === 'qwen') ?? models?.[0]
+  const parsed = parseCategoryReferences(dbModel?.category_references ?? raw.categoryReferences)
+  return {
+    ...DEFAULT_TEXT_CONFIG,
+    ...raw,
+    model: dbModel?.code ?? raw.model ?? DEFAULT_TEXT_CONFIG.model,
+    categoryReferences: Object.keys(parsed).length > 0 ? parsed : DEFAULT_TEXT_CATEGORY_LIMITS,
   }
 }
 
@@ -182,6 +195,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
   const { models: videoModels, isReady: videoModelsReady } = useModels('video', activeWorkspaceId)
   const { models: audioModels, isReady: audioModelsReady } = useModels('tts', activeWorkspaceId)
+  const { models: agentModels, isReady: agentModelsReady } = useModels('agent', activeWorkspaceId)
 
   const isImageGen = node.type === 'image_gen'
   const isTextInput = node.type === 'text_input'
@@ -199,7 +213,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     ? normalizeVideoConfig(node.data.config)
     : DEFAULT_VIDEO_CONFIG
   const textCfg = isTextInput && isTextInputConfig(node.data.config)
-    ? node.data.config
+    ? normalizeTextConfig(node.data.config, agentModelsReady ? agentModels : undefined)
     : DEFAULT_TEXT_CONFIG
   const assetCfg = isAsset && isAssetConfig(node.data.config)
     ? node.data.config
@@ -253,6 +267,10 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     promptFromConfig,
   })
 
+  const commitTextDraft = useCallback((value: string) => {
+    updateCfg({ text: value })
+  }, [updateCfg])
+
   const modelType: ModelType = imageCfg.modelType
   const resolution: Resolution = imageCfg.resolution
   const aspectRatio = imageCfg.aspectRatio
@@ -301,6 +319,21 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
       updateCfg({ categoryReferences: parsed })
     }
   }, [currentVideoDbModel, isVideoGen, updateCfg, videoModelsReady, videoCfg.categoryReferences])
+
+  // 文本节点也使用模型数据里的 categoryReferences，默认模型暂时固定为 Qwen。
+  useEffect(() => {
+    if (!isTextInput || !agentModelsReady) return
+    const currentTextDbModel = agentModels.find((m) => m.code === textCfg.model) ?? agentModels.find((m) => m.provider_code === 'qwen')
+    const parsed = parseCategoryReferences(currentTextDbModel?.category_references)
+    const nextCategoryReferences = Object.keys(parsed).length > 0 ? parsed : DEFAULT_TEXT_CATEGORY_LIMITS
+    if (textCfg.model !== (currentTextDbModel?.code ?? textCfg.model)
+      || JSON.stringify(nextCategoryReferences) !== JSON.stringify(textCfg.categoryReferences)) {
+      updateCfg({
+        model: currentTextDbModel?.code ?? textCfg.model,
+        categoryReferences: nextCategoryReferences,
+      })
+    }
+  }, [agentModels, agentModelsReady, isTextInput, textCfg.categoryReferences, textCfg.model, updateCfg])
 
   const handleExecuteImage = useCallback(async () => {
     if (Array.from(promptDraft).length > PROMPT_MAX_LENGTH) {
@@ -428,7 +461,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
       if (ref.mimeType?.startsWith('video')) return { ...counts, video: counts.video + 1 }
       if (ref.mimeType?.startsWith('audio')) return { ...counts, audio: counts.audio + 1 }
       return { ...counts, image: counts.image + 1 }
-    }, { image: 0, video: 0, audio: 0 })
+    }, { image: 0, video: 0, audio: 0, text: 0 })
   }, [orderedImageRefs])
 
   const handleVideoModeChange = useCallback((newMode: VideoGenConfig['videoMode']) => {
@@ -658,10 +691,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
 
       {isTextInput && (
         <TextInputPanel
-          textDraft={textDraft}
           setTextDraft={setTextDraft}
-          flushTextDraft={flushTextDraft}
-          upstreamTextNodeLabels={upstreamTextNodeLabels}
+          commitTextDraft={commitTextDraft}
         />
       )}
 

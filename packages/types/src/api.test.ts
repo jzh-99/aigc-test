@@ -23,6 +23,7 @@ describe('category_references 图片参考限制', () => {
         image: { min: 0, max: 0 },
         video: { min: 0, max: 0 },
         audio: { min: 0, max: 0 },
+        text: { min: 0, max: 0 },
       },
     },
     image_to_image: {
@@ -31,6 +32,7 @@ describe('category_references 图片参考限制', () => {
         image: { min: 0, max: 6 },
         video: { min: 0, max: 0 },
         audio: { min: 0, max: 0 },
+        text: { min: 0, max: 0 },
       },
     },
   })

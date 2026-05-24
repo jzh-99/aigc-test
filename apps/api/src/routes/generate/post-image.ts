@@ -20,6 +20,7 @@ const FALLBACK_CATEGORY_REFERENCES: CategoryReferences = {
         image: { min: 0, max: 0 },
         video: { min: 0, max: 0 },
         audio: { min: 0, max: 0 },
+        text: { min: 0, max: 0 },
     },
   },
   image_to_image: {
@@ -28,6 +29,7 @@ const FALLBACK_CATEGORY_REFERENCES: CategoryReferences = {
         image: { min: 0, max: 10 },
         video: { min: 0, max: 0 },
         audio: { min: 0, max: 0 },
+        text: { min: 0, max: 0 },
     },
   },
 }

@@ -60,6 +60,12 @@
     --login-text-primary: rgba(255, 255, 255, 0.92);
     --login-text-secondary: rgba(255, 255, 255, 0.45);
     --login-text-muted: rgba(255, 255, 255, 0.25);
+
+    --scrollbar-size: 10px;
+    --scrollbar-track: 268 50% 96%;
+    --scrollbar-thumb: 265 22% 72%;
+    --scrollbar-thumb-hover: 265 36% 62%;
+    --scrollbar-thumb-active: 265 45% 55%;
   }
 
   /* 全站暗黑主题「深渊黑域」变量覆盖 */
@@ -96,6 +102,11 @@
     --ring: 216 88% 65%;
 
     --surface-warm: 222 40% 8%;
+
+    --scrollbar-track: 222 40% 8%;
+    --scrollbar-thumb: 220 16% 32%;
+    --scrollbar-thumb-hover: 273 58% 64%;
+    --scrollbar-thumb-active: 273 68% 72%;
   }
 }
 
@@ -106,11 +117,44 @@
 @layer base {
   * {
     @apply border-border;
+    scrollbar-color: hsl(var(--scrollbar-thumb)) hsl(var(--scrollbar-track));
+    scrollbar-width: thin;
   }
 
   body {
     @apply bg-background text-foreground;
   }
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: hsl(var(--scrollbar-track));
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--scrollbar-thumb));
+  background-clip: padding-box;
+  border: 2px solid hsl(var(--scrollbar-track));
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--scrollbar-thumb-hover));
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: hsl(var(--scrollbar-thumb-active));
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 html {
@@ -154,12 +198,15 @@ html {
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 3px;
+  background: hsl(var(--scrollbar-thumb));
+  background-clip: padding-box;
+  border: 1px solid transparent;
+  border-radius: 999px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: hsl(var(--scrollbar-thumb-hover));
+  background-clip: padding-box;
 }
 
 /* ==========================================================================

@@ -140,7 +140,7 @@ export const AudioGenNode = memo(function AudioGenNode({ id, data }: { id: strin
         </div>
       )}
 
-      {outputs.length >= 1 && (
+      {/* {outputs.length >= 1 && (
         <div className="flex items-center justify-between rounded-b-xl border-t border-border bg-muted px-3 py-1">
           <button onClick={handlePrev} disabled={currentIndex <= 0} className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
             <ChevronLeft className="h-3.5 w-3.5" />
@@ -150,7 +150,7 @@ export const AudioGenNode = memo(function AudioGenNode({ id, data }: { id: strin
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
-      )}
+      )} */}
 
       <Handle
         type="target"

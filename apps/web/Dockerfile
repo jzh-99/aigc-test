@@ -30,8 +30,13 @@ COPY packages/types ./packages/types
 RUN pnpm --filter @aigc/types build
 
 # rewrites() 在 next build 时编译进 routes-manifest.json，必须构建时传入
+# images.remotePatterns 也会在构建期读取存储访问地址
 ARG INTERNAL_API_URL=http://localhost:7001
+ARG NEXT_PUBLIC_STORAGE_HOST=localhost
+ARG NEXT_PUBLIC_STORAGE_PORT=9000
 ENV INTERNAL_API_URL=$INTERNAL_API_URL
+ENV NEXT_PUBLIC_STORAGE_HOST=$NEXT_PUBLIC_STORAGE_HOST
+ENV NEXT_PUBLIC_STORAGE_PORT=$NEXT_PUBLIC_STORAGE_PORT
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN pnpm --filter @aigc/web build

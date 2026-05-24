@@ -8,7 +8,7 @@ import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { CanvasApiError, submitStoryboardSplitterJob } from '@/lib/canvas/canvas-api'
 import type { StoryboardSplitterConfig, AppNode, AppEdge, ShotItem } from '@/lib/canvas/types'
-import { isTextInputConfig, normalizeStoryboardShots } from '@/lib/canvas/types'
+import { DEFAULT_TEXT_CATEGORY_LIMITS, isTextInputConfig, normalizeStoryboardShots } from '@/lib/canvas/types'
 
 interface Props {
   nodeId: string
@@ -119,7 +119,7 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, 
       id: `shot_${nodeId}_${i}`,
       type: 'text_input' as const,
       position: { x: baseX, y: baseY + i * 220 },
-      data: { label: `镜头${shot.shotNumber}`, config: { text: shot.compositionPrompt } },
+      data: { label: `镜头${shot.shotNumber}`, config: { text: shot.compositionPrompt, model: 'qwen3-6b-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS } },
     }))
     const newEdges: AppEdge[] = newNodes.map((n) => ({
       id: `edge_${nodeId}_${n.id}`,

@@ -3,6 +3,13 @@ import { getDb } from '@aigc/db'
 import { signAssetUrls } from '../../lib/storage.js'
 import { CANVAS_ENABLED_TEAM_TYPES } from './_shared.js'
 
+const IMAGE_EXTENSION = /\.(jpg|jpeg|png|webp|gif|avif|bmp|svg)(\?|#|$)/i
+
+function isCanvasPreviewImageUrl(url: string, mimeType?: string): boolean {
+  if (mimeType) return mimeType.startsWith('image/')
+  return IMAGE_EXTENSION.test(url)
+}
+
 // GET /canvases — 列出用户的画布，可按 workspace_id 过滤
 const route: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: { workspace_id?: string } }>('/canvases', async (request, reply) => {
@@ -55,8 +62,7 @@ const route: FastifyPluginAsync = async (app) => {
 
         const url = (row.output_urls as string[] | null)?.[0]
         if (!url) continue
-        // 跳过视频文件
-        if (/\.(mp4|mov|webm)(\?|$)/i.test(url)) continue
+        if (!isCanvasPreviewImageUrl(url)) continue
 
         previewMap[cid].push(url)
       }
@@ -78,8 +84,7 @@ const route: FastifyPluginAsync = async (app) => {
             const url = node.data?.config?.url
             if (!url) continue
             const mimeType = node.data?.config?.mimeType ?? ''
-            if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) continue
-            if (/\.(mp4|mov|webm)(\?|$)/i.test(url)) continue
+            if (!isCanvasPreviewImageUrl(url, mimeType || undefined)) continue
             urls.push(url)
             if (urls.length >= 2) break
           }

@@ -315,7 +315,96 @@ async function main() {
   }
   console.log('  admin team + workspace + credits seeded (管理员)')
 
-  // 9. Provider: Nano Banana — upsert by code
+  // 9. Provider: Qwen — 画布文本节点、分镜拆分等文本类能力使用
+  const qwenResult = await db
+    .insertInto('providers')
+    .values({
+      code: 'qwen',
+      name: '通义千问',
+      region: 'cn',
+      modules: JSON.stringify(['agent']),
+      is_active: true,
+      config: JSON.stringify({
+        api_base_url: process.env.QWEN_API_URL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      }),
+    })
+    .onConflict((oc: any) => oc.column('code').doUpdateSet({
+      name: '通义千问',
+      region: 'cn',
+      modules: JSON.stringify(['agent']),
+      is_active: true,
+      config: JSON.stringify({
+        api_base_url: process.env.QWEN_API_URL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      }),
+    }))
+    .returningAll()
+    .execute()
+
+  const qwenProvider = qwenResult[0]
+  console.log(`  providers seeded (qwen, id=${qwenProvider.id})`)
+
+  const ZERO_REFERENCE_LIMIT = { min: 0, max: 0 }
+  const TEXT_TO_TEXT_CATEGORY_REFERENCES = {
+    text_to_text: {
+      label: '文本生成',
+      limits: {
+        image: ZERO_REFERENCE_LIMIT,
+        video: ZERO_REFERENCE_LIMIT,
+        audio: ZERO_REFERENCE_LIMIT,
+        text: ZERO_REFERENCE_LIMIT,
+      },
+    },
+  }
+
+  const qwenModelCode = process.env.QWEN_MODEL?.trim() || 'qwen3-6b-plus'
+  const qwenAgentModels = [
+    {
+      code: qwenModelCode,
+      name: qwenModelCode,
+      description: '画布文本节点 AI 生成、分镜拆分等文本类任务使用的 Qwen 模型',
+      credit_cost: 1,
+      params_pricing: [{ resolution: 'default', model: qwenModelCode, unit_price: 1 }],
+      category_references: TEXT_TO_TEXT_CATEGORY_REFERENCES,
+      params_schema: {
+        endpoint: 'chat/completions',
+        stream: [true, false],
+        enable_thinking: [false, true],
+        max_tokens: [2000, 4000, 16000],
+        usage: ['canvas_text_gen', 'storyboard_split'],
+      },
+    },
+  ]
+
+  for (const m of qwenAgentModels) {
+    await db
+      .insertInto('provider_models')
+      .values({
+        provider_id: qwenProvider.id,
+        code: m.code,
+        name: m.name,
+        description: m.description,
+        module: 'agent',
+        category_references: JSON.stringify(m.category_references),
+        credit_cost: m.credit_cost,
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: JSON.stringify(m.params_schema),
+        is_active: true,
+      })
+      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+        name: m.name,
+        description: m.description,
+        module: 'agent',
+        category_references: JSON.stringify(m.category_references),
+        credit_cost: m.credit_cost,
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: JSON.stringify(m.params_schema),
+        is_active: true,
+      }))
+      .execute()
+    console.log(`  provider_models seeded (${m.code})`)
+  }
+
+  // 10. Provider: Nano Banana — upsert by code
   const providerResult = await db
     .insertInto('providers')
     .values({
@@ -345,8 +434,6 @@ async function main() {
   const provider = providerResult[0]
   console.log('  providers seeded (comfly)')
 
-  const ZERO_REFERENCE_LIMIT = { min: 0, max: 0 }
-
   const SIX_IMAGE_CATEGORY_REFERENCES = {
     text_to_image: {
       label: '文生图',
@@ -354,6 +441,7 @@ async function main() {
         image: ZERO_REFERENCE_LIMIT,
         video: ZERO_REFERENCE_LIMIT,
         audio: ZERO_REFERENCE_LIMIT,
+        text: ZERO_REFERENCE_LIMIT,
       },
     },
     image_to_image: {
@@ -362,6 +450,7 @@ async function main() {
         image: { min: 0, max: 6 },
         video: ZERO_REFERENCE_LIMIT,
         audio: ZERO_REFERENCE_LIMIT,
+        text: ZERO_REFERENCE_LIMIT,
       },
     },
   }
@@ -374,11 +463,12 @@ async function main() {
         image: { min: 0, max: 14 },
         video: ZERO_REFERENCE_LIMIT,
         audio: ZERO_REFERENCE_LIMIT,
+        text: ZERO_REFERENCE_LIMIT,
       },
     },
   }
 
-  // 10. Provider models: comfly 图片模型 — upsert by code
+  // 11. Provider models: comfly 图片模型 — upsert by code
   const imageModels = [
     // {
     //   code: 'nano-banana-2-2k',
@@ -472,7 +562,7 @@ async function main() {
     console.log(`  provider_models seeded (${m.code})`)
   }
 
-  // 10b. veo3.1 视频模型 — 挂在 nano-banana provider 下
+  // 11b. veo3.1 视频模型 — 挂在 nano-banana provider 下
   const aspectRatioDefaultArr = [{label: '自适应', value : 'adaptive'}, '16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
   const timeDefaultArr = [
     // { label: '自动', value: -1 },
@@ -496,6 +586,7 @@ async function main() {
         image: { min: 1, max: 2 },
         video: { min: 0, max: 0 },
         audio: { min: 0, max: 0 },
+        text: { min: 0, max: 0 },
       },
     },
   }
@@ -507,6 +598,7 @@ async function main() {
         image: { min: 0, max: 9 },
         video: { min: 0, max: 3 },
         audio: { min: 0, max: 3 },
+        text: { min: 0, max: 0 },
       },
     },
     frames: FRAMES_CATEGORY_REFERENCES.frames,
@@ -574,7 +666,7 @@ async function main() {
   //   console.log(`  provider_models seeded (${m.code})`)
   // }
 
-  // 11. Volcengine provider + models
+  // 12. Volcengine provider + models
   const volcResult = await db
     .insertInto('providers')
     .values({

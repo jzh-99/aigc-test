@@ -69,16 +69,18 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     image: currentCategoryReferences.multimodal?.limits.image.max ?? 0,
     video: currentCategoryReferences.multimodal?.limits.video.max ?? 0,
     audio: currentCategoryReferences.multimodal?.limits.audio.max ?? 0,
+    text: 0,
   }), [currentCategoryReferences])
   const getResourceCounts = useCallback((mode: VideoMode): VideoReferenceCounts => {
     if (mode === 'frames') {
-      return { image: [firstFrame, lastFrame].filter(Boolean).length, video: 0, audio: 0 }
+      return { image: [firstFrame, lastFrame].filter(Boolean).length, video: 0, audio: 0, text: 0 }
     }
 
     return {
       image: multimodalImages.length,
       video: multimodalVideos.length,
       audio: multimodalAudios.length,
+      text: 0,
     }
   }, [firstFrame, lastFrame, multimodalAudios.length, multimodalImages.length, multimodalVideos.length])
 

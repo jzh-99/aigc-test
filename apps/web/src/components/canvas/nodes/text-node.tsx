@@ -8,10 +8,10 @@ import { useShallow } from 'zustand/react/shallow'
 import { Type, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
-import type { CanvasNodeData } from '@/lib/canvas/types'
+import type { CanvasNodeData, TextInputConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 
-export const TextNode = memo(function TextNode({ id, data }: { id: string; data: CanvasNodeData<{ text: string }> }) {
+export const TextNode = memo(function TextNode({ id, data }: { id: string; data: CanvasNodeData<TextInputConfig> }) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const { isGenerating } = useNodeExecutionState(id)

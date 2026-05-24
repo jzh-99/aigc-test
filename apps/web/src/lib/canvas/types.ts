@@ -21,6 +21,7 @@ export const DEFAULT_VIDEO_CATEGORY_LIMITS = {
       image: { min: 0, max: 9 },
       video: { min: 0, max: 3 },
       audio: { min: 0, max: 3 },
+      text: { min: 0, max: 0 },
     },
   },
   frames: {
@@ -29,6 +30,7 @@ export const DEFAULT_VIDEO_CATEGORY_LIMITS = {
       image: { min: 1, max: 2 },
       video: { min: 0, max: 0 },
       audio: { min: 0, max: 0 },
+      text: { min: 0, max: 0 },
     },
   },
 } as const satisfies CategoryReferences
@@ -45,6 +47,7 @@ export const DEFAULT_IMAGE_CATEGORY_LIMITS = {
       image: { min: 0, max: 0 },
       video: { min: 0, max: 0 },
       audio: { min: 0, max: 0 },
+      text: { min: 0, max: 0 },
     },
   },
   image_to_image: {
@@ -53,6 +56,19 @@ export const DEFAULT_IMAGE_CATEGORY_LIMITS = {
       image: { min: 0, max: 10 },
       video: { min: 0, max: 0 },
       audio: { min: 0, max: 0 },
+      text: { min: 0, max: 0 },
+    },
+  },
+} as const satisfies CategoryReferences
+
+export const DEFAULT_TEXT_CATEGORY_LIMITS = {
+  text_to_text: {
+    label: '文本生成',
+    limits: {
+      image: { min: 0, max: 0 },
+      video: { min: 0, max: 0 },
+      audio: { min: 0, max: 0 },
+      text: { min: 0, max: 0 },
     },
   },
 } as const satisfies CategoryReferences
@@ -63,6 +79,8 @@ export type ImageResolution = string
 
 export interface TextInputConfig {
   text: string
+  model: string
+  categoryReferences?: CategoryReferences
 }
 
 export interface ImageGenConfig {
