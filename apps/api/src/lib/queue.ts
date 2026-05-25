@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq'
 import type { RedisOptions } from 'ioredis'
+import type { MusicJobData, MusicVoiceCloneJobData } from '@aigc/types'
 
 // 延迟解析 REDIS_URL：模块顶层不能读 process.env，因为 ESM import 在 dotenv config() 之前执行
 function getRedisOptions(): RedisOptions & { maxRetriesPerRequest: null } {
@@ -24,6 +25,8 @@ let _imageQueue: Queue | null = null
 let _transferQueue: Queue | null = null
 let _videoQueue: Queue | null = null
 let _storyboardQueue: Queue | null = null
+let _musicQueue: Queue<MusicJobData> | null = null
+let _musicVoiceCloneQueue: Queue<MusicVoiceCloneJobData> | null = null
 
 export function getImageQueue(): Queue {
   if (!_imageQueue) {
@@ -51,4 +54,18 @@ export function getStoryboardQueue(): Queue {
     _storyboardQueue = new Queue('storyboard-queue', { connection: getRedisOptions() })
   }
   return _storyboardQueue
+}
+
+export function getMusicQueue(): Queue<MusicJobData> {
+  if (!_musicQueue) {
+    _musicQueue = new Queue<MusicJobData>('music-queue', { connection: getRedisOptions() })
+  }
+  return _musicQueue
+}
+
+export function getMusicVoiceCloneQueue(): Queue<MusicVoiceCloneJobData> {
+  if (!_musicVoiceCloneQueue) {
+    _musicVoiceCloneQueue = new Queue<MusicVoiceCloneJobData>('music-voice-clone-queue', { connection: getRedisOptions() })
+  }
+  return _musicVoiceCloneQueue
 }
