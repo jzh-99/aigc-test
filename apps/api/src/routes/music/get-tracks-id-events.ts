@@ -1,21 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { Redis } from 'ioredis'
 import { getDb } from '@aigc/db'
-import { mapMusicTrackResponse, sendMusicRouteError } from './_shared.js'
+import {
+  canReadMusicWorkspace,
+  createMusicSseCleanup,
+  mapMusicTrackResponse,
+  sendMusicRouteError,
+} from './_shared.js'
 
 const ALLOWED_EVENTS = new Set(['status', 'lyrics_delta', 'stream_url', 'completed', 'failed'])
 const TERMINAL_STATUSES = new Set(['completed', 'failed'])
-
-async function canReadWorkspace(db: ReturnType<typeof getDb>, workspaceId: string, userId: string, userRole: 'admin' | 'member') {
-  if (userRole === 'admin') return true
-  const member = await db
-    .selectFrom('workspace_members')
-    .select('id')
-    .where('workspace_id', '=', workspaceId)
-    .where('user_id', '=', userId)
-    .executeTakeFirst()
-  return Boolean(member)
-}
 
 async function getTrackSnapshot(db: ReturnType<typeof getDb>, trackId: string) {
   const row = await db
@@ -46,7 +40,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
 
-      if (!(await canReadWorkspace(db, snapshot.workspace_id, request.user.id, request.user.role))) {
+      if (!(await canReadMusicWorkspace(db, snapshot.workspace_id, request.user.id, request.user.role))) {
         return reply.status(403).send({
           success: false,
           error: { code: 'FORBIDDEN', message: '你无权访问此音乐记录' },
@@ -78,7 +72,20 @@ const route: FastifyPluginAsync = async (app) => {
       const channel = `sse:music_track:${request.params.id}`
       const sub = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379')
       sub.on('error', (error) => app.log.error({ err: error, channel }, 'Music SSE Redis error'))
-      await sub.subscribe(channel)
+      const cleanup = createMusicSseCleanup({
+        requestRaw: request.raw,
+        raw,
+        subscriber: sub,
+        channel,
+        logger: app.log,
+      })
+
+      try {
+        await sub.subscribe(channel)
+      } catch (error) {
+        cleanup({ endRaw: false })
+        throw error
+      }
 
       raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -102,17 +109,8 @@ const route: FastifyPluginAsync = async (app) => {
       })
 
       const heartbeat = setInterval(sendPing, 15_000)
-      let cleaned = false
-      const cleanup = () => {
-        if (cleaned) return
-        cleaned = true
-        clearInterval(heartbeat)
-        sub.unsubscribe(channel).catch((error) => app.log.error({ err: error, channel }, 'Music SSE unsubscribe failed'))
-        sub.quit().catch((error) => app.log.error({ err: error, channel }, 'Music SSE Redis close failed'))
-        setImmediate(() => raw.end())
-      }
+      cleanup.setHeartbeat(heartbeat)
 
-      request.raw.on('close', cleanup)
       return reply.hijack()
     } catch (error) {
       return sendMusicRouteError(reply, error, app.log, 'Music SSE request failed')

@@ -7,9 +7,14 @@ import { __setQueuesForTest, closeQueues } from '../lib/queue.js'
 import {
   assertVoiceCloneReadyForWorkspace,
   assertWorkspaceAccess,
+  createMusicSseCleanup,
+  decodeMusicTrackCursor,
+  encodeMusicTrackCursor,
+  markMusicQueueDeliveryFailed,
   mapMusicVoiceCloneResponse,
   mapMusicTrackResponse,
   MusicRouteError,
+  validateVoiceCloneAudioUpload,
   validateMusicGeneratePayload,
   validateVoiceClonePayload,
 } from '../routes/music/_shared.js'
@@ -20,6 +25,12 @@ interface FakeQueryCall {
   table: string
   joins: string[]
   selects: unknown[]
+  wheres: unknown[][]
+}
+
+interface FakeUpdateCall {
+  table: string
+  setValue: unknown
   wheres: unknown[][]
 }
 
@@ -64,6 +75,47 @@ function createFakeDb(resultsByTable: Record<string, unknown[]>) {
   }
 }
 
+function createFakeTransactionalDb() {
+  const updates: FakeUpdateCall[] = []
+
+  const makeUpdateBuilder = (table: string) => {
+    const call: FakeUpdateCall = { table, setValue: null, wheres: [] }
+    updates.push(call)
+
+    const builder = {
+      set(value: unknown) {
+        call.setValue = value
+        return builder
+      },
+      where(...args: unknown[]) {
+        call.wheres.push(args)
+        return builder
+      },
+      async execute() {
+        return []
+      },
+    }
+    return builder
+  }
+
+  const trx = {
+    updateTable: makeUpdateBuilder,
+  }
+
+  return {
+    updates,
+    db: {
+      transaction() {
+        return {
+          async execute(callback: (trxArg: unknown) => Promise<unknown>) {
+            return callback(trx)
+          },
+        }
+      },
+    },
+  }
+}
+
 async function assertRejectsMusicRouteError(
   promise: Promise<unknown>,
   statusCode: number,
@@ -98,6 +150,142 @@ function makeVoiceCloneRow(overrides: Record<string, unknown> = {}) {
 }
 
 describe('music validation helpers', () => {
+  test('validateVoiceCloneAudioUpload 拒绝空音频文件', () => {
+    assert.throws(
+      () => validateVoiceCloneAudioUpload('empty.mp3', Buffer.alloc(0), 'audio/mpeg'),
+      (error) => {
+        assert.ok(error instanceof MusicRouteError)
+        assert.equal(error.statusCode, 400)
+        assert.equal(error.code, 'BAD_REQUEST')
+        assert.match(error.message, /不能为空/)
+        return true
+      },
+    )
+  })
+
+  test('validateVoiceCloneAudioUpload 拒绝 MIME 与文件头明显不匹配的音频', () => {
+    const wavHeader = Buffer.from('524946460000000057415645', 'hex')
+
+    assert.throws(
+      () => validateVoiceCloneAudioUpload('voice.mp3', wavHeader, 'audio/mpeg'),
+      (error) => {
+        assert.ok(error instanceof MusicRouteError)
+        assert.equal(error.statusCode, 400)
+        assert.equal(error.code, 'BAD_REQUEST')
+        assert.match(error.message, /音频格式/)
+        return true
+      },
+    )
+  })
+
+  test('validateVoiceCloneAudioUpload 接受常见 wav 文件头和 MIME', () => {
+    const wavHeader = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVEfmt ')])
+
+    const result = validateVoiceCloneAudioUpload('voice.wav', wavHeader, 'audio/wav')
+
+    assert.deepEqual(result, { ext: 'wav', contentType: 'audio/wav' })
+  })
+
+  test('music track cursor 使用 created_at + id 稳定编解码并兼容旧时间字符串', () => {
+    const cursor = encodeMusicTrackCursor({
+      id: 'track-1',
+      created_at: new Date('2026-01-01T00:00:00.000Z'),
+    })
+
+    assert.deepEqual(decodeMusicTrackCursor(cursor), {
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      id: 'track-1',
+    })
+
+    assert.deepEqual(decodeMusicTrackCursor('2026-01-02T00:00:00.000Z'), {
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+      id: null,
+    })
+  })
+
+  test('createMusicSseCleanup 取消订阅、关闭 Redis、移除 close listener 时保持幂等', async () => {
+    const events: string[] = []
+    const requestRaw = {
+      on(event: string, listener: () => void) {
+        events.push(`on:${event}`)
+        assert.equal(typeof listener, 'function')
+        return requestRaw
+      },
+      off(event: string) {
+        events.push(`off:${event}`)
+        return requestRaw
+      },
+    }
+    const raw = {
+      end() {
+        events.push('end')
+      },
+    }
+    const subscriber = {
+      async unsubscribe(channel: string) {
+        events.push(`unsubscribe:${channel}`)
+      },
+      async quit() {
+        events.push('quit')
+      },
+    }
+
+    const cleanup = createMusicSseCleanup({
+      requestRaw,
+      raw,
+      subscriber,
+      channel: 'sse:music_track:track-1',
+      logger: { error() {} },
+    })
+
+    cleanup()
+    cleanup()
+    await new Promise((resolve) => setImmediate(resolve))
+
+    assert.deepEqual(events, [
+      'on:close',
+      'off:close',
+      'unsubscribe:sse:music_track:track-1',
+      'quit',
+      'end',
+    ])
+  })
+
+  test('markMusicQueueDeliveryFailed 会把 batch、task、track 标记为 failed', async () => {
+    const { db, updates } = createFakeTransactionalDb()
+
+    await markMusicQueueDeliveryFailed(db as never, {
+      batchId: 'batch-1',
+      taskId: 'task-1',
+      trackId: 'track-1',
+      errorMessage: '任务投递失败，请稍后重试',
+    })
+
+    assert.deepEqual(updates.map((call) => call.table), ['task_batches', 'tasks', 'music_tracks'])
+    assert.deepEqual(updates.map((call) => call.wheres[0]), [
+      ['id', '=', 'batch-1'],
+      ['id', '=', 'task-1'],
+      ['id', '=', 'track-1'],
+    ])
+    assert.match(JSON.stringify(updates.map((call) => call.setValue)), /任务投递失败/)
+  })
+
+  test('markMusicQueueDeliveryFailed 支持把 voice clone 标记为 failed', async () => {
+    const { db, updates } = createFakeTransactionalDb()
+
+    await markMusicQueueDeliveryFailed(db as never, {
+      batchId: 'batch-1',
+      taskId: 'task-1',
+      voiceCloneId: 'voice-clone-1',
+      errorMessage: '任务投递失败，请稍后重试',
+    })
+
+    assert.deepEqual(updates.map((call) => call.table), ['task_batches', 'tasks', 'music_voice_clones'])
+    assert.deepEqual(updates[2]?.wheres[0], ['id', '=', 'voice-clone-1'])
+    assert.match(JSON.stringify(updates[2]?.setValue), /任务投递失败/)
+  })
+
+
   test('voice_id 入参会被拒绝，避免和内部 voice_clone_id 混用', () => {
     assert.throws(
       () => validateMusicGeneratePayload({

@@ -1,28 +1,39 @@
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyBaseLogger, FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import type { MusicVoiceCloneJobData } from '@aigc/types'
-import { uploadToTos } from '../../lib/storage.js'
+import { deleteTosObject, extractStorageKey, uploadToTos } from '../../lib/storage.js'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getMusicVoiceCloneQueue } from '../../lib/queue.js'
 import {
   assertWorkspaceAccess,
   getExpectedCreditErrorMessage,
+  markMusicQueueDeliveryFailed,
   mapMusicVoiceCloneResponse,
+  MAX_VOICE_CLONE_AUDIO_SIZE,
+  MUSIC_QUEUE_DELIVERY_ERROR_MESSAGE,
   resolveVoiceCloneCredits,
   sendMusicRouteError,
+  validateVoiceCloneAudioUpload,
   validateVoiceClonePayload,
 } from './_shared.js'
 
-const MAX_AUDIO_SIZE = 50 * 1024 * 1024
-const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg']
-const AUDIO_MIME: Record<string, string> = {
-  mp3: 'audio/mpeg',
-  wav: 'audio/wav',
-  m4a: 'audio/mp4',
-  aac: 'audio/aac',
-  flac: 'audio/flac',
-  ogg: 'audio/ogg',
+function isPayloadTooLargeError(error: unknown): boolean {
+  return error instanceof Error && (
+    (error as Error & { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE'
+    || /file.*too large|request file too large/i.test(error.message)
+  )
+}
+
+async function cleanupUploadedAudio(sourceAudioUrl: string | null, logger: Pick<FastifyBaseLogger, 'error'>): Promise<void> {
+  if (!sourceAudioUrl) return
+  const key = extractStorageKey(sourceAudioUrl)
+  if (!key) return
+  try {
+    await deleteTosObject(key)
+  } catch (error) {
+    logger.error({ err: error, sourceAudioUrl }, 'Failed to cleanup uploaded music voice clone source audio')
+  }
 }
 
 const route: FastifyPluginAsync = async (app) => {
@@ -31,7 +42,7 @@ const route: FastifyPluginAsync = async (app) => {
     let file: { filename: string; buffer: Buffer; contentType: string } | null = null
 
     try {
-      const parts = (request as any).parts({ limits: { fileSize: MAX_AUDIO_SIZE, files: 1 } })
+      const parts = (request as any).parts({ limits: { fileSize: MAX_VOICE_CLONE_AUDIO_SIZE, files: 1 } })
       for await (const part of parts) {
         if (part.type === 'file') {
           if (file) {
@@ -42,30 +53,16 @@ const route: FastifyPluginAsync = async (app) => {
             })
           }
 
-          const ext = String(part.filename ?? '').split('.').pop()?.toLowerCase() ?? ''
-          if (!AUDIO_EXTS.includes(ext)) {
-            part.file.resume()
-            return reply.status(400).send({
-              success: false,
-              error: { code: 'BAD_REQUEST', message: `不支持的音频格式，请上传 ${AUDIO_EXTS.join('/')} 文件` },
-            })
-          }
-
           const chunks: Buffer[] = []
           for await (const chunk of part.file) {
             chunks.push(chunk as Buffer)
           }
           const buffer = Buffer.concat(chunks)
-          if (buffer.length > MAX_AUDIO_SIZE) {
-            return reply.status(413).send({
-              success: false,
-              error: { code: 'PAYLOAD_TOO_LARGE', message: '音频文件过大，最大支持 50 MB' },
-            })
-          }
+          const validatedAudio = validateVoiceCloneAudioUpload(part.filename, buffer, part.mimetype)
           file = {
-            filename: `${randomUUID()}.${ext}`,
+            filename: `${randomUUID()}.${validatedAudio.ext}`,
             buffer,
-            contentType: AUDIO_MIME[ext] ?? part.mimetype ?? 'application/octet-stream',
+            contentType: validatedAudio.contentType,
           }
         } else if (part.fieldname) {
           fields[part.fieldname] = part.value
@@ -73,6 +70,15 @@ const route: FastifyPluginAsync = async (app) => {
       }
     } catch (error) {
       app.log.warn({ err: error }, 'Failed to parse music voice clone multipart payload')
+      if (isPayloadTooLargeError(error)) {
+        return reply.status(413).send({
+          success: false,
+          error: { code: 'PAYLOAD_TOO_LARGE', message: '音频文件过大，最大支持 50 MB' },
+        })
+      }
+      if (error instanceof Error && error.name === 'MusicRouteError') {
+        return sendMusicRouteError(reply, error, app.log, 'Music voice clone audio validation failed')
+      }
       return reply.status(400).send({
         success: false,
         error: { code: 'BAD_REQUEST', message: '上传表单解析失败' },
@@ -107,8 +113,8 @@ const route: FastifyPluginAsync = async (app) => {
     try {
       const access = await assertWorkspaceAccess(db, workspaceId, userId, request.user.role)
       const credits = await resolveVoiceCloneCredits(db, access.teamId, payload.model)
+      let sourceAudioUrl: string | null = null
 
-      let sourceAudioUrl: string
       try {
         sourceAudioUrl = await uploadToTos(`uploads/music/voice-clones/${file.filename}`, file.buffer, file.contentType)
       } catch (error) {
@@ -118,6 +124,7 @@ const route: FastifyPluginAsync = async (app) => {
           error: { code: 'INTERNAL_ERROR', message: '音频上传失败，请稍后重试' },
         })
       }
+      const uploadedAudioUrl = sourceAudioUrl
 
       let creditAccountId: string
       try {
@@ -125,6 +132,7 @@ const route: FastifyPluginAsync = async (app) => {
         creditAccountId = frozen.creditAccountId
       } catch (error) {
         const message = getExpectedCreditErrorMessage(error)
+        await cleanupUploadedAudio(sourceAudioUrl, app.log)
         if (!message) {
           app.log.error({ err: error }, 'Failed to freeze credits for music voice clone')
           return reply.status(500).send({
@@ -138,7 +146,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
 
-      let created: { batch: any; task: any; voiceClone: any }
+      let created: { batch: any; task: any; voiceClone: any } | null = null
       try {
         created = await db.transaction().execute(async (trx: any) => {
           const batch = await trx
@@ -157,7 +165,7 @@ const route: FastifyPluginAsync = async (app) => {
                 name: payload.name,
                 description: payload.description,
                 gender: payload.gender,
-                source_audio_url: sourceAudioUrl,
+                source_audio_url: uploadedAudioUrl,
                 unit_prices: credits.unitPrices,
               }),
               quantity: 1,
@@ -190,8 +198,8 @@ const route: FastifyPluginAsync = async (app) => {
               name: payload.name,
               gender: payload.gender,
               description: payload.description,
-              source_audio_url: sourceAudioUrl,
-              source_audio_storage_url: sourceAudioUrl,
+              source_audio_url: uploadedAudioUrl,
+              source_audio_storage_url: uploadedAudioUrl,
               voice_id: null,
               external_voice_id: null,
               external_task_id: null,
@@ -216,14 +224,27 @@ const route: FastifyPluginAsync = async (app) => {
         await getMusicVoiceCloneQueue().add('music-voice-clone', jobData)
       } catch (error) {
         app.log.error({ err: error }, 'Failed to create music voice clone task')
+        if (created) {
+          try {
+            await markMusicQueueDeliveryFailed(db, {
+              batchId: created.batch.id,
+              taskId: created.task.id,
+              voiceCloneId: created.voiceClone.id,
+              errorMessage: MUSIC_QUEUE_DELIVERY_ERROR_MESSAGE,
+            })
+          } catch (markError) {
+            app.log.error({ err: markError }, 'Failed to mark music voice clone task as failed after queue delivery failure')
+          }
+        }
+        await cleanupUploadedAudio(sourceAudioUrl, app.log)
         try {
-          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits)
+          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits, created?.task.id, created?.batch.id)
         } catch (refundError) {
           app.log.error({ err: refundError }, 'Failed to refund music voice clone credits')
         }
         return reply.status(500).send({
           success: false,
-          error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回，请重试' },
+          error: { code: 'INTERNAL_ERROR', message: '任务创建失败，请稍后重试' },
         })
       }
 

@@ -1,17 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { mapMusicTrackResponse, sendMusicRouteError } from './_shared.js'
-
-async function canReadWorkspace(db: ReturnType<typeof getDb>, workspaceId: string, userId: string, userRole: 'admin' | 'member') {
-  if (userRole === 'admin') return true
-  const member = await db
-    .selectFrom('workspace_members')
-    .select('id')
-    .where('workspace_id', '=', workspaceId)
-    .where('user_id', '=', userId)
-    .executeTakeFirst()
-  return Boolean(member)
-}
+import { canReadMusicWorkspace, mapMusicTrackResponse, sendMusicRouteError } from './_shared.js'
 
 async function fetchTrackForResponse(db: ReturnType<typeof getDb>, id: string) {
   return db
@@ -46,7 +35,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
 
-      if (!(await canReadWorkspace(db, current.workspace_id, request.user.id, request.user.role))) {
+      if (!(await canReadMusicWorkspace(db, current.workspace_id, request.user.id, request.user.role))) {
         return reply.status(403).send({
           success: false,
           error: { code: 'FORBIDDEN', message: '你无权访问此音乐记录' },
@@ -57,8 +46,17 @@ const route: FastifyPluginAsync = async (app) => {
         .selectFrom('music_tracks')
         .select('id')
         .where('workspace_id', '=', current.workspace_id)
-        .where('created_at', '>', current.created_at)
+        .where((eb: any) =>
+          eb.or([
+            eb('created_at', '>', current.created_at),
+            eb.and([
+              eb('created_at', '=', current.created_at),
+              eb('id', '>', current.id),
+            ]),
+          ]),
+        )
         .orderBy('created_at', 'asc')
+        .orderBy('id', 'asc')
         .limit(1)
         .executeTakeFirst()
 
@@ -66,8 +64,17 @@ const route: FastifyPluginAsync = async (app) => {
         .selectFrom('music_tracks')
         .select('id')
         .where('workspace_id', '=', current.workspace_id)
-        .where('created_at', '<', current.created_at)
+        .where((eb: any) =>
+          eb.or([
+            eb('created_at', '<', current.created_at),
+            eb.and([
+              eb('created_at', '=', current.created_at),
+              eb('id', '<', current.id),
+            ]),
+          ]),
+        )
         .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
         .limit(1)
         .executeTakeFirst()
 

@@ -1,6 +1,12 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { getDb } from '@aigc/db'
-import { mapMusicTrackResponse, sendMusicRouteError } from './_shared.js'
+import {
+  canReadMusicWorkspace,
+  decodeMusicTrackCursor,
+  encodeMusicTrackCursor,
+  mapMusicTrackResponse,
+  sendMusicRouteError,
+} from './_shared.js'
 
 interface TracksQuery {
   workspace_id?: string
@@ -16,28 +22,6 @@ function badRequest(reply: FastifyReply, message: string) {
   })
 }
 
-async function canReadWorkspace(db: ReturnType<typeof getDb>, workspaceId: string, userId: string, userRole: 'admin' | 'member') {
-  const member = await db
-    .selectFrom('workspace_members')
-    .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
-    .select('workspace_members.role')
-    .where('workspace_members.workspace_id', '=', workspaceId)
-    .where('workspace_members.user_id', '=', userId)
-    .where('workspaces.is_deleted', '=', false)
-    .executeTakeFirst()
-
-  if (member) return true
-  if (userRole !== 'admin') return false
-
-  const workspace = await db
-    .selectFrom('workspaces')
-    .select('id')
-    .where('id', '=', workspaceId)
-    .where('is_deleted', '=', false)
-    .executeTakeFirst()
-  return Boolean(workspace)
-}
-
 const route: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: TracksQuery }>('/music/tracks', async (request, reply) => {
     try {
@@ -48,7 +32,7 @@ const route: FastifyPluginAsync = async (app) => {
       const limit = Math.min(50, Math.max(1, Number(request.query.limit ?? 20) || 20))
       const db = getDb()
 
-      if (!(await canReadWorkspace(db, workspaceId, request.user.id, request.user.role))) {
+      if (!(await canReadMusicWorkspace(db, workspaceId, request.user.id, request.user.role))) {
         return reply.status(403).send({
           success: false,
           error: { code: 'FORBIDDEN', message: '你无权访问此工作区' },
@@ -69,15 +53,30 @@ const route: FastifyPluginAsync = async (app) => {
         .where('mt.workspace_id', '=', workspaceId)
 
       if (request.query.cursor) {
-        const cursorDate = new Date(request.query.cursor)
-        if (Number.isNaN(cursorDate.getTime())) return badRequest(reply, 'cursor 不是有效时间')
-        query = query.where('mt.created_at', '<', cursorDate)
+        let cursor: ReturnType<typeof decodeMusicTrackCursor>
+        try {
+          cursor = decodeMusicTrackCursor(request.query.cursor)
+        } catch {
+          return badRequest(reply, 'cursor 不是有效时间')
+        }
+        query = cursor.id
+          ? query.where((eb: any) =>
+            eb.or([
+              eb('mt.created_at', '<', cursor.createdAt),
+              eb.and([
+                eb('mt.created_at', '=', cursor.createdAt),
+                eb('mt.id', '<', cursor.id),
+              ]),
+            ]),
+          )
+          : query.where('mt.created_at', '<', cursor.createdAt)
       } else {
         query = query.offset((page - 1) * limit)
       }
 
       const rows = await query
         .orderBy('mt.created_at', 'desc')
+        .orderBy('mt.id', 'desc')
         .limit(limit + 1)
         .execute()
 
@@ -90,7 +89,7 @@ const route: FastifyPluginAsync = async (app) => {
         page,
         page_size: limit,
         has_more: rows.length > limit,
-        next_cursor: rows.length > limit && last ? last.created_at.toISOString?.() ?? String(last.created_at) : null,
+        next_cursor: rows.length > limit && last ? encodeMusicTrackCursor(last) : null,
       })
     } catch (error) {
       return sendMusicRouteError(reply, error, app.log, 'Music track list request failed')

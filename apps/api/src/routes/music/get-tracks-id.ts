@@ -1,17 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { mapMusicTrackResponse, sendMusicRouteError } from './_shared.js'
-
-async function canReadWorkspace(db: ReturnType<typeof getDb>, workspaceId: string, userId: string, userRole: 'admin' | 'member') {
-  if (userRole === 'admin') return true
-  const member = await db
-    .selectFrom('workspace_members')
-    .select('id')
-    .where('workspace_id', '=', workspaceId)
-    .where('user_id', '=', userId)
-    .executeTakeFirst()
-  return Boolean(member)
-}
+import { canReadMusicWorkspace, mapMusicTrackResponse, sendMusicRouteError } from './_shared.js'
 
 const route: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>('/music/tracks/:id', async (request, reply) => {
@@ -38,7 +27,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
 
-      if (!(await canReadWorkspace(db, row.workspace_id, request.user.id, request.user.role))) {
+      if (!(await canReadMusicWorkspace(db, row.workspace_id, request.user.id, request.user.role))) {
         return reply.status(403).send({
           success: false,
           error: { code: 'FORBIDDEN', message: '你无权访问此音乐记录' },

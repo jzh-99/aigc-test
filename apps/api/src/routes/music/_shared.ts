@@ -2,7 +2,7 @@
 
 import type { FastifyBaseLogger, FastifyReply } from 'fastify'
 import { getDb } from '@aigc/db'
-import type { Selectable } from 'kysely'
+import { sql, type Selectable } from 'kysely'
 import type { Database } from '@aigc/db'
 import type {
   MusicMode,
@@ -37,6 +37,20 @@ type MusicVoiceCloneRow = Selectable<Database['music_voice_clones']> & {
   completed_at?: Date | string | null
 }
 type UrlSigner = (url: string | null | undefined) => Promise<string | null>
+type LoggerLike = Pick<FastifyBaseLogger, 'error'>
+
+export const MAX_VOICE_CLONE_AUDIO_SIZE = 50 * 1024 * 1024
+export const MUSIC_QUEUE_DELIVERY_ERROR_MESSAGE = '任务投递失败，请稍后重试'
+
+const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] as const
+const AUDIO_MIME_BY_EXT: Record<(typeof AUDIO_EXTS)[number], string[]> = {
+  mp3: ['audio/mpeg', 'audio/mp3', 'audio/x-mpeg'],
+  wav: ['audio/wav', 'audio/x-wav', 'audio/wave'],
+  m4a: ['audio/mp4', 'audio/x-m4a'],
+  aac: ['audio/aac', 'audio/aacp', 'audio/x-aac'],
+  flac: ['audio/flac', 'audio/x-flac'],
+  ogg: ['audio/ogg', 'application/ogg'],
+}
 
 export class MusicRouteError extends Error {
   constructor(
@@ -93,6 +107,42 @@ export interface ResolvedMusicCredits {
   unitPrices: Record<string, number>
 }
 
+export interface ValidatedVoiceCloneAudioUpload {
+  ext: (typeof AUDIO_EXTS)[number]
+  contentType: string
+}
+
+export interface MusicTrackCursor {
+  createdAt: Date
+  id: string | null
+}
+
+export interface MusicQueueDeliveryFailureTarget {
+  batchId: string
+  taskId: string
+  trackId?: string
+  voiceCloneId?: string
+  errorMessage?: string
+}
+
+export interface MusicSseCleanupOptions {
+  requestRaw: {
+    on: (event: string, listener: () => void) => unknown
+    off?: (event: string, listener: () => void) => unknown
+    removeListener?: (event: string, listener: () => void) => unknown
+  }
+  raw: {
+    end: () => unknown
+  }
+  subscriber: {
+    unsubscribe: (channel: string) => Promise<unknown>
+    quit: () => Promise<unknown>
+  }
+  channel: string
+  logger: LoggerLike
+  heartbeat?: NodeJS.Timeout | null
+}
+
 const CREDIT_REJECTION_MESSAGES = new Set([
   '未找到A豆账户',
   'A豆余额不足',
@@ -109,6 +159,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function validationError(message: string): never {
   throw new MusicValidationError(message)
+}
+
+function routeError(statusCode: number, code: string, message: string): never {
+  throw new MusicRouteError(statusCode, code, message)
 }
 
 function normalizeRequiredString(value: unknown, message: string): string {
@@ -130,6 +184,171 @@ function normalizeOptionalId(value: unknown): string | null {
   if (typeof value !== 'string') validationError('voice_clone_id 必须是字符串')
   const normalized = value.trim()
   return normalized || null
+}
+
+function normalizeMime(value: string | undefined): string {
+  return String(value ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
+}
+
+function hasPrefix(buffer: Buffer, prefix: number[]): boolean {
+  if (buffer.length < prefix.length) return false
+  return prefix.every((byte, index) => buffer[index] === byte)
+}
+
+function detectAudioMagic(buffer: Buffer): (typeof AUDIO_EXTS)[number] | null {
+  if (buffer.length < 4) return null
+  if (hasPrefix(buffer, [0x49, 0x44, 0x33])) return 'mp3'
+  if (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) return 'mp3'
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WAVE') {
+    return 'wav'
+  }
+  if (buffer.subarray(0, 4).toString('ascii') === 'fLaC') return 'flac'
+  if (buffer.subarray(0, 4).toString('ascii') === 'OggS') return 'ogg'
+  if (buffer[0] === 0xff && (buffer[1] & 0xf6) === 0xf0) return 'aac'
+  if (buffer.length >= 12 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brandText = buffer.subarray(8, Math.min(buffer.length, 32)).toString('ascii')
+    if (/(M4A|M4B|mp4|isom|iso2)/.test(brandText)) return 'm4a'
+  }
+  return null
+}
+
+export function validateVoiceCloneAudioUpload(
+  filename: string | undefined,
+  buffer: Buffer,
+  mimetype: string | undefined,
+): ValidatedVoiceCloneAudioUpload {
+  const ext = String(filename ?? '').split('.').pop()?.toLowerCase() as (typeof AUDIO_EXTS)[number] | undefined
+  if (!ext || !AUDIO_EXTS.includes(ext)) {
+    routeError(400, 'BAD_REQUEST', `不支持的音频格式，请上传 ${AUDIO_EXTS.join('/')} 文件`)
+  }
+  if (buffer.length === 0) routeError(400, 'BAD_REQUEST', '音频文件不能为空')
+  if (buffer.length > MAX_VOICE_CLONE_AUDIO_SIZE) {
+    routeError(413, 'PAYLOAD_TOO_LARGE', '音频文件过大，最大支持 50 MB')
+  }
+
+  const contentType = normalizeMime(mimetype)
+  if (!AUDIO_MIME_BY_EXT[ext].includes(contentType)) {
+    routeError(400, 'BAD_REQUEST', '音频 MIME 类型与文件扩展名不匹配')
+  }
+
+  const detected = detectAudioMagic(buffer)
+  if (!detected || detected !== ext) {
+    routeError(400, 'BAD_REQUEST', '音频格式与文件内容不匹配')
+  }
+
+  return { ext, contentType }
+}
+
+function normalizeCursorDate(value: unknown): Date | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+  if (typeof value !== 'string') return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+export function encodeMusicTrackCursor(row: { id: string; created_at: Date | string }): string {
+  const createdAt = normalizeCursorDate(row.created_at)
+  if (!createdAt) validationError('cursor 不是有效时间')
+  return Buffer.from(JSON.stringify({ created_at: createdAt.toISOString(), id: row.id })).toString('base64url')
+}
+
+export function decodeMusicTrackCursor(cursor: string): MusicTrackCursor {
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf-8')) as {
+      created_at?: unknown
+      createdAt?: unknown
+      id?: unknown
+    }
+    const createdAt = normalizeCursorDate(decoded.created_at ?? decoded.createdAt)
+    if (createdAt && typeof decoded.id === 'string' && decoded.id.trim()) {
+      return { createdAt, id: decoded.id }
+    }
+  } catch {
+    // 兼容旧版直接传 ISO 时间字符串的 cursor。
+  }
+
+  const legacyDate = normalizeCursorDate(cursor)
+  if (!legacyDate) validationError('cursor 不是有效时间')
+  return { createdAt: legacyDate, id: null }
+}
+
+export function createMusicSseCleanup(options: MusicSseCleanupOptions) {
+  let cleaned = false
+  let heartbeat = options.heartbeat ?? null
+  const onClose = () => cleanup()
+
+  const cleanup = (cleanupOptions: { endRaw?: boolean } = {}) => {
+    if (cleaned) return
+    cleaned = true
+    if (heartbeat) clearInterval(heartbeat)
+    options.requestRaw.off?.('close', onClose)
+      ?? options.requestRaw.removeListener?.('close', onClose)
+    options.subscriber
+      .unsubscribe(options.channel)
+      .catch((error) => options.logger.error({ err: error, channel: options.channel }, 'Music SSE unsubscribe failed'))
+    options.subscriber
+      .quit()
+      .catch((error) => options.logger.error({ err: error, channel: options.channel }, 'Music SSE Redis close failed'))
+    if (cleanupOptions.endRaw !== false) setImmediate(() => options.raw.end())
+  }
+
+  cleanup.setHeartbeat = (nextHeartbeat: NodeJS.Timeout) => {
+    heartbeat = nextHeartbeat
+  }
+  options.requestRaw.on('close', onClose)
+  return cleanup
+}
+
+export async function markMusicQueueDeliveryFailed(
+  db: Db,
+  target: MusicQueueDeliveryFailureTarget,
+): Promise<void> {
+  const errorMessage = target.errorMessage ?? MUSIC_QUEUE_DELIVERY_ERROR_MESSAGE
+  await db.transaction().execute(async (trx: any) => {
+    await trx
+      .updateTable('task_batches')
+      .set({
+        status: 'failed',
+        failed_count: 1,
+        updated_at: sql`now()`,
+      })
+      .where('id', '=', target.batchId)
+      .execute()
+
+    await trx
+      .updateTable('tasks')
+      .set({
+        status: 'failed',
+        error_message: errorMessage,
+        completed_at: sql`now()`,
+      })
+      .where('id', '=', target.taskId)
+      .execute()
+
+    if (target.trackId) {
+      await trx
+        .updateTable('music_tracks')
+        .set({
+          status: 'failed',
+          error_message: errorMessage,
+          updated_at: sql`now()`,
+        })
+        .where('id', '=', target.trackId)
+        .execute()
+    }
+
+    if (target.voiceCloneId) {
+      await trx
+        .updateTable('music_voice_clones')
+        .set({
+          status: 'failed',
+          error_message: errorMessage,
+          updated_at: sql`now()`,
+        })
+        .where('id', '=', target.voiceCloneId)
+        .execute()
+    }
+  })
 }
 
 function normalizeLimitedText(
@@ -442,6 +661,33 @@ export async function assertWorkspaceAccess(
 
   if (!teamId) throw new MusicRouteError(404, 'NOT_FOUND', '工作区未找到')
   return { teamId, role: wsMember?.role ?? null }
+}
+
+export async function canReadMusicWorkspace(
+  db: Db,
+  workspaceId: string,
+  userId: string,
+  userRole: 'admin' | 'member' = 'member',
+): Promise<boolean> {
+  if (userRole === 'admin') {
+    const workspace = await db
+      .selectFrom('workspaces')
+      .select('id')
+      .where('id', '=', workspaceId)
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+    return Boolean(workspace)
+  }
+
+  const member = await db
+    .selectFrom('workspace_members')
+    .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
+    .select('workspace_members.id')
+    .where('workspace_members.workspace_id', '=', workspaceId)
+    .where('workspace_members.user_id', '=', userId)
+    .where('workspaces.is_deleted', '=', false)
+    .executeTakeFirst()
+  return Boolean(member)
 }
 
 export async function assertVoiceCloneReadyForWorkspace(

@@ -139,7 +139,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await db.schema
     .createIndex('idx_music_tracks_workspace_created')
     .on('music_tracks')
-    .columns(['workspace_id', 'created_at'])
+    .columns(['workspace_id', 'created_at', 'id'])
     .execute()
 
   await db.schema

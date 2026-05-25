@@ -8,7 +8,9 @@ import {
   assertVoiceCloneReadyForWorkspace,
   assertWorkspaceAccess,
   getExpectedCreditErrorMessage,
+  markMusicQueueDeliveryFailed,
   mapMusicTrackResponse,
+  MUSIC_QUEUE_DELIVERY_ERROR_MESSAGE,
   resolveMusicCredits,
   sendMusicRouteError,
   validateMusicGeneratePayload,
@@ -119,7 +121,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
 
-      let created: { batch: any; task: any; track: any }
+      let created: { batch: any; task: any; track: any } | null = null
       try {
         created = await db.transaction().execute(async (trx: any) => {
           const params = {
@@ -205,14 +207,26 @@ const route: FastifyPluginAsync = async (app) => {
         await getMusicQueue().add('music-generate', jobData)
       } catch (error) {
         app.log.error({ err: error }, 'Failed to create music task')
+        if (created) {
+          try {
+            await markMusicQueueDeliveryFailed(db, {
+              batchId: created.batch.id,
+              taskId: created.task.id,
+              trackId: created.track.id,
+              errorMessage: MUSIC_QUEUE_DELIVERY_ERROR_MESSAGE,
+            })
+          } catch (markError) {
+            app.log.error({ err: markError }, 'Failed to mark music task as failed after queue delivery failure')
+          }
+        }
         try {
-          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits)
+          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits, created?.task.id, created?.batch.id)
         } catch (refundError) {
           app.log.error({ err: refundError }, 'Failed to refund music credits after task creation failure')
         }
         return reply.status(500).send({
           success: false,
-          error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回，请重试' },
+          error: { code: 'INTERNAL_ERROR', message: '任务创建失败，请稍后重试' },
         })
       }
 

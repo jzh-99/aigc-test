@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { mapMusicVoiceCloneResponse, sendMusicRouteError } from './_shared.js'
+import { canReadMusicWorkspace, mapMusicVoiceCloneResponse, sendMusicRouteError } from './_shared.js'
 
 interface VoiceClonesQuery {
   workspace_id?: string
@@ -15,28 +15,6 @@ function badRequest(reply: FastifyReply, message: string) {
   })
 }
 
-async function canReadWorkspace(db: ReturnType<typeof getDb>, workspaceId: string, userId: string, userRole: 'admin' | 'member') {
-  const member = await db
-    .selectFrom('workspace_members')
-    .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
-    .select('workspace_members.role')
-    .where('workspace_members.workspace_id', '=', workspaceId)
-    .where('workspace_members.user_id', '=', userId)
-    .where('workspaces.is_deleted', '=', false)
-    .executeTakeFirst()
-
-  if (member) return true
-  if (userRole !== 'admin') return false
-
-  const workspace = await db
-    .selectFrom('workspaces')
-    .select('id')
-    .where('id', '=', workspaceId)
-    .where('is_deleted', '=', false)
-    .executeTakeFirst()
-  return Boolean(workspace)
-}
-
 const route: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: VoiceClonesQuery }>('/music/voice-clones', async (request, reply) => {
     try {
@@ -46,7 +24,7 @@ const route: FastifyPluginAsync = async (app) => {
       const limit = Math.min(100, Math.max(1, Number(request.query.limit ?? 50) || 50))
       const db = getDb()
 
-      if (!(await canReadWorkspace(db, workspaceId, request.user.id, request.user.role))) {
+      if (!(await canReadMusicWorkspace(db, workspaceId, request.user.id, request.user.role))) {
         return reply.status(403).send({
           success: false,
           error: { code: 'FORBIDDEN', message: '你无权访问此工作区' },
