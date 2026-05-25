@@ -33,7 +33,6 @@ type MusicTrackRow = Selectable<Database['music_tracks']> & {
 }
 type MusicVoiceCloneRow = Selectable<Database['music_voice_clones']> & {
   gender?: MusicVoiceGender | null
-  demo_audio_url?: string | null
   completed_at?: Date | string | null
 }
 type UrlSigner = (url: string | null | undefined) => Promise<string | null>
@@ -155,20 +154,25 @@ function normalizeVoiceGender(value: unknown): MusicVoiceGender {
 }
 
 function normalizeStyles(value: unknown): string[] {
+  if (value == null) return []
   const rawItems = Array.isArray(value)
     ? value
     : typeof value === 'string'
       ? value.split(/[,，、\n]/)
-      : []
+      : null
+
+  if (!rawItems) throw new Error('styles 必须是字符串或字符串数组')
 
   const seen = new Set<string>()
   const styles: string[] = []
   for (const item of rawItems) {
-    if (typeof item !== 'string') continue
+    if (typeof item !== 'string') throw new Error('styles 只允许字符串')
     const style = item.trim()
     if (!style || seen.has(style)) continue
+    if (countTextLength(style) > 24) throw new Error('styles 单项不能超过 24 字')
     seen.add(style)
     styles.push(style)
+    if (styles.length > 12) throw new Error('styles 最多 12 项')
   }
   return styles
 }
@@ -188,19 +192,22 @@ async function resolvePlaybackUrl(
   storageUrl: string | null | undefined,
   signer: UrlSigner,
 ): Promise<string | null> {
-  return publicUrl ?? signUrlOrNull(storageUrl, signer)
+  return (await signUrlOrNull(storageUrl, signer)) ?? publicUrl ?? null
 }
 
 export function validateMusicGeneratePayload(body: unknown): ValidatedMusicGeneratePayload {
   if (!isRecord(body)) throw new Error('请求体不能为空')
+  if (Object.prototype.hasOwnProperty.call(body, 'voice_id')) {
+    throw new Error('voice_id 不是内部音色克隆记录 ID，请使用 voice_clone_id')
+  }
 
   const mode = normalizeMode(body.mode)
   const trackType = normalizeTrackType(body.track_type ?? body.type)
   const model = normalizeModel(body.model)
   const workspaceId = normalizeRequiredString(body.workspace_id, 'workspace_id 不能为空')
   const voiceGender = normalizeVoiceGender(body.voice_gender)
-  const voiceCloneId = normalizeOptionalId(body.voice_clone_id ?? body.voice_id)
-  const params = isRecord(body.params) ? { ...body.params } : {}
+  const voiceCloneId = normalizeOptionalId(body.voice_clone_id)
+  const params = {}
 
   if (mode === 'inspiration') {
     const prompt = normalizeLimitedText(
@@ -324,7 +331,7 @@ export async function mapMusicVoiceCloneResponse(
     gender: row.gender ?? 'auto',
     description: row.description,
     status: row.status,
-    demo_audio_url: row.demo_audio_url ?? await signUrlOrNull(row.source_audio_storage_url, signer) ?? row.source_audio_url,
+    demo_audio_url: await resolvePlaybackUrl(row.source_audio_url, row.source_audio_storage_url, signer),
     error_message: row.error_message,
     created_at: toIsoString(row.created_at) ?? '',
     updated_at: toIsoString(row.updated_at) ?? '',
@@ -341,9 +348,15 @@ export async function assertWorkspaceAccess(
   const wsMember = await db
     .selectFrom('workspace_members')
     .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
+    .innerJoin('team_members', (join) =>
+      join
+        .onRef('team_members.team_id', '=', 'workspaces.team_id')
+        .onRef('team_members.user_id', '=', 'workspace_members.user_id'),
+    )
     .select(['workspaces.team_id', 'workspace_members.role'])
     .where('workspace_members.workspace_id', '=', workspaceId)
     .where('workspace_members.user_id', '=', userId)
+    .where('workspaces.is_deleted', '=', false)
     .executeTakeFirst()
 
   if (!wsMember && userRole !== 'admin') {

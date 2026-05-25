@@ -69,3 +69,23 @@ export function getMusicVoiceCloneQueue(): Queue<MusicVoiceCloneJobData> {
   }
   return _musicVoiceCloneQueue
 }
+
+export async function closeQueues(): Promise<void> {
+  const queues = [
+    _imageQueue,
+    _transferQueue,
+    _videoQueue,
+    _storyboardQueue,
+    _musicQueue,
+    _musicVoiceCloneQueue,
+  ]
+
+  _imageQueue = null
+  _transferQueue = null
+  _videoQueue = null
+  _storyboardQueue = null
+  _musicQueue = null
+  _musicVoiceCloneQueue = null
+
+  await Promise.all(queues.map((queue) => queue?.close()))
+}

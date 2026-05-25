@@ -11,6 +11,7 @@ import multipart from '@fastify/multipart'
 import autoload from '@fastify/autoload'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { closeQueues } from './lib/queue.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -63,6 +64,7 @@ export async function buildApp() {
   app.decorate('redisSub', redisSub)
 
   app.addHook('onClose', async () => {
+    await closeQueues()
     await redis.quit()
     await redisSub.quit()
   })
