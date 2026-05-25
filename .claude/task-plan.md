@@ -12,7 +12,7 @@
 - [x] 可视化草图迭代：完成 v1-v9，最终确认单栏制作表单、右侧作品列表、详情页右侧歌词抽屉。
 - [x] 设计文档：保存到 `docs/superpowers/specs/2026-05-25-music-creation-design.md`。
 - [x] 用户 review 设计文档：已补充音色描述、标题限制、列表空状态、voice_id 字段和 mureka 两类计费规则。
-- [ ] 编写实施计划。
+- [x] 编写实施计划：保存到 `docs/superpowers/plans/2026-05-25-music-creation.md`。
 
 ## 2026-05-21 — 实现计划阶段
 

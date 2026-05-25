@@ -34,6 +34,10 @@
 - 音色克隆表补充 `voice_id` 字段，用于后续歌曲生成。
 - 计费配置调整为 `mureka-8`、`mureka-9` 分别具备歌曲/纯音乐生成价格与音色克隆价格。
 
+### 2026-05-25 实施计划
+- 已写入实施计划：`docs/superpowers/plans/2026-05-25-music-creation.md`。
+- 计划拆为 10 个任务：共享类型、数据库和 seed、API 校验、API 路由、Mureka/storage worker 基础、music worker、前端 hooks/navigation、音乐列表页、详情页、端到端验证。
+
 ## 2026-05-21 — 继续计划阶段
 
 ### 已恢复上下文
