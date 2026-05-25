@@ -163,8 +163,45 @@ export async function down(db: Kysely<unknown>): Promise<void> {
   await db.schema.dropTable('music_tracks').ifExists().execute()
   await db.schema.dropTable('music_voice_clones').ifExists().execute()
 
+  await sql`
+    DELETE FROM team_model_configs
+    WHERE model_id IN (
+      SELECT id FROM provider_models WHERE module IN ('music','music_voice_clone')
+    )
+  `.execute(db)
+  await sql`DELETE FROM provider_models WHERE module IN ('music','music_voice_clone')`.execute(db)
+
   await sql`ALTER TABLE provider_models DROP CONSTRAINT IF EXISTS chk_pm_module`.execute(db)
   await sql`ALTER TABLE provider_models ADD CONSTRAINT chk_pm_module CHECK (module IN ('image','video','tts','lipsync','agent','avatar','action_imitation'))`.execute(db)
+
+  await sql`
+    UPDATE canvas_node_outputs
+    SET batch_id = NULL
+    WHERE batch_id IN (
+      SELECT id FROM task_batches WHERE module IN ('music','music_voice_clone')
+    )
+  `.execute(db)
+  await sql`
+    DELETE FROM assets
+    WHERE task_id IN (
+      SELECT tasks.id
+      FROM tasks
+      INNER JOIN task_batches ON task_batches.id = tasks.batch_id
+      WHERE task_batches.module IN ('music','music_voice_clone')
+    )
+    OR batch_id IN (
+      SELECT id
+      FROM task_batches
+      WHERE module IN ('music','music_voice_clone')
+    )
+  `.execute(db)
+  await sql`
+    DELETE FROM tasks
+    WHERE batch_id IN (
+      SELECT id FROM task_batches WHERE module IN ('music','music_voice_clone')
+    )
+  `.execute(db)
+  await sql`DELETE FROM task_batches WHERE module IN ('music','music_voice_clone')`.execute(db)
 
   await sql`ALTER TABLE task_batches DROP CONSTRAINT IF EXISTS chk_tb_module`.execute(db)
   await sql`ALTER TABLE task_batches ADD CONSTRAINT chk_tb_module CHECK (module IN ('image','video','tts','lipsync','agent','avatar','action_imitation','storyboard'))`.execute(db)

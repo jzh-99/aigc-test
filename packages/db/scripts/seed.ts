@@ -903,6 +903,10 @@ async function main() {
   }
   console.log('  Volcengine models seeded')
 
+  const murekaApiBaseUrl = process.env.MUREKA_API_URL?.trim()
+  const murekaEnabled = Boolean(murekaApiBaseUrl)
+  const murekaConfig = murekaApiBaseUrl ? { api_base_url: murekaApiBaseUrl } : {}
+
   const murekaResult = await db
     .insertInto('providers')
     .values({
@@ -910,19 +914,15 @@ async function main() {
       name: 'Mureka',
       region: 'global',
       modules: JSON.stringify(['music', 'music_voice_clone']),
-      is_active: true,
-      config: JSON.stringify({
-        api_base_url: process.env.MUREKA_API_URL ?? '',
-      }),
+      is_active: murekaEnabled,
+      config: JSON.stringify(murekaConfig),
     })
     .onConflict((oc: any) => oc.column('code').doUpdateSet({
       name: 'Mureka',
       region: 'global',
       modules: JSON.stringify(['music', 'music_voice_clone']),
-      is_active: true,
-      config: JSON.stringify({
-        api_base_url: process.env.MUREKA_API_URL ?? '',
-      }),
+      is_active: murekaEnabled,
+      config: JSON.stringify(murekaConfig),
     }))
     .returningAll()
     .execute()
@@ -1034,7 +1034,7 @@ async function main() {
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
-        is_active: true,
+        is_active: murekaEnabled,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
         name: m.name,
@@ -1044,7 +1044,7 @@ async function main() {
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
-        is_active: true,
+        is_active: murekaEnabled,
       }))
       .execute()
     console.log(`  provider_models seeded (${m.code})`)

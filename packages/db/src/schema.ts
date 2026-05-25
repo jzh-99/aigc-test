@@ -1,6 +1,7 @@
 import type { ColumnType, Generated } from 'kysely'
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>
+type JsonArrayInput<T> = T[] | string
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
 
@@ -406,7 +407,7 @@ export interface MusicVoiceClonesTable {
   voice_id: string | null
   external_voice_id: string | null
   external_task_id: string | null
-  status: 'pending' | 'processing' | 'ready' | 'failed'
+  status: Generated<'pending' | 'processing' | 'ready' | 'failed'>
   error_message: string | null
   created_at: Generated<Date>
   updated_at: Generated<Date>
@@ -424,9 +425,9 @@ export interface MusicTracksTable {
   title: string | null
   prompt: string | null
   lyrics: string | null
-  styles: ColumnType<string[], string, string>
+  styles: ColumnType<string[], JsonArrayInput<string> | undefined, JsonArrayInput<string>>
   voice_clone_id: string | null
-  voice_gender: 'auto' | 'male' | 'female'
+  voice_gender: Generated<'auto' | 'male' | 'female'>
   model: string
   cover_url: string | null
   cover_storage_url: string | null
@@ -438,7 +439,7 @@ export interface MusicTracksTable {
   wav_url: string | null
   wav_storage_url: string | null
   external_task_id: string | null
-  status:
+  status: Generated<
     | 'pending'
     | 'lyrics_generating'
     | 'song_generating'
@@ -446,6 +447,7 @@ export interface MusicTracksTable {
     | 'transferring'
     | 'completed'
     | 'failed'
+  >
   error_message: string | null
   created_at: Generated<Date>
   updated_at: Generated<Date>
