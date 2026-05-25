@@ -249,6 +249,54 @@ describe('music validation helpers', () => {
       'quit',
       'end',
     ])
+    assert.equal(cleanup.isCleaned(), true)
+  })
+
+  test('createMusicSseCleanup 已清理后注册 heartbeat 会立即清理 interval', async () => {
+    const originalClearInterval = globalThis.clearInterval
+    const clearedIntervals: unknown[] = []
+    let heartbeat: NodeJS.Timeout | null = null
+
+    globalThis.clearInterval = ((interval: Parameters<typeof clearInterval>[0]) => {
+      clearedIntervals.push(interval)
+      return originalClearInterval(interval)
+    }) as typeof clearInterval
+
+    try {
+      const requestRaw = {
+        on() {
+          return requestRaw
+        },
+        off() {
+          return requestRaw
+        },
+      }
+      const raw = {
+        end() {},
+      }
+      const subscriber = {
+        async unsubscribe() {},
+        async quit() {},
+      }
+
+      const cleanup = createMusicSseCleanup({
+        requestRaw,
+        raw,
+        subscriber,
+        channel: 'sse:music_track:track-1',
+        logger: { error() {} },
+      })
+
+      cleanup({ endRaw: false })
+      heartbeat = setInterval(() => {}, 15_000)
+      cleanup.setHeartbeat(heartbeat)
+
+      assert.equal(cleanup.isCleaned(), true)
+      assert.deepEqual(clearedIntervals, [heartbeat])
+    } finally {
+      if (heartbeat) originalClearInterval(heartbeat)
+      globalThis.clearInterval = originalClearInterval
+    }
   })
 
   test('markMusicQueueDeliveryFailed 会把 batch、task、track 标记为 failed', async () => {

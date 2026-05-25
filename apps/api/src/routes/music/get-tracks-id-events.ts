@@ -79,12 +79,18 @@ const route: FastifyPluginAsync = async (app) => {
         channel,
         logger: app.log,
       })
+      const isConnectionClosed = () => cleanup.isCleaned() || request.raw.destroyed || raw.destroyed || raw.writableEnded
 
       try {
         await sub.subscribe(channel)
       } catch (error) {
         cleanup({ endRaw: false })
         throw error
+      }
+
+      if (isConnectionClosed()) {
+        cleanup({ endRaw: false })
+        return reply.hijack()
       }
 
       raw.writeHead(200, {

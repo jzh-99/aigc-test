@@ -143,6 +143,11 @@ export interface MusicSseCleanupOptions {
   heartbeat?: NodeJS.Timeout | null
 }
 
+export type MusicSseCleanup = ((cleanupOptions?: { endRaw?: boolean }) => void) & {
+  isCleaned: () => boolean
+  setHeartbeat: (nextHeartbeat: NodeJS.Timeout) => void
+}
+
 const CREDIT_REJECTION_MESSAGES = new Set([
   '未找到A豆账户',
   'A豆余额不足',
@@ -272,7 +277,7 @@ export function decodeMusicTrackCursor(cursor: string): MusicTrackCursor {
   return { createdAt: legacyDate, id: null }
 }
 
-export function createMusicSseCleanup(options: MusicSseCleanupOptions) {
+export function createMusicSseCleanup(options: MusicSseCleanupOptions): MusicSseCleanup {
   let cleaned = false
   let heartbeat = options.heartbeat ?? null
   const onClose = () => cleanup()
@@ -292,7 +297,12 @@ export function createMusicSseCleanup(options: MusicSseCleanupOptions) {
     if (cleanupOptions.endRaw !== false) setImmediate(() => options.raw.end())
   }
 
+  cleanup.isCleaned = () => cleaned
   cleanup.setHeartbeat = (nextHeartbeat: NodeJS.Timeout) => {
+    if (cleaned) {
+      clearInterval(nextHeartbeat)
+      return
+    }
     heartbeat = nextHeartbeat
   }
   options.requestRaw.on('close', onClose)
