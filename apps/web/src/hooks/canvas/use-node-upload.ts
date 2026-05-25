@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
+import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { uploadAssetFile, createNodeOutput } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
 
@@ -38,12 +39,15 @@ export function useNodeUpload(nodeId: string, canvasId: string, accept: string) 
 
       setUploading(true)
       try {
-        const url = await uploadAssetFile(file, token)
+        const url = await uploadAssetFile(file, token, { canvasId, canvasNodeId: nodeId })
         // 后端已做 upsert：有 is_selected 记录则替换，无则新增
         const id = await createNodeOutput(canvasId, nodeId, url, token)
-        const type = file.type.startsWith('video/') ? 'video' : 'image'
+        const type = file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'image'
         // 上传是替换操作，覆盖节点当前输出
         replaceNodeOutput(nodeId, { id, url, type })
+        if (type === 'video') await useCanvasSidebarDataStore.getState().refreshVideoAssets(canvasId, token)
+        else if (type === 'audio') await useCanvasSidebarDataStore.getState().refreshAudioAssets(canvasId, token)
+        else await useCanvasSidebarDataStore.getState().refreshAssets(canvasId, token)
         toast.success('上传成功')
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '上传失败'

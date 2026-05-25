@@ -125,6 +125,7 @@ export interface AssetConfig {
   thumbnailUrl?: string
   thumbnail_url?: string
   duration?: number
+  canvasId?: string
 }
 
 export interface ScriptWriterConfig {

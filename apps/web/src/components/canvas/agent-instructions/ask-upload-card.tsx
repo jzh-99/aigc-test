@@ -6,6 +6,7 @@ import type { AssetTypeHint } from '@/lib/canvas/agent-types'
 import { uploadAssetFile } from '@/lib/canvas/canvas-api'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
+import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { isAssetConfig } from '@/lib/canvas/types'
 import { toast } from 'sonner'
@@ -29,6 +30,14 @@ function mimeIcon(mimeType: string) {
   if (mimeType.startsWith('video')) return '🎬'
   if (mimeType.startsWith('audio')) return '🎵'
   return '🖼'
+}
+
+async function refreshAssetType(canvasId: string, token: string | undefined | null, mimeType: string) {
+  if (!token) return
+  const sidebar = useCanvasSidebarDataStore.getState()
+  if (mimeType.startsWith('video/')) await sidebar.refreshVideoAssets(canvasId, token)
+  else if (mimeType.startsWith('audio/')) await sidebar.refreshAudioAssets(canvasId, token)
+  else await sidebar.refreshAssets(canvasId, token)
 }
 
 export function AskUploadCard({ assetTypes, canvasId, onUploaded, onSkip, onNodeSelectedRef }: Props) {
@@ -93,9 +102,10 @@ export function AskUploadCard({ assetTypes, canvasId, onUploaded, onSkip, onNode
     const results: ReferencedNode[] = []
     try {
       for (const file of Array.from(files)) {
-        const url = await uploadAssetFile(file, token ?? undefined)
         const nodeId = `agent_asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-        addNodeWithConfig('asset', { x: 100, y: 100 }, { url, name: file.name, mimeType: file.type }, nodeId)
+        const url = await uploadAssetFile(file, token ?? undefined, { canvasId, canvasNodeId: nodeId })
+        addNodeWithConfig('asset', { x: 100, y: 100 }, { url, name: file.name, mimeType: file.type, canvasId }, nodeId)
+        await refreshAssetType(canvasId, token, file.type)
         results.push({ nodeId, name: file.name, mimeType: file.type, url })
       }
       onUploaded(results)

@@ -49,6 +49,7 @@ const route: FastifyPluginAsync = async (app) => {
                'failed_count', 'status', 'actual_credits', 'created_at', 'module', 'provider'])
       .where('canvas_id', '=', id)
       .where('is_deleted', '=', false)
+      .where('is_hidden', '=', false)
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .limit(limitN + 1) as any

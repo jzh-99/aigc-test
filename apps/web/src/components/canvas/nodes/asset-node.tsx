@@ -4,6 +4,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeHighlighted } from '@/stores/canvas/execution-store'
+import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { uploadAssetFile } from '@/lib/canvas/canvas-api'
 import { Image as ImageIcon, X, FileVideo, Music, Upload, Play, Pause, Loader2 } from 'lucide-react'
@@ -17,6 +18,7 @@ export interface AssetNodeConfig {
   url: string
   name?: string
   mimeType?: string
+  canvasId?: string
 }
 
 function nodeWidthFromRatio(w: number, h: number): number {
@@ -54,11 +56,17 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
     setUploading(true)
     setVideoSize(null)
     try {
-      const url = await uploadAssetFile(file, token)
+      const url = await uploadAssetFile(file, token, { canvasId: cfg.canvasId, canvasNodeId: cfg.canvasId ? id : undefined })
       updateNodeData(id, {
-        config: { url, name: file.name, mimeType: file.type },
+        config: { url, name: file.name, mimeType: file.type, canvasId: cfg.canvasId },
         label: file.name.replace(/\.[^.]+$/, ''),
       })
+      if (cfg.canvasId) {
+        const sidebar = useCanvasSidebarDataStore.getState()
+        if (file.type.startsWith('video/')) await sidebar.refreshVideoAssets(cfg.canvasId, token)
+        else if (file.type.startsWith('audio/')) await sidebar.refreshAudioAssets(cfg.canvasId, token)
+        else await sidebar.refreshAssets(cfg.canvasId, token)
+      }
     } catch (err: any) {
       toast.error(`上传失败: ${err.message}`)
     } finally {

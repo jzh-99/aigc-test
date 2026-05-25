@@ -446,6 +446,14 @@ function Flow({
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number; mode: 'add' | 'downstream'; sourceNodeIds: string[]; uploadTarget: CanvasUploadTarget | null } | null>(null)
 
+  const refreshUploadedAssetType = useCallback(async (mediaKind: 'image' | 'video' | 'audio') => {
+    if (!token) return
+    const sidebar = useCanvasSidebarDataStore.getState()
+    if (mediaKind === 'video') await sidebar.refreshVideoAssets(canvasId, token)
+    else if (mediaKind === 'audio') await sidebar.refreshAudioAssets(canvasId, token)
+    else await sidebar.refreshAssets(canvasId, token)
+  }, [canvasId, token])
+
   const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const rect = wrapperRef.current?.getBoundingClientRect()
@@ -541,9 +549,9 @@ function Flow({
 
     setUploadingFromMenu(true)
     try {
-      const url = await uploadAssetFile(file, token)
       if (target.kind === 'canvas') {
         const nodeId = `node_${generateUUID()}`
+        const url = await uploadAssetFile(file, token, { canvasId, canvasNodeId: nodeId })
         const nodeType = mediaKind === 'video' ? 'video_gen' : mediaKind === 'audio' ? 'audio_gen' : 'image_gen'
         addNodeWithConfig(nodeType, position, {}, nodeId)
         const outputId = await createNodeOutput(canvasId, nodeId, url, token)
@@ -553,10 +561,12 @@ function Flow({
           url,
           type: mediaKind,
         })
+        await refreshUploadedAssetType(mediaKind)
         toast.success('上传成功')
         return
       }
 
+      const url = await uploadAssetFile(file, token, { canvasId, canvasNodeId: target.nodeId })
       if (target.uploadMode === 'output') {
         const outputId = await createNodeOutput(canvasId, target.nodeId, url, token)
         initNodeState(target.nodeId)
@@ -567,10 +577,11 @@ function Flow({
         })
       } else {
         updateNodeData(target.nodeId, {
-          config: { url, name: file.name, mimeType: file.type },
+          config: { url, name: file.name, mimeType: file.type, canvasId },
           label: file.name.replace(/\.[^.]+$/, ''),
         })
       }
+      await refreshUploadedAssetType(mediaKind)
       toast.success('上传成功')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '上传失败'
@@ -578,7 +589,7 @@ function Flow({
     } finally {
       setUploadingFromMenu(false)
     }
-  }, [token, canvasId, addNodeWithConfig, initNodeState, replaceNodeOutput, updateNodeData])
+  }, [token, canvasId, addNodeWithConfig, initNodeState, replaceNodeOutput, updateNodeData, refreshUploadedAssetType])
 
   const [showShortcuts, setShowShortcuts] = useState(false)
   const clipboardRef = useRef<{ nodes: AppNode[]; edges: AppEdge[] } | null>(null)
@@ -734,13 +745,16 @@ function Flow({
           y: e.clientY - rect.top,
         })
         try {
-          const url = await uploadAssetFile(file, token)
           const nodeId = `node_${generateUUID()}`
+          const url = await uploadAssetFile(file, token, { canvasId, canvasNodeId: nodeId })
           addNodeWithConfig('asset', position, {
             url,
             name: file.name,
             mimeType: file.type,
+            canvasId,
           }, nodeId)
+          const mediaKind = getCanvasUploadMediaKind(file)
+          if (mediaKind) await refreshUploadedAssetType(mediaKind)
         } catch (err: any) {
           toast.error(`上传 ${file.name} 失败: ${err.message}`)
         }
@@ -748,7 +762,7 @@ function Flow({
     } finally {
       setUploading(false)
     }
-  }, [token, project, addNodeWithConfig])
+  }, [token, project, addNodeWithConfig, canvasId, refreshUploadedAssetType])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Loader2, ChevronDown, ImageIcon, Film } from 'lucide-react'
+import { X, Loader2, ChevronDown, ImageIcon, Film, Music } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { BatchDetail } from '@/components/history/batch-detail'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,8 @@ import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import type { CanvasAssetItem, CanvasHistoryItem } from '@/lib/canvas/canvas-api'
 
 type Tab = 'history' | 'assets'
+type AssetSubTab = 'image' | 'video' | 'audio'
+type PreviewType = 'image' | 'video' | 'audio'
 
 interface Props {
   canvasId: string
@@ -28,15 +30,17 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [tab, setTab] = useState<Tab>('history')
   const [detailBatchId, setDetailBatchId] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<{ url: string; type: 'image' | 'video' } | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; type: PreviewType } | null>(null)
 
   const byCanvas = useCanvasSidebarDataStore((s) => s.byCanvas)
   const refreshHistory = useCanvasSidebarDataStore((s) => s.refreshHistory)
   const refreshAssets = useCanvasSidebarDataStore((s) => s.refreshAssets)
   const refreshVideoAssets = useCanvasSidebarDataStore((s) => s.refreshVideoAssets)
+  const refreshAudioAssets = useCanvasSidebarDataStore((s) => s.refreshAudioAssets)
   const loadMoreHistory = useCanvasSidebarDataStore((s) => s.loadMoreHistory)
   const loadMoreAssets = useCanvasSidebarDataStore((s) => s.loadMoreAssets)
   const loadMoreVideoAssets = useCanvasSidebarDataStore((s) => s.loadMoreVideoAssets)
+  const loadMoreAudioAssets = useCanvasSidebarDataStore((s) => s.loadMoreAudioAssets)
   const setAssetSubTab = useCanvasSidebarDataStore((s) => s.setAssetSubTab)
 
   const bucket = byCanvas[canvasId]
@@ -54,6 +58,10 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
     }
     if (tab === 'assets' && assetSubTab === 'video' && !bucket?.videoAssets.loaded && !bucket?.videoAssets.loading) {
       refreshVideoAssets(canvasId, token)
+      return
+    }
+    if (tab === 'assets' && assetSubTab === 'audio' && !bucket?.audioAssets.loaded && !bucket?.audioAssets.loading) {
+      refreshAudioAssets(canvasId, token)
     }
   }, [
     tab,
@@ -66,9 +74,12 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
     bucket?.assets.loading,
     bucket?.videoAssets.loaded,
     bucket?.videoAssets.loading,
+    bucket?.audioAssets.loaded,
+    bucket?.audioAssets.loading,
     refreshHistory,
     refreshAssets,
     refreshVideoAssets,
+    refreshAudioAssets,
   ])
 
   const historyData = useMemo(() => {
@@ -85,16 +96,26 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
 
   const assetsData = useMemo(() => {
     const fallback = { items: [] as CanvasAssetItem[], loading: true, loaded: false, nextCursor: null as string | null }
-    const section = assetSubTab === 'video' ? (bucket?.videoAssets ?? fallback) : (bucket?.assets ?? fallback)
+    const section = assetSubTab === 'video'
+      ? (bucket?.videoAssets ?? fallback)
+      : assetSubTab === 'audio'
+        ? (bucket?.audioAssets ?? fallback)
+        : (bucket?.assets ?? fallback)
     return {
       subTab: assetSubTab,
       items: section.items,
       loading: token ? section.loading : true,
       loaded: section.loaded,
       hasMore: !!section.nextCursor,
-      loadMore: () => token && (assetSubTab === 'video' ? loadMoreVideoAssets(canvasId, token) : loadMoreAssets(canvasId, token)),
+      loadMore: () => token && (
+        assetSubTab === 'video'
+          ? loadMoreVideoAssets(canvasId, token)
+          : assetSubTab === 'audio'
+            ? loadMoreAudioAssets(canvasId, token)
+            : loadMoreAssets(canvasId, token)
+      ),
     }
-  }, [bucket?.assets, bucket?.videoAssets, assetSubTab, token, loadMoreAssets, loadMoreVideoAssets, canvasId])
+  }, [bucket?.assets, bucket?.videoAssets, bucket?.audioAssets, assetSubTab, token, loadMoreAssets, loadMoreVideoAssets, loadMoreAudioAssets, canvasId])
 
 
   return (
@@ -172,6 +193,10 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
               className="max-w-[90vw] max-h-[90vh] rounded shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />
+          ) : lightbox.type === 'audio' ? (
+            <div className="w-[90vw] max-w-[420px] rounded-lg bg-background p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <audio src={lightbox.url} controls autoPlay className="w-full" />
+            </div>
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -300,16 +325,16 @@ function AssetsTab({
   onOpenLightbox,
 }: {
   data: {
-    subTab: 'image' | 'video'
+    subTab: AssetSubTab
     items: CanvasAssetItem[]
     loading: boolean
     loaded: boolean
     hasMore: boolean
     loadMore: () => void
   }
-  onSubTabChange: (subTab: 'image' | 'video') => void
+  onSubTabChange: (subTab: AssetSubTab) => void
   onOpenDetail: (id: string) => void
-  onOpenLightbox: (url: string, type: 'image' | 'video') => void
+  onOpenLightbox: (url: string, type: PreviewType) => void
 }) {
   const { subTab, items, loading, loaded, hasMore, loadMore } = data
 
@@ -336,6 +361,16 @@ function AssetsTab({
         >
           视频
         </button>
+        <button
+          data-testid="canvas-assets-subtab-audio"
+          onClick={() => onSubTabChange('audio')}
+          className={cn(
+            'flex-1 py-1.5 text-[11px] font-medium transition-colors',
+            subTab === 'audio' ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:bg-muted'
+          )}
+        >
+          音频
+        </button>
       </div>
 
       {loading && items.length === 0 ? (
@@ -343,7 +378,9 @@ function AssetsTab({
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       ) : loaded && !loading && items.length === 0 ? (
-        <div className="text-center py-10 text-xs text-muted-foreground">{subTab === 'video' ? '暂无视频资产' : '暂无图片资产'}</div>
+        <div className="text-center py-10 text-xs text-muted-foreground">
+          {subTab === 'video' ? '暂无视频资产' : subTab === 'audio' ? '暂无音频资产' : '暂无图片资产'}
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2">
@@ -351,15 +388,21 @@ function AssetsTab({
               const url = asset.storage_url || asset.original_url
               const thumbnailUrl = asset.thumbnail_url || null
               const isVideo = subTab === 'video' || asset.type?.startsWith('video')
+              const isAudio = subTab === 'audio' || asset.type?.startsWith('audio')
               return (
                 <button
                   key={asset.id}
                   data-testid={`canvas-asset-item-${asset.id}`}
-                  onClick={() => (url ? onOpenLightbox(url, isVideo ? 'video' : 'image') : onOpenDetail(asset.batch_id))}
+                  onClick={() => (url ? onOpenLightbox(url, isAudio ? 'audio' : isVideo ? 'video' : 'image') : onOpenDetail(asset.batch_id))}
                   className="group relative rounded-lg overflow-hidden bg-muted aspect-square focus:outline-none"
                 >
                   {url ? (
-                    isVideo && !thumbnailUrl ? (
+                    isAudio ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-emerald-50 text-emerald-700">
+                        <Music className="w-6 h-6" />
+                        <span className="text-[10px] font-medium">音频资产</span>
+                      </div>
+                    ) : isVideo && !thumbnailUrl ? (
                       <video src={url} muted preload="metadata" playsInline className="w-full h-full object-cover" />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -367,7 +410,7 @@ function AssetsTab({
                     )
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      {isVideo ? <Film className="w-5 h-5 text-muted-foreground/50" /> : <ImageIcon className="w-5 h-5 text-muted-foreground/50" />}
+                      {isAudio ? <Music className="w-5 h-5 text-muted-foreground/50" /> : isVideo ? <Film className="w-5 h-5 text-muted-foreground/50" /> : <ImageIcon className="w-5 h-5 text-muted-foreground/50" />}
                     </div>
                   )}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5">

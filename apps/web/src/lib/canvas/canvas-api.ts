@@ -294,8 +294,15 @@ export async function updateCanvasThumbnail(canvasId: string, thumbnailUrl: stri
 /**
  * 上传素材文件，返回 proxy URL（公网可访问，用于前端显示和 AI 调用）
  */
-export async function uploadAssetFile(file: File, token?: string): Promise<string> {
+export interface UploadAssetFileOptions {
+  canvasId?: string
+  canvasNodeId?: string
+}
+
+export async function uploadAssetFile(file: File, token?: string, options: UploadAssetFileOptions = {}): Promise<string> {
   const formData = new FormData()
+  if (options.canvasId) formData.append('canvas_id', options.canvasId)
+  if (options.canvasNodeId) formData.append('canvas_node_id', options.canvasNodeId)
   formData.append('file', file)
 
   const res = await fetch('/api/v1/canvases/asset-upload', {
