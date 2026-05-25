@@ -155,7 +155,17 @@ export interface TaskBatchesTable {
   credit_account_id: string
   parent_batch_id: string | null
   idempotency_key: string
-  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
+  module:
+    | 'image'
+    | 'video'
+    | 'tts'
+    | 'lipsync'
+    | 'agent'
+    | 'avatar'
+    | 'action_imitation'
+    | 'storyboard'
+    | 'music'
+    | 'music_voice_clone'
   provider: string
   model: string
   prompt: string
@@ -267,7 +277,16 @@ export interface ProviderModelsTable {
   code: string
   name: string
   description: string | null
-  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
+  module:
+    | 'image'
+    | 'video'
+    | 'tts'
+    | 'lipsync'
+    | 'agent'
+    | 'avatar'
+    | 'action_imitation'
+    | 'music'
+    | 'music_voice_clone'
   category_references: ColumnType<unknown, string, string> | null
   credit_cost: number
   params_pricing: ColumnType<unknown, string, string>
@@ -371,6 +390,67 @@ export interface VideoStudioProjectsTable {
   updated_at: Generated<Date>
 }
 
+// ─── Music ───────────────────────────────────────────────────────────────────
+
+export interface MusicVoiceClonesTable {
+  id: Generated<string>
+  workspace_id: string
+  user_id: string
+  team_id: string
+  batch_id: string | null
+  task_id: string | null
+  name: string
+  description: string | null
+  source_audio_url: string
+  source_audio_storage_url: string | null
+  voice_id: string | null
+  external_voice_id: string | null
+  external_task_id: string | null
+  status: 'pending' | 'processing' | 'ready' | 'failed'
+  error_message: string | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface MusicTracksTable {
+  id: Generated<string>
+  workspace_id: string
+  user_id: string
+  team_id: string
+  batch_id: string | null
+  task_id: string | null
+  type: 'song' | 'instrumental'
+  mode: 'inspiration' | 'custom'
+  title: string | null
+  prompt: string | null
+  lyrics: string | null
+  styles: ColumnType<string[], string, string>
+  voice_clone_id: string | null
+  voice_gender: 'auto' | 'male' | 'female'
+  model: string
+  cover_url: string | null
+  cover_storage_url: string | null
+  stream_url: string | null
+  audio_url: string | null
+  audio_storage_url: string | null
+  flac_url: string | null
+  flac_storage_url: string | null
+  wav_url: string | null
+  wav_storage_url: string | null
+  external_task_id: string | null
+  status:
+    | 'pending'
+    | 'lyrics_generating'
+    | 'song_generating'
+    | 'cover_generating'
+    | 'transferring'
+    | 'completed'
+    | 'failed'
+  error_message: string | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── AI Assistant Errors ──────────────────────────────────────────────────────
 
 export interface AiAssistantErrorsTable {
@@ -426,6 +506,8 @@ export interface Database {
   canvas_node_outputs: CanvasNodeOutputsTable
   canvas_agent_sessions: CanvasAgentSessionsTable
   video_studio_projects: VideoStudioProjectsTable
+  music_voice_clones: MusicVoiceClonesTable
+  music_tracks: MusicTracksTable
   ai_assistant_errors: AiAssistantErrorsTable
   submission_errors: SubmissionErrorsTable
 }

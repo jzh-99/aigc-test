@@ -903,6 +903,153 @@ async function main() {
   }
   console.log('  Volcengine models seeded')
 
+  const murekaResult = await db
+    .insertInto('providers')
+    .values({
+      code: 'mureka',
+      name: 'Mureka',
+      region: 'global',
+      modules: JSON.stringify(['music', 'music_voice_clone']),
+      is_active: true,
+      config: JSON.stringify({
+        api_base_url: process.env.MUREKA_API_URL ?? '',
+      }),
+    })
+    .onConflict((oc: any) => oc.column('code').doUpdateSet({
+      name: 'Mureka',
+      region: 'global',
+      modules: JSON.stringify(['music', 'music_voice_clone']),
+      is_active: true,
+      config: JSON.stringify({
+        api_base_url: process.env.MUREKA_API_URL ?? '',
+      }),
+    }))
+    .returningAll()
+    .execute()
+  const murekaProvider = murekaResult[0]
+  console.log(`  providers seeded (mureka, id=${murekaProvider.id})`)
+
+  const MUSIC_CATEGORY_REFERENCES = {
+    text_to_music: {
+      label: '文本生成音乐',
+      limits: {
+        image: ZERO_REFERENCE_LIMIT,
+        video: ZERO_REFERENCE_LIMIT,
+        audio: ZERO_REFERENCE_LIMIT,
+        text: ZERO_REFERENCE_LIMIT,
+      },
+    },
+    voice_clone_music: {
+      label: '克隆音色生成音乐',
+      limits: {
+        image: ZERO_REFERENCE_LIMIT,
+        video: ZERO_REFERENCE_LIMIT,
+        audio: { min: 0, max: 1 },
+        text: ZERO_REFERENCE_LIMIT,
+      },
+    },
+  }
+
+  const murekaMusicParamsSchema = {
+    type: ['song', 'instrumental'],
+    mode: ['inspiration', 'custom'],
+    styles: [],
+    voice_gender: ['auto', 'male', 'female'],
+    voice_id: [],
+  }
+
+  const murekaMusicModels = [
+    {
+      code: 'mureka-8',
+      name: 'Mureka 8 音乐生成',
+      description: '音乐生成模型，覆盖歌词、歌曲、纯音乐、封面和转存成本',
+      module: 'music' as const,
+      credit_cost: 12,
+      category_references: MUSIC_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: 'lyrics', model: 'mureka-8', unit_price: 2 },
+        { resolution: 'song', model: 'mureka-8', unit_price: 8 },
+        { resolution: 'instrumental', model: 'mureka-8', unit_price: 8 },
+        { resolution: 'cover', model: 'mureka-8', unit_price: 1 },
+        { resolution: 'transfer', model: 'mureka-8', unit_price: 1 },
+      ],
+      params_schema: murekaMusicParamsSchema,
+    },
+    {
+      code: 'mureka-8-voice-clone',
+      name: 'Mureka 8 音色克隆',
+      description: 'Mureka 8 音色克隆独立计费模型',
+      module: 'music_voice_clone' as const,
+      credit_cost: 5,
+      category_references: null,
+      params_pricing: [
+        { resolution: 'voice_clone', model: 'mureka-8', unit_price: 5 },
+      ],
+      params_schema: {
+        source_audio: [],
+      },
+    },
+    {
+      code: 'mureka-9',
+      name: 'Mureka 9 音乐生成',
+      description: '高质量音乐生成模型，覆盖歌词、歌曲、纯音乐、封面和转存成本',
+      module: 'music' as const,
+      credit_cost: 18,
+      category_references: MUSIC_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: 'lyrics', model: 'mureka-9', unit_price: 3 },
+        { resolution: 'song', model: 'mureka-9', unit_price: 12 },
+        { resolution: 'instrumental', model: 'mureka-9', unit_price: 12 },
+        { resolution: 'cover', model: 'mureka-9', unit_price: 1 },
+        { resolution: 'transfer', model: 'mureka-9', unit_price: 2 },
+      ],
+      params_schema: murekaMusicParamsSchema,
+    },
+    {
+      code: 'mureka-9-voice-clone',
+      name: 'Mureka 9 音色克隆',
+      description: 'Mureka 9 音色克隆独立计费模型',
+      module: 'music_voice_clone' as const,
+      credit_cost: 8,
+      category_references: null,
+      params_pricing: [
+        { resolution: 'voice_clone', model: 'mureka-9', unit_price: 8 },
+      ],
+      params_schema: {
+        source_audio: [],
+      },
+    },
+  ]
+
+  for (const m of murekaMusicModels) {
+    await db
+      .insertInto('provider_models')
+      .values({
+        provider_id: murekaProvider.id,
+        code: m.code,
+        name: m.name,
+        description: m.description,
+        module: m.module,
+        category_references: m.category_references ? JSON.stringify(m.category_references) : null,
+        credit_cost: m.credit_cost,
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: JSON.stringify(m.params_schema),
+        is_active: true,
+      })
+      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+        name: m.name,
+        description: m.description,
+        module: m.module,
+        category_references: m.category_references ? JSON.stringify(m.category_references) : null,
+        credit_cost: m.credit_cost,
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: JSON.stringify(m.params_schema),
+        is_active: true,
+      }))
+      .execute()
+    console.log(`  provider_models seeded (${m.code})`)
+  }
+
   const minimaxResult = await db
     .insertInto('providers')
     .values({
