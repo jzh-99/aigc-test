@@ -30,6 +30,9 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     )
     .addColumn('name', 'varchar(100)', (col) => col.notNull())
     .addColumn('description', 'text')
+    .addColumn('gender', 'varchar(20)', (col) =>
+      col.notNull().defaultTo('auto')
+    )
     .addColumn('source_audio_url', 'text', (col) => col.notNull())
     .addColumn('source_audio_storage_url', 'text')
     .addColumn('voice_id', 'varchar(255)')
@@ -48,6 +51,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .execute()
 
   await sql`ALTER TABLE music_voice_clones ADD CONSTRAINT chk_music_voice_clones_status CHECK (status IN ('pending','processing','ready','failed'))`.execute(db)
+  await sql`ALTER TABLE music_voice_clones ADD CONSTRAINT chk_music_voice_clones_gender CHECK (gender IN ('auto','male','female'))`.execute(db)
 
   await db.schema
     .createIndex('idx_music_voice_clones_workspace_created')

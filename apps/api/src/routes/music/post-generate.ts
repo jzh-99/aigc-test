@@ -1,36 +1,18 @@
-import type { FastifyPluginAsync, FastifyReply } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import type { MusicJobData } from '@aigc/types'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getMusicQueue } from '../../lib/queue.js'
 import {
-  MusicRouteError,
   assertVoiceCloneReadyForWorkspace,
   assertWorkspaceAccess,
+  getExpectedCreditErrorMessage,
   mapMusicTrackResponse,
   resolveMusicCredits,
+  sendMusicRouteError,
   validateMusicGeneratePayload,
 } from './_shared.js'
-
-function sendError(reply: FastifyReply, error: unknown) {
-  if (error instanceof MusicRouteError) {
-    return reply.status(error.statusCode).send({
-      success: false,
-      error: { code: error.code, message: error.message },
-    })
-  }
-  if (error instanceof Error) {
-    return reply.status(400).send({
-      success: false,
-      error: { code: 'BAD_REQUEST', message: error.message },
-    })
-  }
-  return reply.status(500).send({
-    success: false,
-    error: { code: 'INTERNAL_ERROR', message: '请求处理失败' },
-  })
-}
 
 function toTaskResponse(task: any) {
   return {
@@ -52,7 +34,7 @@ const route: FastifyPluginAsync = async (app) => {
     try {
       payload = validateMusicGeneratePayload(request.body)
     } catch (error) {
-      return sendError(reply, error)
+      return sendMusicRouteError(reply, error, app.log, 'Music generate validation failed')
     }
 
     const db = getDb()
@@ -60,11 +42,14 @@ const route: FastifyPluginAsync = async (app) => {
     const idempotencyKey = payload.idempotency_key ?? randomUUID()
 
     try {
+      const access = await assertWorkspaceAccess(db, payload.workspace_id, userId, request.user.role)
+
       const existingBatch = await db
         .selectFrom('task_batches')
         .selectAll()
         .where('idempotency_key', '=', idempotencyKey)
         .where('user_id', '=', userId)
+        .where('workspace_id', '=', payload.workspace_id)
         .where('module', '=', 'music')
         .where('is_deleted', '=', false)
         .executeTakeFirst()
@@ -82,6 +67,7 @@ const route: FastifyPluginAsync = async (app) => {
             'mvc.name as voice_name',
           ])
           .where('mt.batch_id', '=', existingBatch.id)
+          .where('mt.workspace_id', '=', payload.workspace_id)
           .orderBy('mt.created_at', 'asc')
           .executeTakeFirst()
 
@@ -111,7 +97,6 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
 
-      const access = await assertWorkspaceAccess(db, payload.workspace_id, userId, request.user.role)
       const voice = await assertVoiceCloneReadyForWorkspace(db, payload.workspace_id, payload.voice_clone_id)
       const credits = await resolveMusicCredits(db, access.teamId, payload.model, payload.track_type, payload.mode)
 
@@ -120,7 +105,14 @@ const route: FastifyPluginAsync = async (app) => {
         const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits)
         creditAccountId = frozen.creditAccountId
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'A豆余额不足'
+        const message = getExpectedCreditErrorMessage(error)
+        if (!message) {
+          app.log.error({ err: error }, 'Failed to freeze credits for music generation')
+          return reply.status(500).send({
+            success: false,
+            error: { code: 'INTERNAL_ERROR', message: '请求处理失败，请稍后重试' },
+          })
+        }
         return reply.status(402).send({
           success: false,
           error: { code: 'INSUFFICIENT_CREDITS', message },
@@ -252,10 +244,7 @@ const route: FastifyPluginAsync = async (app) => {
         track,
       })
     } catch (error) {
-      if (!(error instanceof MusicRouteError)) {
-        app.log.error({ err: error }, 'Music generate request failed')
-      }
-      return sendError(reply, error)
+      return sendMusicRouteError(reply, error, app.log, 'Music generate request failed')
     }
   })
 }

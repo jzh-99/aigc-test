@@ -21,6 +21,25 @@ describe('music schema types', () => {
     assert.equal(status, 'ready')
   })
 
+  test('音色克隆 gender 支持默认值和限定枚举', () => {
+    const selectedGender: Selectable<Database['music_voice_clones']>['gender'] = 'female'
+    const insertWithoutGender: Insertable<Database['music_voice_clones']> = {
+      workspace_id: 'workspace_1',
+      user_id: 'user_1',
+      team_id: 'team_1',
+      name: 'demo voice',
+      source_audio_url: 'https://example.com/source.mp3',
+    }
+    const insertWithGender: Insertable<Database['music_voice_clones']> = {
+      ...insertWithoutGender,
+      gender: 'male',
+    }
+
+    assert.equal(selectedGender, 'female')
+    assert.equal(insertWithoutGender.name, 'demo voice')
+    assert.equal(insertWithGender.gender, 'male')
+  })
+
   test('音色克隆 voice_id 可存储外部音色 ID', () => {
     const voiceId: Database['music_voice_clones']['voice_id'] = 'voice_123'
 

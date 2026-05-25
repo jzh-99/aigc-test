@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, FastifyReply } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import type { MusicVoiceCloneJobData } from '@aigc/types'
@@ -6,10 +6,11 @@ import { uploadToTos } from '../../lib/storage.js'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getMusicVoiceCloneQueue } from '../../lib/queue.js'
 import {
-  MusicRouteError,
   assertWorkspaceAccess,
+  getExpectedCreditErrorMessage,
   mapMusicVoiceCloneResponse,
   resolveVoiceCloneCredits,
+  sendMusicRouteError,
   validateVoiceClonePayload,
 } from './_shared.js'
 
@@ -22,25 +23,6 @@ const AUDIO_MIME: Record<string, string> = {
   aac: 'audio/aac',
   flac: 'audio/flac',
   ogg: 'audio/ogg',
-}
-
-function sendError(reply: FastifyReply, error: unknown) {
-  if (error instanceof MusicRouteError) {
-    return reply.status(error.statusCode).send({
-      success: false,
-      error: { code: error.code, message: error.message },
-    })
-  }
-  if (error instanceof Error) {
-    return reply.status(400).send({
-      success: false,
-      error: { code: 'BAD_REQUEST', message: error.message },
-    })
-  }
-  return reply.status(500).send({
-    success: false,
-    error: { code: 'INTERNAL_ERROR', message: '请求处理失败' },
-  })
 }
 
 const route: FastifyPluginAsync = async (app) => {
@@ -116,7 +98,7 @@ const route: FastifyPluginAsync = async (app) => {
     try {
       payload = validateVoiceClonePayload(fields)
     } catch (error) {
-      return sendError(reply, error)
+      return sendMusicRouteError(reply, error, app.log, 'Music voice clone validation failed')
     }
 
     const db = getDb()
@@ -142,7 +124,14 @@ const route: FastifyPluginAsync = async (app) => {
         const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits)
         creditAccountId = frozen.creditAccountId
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'A豆余额不足'
+        const message = getExpectedCreditErrorMessage(error)
+        if (!message) {
+          app.log.error({ err: error }, 'Failed to freeze credits for music voice clone')
+          return reply.status(500).send({
+            success: false,
+            error: { code: 'INTERNAL_ERROR', message: '请求处理失败，请稍后重试' },
+          })
+        }
         return reply.status(402).send({
           success: false,
           error: { code: 'INSUFFICIENT_CREDITS', message },
@@ -199,6 +188,7 @@ const route: FastifyPluginAsync = async (app) => {
               batch_id: batch.id,
               task_id: task.id,
               name: payload.name,
+              gender: payload.gender,
               description: payload.description,
               source_audio_url: sourceAudioUrl,
               source_audio_storage_url: sourceAudioUrl,
@@ -239,10 +229,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       return reply.status(201).send(await mapMusicVoiceCloneResponse(created.voiceClone))
     } catch (error) {
-      if (!(error instanceof MusicRouteError)) {
-        app.log.error({ err: error }, 'Music voice clone request failed')
-      }
-      return sendError(reply, error)
+      return sendMusicRouteError(reply, error, app.log, 'Music voice clone request failed')
     }
   })
 }

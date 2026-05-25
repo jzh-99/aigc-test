@@ -1,5 +1,6 @@
 // music 模块共享辅助函数；autoload 会忽略以 _ 开头的文件。
 
+import type { FastifyBaseLogger, FastifyReply } from 'fastify'
 import { getDb } from '@aigc/db'
 import type { Selectable } from 'kysely'
 import type { Database } from '@aigc/db'
@@ -48,6 +49,13 @@ export class MusicRouteError extends Error {
   }
 }
 
+export class MusicValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MusicValidationError'
+  }
+}
+
 export interface ValidatedMusicGeneratePayload {
   idempotency_key?: string
   workspace_id: string
@@ -85,6 +93,12 @@ export interface ResolvedMusicCredits {
   unitPrices: Record<string, number>
 }
 
+const CREDIT_REJECTION_MESSAGES = new Set([
+  '未找到A豆账户',
+  'A豆余额不足',
+  '个人积分配额已用尽，请联系团队负责人增加配额',
+])
+
 function countTextLength(value: string): number {
   return [...value].length
 }
@@ -93,10 +107,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function validationError(message: string): never {
+  throw new MusicValidationError(message)
+}
+
 function normalizeRequiredString(value: unknown, message: string): string {
-  if (typeof value !== 'string') throw new Error(message)
+  if (typeof value !== 'string') validationError(message)
   const normalized = value.trim()
-  if (!normalized) throw new Error(message)
+  if (!normalized) validationError(message)
   return normalized
 }
 
@@ -109,7 +127,7 @@ function normalizeOptionalString(value: unknown): string | null {
 
 function normalizeOptionalId(value: unknown): string | null {
   if (value == null) return null
-  if (typeof value !== 'string') throw new Error('voice_clone_id 必须是字符串')
+  if (typeof value !== 'string') validationError('voice_clone_id 必须是字符串')
   const normalized = value.trim()
   return normalized || null
 }
@@ -121,36 +139,36 @@ function normalizeLimitedText(
   maxLength: number,
 ): string {
   const normalized = normalizeRequiredString(value, requiredMessage)
-  if (countTextLength(normalized) > maxLength) throw new Error(tooLongMessage)
+  if (countTextLength(normalized) > maxLength) validationError(tooLongMessage)
   return normalized
 }
 
 function normalizeOptionalLimitedText(value: unknown, tooLongMessage: string, maxLength: number): string | null {
   const normalized = normalizeOptionalString(value)
   if (!normalized) return null
-  if (countTextLength(normalized) > maxLength) throw new Error(tooLongMessage)
+  if (countTextLength(normalized) > maxLength) validationError(tooLongMessage)
   return normalized
 }
 
 function normalizeMode(value: unknown): MusicMode {
   if (typeof value === 'string' && MUSIC_MODE_VALUES.includes(value as MusicMode)) return value as MusicMode
-  throw new Error('mode 只允许 inspiration/custom')
+  validationError('mode 只允许 inspiration/custom')
 }
 
 function normalizeTrackType(value: unknown): MusicTrackType {
   if (typeof value === 'string' && MUSIC_TRACK_TYPE_VALUES.includes(value as MusicTrackType)) return value as MusicTrackType
-  throw new Error('type 只允许 song/instrumental')
+  validationError('type 只允许 song/instrumental')
 }
 
 function normalizeModel(value: unknown): MusicModel {
   if (isMusicModel(value)) return value
-  throw new Error(`model 只允许 ${MUSIC_MODEL_VALUES.join('/')}`)
+  validationError(`model 只允许 ${MUSIC_MODEL_VALUES.join('/')}`)
 }
 
 function normalizeVoiceGender(value: unknown): MusicVoiceGender {
   if (value == null || value === '') return 'auto'
   if (isMusicVoiceGender(value)) return value
-  throw new Error('voice_gender 只允许 auto/male/female')
+  validationError('voice_gender 只允许 auto/male/female')
 }
 
 function normalizeStyles(value: unknown): string[] {
@@ -161,20 +179,69 @@ function normalizeStyles(value: unknown): string[] {
       ? value.split(/[,，、\n]/)
       : null
 
-  if (!rawItems) throw new Error('styles 必须是字符串或字符串数组')
+  if (!rawItems) validationError('styles 必须是字符串或字符串数组')
 
   const seen = new Set<string>()
   const styles: string[] = []
   for (const item of rawItems) {
-    if (typeof item !== 'string') throw new Error('styles 只允许字符串')
+    if (typeof item !== 'string') validationError('styles 只允许字符串')
     const style = item.trim()
     if (!style || seen.has(style)) continue
-    if (countTextLength(style) > 24) throw new Error('styles 单项不能超过 24 字')
+    if (countTextLength(style) > 24) validationError('styles 单项不能超过 24 字')
     seen.add(style)
     styles.push(style)
-    if (styles.length > 12) throw new Error('styles 最多 12 项')
+    if (styles.length > 12) validationError('styles 最多 12 项')
   }
   return styles
+}
+
+function normalizeMusicTitleForRequest(value: string): string {
+  try {
+    return normalizeMusicTitle(value)
+  } catch (error) {
+    if (error instanceof Error) validationError(error.message)
+    validationError('标题不合法')
+  }
+}
+
+function normalizeVoiceCloneDescriptionForRequest(value: string | null): string | null {
+  try {
+    return normalizeVoiceCloneDescription(value)
+  } catch (error) {
+    if (error instanceof Error) validationError(error.message)
+    validationError('描述不合法')
+  }
+}
+
+export function sendMusicRouteError(
+  reply: FastifyReply,
+  error: unknown,
+  logger?: FastifyBaseLogger,
+  logMessage = 'Music request failed',
+) {
+  if (error instanceof MusicRouteError) {
+    return reply.status(error.statusCode).send({
+      success: false,
+      error: { code: error.code, message: error.message },
+    })
+  }
+  if (error instanceof MusicValidationError) {
+    return reply.status(400).send({
+      success: false,
+      error: { code: 'BAD_REQUEST', message: error.message },
+    })
+  }
+
+  logger?.error({ err: error }, logMessage)
+  return reply.status(500).send({
+    success: false,
+    error: { code: 'INTERNAL_ERROR', message: '请求处理失败，请稍后重试' },
+  })
+}
+
+export function getExpectedCreditErrorMessage(error: unknown): string | null {
+  if (!(error instanceof Error)) return null
+  return CREDIT_REJECTION_MESSAGES.has(error.message) ? error.message : null
 }
 
 function toIsoString(value: Date | string | null | undefined): string | null {
@@ -196,9 +263,9 @@ async function resolvePlaybackUrl(
 }
 
 export function validateMusicGeneratePayload(body: unknown): ValidatedMusicGeneratePayload {
-  if (!isRecord(body)) throw new Error('请求体不能为空')
+  if (!isRecord(body)) validationError('请求体不能为空')
   if (Object.prototype.hasOwnProperty.call(body, 'voice_id')) {
-    throw new Error('voice_id 不是内部音色克隆记录 ID，请使用 voice_clone_id')
+    validationError('voice_id 不是内部音色克隆记录 ID，请使用 voice_clone_id')
   }
 
   const mode = normalizeMode(body.mode)
@@ -236,7 +303,7 @@ export function validateMusicGeneratePayload(body: unknown): ValidatedMusicGener
   }
 
   if (trackType === 'instrumental') {
-    throw new Error('custom 模式不支持 instrumental')
+    validationError('custom 模式不支持 instrumental')
   }
 
   return {
@@ -246,7 +313,7 @@ export function validateMusicGeneratePayload(body: unknown): ValidatedMusicGener
     track_type: trackType,
     model,
     prompt: normalizeOptionalLimitedText(body.prompt, `灵感描述不能超过 ${MUSIC_PROMPT_MAX_LENGTH} 字`, MUSIC_PROMPT_MAX_LENGTH),
-    title: normalizeMusicTitle(normalizeRequiredString(body.title, '标题不能为空')),
+    title: normalizeMusicTitleForRequest(normalizeRequiredString(body.title, '标题不能为空')),
     lyrics: normalizeLimitedText(
       body.lyrics,
       '歌词不能为空',
@@ -263,10 +330,10 @@ export function validateMusicGeneratePayload(body: unknown): ValidatedMusicGener
 }
 
 export function validateVoiceClonePayload(body: unknown): ValidatedVoiceClonePayload {
-  if (!isRecord(body)) throw new Error('请求体不能为空')
+  if (!isRecord(body)) validationError('请求体不能为空')
   return {
     name: normalizeRequiredString(body.name, '音色名称不能为空'),
-    description: normalizeVoiceCloneDescription(normalizeOptionalString(body.description)),
+    description: normalizeVoiceCloneDescriptionForRequest(normalizeOptionalString(body.description)),
     gender: normalizeVoiceGender(body.gender),
     model: normalizeModel(body.model ?? 'mureka-8'),
   }

@@ -402,6 +402,7 @@ export interface MusicVoiceClonesTable {
   task_id: string | null
   name: string
   description: string | null
+  gender: Generated<'auto' | 'male' | 'female'>
   source_audio_url: string
   source_audio_storage_url: string | null
   voice_id: string | null

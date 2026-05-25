@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
+import { readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { __setQueuesForTest, closeQueues } from '../lib/queue.js'
 import {
   assertVoiceCloneReadyForWorkspace,
@@ -10,6 +13,8 @@ import {
   validateMusicGeneratePayload,
   validateVoiceClonePayload,
 } from '../routes/music/_shared.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 interface FakeQueryCall {
   table: string
@@ -398,6 +403,19 @@ describe('music validation helpers', () => {
 
     assert.equal(calls.length, 1)
     assert.deepEqual(calls[0]?.joins, ['workspaces', 'team_members'])
+  })
+
+  test('post-generate 幂等命中前先校验 workspace 权限并限定当前 workspace', async () => {
+    const source = await readFile(join(__dirname, '../routes/music/post-generate.ts'), 'utf-8')
+    const validateIndex = source.indexOf('payload = validateMusicGeneratePayload(request.body)')
+    const accessIndex = source.indexOf('const access = await assertWorkspaceAccess')
+    const existingBatchIndex = source.indexOf("selectFrom('task_batches')")
+
+    assert.ok(validateIndex >= 0)
+    assert.ok(accessIndex > validateIndex)
+    assert.ok(existingBatchIndex > accessIndex)
+    assert.match(source, /\.where\('workspace_id', '=', payload\.workspace_id\)/)
+    assert.match(source, /\.where\('mt\.workspace_id', '=', payload\.workspace_id\)/)
   })
 
   test('closeQueues 关闭后可重复调用且不连接真实 Redis', async () => {
