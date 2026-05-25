@@ -43,6 +43,9 @@ function countTextLength(value: string): number {
 
 export function normalizeMusicTitle(value: string): string {
   const title = value.trim()
+  if (!title) {
+    throw new Error('标题不能为空')
+  }
   if (countTextLength(title) > MUSIC_CUSTOM_TITLE_MAX_LENGTH) {
     throw new Error(`标题不能超过 ${MUSIC_CUSTOM_TITLE_MAX_LENGTH} 字`)
   }

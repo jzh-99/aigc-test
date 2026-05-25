@@ -25,6 +25,10 @@ describe('音乐标题标准化', () => {
     assert.equal(normalizeMusicTitle('  星空来信  '), '星空来信')
   })
 
+  test('标题 trim 后为空时抛出错误', () => {
+    assert.throws(() => normalizeMusicTitle('   '), /标题不能为空/)
+  })
+
   test('标题超过 20 字时抛出错误', () => {
     assert.throws(() => normalizeMusicTitle('一'.repeat(21)), /标题不能超过 20 字/)
   })
