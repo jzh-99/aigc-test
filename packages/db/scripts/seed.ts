@@ -356,7 +356,7 @@ async function main() {
     },
   }
 
-  const qwenModelCode = process.env.QWEN_MODEL?.trim() || 'qwen3-6b-plus'
+  const qwenModelCode = process.env.QWEN_MODEL?.trim() || 'qwen3.6-plus'
   const qwenAgentModels = [
     {
       code: qwenModelCode,

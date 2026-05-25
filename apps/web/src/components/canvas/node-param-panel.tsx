@@ -88,7 +88,7 @@ const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
   categoryReferences: DEFAULT_VIDEO_CATEGORY_LIMITS,
 }
 
-const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '', model: 'qwen3-6b-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS }
+const DEFAULT_TEXT_CONFIG: TextInputConfig = { text: '', model: 'qwen3.6-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS }
 const DEFAULT_ASSET_CONFIG: AssetConfig = { url: '', name: '', mimeType: 'image/jpeg' }
 const DEFAULT_AUDIO_CONFIG: AudioGenConfig = {
   text: '',

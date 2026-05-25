@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { signAssetUrl, uploadToTos } from '../../lib/storage.js'
 import { generateMiniMaxTtsAudio } from '../../services/minimax-tts.js'
+import { normalizeModelJsonFields } from '../../lib/model-json.js'
 
 const MINIMAX_DEMO_TEXT = '欢迎来到toby AI，挑选一个你喜欢的音色，让我们开始创作之旅吧。'
 const MINIMAX_DEMO_MODEL = 'speech-2.8-turbo'
@@ -86,7 +87,7 @@ const route: FastifyPluginAsync = async (app) => {
         const effective = r.team_is_active !== null ? r.team_is_active : r.global_is_active
         return effective
       })
-      .map((r) => ({
+      .map((r) => normalizeModelJsonFields({
         id: r.id, code: r.code, name: r.name, description: r.description,
         module: r.module, category_references: r.category_references,
         credit_cost: r.credit_cost, params_pricing: r.params_pricing,

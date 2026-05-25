@@ -81,7 +81,7 @@ const route: FastifyPluginAsync = async (app) => {
             idempotency_key: crypto.randomUUID(),
             module: 'storyboard',
             provider: 'qwen',
-            model: process.env.QWEN_MODEL ?? 'qwen3-6b-plus',
+            model: process.env.QWEN_MODEL ?? 'qwen3.6-plus',
             prompt: script.slice(0, 500),
             params: JSON.stringify({ shotCount }),
             quantity: 1,

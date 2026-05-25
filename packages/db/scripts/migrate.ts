@@ -23,7 +23,7 @@ class SafeFileMigrationProvider implements MigrationProvider {
     const migrations: Record<string, Migration> = {}
     const files = await fs.readdir(this.folder)
     for (const file of files.sort()) {
-      if (file.endsWith('.ts') || file.endsWith('.js')) {
+      if ((file.endsWith('.ts') || file.endsWith('.js')) && !file.includes('.test.')) {
         const filePath = path.join(this.folder, file)
         const mod = await import(pathToFileURL(filePath).href)
         const name = file.replace(/\.(ts|js)$/, '')

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
+import { normalizeModelJsonFields } from '../../lib/model-json.js'
 
 // GET /admin/models — 查询所有模型（支持按 module 过滤）
 const route: FastifyPluginAsync = async (app) => {
@@ -20,7 +21,8 @@ const route: FastifyPluginAsync = async (app) => {
     if (req.query.module) {
       query = query.where('pm.module', '=', req.query.module as any)
     }
-    return query.execute()
+    const rows = await query.execute()
+    return rows.map((row) => normalizeModelJsonFields(row))
   })
 }
 

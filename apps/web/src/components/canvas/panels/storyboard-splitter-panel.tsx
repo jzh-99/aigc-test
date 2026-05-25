@@ -119,7 +119,7 @@ export function StoryboardSplitterPanel({ nodeId, canvasId, config, onExecuted, 
       id: `shot_${nodeId}_${i}`,
       type: 'text_input' as const,
       position: { x: baseX, y: baseY + i * 220 },
-      data: { label: `镜头${shot.shotNumber}`, config: { text: shot.compositionPrompt, model: 'qwen3-6b-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS } },
+      data: { label: `镜头${shot.shotNumber}`, config: { text: shot.compositionPrompt, model: 'qwen3.6-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS } },
     }))
     const newEdges: AppEdge[] = newNodes.map((n) => ({
       id: `edge_${nodeId}_${n.id}`,

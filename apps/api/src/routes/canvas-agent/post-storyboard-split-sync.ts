@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify'
 const route: FastifyPluginAsync = async (app) => {
   const API_URL = process.env.QWEN_API_URL ?? ''
   const API_KEY = process.env.QWEN_API_KEY ?? ''
-  const MODEL = process.env.QWEN_MODEL ?? 'qwen3-6b-plus'
+  const MODEL = process.env.QWEN_MODEL ?? 'qwen3.6-plus'
   const SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_STORYBOARD_SPLIT ?? ''
 
   app.post<{

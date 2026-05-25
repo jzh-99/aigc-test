@@ -25,7 +25,7 @@ export class NodeRegistry {
       CanvasComponent: TextNode as any,
       inputs: [{ id: 'any-in', type: 'text', position: 'left' }],
       outputs: [{ id: 'text-out', type: 'text', position: 'right' }],
-      defaultConfig: { text: '', model: 'qwen3-6b-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS },
+      defaultConfig: { text: '', model: 'qwen3.6-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS },
     })
 
     this.register({

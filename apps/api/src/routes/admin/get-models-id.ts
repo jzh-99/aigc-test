@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
+import { normalizeModelJsonFields } from '../../lib/model-json.js'
 
 // GET /admin/models/:id — 查询单个模型详情
 const route: FastifyPluginAsync = async (app) => {
@@ -18,7 +19,7 @@ const route: FastifyPluginAsync = async (app) => {
       .executeTakeFirst()
 
     if (!model) return reply.status(404).send({ error: 'Model not found' })
-    return model
+    return normalizeModelJsonFields(model)
   })
 }
 
