@@ -57,3 +57,25 @@ export interface StoryboardJobData {
   script: string
   shotCount: number
 }
+
+export interface MusicJobData {
+  taskId: string
+  batchId: string
+  trackId: string
+  userId: string
+  teamId: string
+  workspaceId: string
+  creditAccountId: string
+  estimatedCredits: number
+}
+
+export interface MusicVoiceCloneJobData {
+  taskId: string
+  batchId: string
+  voiceCloneId: string
+  userId: string
+  teamId: string
+  workspaceId: string
+  creditAccountId: string
+  estimatedCredits: number
+}
