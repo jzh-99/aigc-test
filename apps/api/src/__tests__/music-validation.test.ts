@@ -1,10 +1,96 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
+import { __setQueuesForTest, closeQueues } from '../lib/queue.js'
 import {
+  assertVoiceCloneReadyForWorkspace,
+  assertWorkspaceAccess,
+  mapMusicVoiceCloneResponse,
   mapMusicTrackResponse,
+  MusicRouteError,
   validateMusicGeneratePayload,
   validateVoiceClonePayload,
 } from '../routes/music/_shared.js'
+
+interface FakeQueryCall {
+  table: string
+  joins: string[]
+  selects: unknown[]
+  wheres: unknown[][]
+}
+
+function createFakeDb(resultsByTable: Record<string, unknown[]>) {
+  const calls: FakeQueryCall[] = []
+
+  return {
+    calls,
+    db: {
+      selectFrom(table: string) {
+        const call: FakeQueryCall = { table, joins: [], selects: [], wheres: [] }
+        calls.push(call)
+
+        const joinBuilder = {
+          onRef() {
+            return joinBuilder
+          },
+        }
+
+        const builder = {
+          innerJoin(joinTable: string, joinCallback?: unknown) {
+            call.joins.push(joinTable)
+            if (typeof joinCallback === 'function') joinCallback(joinBuilder)
+            return builder
+          },
+          select(selection: unknown) {
+            call.selects.push(selection)
+            return builder
+          },
+          where(...args: unknown[]) {
+            call.wheres.push(args)
+            return builder
+          },
+          async executeTakeFirst() {
+            return resultsByTable[table]?.shift()
+          },
+        }
+
+        return builder
+      },
+    },
+  }
+}
+
+async function assertRejectsMusicRouteError(
+  promise: Promise<unknown>,
+  statusCode: number,
+  code: string,
+) {
+  await assert.rejects(promise, (error) => {
+    assert.ok(error instanceof MusicRouteError)
+    assert.equal(error.statusCode, statusCode)
+    assert.equal(error.code, code)
+    return true
+  })
+}
+
+function makeVoiceCloneRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'voice-clone-1',
+    voice_id: 'provider-voice-1',
+    user_id: 'user-1',
+    workspace_id: 'workspace-1',
+    name: '测试音色',
+    gender: 'auto',
+    description: null,
+    status: 'ready',
+    source_audio_url: 'https://cdn.example.com/source.wav',
+    source_audio_storage_url: null,
+    error_message: null,
+    created_at: new Date('2026-01-01T00:00:00.000Z'),
+    updated_at: new Date('2026-01-01T00:01:00.000Z'),
+    completed_at: null,
+    ...overrides,
+  }
+}
 
 describe('music validation helpers', () => {
   test('voice_id 入参会被拒绝，避免和内部 voice_clone_id 混用', () => {
@@ -202,5 +288,135 @@ describe('music validation helpers', () => {
 
     assert.equal(response.cover_url, 'https://cdn.example.com/cover.jpg')
     assert.equal(response.audio_url, 'https://cdn.example.com/track.mp3')
+  })
+
+  test('assertVoiceCloneReadyForWorkspace 使用内部 voice_clone_id 查询当前 workspace 的 ready 记录', async () => {
+    const { db, calls } = createFakeDb({
+      music_voice_clones: [{
+        id: 'voice-clone-1',
+        name: '测试音色',
+        voice_id: 'provider-voice-1',
+        external_voice_id: 'external-voice-1',
+        workspace_id: 'workspace-current',
+        status: 'ready',
+      }],
+    })
+
+    const voice = await assertVoiceCloneReadyForWorkspace(db as never, 'workspace-current', 'voice-clone-1')
+
+    assert.equal(voice?.voice_id, 'provider-voice-1')
+    assert.equal(calls[0]?.table, 'music_voice_clones')
+    assert.deepEqual(calls[0]?.wheres, [
+      ['id', '=', 'voice-clone-1'],
+      ['workspace_id', '=', 'workspace-current'],
+      ['status', '=', 'ready'],
+    ])
+  })
+
+  test('assertVoiceCloneReadyForWorkspace 遇到 ready 记录缺少 voice_id 时抛 VOICE_NOT_READY', async () => {
+    const { db } = createFakeDb({
+      music_voice_clones: [{
+        id: 'voice-clone-1',
+        name: '测试音色',
+        voice_id: '',
+        external_voice_id: null,
+        workspace_id: 'workspace-1',
+        status: 'ready',
+      }],
+    })
+
+    await assertRejectsMusicRouteError(
+      assertVoiceCloneReadyForWorkspace(db as never, 'workspace-1', 'voice-clone-1'),
+      404,
+      'VOICE_NOT_READY',
+    )
+  })
+
+  test('mapMusicVoiceCloneResponse 优先返回签名后的 source_audio_storage_url 且不暴露原始 storage URL', async () => {
+    const signedUrls: string[] = []
+    const response = await mapMusicVoiceCloneResponse(
+      makeVoiceCloneRow({
+        source_audio_url: 'https://cdn.example.com/source.wav',
+        source_audio_storage_url: 'tos://bucket/source.wav',
+      }) as never,
+      async (url) => {
+        signedUrls.push(url ?? '')
+        return `/signed/${encodeURIComponent(url ?? '')}`
+      },
+    )
+
+    assert.deepEqual(signedUrls, ['tos://bucket/source.wav'])
+    assert.equal(response.demo_audio_url, '/signed/tos%3A%2F%2Fbucket%2Fsource.wav')
+    assert.equal(Object.values(response).includes('tos://bucket/source.wav'), false)
+    assert.equal('source_audio_storage_url' in response, false)
+  })
+
+  test('mapMusicVoiceCloneResponse 没有 storage URL 时 fallback 到 source_audio_url', async () => {
+    const signedUrls: string[] = []
+    const response = await mapMusicVoiceCloneResponse(
+      makeVoiceCloneRow({
+        source_audio_url: 'https://cdn.example.com/source.wav',
+        source_audio_storage_url: null,
+      }) as never,
+      async (url) => {
+        signedUrls.push(url ?? '')
+        return `/signed/${encodeURIComponent(url ?? '')}`
+      },
+    )
+
+    assert.deepEqual(signedUrls, [])
+    assert.equal(response.demo_audio_url, 'https://cdn.example.com/source.wav')
+  })
+
+  test('assertWorkspaceAccess 非管理员访问 deleted workspace 时拒绝', async () => {
+    const { db, calls } = createFakeDb({
+      workspace_members: [undefined],
+      workspaces: [{ team_id: 'team-deleted' }],
+    })
+
+    await assertRejectsMusicRouteError(
+      assertWorkspaceAccess(db as never, 'workspace-deleted', 'user-1', 'member'),
+      403,
+      'FORBIDDEN',
+    )
+
+    assert.equal(calls.length, 1)
+    assert.deepEqual(calls[0]?.wheres.at(-1), ['workspaces.is_deleted', '=', false])
+  })
+
+  test('assertWorkspaceAccess 非管理员缺少 team_members 关联时拒绝且不走 admin fallback', async () => {
+    const { db, calls } = createFakeDb({
+      workspace_members: [undefined],
+      workspaces: [{ team_id: 'team-1' }],
+    })
+
+    await assertRejectsMusicRouteError(
+      assertWorkspaceAccess(db as never, 'workspace-1', 'user-1', 'member'),
+      403,
+      'FORBIDDEN',
+    )
+
+    assert.equal(calls.length, 1)
+    assert.deepEqual(calls[0]?.joins, ['workspaces', 'team_members'])
+  })
+
+  test('closeQueues 关闭后可重复调用且不连接真实 Redis', async () => {
+    const closedQueues: string[] = []
+    const makeQueue = (name: string) => ({
+      async close() {
+        closedQueues.push(name)
+      },
+    })
+
+    __setQueuesForTest({
+      imageQueue: makeQueue('image'),
+      musicQueue: makeQueue('music'),
+      musicVoiceCloneQueue: makeQueue('music-voice-clone'),
+    })
+
+    await closeQueues()
+    await closeQueues()
+
+    assert.deepEqual(closedQueues, ['image', 'music', 'music-voice-clone'])
   })
 })

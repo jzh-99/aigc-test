@@ -28,6 +28,24 @@ let _storyboardQueue: Queue | null = null
 let _musicQueue: Queue<MusicJobData> | null = null
 let _musicVoiceCloneQueue: Queue<MusicVoiceCloneJobData> | null = null
 
+type CloseableQueue = Pick<Queue, 'close'>
+
+export function __setQueuesForTest(queues: {
+  imageQueue?: CloseableQueue | null
+  transferQueue?: CloseableQueue | null
+  videoQueue?: CloseableQueue | null
+  storyboardQueue?: CloseableQueue | null
+  musicQueue?: CloseableQueue | null
+  musicVoiceCloneQueue?: CloseableQueue | null
+}): void {
+  _imageQueue = (queues.imageQueue as Queue | null | undefined) ?? null
+  _transferQueue = (queues.transferQueue as Queue | null | undefined) ?? null
+  _videoQueue = (queues.videoQueue as Queue | null | undefined) ?? null
+  _storyboardQueue = (queues.storyboardQueue as Queue | null | undefined) ?? null
+  _musicQueue = (queues.musicQueue as Queue<MusicJobData> | null | undefined) ?? null
+  _musicVoiceCloneQueue = (queues.musicVoiceCloneQueue as Queue<MusicVoiceCloneJobData> | null | undefined) ?? null
+}
+
 export function getImageQueue(): Queue {
   if (!_imageQueue) {
     _imageQueue = new Queue('image-queue', { connection: getRedisOptions() })
