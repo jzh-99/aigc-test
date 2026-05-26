@@ -16,6 +16,11 @@ import {
   validateMusicGeneratePayload,
 } from './_shared.js'
 
+function deriveInitialMusicTitle(payload: ReturnType<typeof validateMusicGeneratePayload>): string {
+  const source = payload.title ?? payload.prompt ?? payload.lyrics ?? 'Toby AI 音乐'
+  return [...source.trim()].slice(0, 20).join('') || 'Toby AI 音乐'
+}
+
 function toTaskResponse(task: any) {
   return {
     id: task.id,
@@ -180,7 +185,7 @@ const route: FastifyPluginAsync = async (app) => {
               task_id: task.id,
               type: payload.track_type,
               mode: payload.mode,
-              title: payload.title,
+              title: deriveInitialMusicTitle(payload),
               prompt: payload.prompt,
               lyrics: payload.lyrics,
               styles: JSON.stringify(payload.styles),

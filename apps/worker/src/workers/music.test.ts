@@ -6,6 +6,12 @@ import {
   downloadMusicFile,
   extensionForMusicContent,
 } from '../lib/music-storage.js'
+import {
+  buildCoverPrompt,
+  nextTrackStatusForMode,
+  parseMusicBatchParams,
+  pickFinalMediaResult,
+} from './music-helpers.js'
 
 function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(data), {
@@ -115,3 +121,23 @@ test('downloadMusicFile rejects non-audio content for audio transfer', async () 
   )
 })
 
+test('music worker helpers parse batch params and status transitions', () => {
+  assert.deepEqual(parseMusicBatchParams('{"mode":"custom","voice_id":"voice_123","styles":["R&B"]}'), {
+    mode: 'custom',
+    voice_id: 'voice_123',
+    styles: ['R&B'],
+  })
+  assert.equal(nextTrackStatusForMode('inspiration', 'song'), 'lyrics_generating')
+  assert.equal(nextTrackStatusForMode('custom', 'song'), 'song_generating')
+  assert.match(buildCoverPrompt({
+    title: '星空来信',
+    prompt: '星空与思念',
+    type: 'song',
+    styles: ['流行'],
+  }), /无文字，无水印/)
+})
+
+test('pickFinalMediaResult rejects failed Mureka result', () => {
+  assert.throws(() => pickFinalMediaResult({ status: 'failed', error_message: 'bad song' }), /bad song/)
+  assert.equal(pickFinalMediaResult({ status: 'processing', task_id: 'task_1' }).task_id, 'task_1')
+})
