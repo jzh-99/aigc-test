@@ -72,7 +72,8 @@ export interface MusicGenerateRequest {
   prompt?: string
   lyrics?: string
   title?: string
-  voice_id?: string
+  styles?: string[]
+  voice_clone_id?: string | null
   voice_gender?: MusicVoiceGender
   params?: Record<string, unknown>
   canvas_id?: string
@@ -92,8 +93,19 @@ export interface MusicTrackResponse {
   title: string | null
   prompt: string | null
   lyrics: string | null
+  styles: string[]
+  voice_clone_id: string | null
+  voice_gender: MusicVoiceGender
+  voice_name: string | null
+  stream_url: string | null
   audio_url: string | null
+  audio_storage_url?: string | null
+  flac_url: string | null
+  flac_storage_url?: string | null
+  wav_url: string | null
+  wav_storage_url?: string | null
   cover_url: string | null
+  cover_storage_url?: string | null
   duration_seconds: number | null
   error_message: string | null
   estimated_credits: number
@@ -120,5 +132,8 @@ export interface MusicVoiceCloneResponse {
 }
 
 export type MusicSseEvent =
-  | { event: 'music_track_update'; data: MusicTrackResponse }
-  | { event: 'music_voice_clone_update'; data: MusicVoiceCloneResponse }
+  | { event: 'status'; status: MusicTrackStatus; message?: string }
+  | { event: 'lyrics_delta'; delta: string; lyrics: string }
+  | { event: 'stream_url'; stream_url: string }
+  | { event: 'completed'; track?: MusicTrackResponse; track_id?: string }
+  | { event: 'failed'; error_message: string }
