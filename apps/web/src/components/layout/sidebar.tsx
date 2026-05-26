@@ -24,7 +24,7 @@ import {
   Shield,
   Palette,
   Clapperboard,
-  Music2,
+  WandSparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -39,8 +39,8 @@ interface NavItem {
 const baseNavItems: NavItem[] = [
   { href: '/', label: '工作台', icon: LayoutDashboard },
   { href: '/generation', label: '创作生成', icon: Sparkles },
-  { href: '/canvas/gallery', label: '画布', icon: Palette },
-  { href: '/music', label: '音乐', icon: Music2 },
+  { href: '/canvas/gallery', label: '灵动画布', icon: Palette },
+  { href: '/toby-studio', label: 'Toby Studio', icon: WandSparkles },
   { href: '/video-studio', label: '视频工坊', icon: Clapperboard },
   { href: '/assets', label: '资产库', icon: Images },
 ]

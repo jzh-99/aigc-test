@@ -5,7 +5,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { __setQueuesForTest, closeQueues } from '../lib/queue.js'
 import {
+  assertVoiceCloneAudioDuration,
   assertVoiceCloneReadyForWorkspace,
+  buildMusicAdjacentResponse,
   assertWorkspaceAccess,
   createMusicSseCleanup,
   decodeMusicTrackCursor,
@@ -13,7 +15,9 @@ import {
   markMusicQueueDeliveryFailed,
   mapMusicVoiceCloneResponse,
   mapMusicTrackResponse,
+  createMusicTrackSsePayload,
   MusicRouteError,
+  resolveVoiceCloneCredits,
   validateVoiceCloneAudioUpload,
   validateMusicGeneratePayload,
   validateVoiceClonePayload,
@@ -149,6 +153,20 @@ function makeVoiceCloneRow(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function makeMp3Buffer(seconds: number): Buffer {
+  const sampleRate = 44100
+  const bitrate = 128000
+  const samplesPerFrame = 1152
+  const frameSize = Math.floor((144 * bitrate) / sampleRate)
+  const frameCount = Math.ceil((seconds * sampleRate) / samplesPerFrame)
+  const frame = Buffer.alloc(frameSize, 0)
+  frame[0] = 0xff
+  frame[1] = 0xfb
+  frame[2] = 0x90
+  frame[3] = 0x64
+  return Buffer.concat(Array.from({ length: frameCount }, () => frame))
+}
+
 describe('music validation helpers', () => {
   test('validateVoiceCloneAudioUpload 拒绝空音频文件', () => {
     assert.throws(
@@ -178,12 +196,59 @@ describe('music validation helpers', () => {
     )
   })
 
-  test('validateVoiceCloneAudioUpload 接受常见 wav 文件头和 MIME', () => {
+  test('validateVoiceCloneAudioUpload 拒绝非 MP3/M4A 音频', () => {
     const wavHeader = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVEfmt ')])
 
-    const result = validateVoiceCloneAudioUpload('voice.wav', wavHeader, 'audio/wav')
+    assert.throws(
+      () => validateVoiceCloneAudioUpload('voice.wav', wavHeader, 'audio/wav'),
+      (error) => {
+        assert.ok(error instanceof MusicRouteError)
+        assert.equal(error.statusCode, 400)
+        assert.equal(error.code, 'BAD_REQUEST')
+        assert.match(error.message, /mp3\/m4a/)
+        return true
+      },
+    )
+  })
 
-    assert.deepEqual(result, { ext: 'wav', contentType: 'audio/wav' })
+  test('validateVoiceCloneAudioUpload 拒绝超过 10MB 的音频', () => {
+    assert.throws(
+      () => validateVoiceCloneAudioUpload('voice.mp3', Buffer.alloc((10 * 1024 * 1024) + 1, 0xff), 'audio/mpeg'),
+      (error) => {
+        assert.ok(error instanceof MusicRouteError)
+        assert.equal(error.statusCode, 413)
+        assert.equal(error.code, 'PAYLOAD_TOO_LARGE')
+        assert.match(error.message, /10 MB/)
+        return true
+      },
+    )
+  })
+
+  test('validateVoiceCloneAudioUpload 接受常见 m4a 文件头和 MIME', () => {
+    const m4aHeader = Buffer.concat([Buffer.alloc(4), Buffer.from('ftypM4A '), Buffer.alloc(16)])
+
+    const result = validateVoiceCloneAudioUpload('voice.m4a', m4aHeader, 'audio/mp4')
+
+    assert.deepEqual(result, { ext: 'm4a', contentType: 'audio/mp4' })
+  })
+
+  test('assertVoiceCloneAudioDuration 拒绝不足 15 秒的音频', () => {
+    assert.throws(
+      () => assertVoiceCloneAudioDuration(makeMp3Buffer(10), 'mp3'),
+      (error) => {
+        assert.ok(error instanceof MusicRouteError)
+        assert.equal(error.statusCode, 400)
+        assert.equal(error.code, 'BAD_REQUEST')
+        assert.match(error.message, /至少需要 15 秒/)
+        return true
+      },
+    )
+  })
+
+  test('assertVoiceCloneAudioDuration 接受 15 秒以上音频', () => {
+    const duration = assertVoiceCloneAudioDuration(makeMp3Buffer(16), 'mp3')
+
+    assert.ok(duration >= 15)
   })
 
   test('music track cursor 使用 created_at + id 稳定编解码并兼容旧时间字符串', () => {
@@ -372,6 +437,36 @@ describe('music validation helpers', () => {
     )
   })
 
+  test('validateVoiceClonePayload 不要求音色克隆模型', () => {
+    const payload = validateVoiceClonePayload({
+      name: '我的音色',
+      description: '温暖明亮',
+      gender: 'auto',
+    })
+
+    assert.deepEqual(payload, {
+      name: '我的音色',
+      description: '温暖明亮',
+      gender: 'auto',
+    })
+  })
+
+  test('resolveVoiceCloneCredits 使用环境变量配置价格且不查询模型表', async () => {
+    const previous = process.env.MUSIC_VOICE_CLONE_CREDITS
+    process.env.MUSIC_VOICE_CLONE_CREDITS = '7'
+    const { db, calls } = createFakeDb({})
+
+    const credits = await resolveVoiceCloneCredits(db as never, 'team-1')
+
+    assert.equal(credits.providerModelId, null)
+    assert.equal(credits.providerCode, 'mureka')
+    assert.equal(credits.estimatedCredits, 7)
+    assert.deepEqual(credits.unitPrices, { voice_clone: 7 })
+    assert.equal(calls.length, 0)
+    if (previous === undefined) delete process.env.MUSIC_VOICE_CLONE_CREDITS
+    else process.env.MUSIC_VOICE_CLONE_CREDITS = previous
+  })
+
   test('inspiration prompt 超过 1024 字会失败', () => {
     assert.throws(
       () => validateMusicGeneratePayload({
@@ -382,6 +477,36 @@ describe('music validation helpers', () => {
         prompt: '灵'.repeat(1025),
       }),
       /灵感描述不能超过 1024 字/,
+    )
+  })
+
+  test('inspiration 模式保留音色克隆', () => {
+    const payload = validateMusicGeneratePayload({
+      workspace_id: 'workspace-1',
+      mode: 'inspiration',
+      track_type: 'song',
+      model: 'mureka-8',
+      prompt: '写一首轻快的歌',
+      voice_clone_id: 'voice-clone-1',
+      voice_gender: 'auto',
+    })
+
+    assert.equal(payload.voice_clone_id, 'voice-clone-1')
+    assert.equal(payload.voice_gender, 'auto')
+  })
+
+  test('音色克隆和音色性别不能同时选择', () => {
+    assert.throws(
+      () => validateMusicGeneratePayload({
+        workspace_id: 'workspace-1',
+        mode: 'inspiration',
+        track_type: 'song',
+        model: 'mureka-8',
+        prompt: '写一首轻快的歌',
+        voice_clone_id: 'voice-clone-1',
+        voice_gender: 'female',
+      }),
+      /音色和音色性别不能同时选择/,
     )
   })
 
@@ -455,6 +580,12 @@ describe('music validation helpers', () => {
         title: '测试歌',
         prompt: null,
         lyrics: '歌词',
+        lyrics_sections: [{
+          section_type: 'verse',
+          start: 0,
+          end: 2,
+          lines: [{ start: 0, end: 2, text: '歌词' }],
+        }],
         styles: ['pop'],
         voice_clone_id: 'voice-clone-1',
         voice_gender: 'female',
@@ -468,6 +599,7 @@ describe('music validation helpers', () => {
         flac_storage_url: 'tos://bucket/track.flac',
         wav_url: 'https://cdn.example.com/track.wav',
         wav_storage_url: 'tos://bucket/track.wav',
+        duration_seconds: 2,
         external_task_id: 'external-1',
         status: 'completed',
         error_message: null,
@@ -488,6 +620,13 @@ describe('music validation helpers', () => {
     assert.equal(response.flac_storage_url, '/signed/tos%3A%2F%2Fbucket%2Ftrack.flac')
     assert.equal(response.wav_url, '/signed/tos%3A%2F%2Fbucket%2Ftrack.wav')
     assert.equal(response.wav_storage_url, '/signed/tos%3A%2F%2Fbucket%2Ftrack.wav')
+    assert.equal(response.duration_seconds, 2)
+    assert.deepEqual(response.lyrics_sections, [{
+      section_type: 'verse',
+      start: 0,
+      end: 2,
+      lines: [{ start: 0, end: 2, text: '歌词' }],
+    }])
   })
 
   test('mapMusicTrackResponse 在没有 storage URL 时 fallback provider URL', async () => {
@@ -504,6 +643,7 @@ describe('music validation helpers', () => {
         title: '测试歌',
         prompt: null,
         lyrics: '歌词',
+        lyrics_sections: [],
         styles: ['pop'],
         voice_clone_id: null,
         voice_gender: 'auto',
@@ -517,6 +657,7 @@ describe('music validation helpers', () => {
         flac_storage_url: null,
         wav_url: null,
         wav_storage_url: null,
+        duration_seconds: null,
         external_task_id: 'external-1',
         status: 'completed',
         error_message: null,
@@ -529,6 +670,47 @@ describe('music validation helpers', () => {
 
     assert.equal(response.cover_url, 'https://cdn.example.com/cover.jpg')
     assert.equal(response.audio_url, 'https://cdn.example.com/track.mp3')
+  })
+
+  test('createMusicTrackSsePayload 为状态和终态事件携带完整 track 快照', () => {
+    const track = {
+      id: 'track-1',
+      status: 'completed',
+      stream_url: 'https://stream.example.com/track.m3u8',
+    } as never
+
+    assert.deepEqual(createMusicTrackSsePayload('completed', track), {
+      event: 'completed',
+      track,
+    })
+    assert.deepEqual(createMusicTrackSsePayload('status', track), {
+      event: 'status',
+      status: 'completed',
+      track,
+    })
+    assert.deepEqual(createMusicTrackSsePayload('stream_url', track), {
+      event: 'stream_url',
+      stream_url: 'https://stream.example.com/track.m3u8',
+      track,
+    })
+  })
+
+  test('buildMusicAdjacentResponse 同时返回相邻歌曲 ID，匹配前端播放器契约', () => {
+    const previous = { id: 'track-newer', title: '上一首' }
+    const next = { id: 'track-older', title: '下一首' }
+
+    assert.deepEqual(buildMusicAdjacentResponse(previous, next), {
+      previous_id: 'track-newer',
+      next_id: 'track-older',
+      previous,
+      next,
+    })
+    assert.deepEqual(buildMusicAdjacentResponse(null, null), {
+      previous_id: null,
+      next_id: null,
+      previous: null,
+      next: null,
+    })
   })
 
   test('assertVoiceCloneReadyForWorkspace 使用内部 voice_clone_id 查询当前 workspace 的 ready 记录', async () => {

@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq'
-import { getDb } from '@aigc/db'
+import { getDb, recordProviderApiLog } from '@aigc/db'
 import { sql } from 'kysely'
 import type { VideoSubmitJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
@@ -11,36 +11,192 @@ const logger = buildLogger()
 const VOLCENGINE_API_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 
-async function submitVolcengine(model: string, prompt: string, params: Record<string, unknown>): Promise<string> {
-  const body = buildVolcengineTaskBody(model, prompt, params)
-
-  const apiKey = process.env.VOLCENGINE_API_KEY ?? ''
-  const res = await fetch(`${VOLCENGINE_API_URL}/contents/generations/tasks`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  })
-  const data = (await res.json()) as { id?: string; error?: { message?: string } }
-  if (!res.ok || !data.id) throw new Error(data.error?.message ?? `火山引擎 API 错误 ${res.status}`)
-  return data.id
+interface VideoSubmitAuditContext {
+  taskId: string
+  batchId: string
+  userId: string
+  teamId: string
 }
 
-async function submitVeo(model: string, prompt: string, params: Record<string, unknown>): Promise<string> {
+async function readJsonResponse(res: Response): Promise<unknown> {
+  const text = await res.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+function responseId(data: unknown): string | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  const id = (data as { id?: unknown }).id
+  return typeof id === 'string' ? id : null
+}
+
+function responseError(data: unknown): string | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  const error = (data as { error?: { message?: unknown }; message?: unknown }).error
+  if (typeof error?.message === 'string') return error.message
+  const message = (data as { message?: unknown }).message
+  return typeof message === 'string' ? message : null
+}
+
+async function submitVolcengine(
+  model: string,
+  prompt: string,
+  params: Record<string, unknown>,
+  audit: VideoSubmitAuditContext,
+): Promise<string> {
+  const body = buildVolcengineTaskBody(model, prompt, params)
+  const endpoint = '/contents/generations/tasks'
+  const apiKey = process.env.VOLCENGINE_API_KEY ?? ''
+  const startedAt = Date.now()
+  let responseStatus: number | null = null
+  try {
+    const res = await fetch(`${VOLCENGINE_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    })
+    responseStatus = res.status
+    const data = await readJsonResponse(res)
+    const id = responseId(data)
+    if (!res.ok || !id) {
+      const message = responseError(data) ?? `火山引擎 API 错误 ${res.status}`
+      await recordProviderApiLog({
+        ...audit,
+        module: 'video',
+        provider: 'volcengine',
+        model,
+        operation: 'video.submit',
+        method: 'POST',
+        endpoint,
+        requestPayload: body,
+        responseStatus: res.status,
+        responsePayload: data,
+        durationMs: Date.now() - startedAt,
+        status: 'failed',
+        errorMessage: message,
+      })
+      throw new Error(message)
+    }
+    await recordProviderApiLog({
+      ...audit,
+      module: 'video',
+      provider: 'volcengine',
+      model,
+      operation: 'video.submit',
+      method: 'POST',
+      endpoint,
+      requestPayload: body,
+      responseStatus: res.status,
+      responsePayload: data,
+      externalTaskId: id,
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    })
+    return id
+  } catch (error) {
+    if (responseStatus !== null) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    await recordProviderApiLog({
+      ...audit,
+      module: 'video',
+      provider: 'volcengine',
+      model,
+      operation: 'video.submit',
+      method: 'POST',
+      endpoint,
+      requestPayload: body,
+      responseStatus,
+      durationMs: Date.now() - startedAt,
+      status: 'failed',
+      errorMessage: message,
+    })
+    throw error
+  }
+}
+
+async function submitVeo(
+  model: string,
+  prompt: string,
+  params: Record<string, unknown>,
+  audit: VideoSubmitAuditContext,
+): Promise<string> {
   const body: Record<string, unknown> = { model, prompt }
   if (params.aspect_ratio) body.aspect_ratio = params.aspect_ratio
   if (typeof params.duration === 'number' && params.duration > 0) body.duration = params.duration
 
   const apiKey = process.env.NANO_BANANA_API_KEY ?? ''
-  const res = await fetch(`${VEO_API_URL}/v2/videos/generations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  })
-  const data = (await res.json()) as { id?: string; error?: { message?: string } }
-  if (!res.ok || !data.id) throw new Error(data.error?.message ?? `Veo API 错误 ${res.status}`)
-  return data.id
+  const endpoint = '/v2/videos/generations'
+  const startedAt = Date.now()
+  let responseStatus: number | null = null
+  try {
+    const res = await fetch(`${VEO_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    })
+    responseStatus = res.status
+    const data = await readJsonResponse(res)
+    const id = responseId(data)
+    if (!res.ok || !id) {
+      const message = responseError(data) ?? `Veo API 错误 ${res.status}`
+      await recordProviderApiLog({
+        ...audit,
+        module: 'video',
+        provider: 'nano-banana',
+        model,
+        operation: 'video.submit',
+        method: 'POST',
+        endpoint,
+        requestPayload: body,
+        responseStatus: res.status,
+        responsePayload: data,
+        durationMs: Date.now() - startedAt,
+        status: 'failed',
+        errorMessage: message,
+      })
+      throw new Error(message)
+    }
+    await recordProviderApiLog({
+      ...audit,
+      module: 'video',
+      provider: 'nano-banana',
+      model,
+      operation: 'video.submit',
+      method: 'POST',
+      endpoint,
+      requestPayload: body,
+      responseStatus: res.status,
+      responsePayload: data,
+      externalTaskId: id,
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    })
+    return id
+  } catch (error) {
+    if (responseStatus !== null) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    await recordProviderApiLog({
+      ...audit,
+      module: 'video',
+      provider: 'nano-banana',
+      model,
+      operation: 'video.submit',
+      method: 'POST',
+      endpoint,
+      requestPayload: body,
+      responseStatus,
+      durationMs: Date.now() - startedAt,
+      status: 'failed',
+      errorMessage: message,
+    })
+    throw error
+  }
 }
 
 export const videoSubmitWorker = new Worker<VideoSubmitJobData>(
@@ -66,9 +222,10 @@ export const videoSubmitWorker = new Worker<VideoSubmitJobData>(
 
     try {
       // 提交到 AI 提供商，拿到 external_task_id
+      const audit = { taskId, batchId, userId, teamId }
       const externalTaskId = provider === 'volcengine'
-        ? await submitVolcengine(model, prompt, params)
-        : await submitVeo(model, prompt, params)
+        ? await submitVolcengine(model, prompt, params, audit)
+        : await submitVeo(model, prompt, params, audit)
 
       // 写入 external_task_id，poller 开始轮询
       await db.updateTable('tasks')

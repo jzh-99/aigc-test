@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { canReadMusicWorkspace, mapMusicTrackResponse, sendMusicRouteError } from './_shared.js'
+import { buildMusicAdjacentResponse, canReadMusicWorkspace, mapMusicTrackResponse, sendMusicRouteError } from './_shared.js'
 
 async function fetchTrackForResponse(db: ReturnType<typeof getDb>, id: string) {
   return db
@@ -83,10 +83,10 @@ const route: FastifyPluginAsync = async (app) => {
         nextId ? fetchTrackForResponse(db, nextId.id) : null,
       ])
 
-      return reply.send({
-        previous: previous ? await mapMusicTrackResponse(previous, { name: previous.voice_name }) : null,
-        next: next ? await mapMusicTrackResponse(next, { name: next.voice_name }) : null,
-      })
+      return reply.send(buildMusicAdjacentResponse(
+        previous ? await mapMusicTrackResponse(previous, { name: previous.voice_name }) : null,
+        next ? await mapMusicTrackResponse(next, { name: next.voice_name }) : null,
+      ))
     } catch (error) {
       return sendMusicRouteError(reply, error, app.log, 'Music adjacent tracks request failed')
     }

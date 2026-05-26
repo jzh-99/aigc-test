@@ -128,12 +128,20 @@ export const musicVoiceCloneWorker = new Worker<MusicVoiceCloneJobData>(
       const sourceAudioUrl = voice.source_audio_storage_url ?? voice.source_audio_url
       if (!sourceAudioUrl) throw new Error('音色克隆缺少源音频')
 
-      const mureka = new MurekaClient()
+      const mureka = new MurekaClient({
+        auditContext: {
+          batchId: data.batchId,
+          taskId: data.taskId,
+          userId: data.userId,
+          teamId: data.teamId,
+          workspaceId: data.workspaceId,
+          module: 'music_voice_clone',
+        },
+      })
       let result = await mureka.cloneVoice({
         audioUrl: sourceAudioUrl,
         name: voice.name,
         description: voice.description,
-        model: 'mureka-8',
         gender: voice.gender,
       })
 
@@ -168,4 +176,3 @@ export const musicVoiceCloneWorker = new Worker<MusicVoiceCloneJobData>(
 musicVoiceCloneWorker.on('error', (err) => {
   logger.error({ err: err.message }, 'Music voice clone worker 错误')
 })
-

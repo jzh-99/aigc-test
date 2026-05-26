@@ -5,6 +5,7 @@ import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { Queue } from 'bullmq'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
 import { buildLogger } from '../logger.js'
+import { recordProviderPollAudit } from '../lib/provider-poll-audit.js'
 
 const logger = buildLogger()
 
@@ -28,6 +29,7 @@ interface ActionTaskRow {
   batchId: string
   userId: string
   teamId: string
+  workspaceId: string | null
   creditAccountId: string
   estimatedCredits: number
   externalTaskId: string
@@ -38,16 +40,36 @@ async function checkActionTask(externalTaskId: string): Promise<{
   status: 'SUCCESS' | 'FAILURE' | 'IN_PROGRESS' | 'POLL_ERROR'
   videoUrl?: string
   failReason?: string
+  errorMessage?: string
+  endpoint?: string
+  requestPayload?: unknown
+  responseStatus?: number | null
+  responsePayload?: unknown
+  durationMs?: number | null
 }> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 15_000)
+  const requestPayload = {
+    req_key: ACTION_REQ_KEY,
+    task_id: externalTaskId,
+  }
+  const endpoint = `/?Action=CVSync2AsyncGetResult&Version=${ACTION_API_VERSION}`
+  const startedAt = Date.now()
   try {
-    const { url, headers, body } = buildSignedRequest('CVSync2AsyncGetResult', ACTION_API_VERSION, {
-      req_key: ACTION_REQ_KEY,
-      task_id: externalTaskId,
-    })
+    const { url, headers, body } = buildSignedRequest('CVSync2AsyncGetResult', ACTION_API_VERSION, requestPayload)
     const res = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
-    if (!res.ok) return { status: 'POLL_ERROR' }
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return {
+        status: 'POLL_ERROR',
+        errorMessage: errorBody || `HTTP ${res.status}`,
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
+    }
 
     const json = (await res.json()) as {
       code: number
@@ -58,26 +80,111 @@ async function checkActionTask(externalTaskId: string): Promise<{
     if (json.code !== 10000) {
       // Non-retryable moderation errors
       if ([50411, 50412, 50413, 50513].includes(json.code)) {
-        return { status: 'FAILURE', failReason: `审核未通过 (${json.code}): ${json.message}` }
+        return {
+          status: 'FAILURE',
+          failReason: `审核未通过 (${json.code}): ${json.message}`,
+          endpoint,
+          requestPayload,
+          responseStatus: res.status,
+          responsePayload: json,
+          durationMs: Date.now() - startedAt,
+        }
       }
-      return { status: 'POLL_ERROR' }
+      return {
+        status: 'POLL_ERROR',
+        errorMessage: json.message ?? `Volcengine code ${json.code}`,
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: json,
+        durationMs: Date.now() - startedAt,
+      }
     }
 
     const taskStatus = json.data?.status
     if (taskStatus === 'done') {
-      if (json.data?.video_url) return { status: 'SUCCESS', videoUrl: json.data.video_url }
-      return { status: 'FAILURE', failReason: 'Task done but no video_url returned' }
+      if (json.data?.video_url) return {
+        status: 'SUCCESS',
+        videoUrl: json.data.video_url,
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: json,
+        durationMs: Date.now() - startedAt,
+      }
+      return {
+        status: 'FAILURE',
+        failReason: 'Task done but no video_url returned',
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: json,
+        durationMs: Date.now() - startedAt,
+      }
     }
     if (taskStatus === 'not_found' || taskStatus === 'expired') {
-      return { status: 'FAILURE', failReason: `任务状态: ${taskStatus}` }
+      return {
+        status: 'FAILURE',
+        failReason: `任务状态: ${taskStatus}`,
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: json,
+        durationMs: Date.now() - startedAt,
+      }
     }
     // processing, in_queue, generating
-    return { status: 'IN_PROGRESS' }
-  } catch {
-    return { status: 'POLL_ERROR' }
+    return {
+      status: 'IN_PROGRESS',
+      endpoint,
+      requestPayload,
+      responseStatus: res.status,
+      responsePayload: json,
+      durationMs: Date.now() - startedAt,
+    }
+  } catch (error) {
+    return {
+      status: 'POLL_ERROR',
+      errorMessage: error instanceof Error ? error.message : String(error),
+      endpoint,
+      requestPayload,
+      durationMs: Date.now() - startedAt,
+    }
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function auditActionPoll(task: ActionTaskRow, result: Awaited<ReturnType<typeof checkActionTask>>): Promise<void> {
+  await recordProviderPollAudit({
+    auditKey: `${task.taskId}:action-imitation.query`,
+    batchId: task.batchId,
+    taskId: task.taskId,
+    userId: task.userId,
+    teamId: task.teamId,
+    workspaceId: task.workspaceId,
+    module: 'action_imitation',
+    provider: 'volcengine',
+    model: ACTION_REQ_KEY,
+    operation: 'action-imitation.query',
+    method: 'POST',
+    endpoint: result.endpoint ?? '/?Action=CVSync2AsyncGetResult',
+    requestPayload: result.requestPayload ?? null,
+    responseStatus: result.responseStatus ?? null,
+    responsePayload: result.responsePayload ?? result,
+    externalTaskId: task.externalTaskId,
+    durationMs: result.durationMs ?? null,
+    status: result.status === 'POLL_ERROR' || result.status === 'FAILURE' ? 'failed' : 'success',
+    errorMessage: result.errorMessage ?? result.failReason ?? null,
+    pollStatus: result.status,
+    keyFields: {
+      status: result.status,
+      video_url: result.videoUrl ?? null,
+      fail_reason: result.failReason ?? null,
+      error_message: result.errorMessage ?? null,
+    },
+    final: result.status === 'SUCCESS' || result.status === 'FAILURE',
+  })
 }
 
 async function handleActionSuccess(task: ActionTaskRow, videoUrl: string): Promise<void> {
@@ -177,6 +284,7 @@ async function pollActionTasks(): Promise<void> {
       'tasks.processing_started_at as processingStartedAt',
       'task_batches.team_id as teamId',
       'task_batches.user_id as userId',
+      'task_batches.workspace_id as workspaceId',
       'task_batches.credit_account_id as creditAccountId',
     ])
     .where('tasks.status', '=', 'processing')
@@ -199,6 +307,7 @@ async function pollActionTasks(): Promise<void> {
       }
 
       const result = await checkActionTask(task.externalTaskId)
+      await auditActionPoll(task, result)
 
       if (result.status === 'SUCCESS' && result.videoUrl) {
         pollErrorCounts.delete(task.taskId)

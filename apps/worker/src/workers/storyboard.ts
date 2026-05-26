@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq'
 import { sql } from 'kysely'
 import type { StoryboardJobData } from '@aigc/types'
-import { getDb } from '@aigc/db'
+import { getDb, recordProviderApiLog } from '@aigc/db'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { buildLogger } from '../logger.js'
 
@@ -33,12 +33,55 @@ interface ShotItem {
   cameraMotionPrompt: string
 }
 
-async function callQwen(script: string, shotCount: number, logCtx: Record<string, unknown>): Promise<ShotItem[]> {
+async function callQwen(
+  data: StoryboardJobData,
+  logCtx: Record<string, unknown>,
+): Promise<ShotItem[]> {
+  const { script, shotCount } = data
   const countInstruction = shotCount > 0
     ? `分割成 ${shotCount} 个分镜`
     : '根据剧本内容自动决定分镜数量（每个分镜约10秒）'
   const userPrompt = `请将以下剧本${countInstruction}：\n\n${script}`
   const startedAt = Date.now()
+  const endpoint = '/chat/completions'
+  const requestPayload = {
+    model: MODEL,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ],
+    stream: false,
+    max_tokens: 16000,
+    enable_thinking: false,
+  }
+  let auditWritten = false
+
+  async function writeAudit(input: {
+    responseStatus?: number | null
+    responsePayload?: unknown
+    status: 'success' | 'failed'
+    errorMessage?: string | null
+  }): Promise<void> {
+    auditWritten = true
+    await recordProviderApiLog({
+      batchId: data.batchId,
+      taskId: data.taskId,
+      userId: data.userId,
+      teamId: data.teamId,
+      module: 'storyboard',
+      provider: 'qwen',
+      model: MODEL,
+      operation: 'storyboard.split',
+      method: 'POST',
+      endpoint,
+      requestPayload,
+      responseStatus: input.responseStatus ?? null,
+      responsePayload: input.responsePayload,
+      durationMs: Date.now() - startedAt,
+      status: input.status,
+      errorMessage: input.errorMessage ?? null,
+    })
+  }
 
   logger.info(
     {
@@ -66,25 +109,18 @@ async function callQwen(script: string, shotCount: number, logCtx: Record<string
 
   let res: Response
   try {
-    res = await fetch(`${API_URL}/chat/completions`, {
+    res = await fetch(`${API_URL}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${API_KEY}`,
       },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        stream: false,
-        max_tokens: 16000,
-        enable_thinking:  false,
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     })
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    await writeAudit({ status: 'failed', errorMessage: message })
     logger.error(
       {
         ...logCtx,
@@ -116,20 +152,31 @@ async function callQwen(script: string, shotCount: number, logCtx: Record<string
 
   if (!res.ok) {
     const errText = await res.text()
+    await writeAudit({
+      responseStatus: res.status,
+      responsePayload: { body: errText },
+      status: 'failed',
+      errorMessage: `Qwen API error ${res.status}: ${errText.slice(0, 500)}`,
+    })
     logger.error({ ...logCtx, status: res.status, bodyPreview: errText.slice(0, 500) }, '[storyboard-job] Qwen HTTP 错误')
     throw new Error(`Qwen API error ${res.status}: ${errText.slice(0, 200)}`)
   }
 
-  const data = await res.json() as {
+  const responseData = await res.json() as {
     choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>
   }
-  const raw = data.choices?.[0]?.message?.content ?? ''
+  await writeAudit({
+    responseStatus: res.status,
+    responsePayload: responseData,
+    status: 'success',
+  })
+  const raw = responseData.choices?.[0]?.message?.content ?? ''
 
   logger.info(
     {
       ...logCtx,
       elapsedMs: Date.now() - startedAt,
-      choiceCount: data.choices?.length ?? 0,
+      choiceCount: responseData.choices?.length ?? 0,
       rawLength: raw.length,
       rawPreview: raw.slice(0, 200),
     },
@@ -140,6 +187,7 @@ async function callQwen(script: string, shotCount: number, logCtx: Record<string
   const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
   const jsonMatch = cleaned.match(/\[[\s\S]*\]/)
   if (!jsonMatch) {
+    if (!auditWritten) await writeAudit({ responseStatus: res.status, responsePayload: responseData, status: 'failed', errorMessage: 'AI返回格式错误：未找到 JSON 数组' })
     logger.error({ ...logCtx, cleanedLength: cleaned.length, cleanedPreview: cleaned.slice(0, 500) }, '[storyboard-job] Qwen JSON 数组提取失败')
     throw new Error('AI返回格式错误：未找到 JSON 数组')
   }
@@ -193,7 +241,7 @@ export const storyboardWorker = new Worker<StoryboardJobData>(
       .execute()
 
     try {
-      const shots = await callQwen(data.script, data.shotCount, logCtx)
+      const shots = await callQwen(data, logCtx)
       logger.info({ ...logCtx, shotCount: shots.length }, '[storyboard-job] AI 返回成功')
 
       const paramsSnapshot = JSON.stringify({ shots })

@@ -55,3 +55,6 @@ export function buildMusicEventsUrl(trackId: string): string {
   return `/api/v1/music/tracks/${trackId}/events`
 }
 
+export function buildMusicVoiceCloneEventsUrl(voiceCloneId: string): string {
+  return `/api/v1/music/voice-clones/${voiceCloneId}/events`
+}

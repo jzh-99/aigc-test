@@ -200,6 +200,11 @@ const route: FastifyPluginAsync = async (app) => {
         pitch,
         emotion: emotion || undefined,
         stream,
+        auditContext: {
+          userId,
+          teamId,
+          workspaceId,
+        },
       })
       const storageUrl = await uploadToTos(`tts/${userId}/${Date.now()}-${voice.id}.mp3`, audioBuffer, TTS_CONTENT_TYPE)
 

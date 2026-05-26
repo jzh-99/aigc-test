@@ -2,30 +2,97 @@
 // autoload 会忽略以 _ 开头的文件，此文件仅供同目录路由 import
 
 import { getDb } from '@aigc/db'
+import { recordLlmProviderCall, type LlmProviderAuditContext } from '../../lib/provider-api-audit.js'
 
 // 调用 LLM（nano_banana OpenAI 兼容接口）
-export async function callLLM(systemPrompt: string, userPrompt: string, maxTokens = 4000): Promise<string> {
+export async function callLLM(
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens = 4000,
+  auditContext?: Partial<LlmProviderAuditContext>,
+): Promise<string> {
   const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
   const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
   const AI_MODEL = process.env.NANO_BANANA_MODEL ?? ''
+  const endpoint = '/v1/chat/completions'
+  const requestPayload = {
+    model: AI_MODEL,
+    messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+    stream: false,
+    max_tokens: maxTokens,
+  }
+  const startedAt = Date.now()
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 90_000)
   try {
-    const res = await fetch(`${AI_API_URL}/v1/chat/completions`, {
+    const res = await fetch(`${AI_API_URL}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI_API_KEY}` },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        stream: false,
-        max_tokens: maxTokens,
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     })
-    if (!res.ok) throw new Error(`LLM error ${res.status}`)
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      await recordLlmProviderCall({
+        module: auditContext?.module ?? 'agent',
+        provider: auditContext?.provider ?? 'nano-banana',
+        model: auditContext?.model ?? AI_MODEL,
+        operation: auditContext?.operation ?? 'llm.generate',
+        endpoint: auditContext?.endpoint ?? endpoint,
+        userId: auditContext?.userId,
+        teamId: auditContext?.teamId,
+        workspaceId: auditContext?.workspaceId,
+        batchId: auditContext?.batchId,
+        taskId: auditContext?.taskId,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: { body: errText },
+        durationMs: Date.now() - startedAt,
+        status: 'failed',
+        errorMessage: `LLM HTTP ${res.status}: ${errText.slice(0, 500)}`,
+      })
+      throw new Error(`LLM error ${res.status}`)
+    }
     const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
+    await recordLlmProviderCall({
+      module: auditContext?.module ?? 'agent',
+      provider: auditContext?.provider ?? 'nano-banana',
+      model: auditContext?.model ?? AI_MODEL,
+      operation: auditContext?.operation ?? 'llm.generate',
+      endpoint: auditContext?.endpoint ?? endpoint,
+      userId: auditContext?.userId,
+      teamId: auditContext?.teamId,
+      workspaceId: auditContext?.workspaceId,
+      batchId: auditContext?.batchId,
+      taskId: auditContext?.taskId,
+      requestPayload,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    })
     return data.choices?.[0]?.message?.content ?? ''
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('LLM error ')) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    await recordLlmProviderCall({
+      module: auditContext?.module ?? 'agent',
+      provider: auditContext?.provider ?? 'nano-banana',
+      model: auditContext?.model ?? AI_MODEL,
+      operation: auditContext?.operation ?? 'llm.generate',
+      endpoint: auditContext?.endpoint ?? endpoint,
+      userId: auditContext?.userId,
+      teamId: auditContext?.teamId,
+      workspaceId: auditContext?.workspaceId,
+      batchId: auditContext?.batchId,
+      taskId: auditContext?.taskId,
+      requestPayload,
+      durationMs: Date.now() - startedAt,
+      status: 'failed',
+      errorMessage: message,
+    })
+    throw error
   } finally {
     clearTimeout(timer)
   }

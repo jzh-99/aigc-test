@@ -14,6 +14,7 @@ import {
   MUSIC_QUEUE_DELIVERY_ERROR_MESSAGE,
   resolveVoiceCloneCredits,
   sendMusicRouteError,
+  assertVoiceCloneAudioDuration,
   validateVoiceCloneAudioUpload,
   validateVoiceClonePayload,
 } from './_shared.js'
@@ -59,6 +60,7 @@ const route: FastifyPluginAsync = async (app) => {
           }
           const buffer = Buffer.concat(chunks)
           const validatedAudio = validateVoiceCloneAudioUpload(part.filename, buffer, part.mimetype)
+          assertVoiceCloneAudioDuration(buffer, validatedAudio.ext)
           file = {
             filename: `${randomUUID()}.${validatedAudio.ext}`,
             buffer,
@@ -73,7 +75,7 @@ const route: FastifyPluginAsync = async (app) => {
       if (isPayloadTooLargeError(error)) {
         return reply.status(413).send({
           success: false,
-          error: { code: 'PAYLOAD_TOO_LARGE', message: '音频文件过大，最大支持 50 MB' },
+          error: { code: 'PAYLOAD_TOO_LARGE', message: '音频文件过大，最大支持 10 MB' },
         })
       }
       if (error instanceof Error && error.name === 'MusicRouteError') {
@@ -112,7 +114,7 @@ const route: FastifyPluginAsync = async (app) => {
 
     try {
       const access = await assertWorkspaceAccess(db, workspaceId, userId, request.user.role)
-      const credits = await resolveVoiceCloneCredits(db, access.teamId, payload.model)
+      const credits = await resolveVoiceCloneCredits(db, access.teamId)
       let sourceAudioUrl: string | null = null
 
       try {
@@ -159,7 +161,7 @@ const route: FastifyPluginAsync = async (app) => {
               idempotency_key: randomUUID(),
               module: 'music_voice_clone',
               provider: credits.providerCode,
-              model: payload.model,
+              model: 'voice_clone',
               prompt: payload.name,
               params: JSON.stringify({
                 name: payload.name,

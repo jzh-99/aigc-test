@@ -391,6 +391,31 @@ export interface VideoStudioProjectsTable {
   updated_at: Generated<Date>
 }
 
+export interface ProviderApiLogsTable {
+  id: Generated<string>
+  batch_id: string | null
+  task_id: string | null
+  user_id: string | null
+  team_id: string | null
+  workspace_id: string | null
+  module: string
+  provider: string
+  model: string | null
+  operation: string
+  method: string
+  endpoint: string
+  request_payload: ColumnType<unknown, string | null, string | null> | null
+  request_truncated: Generated<boolean>
+  response_status: number | null
+  response_payload: ColumnType<unknown, string | null, string | null> | null
+  response_truncated: Generated<boolean>
+  external_task_id: string | null
+  duration_ms: number | null
+  status: 'success' | 'failed'
+  error_message: string | null
+  created_at: Generated<Date>
+}
+
 // ─── Music ───────────────────────────────────────────────────────────────────
 
 export interface MusicVoiceClonesTable {
@@ -426,6 +451,7 @@ export interface MusicTracksTable {
   title: string | null
   prompt: string | null
   lyrics: string | null
+  lyrics_sections: ColumnType<Array<Record<string, unknown>>, JsonArrayInput<Record<string, unknown>> | undefined, JsonArrayInput<Record<string, unknown>>>
   styles: ColumnType<string[], JsonArrayInput<string> | undefined, JsonArrayInput<string>>
   voice_clone_id: string | null
   voice_gender: Generated<'auto' | 'male' | 'female'>
@@ -439,6 +465,7 @@ export interface MusicTracksTable {
   flac_storage_url: string | null
   wav_url: string | null
   wav_storage_url: string | null
+  duration_seconds: number | null
   external_task_id: string | null
   status: Generated<
     | 'pending'
@@ -498,6 +525,7 @@ export interface Database {
   assets: AssetsTable
   prompt_filter_logs: PromptFilterLogsTable
   webhook_logs: WebhookLogsTable
+  provider_api_logs: ProviderApiLogsTable
   payment_orders: PaymentOrdersTable
   providers: ProvidersTable
   provider_models: ProviderModelsTable

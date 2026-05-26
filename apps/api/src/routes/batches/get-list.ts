@@ -34,6 +34,7 @@ const route: FastifyPluginAsync = async (app) => {
         .where('is_hidden', '=', false)
         .where('canvas_id', 'is', null)
         .where('video_studio_project_id', 'is', null)
+        .where('module', 'not in', ['music', 'music_voice_clone'])
         .orderBy('created_at', 'desc')
         .orderBy('id', 'desc')
         .limit(limit + 1) // fetch one extra to determine if there's a next page

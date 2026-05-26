@@ -47,7 +47,12 @@ const route: FastifyPluginAsync = async (app) => {
       const userPrompt = `请将以下剧本${countInstruction}${ratioNote}${styleNote}${charList}${sceneList}。\n\n每个片段必须填写 transition 和 duration；每个分镜必须填写 characters、scene、duration、content 和 visualPrompt。content 必须与 visualPrompt 保持一致或高度一致。详细景别、角度、构图、焦点变化和运镜过程必须写进 visualPrompt。台词直接写在 visualPrompt 里；有台词时，台词后写"【角色名音色】语气：..."。\n\n剧本：\n\n${script}`
 
       try {
-        const raw = await callLLM(STORYBOARD_SYSTEM_PROMPT, userPrompt, 8000)
+        const raw = await callLLM(STORYBOARD_SYSTEM_PROMPT, userPrompt, 8000, {
+          userId: request.user.id,
+          module: 'agent',
+          provider: 'nano-banana',
+          operation: 'video-studio.storyboard.split',
+        })
         type ShotRaw = { id: string; label: string; content: string; characters?: string[]; scene?: string; duration: number; visualPrompt?: string }
         type FragmentRaw = { id: string; label: string; duration: number; transition?: string; shots: ShotRaw[] }
         type StoryboardResult = { fragments?: FragmentRaw[]; shots?: ShotRaw[] }

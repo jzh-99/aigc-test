@@ -7,6 +7,11 @@ export interface VideoPollResult {
   httpStatus?: number
   errorMessage?: string
   retryable?: boolean
+  endpoint?: string
+  requestPayload?: unknown
+  responseStatus?: number | null
+  responsePayload?: unknown
+  durationMs?: number | null
 }
 
 const RETRYABLE_HTTP_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504])

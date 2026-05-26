@@ -26,6 +26,14 @@ function statusText(status: MusicTrackResponse['status']) {
   return map[status]
 }
 
+function trackTypeText(trackType: MusicTrackResponse['track_type']) {
+  return trackType === 'instrumental' ? '纯音乐' : '歌曲'
+}
+
+function creatorText(trackType: MusicTrackResponse['track_type']) {
+  return trackType === 'instrumental' ? '作曲' : '作词作曲'
+}
+
 export function MusicTrackList({ tracks, isLoading, onLoadMore, hasMore }: Props) {
   if (!isLoading && tracks.length === 0) {
     return (
@@ -41,7 +49,7 @@ export function MusicTrackList({ tracks, isLoading, onLoadMore, hasMore }: Props
       {tracks.map((track) => (
         <Link
           key={track.id}
-          href={`/music/${track.id}`}
+          href={`/toby-studio/music/${track.id}`}
           className="grid grid-cols-[76px_1fr_auto] items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/70"
         >
           <div className="aspect-square overflow-hidden rounded-lg bg-muted">
@@ -55,7 +63,7 @@ export function MusicTrackList({ tracks, isLoading, onLoadMore, hasMore }: Props
           <div className="min-w-0">
             <div className="truncate font-medium">{track.title ?? '未命名音乐'}</div>
             <div className="mt-1 truncate text-xs text-muted-foreground">
-              {track.track_type === 'instrumental' ? '纯音乐' : '歌曲'} · {track.voice_name ?? 'Toby AI'} · {track.model}
+              {trackTypeText(track.track_type)} · {track.voice_name ?? 'Toby AI'} · {creatorText(track.track_type)}
             </div>
           </div>
           <Badge variant={track.status === 'failed' ? 'destructive' : track.status === 'completed' ? 'default' : 'secondary'}>
@@ -71,4 +79,3 @@ export function MusicTrackList({ tracks, isLoading, onLoadMore, hasMore }: Props
     </div>
   )
 }
-

@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq'
-import { getDb } from '@aigc/db'
+import { getDb, recordProviderApiLog } from '@aigc/db'
 import { sql } from 'kysely'
 import type { MusicJobData, MusicModel, MusicTrackStatus } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
@@ -9,9 +9,15 @@ import { transferMusicUrl } from '../lib/music-storage.js'
 import { VolcengineImageAdapter } from '../adapters/volcengine-image.js'
 import {
   buildCoverPrompt,
+  buildMurekaGenerationPrompt,
+  hasMurekaDownloadableMediaUrl,
+  hasMurekaMediaUrl,
   nextTrackStatusForMode,
+  normalizeMurekaLyricsSections,
   parseMusicBatchParams,
   pickFinalMediaResult,
+  resolveMurekaPollTaskId,
+  shouldUseMurekaVoiceOptions,
 } from './music-helpers.js'
 
 const logger = buildLogger()
@@ -27,6 +33,14 @@ async function publishTrackEvent(trackId: string, payload: Record<string, unknow
 async function updateTrackStatus(trackId: string, status: MusicTrackStatus, message?: string): Promise<void> {
   await getDb().updateTable('music_tracks').set({ status }).where('id', '=', trackId).execute()
   await publishTrackEvent(trackId, { event: 'status', status, message })
+  logger.info({ trackId, status, message }, '音乐生成状态已更新')
+}
+
+async function updateTrackStreamUrl(trackId: string, streamUrl: string | null | undefined): Promise<void> {
+  if (!streamUrl) return
+  await getDb().updateTable('music_tracks').set({ stream_url: streamUrl }).where('id', '=', trackId).execute()
+  await publishTrackEvent(trackId, { event: 'stream_url', stream_url: streamUrl })
+  logger.info({ trackId, hasStreamUrl: true }, '音乐流式播放地址已提前写入')
 }
 
 async function confirmMusicCredits(data: MusicJobData, actualCredits: number): Promise<void> {
@@ -67,6 +81,14 @@ async function confirmMusicCredits(data: MusicJobData, actualCredits: number): P
       status: 'completed',
     }).where('id', '=', data.batchId).execute()
   })
+  logger.info({
+    taskId: data.taskId,
+    batchId: data.batchId,
+    trackId: data.trackId,
+    creditAccountId: data.creditAccountId,
+    estimatedCredits: data.estimatedCredits,
+    actualCredits,
+  }, '音乐生成积分已确认')
 }
 
 async function failMusicJob(data: MusicJobData, message: string): Promise<void> {
@@ -112,23 +134,73 @@ async function failMusicJob(data: MusicJobData, message: string): Promise<void> 
     }).where('id', '=', data.batchId).execute()
   })
   await publishTrackEvent(data.trackId, { event: 'failed', error_message: message })
+  logger.info({
+    taskId: data.taskId,
+    batchId: data.batchId,
+    trackId: data.trackId,
+    creditAccountId: data.creditAccountId,
+    estimatedCredits: data.estimatedCredits,
+    err: message,
+  }, '音乐生成失败已落库并退回冻结积分')
 }
 
-async function generateCover(track: { id: string; title: string; prompt: string | null; lyrics: string | null; styles: string[]; type: 'song' | 'instrumental' }) {
+async function generateCover(track: {
+  id: string
+  batchId: string
+  taskId: string
+  userId: string
+  teamId: string
+  workspaceId: string
+  title: string
+  prompt: string | null
+  lyrics: string | null
+  styles: string[]
+  type: 'song' | 'instrumental'
+}) {
   try {
     await updateTrackStatus(track.id, 'cover_generating')
+    logger.info({
+      trackId: track.id,
+      trackType: track.type,
+      titleLength: [...track.title].length,
+      promptLength: track.prompt ? [...track.prompt].length : 0,
+      lyricsLength: track.lyrics ? [...track.lyrics].length : 0,
+      stylesCount: track.styles.length,
+    }, '开始生成音乐封面')
     const adapter = new VolcengineImageAdapter()
-    const result = await adapter.generateImage({
+    const coverRequest = {
       model: 'seedream-5.0-lite',
       prompt: buildCoverPrompt(track),
       params: { aspect_ratio: '1:1', resolution: '2k', watermark: false },
+    }
+    const startedAt = Date.now()
+    const result = await adapter.generateImage(coverRequest)
+    await recordProviderApiLog({
+      batchId: track.batchId,
+      taskId: track.taskId,
+      userId: track.userId,
+      teamId: track.teamId,
+      workspaceId: track.workspaceId,
+      module: 'music',
+      provider: 'volcengine',
+      model: coverRequest.model,
+      operation: 'cover.generate',
+      method: 'POST',
+      endpoint: '/images/generations',
+      requestPayload: coverRequest,
+      responsePayload: result,
+      durationMs: Date.now() - startedAt,
+      status: result.success ? 'success' : 'failed',
+      errorMessage: result.success ? null : result.errorMessage ?? '封面生成失败',
     })
     if (!result.success || !result.outputUrl) throw new Error(result.errorMessage ?? '封面生成失败')
+    logger.info({ trackId: track.id, hasOutputUrl: Boolean(result.outputUrl) }, '音乐封面生成成功，开始转存')
     const stored = await transferMusicUrl(result.outputUrl, 'cover', track.id, { maxBytes: 20 * 1024 * 1024 })
     await getDb().updateTable('music_tracks').set({
       cover_url: result.outputUrl,
       cover_storage_url: stored.storageUrl,
     }).where('id', '=', track.id).execute()
+    logger.info({ trackId: track.id, coverStorageUrl: stored.storageUrl }, '音乐封面已转存')
   } catch (error) {
     logger.warn({ err: error, trackId: track.id }, '歌曲封面生成失败，继续完成音乐任务')
   }
@@ -140,11 +212,26 @@ async function transferResultMedia(trackId: string, result: MurekaMediaResult): 
   wavStorageUrl: string | null
 }> {
   await updateTrackStatus(trackId, 'transferring')
+  logger.info({
+    trackId,
+    hasAudioUrl: Boolean(result.url),
+    hasFlacUrl: Boolean(result.flac_url),
+    hasWavUrl: Boolean(result.wav_url),
+    hasStreamUrl: Boolean(result.stream_url),
+    murekaTaskId: result.task_id ?? null,
+    murekaId: result.id ?? null,
+  }, '开始转存音乐生成结果')
   const [audio, flac, wav] = await Promise.all([
     result.url ? transferMusicUrl(result.url, 'audio', trackId) : Promise.resolve(null),
     result.flac_url ? transferMusicUrl(result.flac_url, 'flac', trackId) : Promise.resolve(null),
     result.wav_url ? transferMusicUrl(result.wav_url, 'wav', trackId) : Promise.resolve(null),
   ])
+  logger.info({
+    trackId,
+    audioStorageUrl: audio?.storageUrl ?? null,
+    flacStorageUrl: flac?.storageUrl ?? null,
+    wavStorageUrl: wav?.storageUrl ?? null,
+  }, '音乐生成结果转存完成')
   return {
     audioStorageUrl: audio?.storageUrl ?? null,
     flacStorageUrl: flac?.storageUrl ?? null,
@@ -177,43 +264,133 @@ export const musicWorker = new Worker<MusicJobData>(
         .executeTakeFirstOrThrow()
 
       const params = parseMusicBatchParams(row.batch_params)
-      const mureka = new MurekaClient()
+      const mureka = new MurekaClient({
+        auditContext: {
+          batchId: data.batchId,
+          taskId: data.taskId,
+          userId: data.userId,
+          teamId: data.teamId,
+          workspaceId: data.workspaceId,
+          module: 'music',
+        },
+      })
       const model = row.model as MusicModel
       const initialStatus = nextTrackStatusForMode(row.mode, row.type)
+      const musicCtx = {
+        ...logCtx,
+        batchId: data.batchId,
+        userId: data.userId,
+        teamId: data.teamId,
+        workspaceId: data.workspaceId,
+        mode: row.mode,
+        trackType: row.type,
+        model,
+        voiceGender: row.voice_gender,
+        hasVoiceClone: Boolean(row.voice_clone_id),
+        hasResolvedVoiceId: Boolean(params.voice_id),
+        stylesCount: row.styles.length,
+        promptLength: row.prompt ? [...row.prompt].length : 0,
+        lyricsLength: row.lyrics ? [...row.lyrics].length : 0,
+        titleLength: row.title ? [...row.title].length : 0,
+        estimatedCredits: data.estimatedCredits,
+      }
+      logger.info(musicCtx, '音乐生成任务上下文已加载')
       await updateTrackStatus(row.id, initialStatus)
+      const generationPrompt = buildMurekaGenerationPrompt({
+        mode: row.mode,
+        type: row.type,
+        title: row.title,
+        prompt: row.prompt,
+        lyrics: row.lyrics,
+        styles: row.styles,
+        voiceGender: row.voice_gender,
+      })
 
       let lyrics = row.lyrics
       if (row.mode === 'inspiration' && row.type === 'song') {
+        logger.info(musicCtx, '开始调用 Mureka 生成歌词')
         lyrics = await mureka.generateLyrics({
-          prompt: row.prompt ?? '',
+          prompt: generationPrompt,
           model,
-          voiceGender: row.voice_gender,
         })
+        logger.info({ ...musicCtx, generatedLyricsLength: lyrics ? [...lyrics].length : 0 }, 'Mureka 歌词生成完成')
         await db.updateTable('music_tracks').set({ lyrics }).where('id', '=', row.id).execute()
         await publishTrackEvent(row.id, { event: 'lyrics_delta', delta: lyrics, lyrics })
       }
 
       await updateTrackStatus(row.id, 'song_generating')
+      logger.info({
+        ...musicCtx,
+        lyricsLengthForSong: lyrics ? [...lyrics].length : 0,
+      }, row.type === 'instrumental' ? '开始调用 Mureka 生成纯音乐' : '开始调用 Mureka 生成歌曲')
+      const shouldUseVoiceOptions = shouldUseMurekaVoiceOptions(row.type)
       const immediate = row.type === 'instrumental'
-        ? await mureka.generateInstrumental({ prompt: row.prompt ?? '', model, voiceGender: row.voice_gender })
+        ? await mureka.generateInstrumental({ prompt: generationPrompt, model })
         : await mureka.generateSong({
             lyrics: lyrics ?? '',
-            prompt: row.prompt,
+            prompt: generationPrompt,
             title: row.title,
             model,
-            voiceId: params.voice_id ?? null,
-            voiceGender: row.voice_gender,
+            voiceId: shouldUseVoiceOptions ? params.voice_id ?? null : null,
             styles: row.styles,
           })
 
+      logger.info({
+        ...musicCtx,
+        murekaTaskId: immediate.task_id ?? null,
+        murekaId: immediate.id ?? null,
+        murekaStatus: immediate.status ?? null,
+        hasAudioUrl: Boolean(immediate.url),
+        hasFlacUrl: Boolean(immediate.flac_url),
+        hasWavUrl: Boolean(immediate.wav_url),
+        hasStreamUrl: Boolean(immediate.stream_url),
+      }, 'Mureka 音乐生成初始响应')
       let media = pickFinalMediaResult(immediate)
-      if (!media.url && !media.flac_url && !media.wav_url && media.task_id) {
-        media = await mureka.pollSongResult(media.task_id)
+      await updateTrackStreamUrl(row.id, media.stream_url)
+      const initialPollTaskId = resolveMurekaPollTaskId(media)
+      if (!hasMurekaDownloadableMediaUrl(media) && initialPollTaskId) {
+        logger.info({ ...musicCtx, murekaTaskId: initialPollTaskId }, 'Mureka 音乐生成进入轮询')
+        let lastStreamUrl = media.stream_url ?? null
+        const pollResult = row.type === 'instrumental'
+          ? mureka.pollInstrumentalResult
+          : mureka.pollSongResult
+        media = await pollResult.call(mureka, initialPollTaskId, {
+          onUpdate: async (result) => {
+            if (result.stream_url && result.stream_url !== lastStreamUrl) {
+              lastStreamUrl = result.stream_url
+              await updateTrackStreamUrl(row.id, result.stream_url)
+            }
+          },
+        })
+        logger.info({
+          ...musicCtx,
+          murekaTaskId: resolveMurekaPollTaskId(media) ?? initialPollTaskId,
+          murekaId: media.id ?? null,
+          murekaStatus: media.status ?? null,
+          hasAudioUrl: Boolean(media.url),
+          hasFlacUrl: Boolean(media.flac_url),
+          hasWavUrl: Boolean(media.wav_url),
+          hasStreamUrl: Boolean(media.stream_url),
+        }, 'Mureka 音乐生成轮询完成')
       }
-      if (media.stream_url) await publishTrackEvent(row.id, { event: 'stream_url', stream_url: media.stream_url })
+      if (!hasMurekaMediaUrl(media)) {
+        logger.warn({
+          ...musicCtx,
+          murekaTaskId: resolveMurekaPollTaskId(media) ?? initialPollTaskId,
+          murekaId: media.id ?? immediate.id ?? null,
+          murekaStatus: media.status ?? immediate.status ?? null,
+        }, 'Mureka 音乐生成未返回可播放地址')
+        throw new Error('Mureka 音乐生成未返回可播放地址')
+      }
+      await updateTrackStreamUrl(row.id, media.stream_url)
 
       await generateCover({
         id: row.id,
+        batchId: data.batchId,
+        taskId: data.taskId,
+        userId: data.userId,
+        teamId: data.teamId,
+        workspaceId: data.workspaceId,
         title: media.title ?? row.title ?? 'Toby AI 音乐',
         prompt: row.prompt,
         lyrics,
@@ -232,13 +409,24 @@ export const musicWorker = new Worker<MusicJobData>(
         flac_storage_url: stored.flacStorageUrl,
         wav_url: media.wav_url ?? null,
         wav_storage_url: stored.wavStorageUrl,
+        duration_seconds: media.duration ?? null,
+        lyrics_sections: JSON.stringify(normalizeMurekaLyricsSections(media.lyrics_sections)),
         external_task_id: media.task_id ?? media.id ?? null,
         status: 'completed',
       }).where('id', '=', row.id).execute()
 
       await confirmMusicCredits(data, data.estimatedCredits)
       await publishTrackEvent(row.id, { event: 'completed', track_id: row.id })
-      logger.info(logCtx, '音乐生成任务完成')
+      logger.info({
+        ...musicCtx,
+        murekaTaskId: media.task_id ?? media.id ?? null,
+        completedTitleLength: media.title ? [...media.title].length : [...(row.title ?? 'Toby AI 音乐')].length,
+        hasAudioStorageUrl: Boolean(stored.audioStorageUrl),
+        hasFlacStorageUrl: Boolean(stored.flacStorageUrl),
+        hasWavStorageUrl: Boolean(stored.wavStorageUrl),
+        lyricsSectionsCount: media.lyrics_sections?.length ?? 0,
+        durationSeconds: media.duration ?? null,
+      }, '音乐生成任务完成')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       logger.error({ ...logCtx, err: message }, '音乐生成任务失败')

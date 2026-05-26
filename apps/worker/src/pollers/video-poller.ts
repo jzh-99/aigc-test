@@ -3,6 +3,7 @@ import { sql } from 'kysely'
 import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { Queue } from 'bullmq'
 import { buildLogger } from '../logger.js'
+import { recordProviderPollAudit } from '../lib/provider-poll-audit.js'
 import {
   classifyVideoPollHttpError,
   MAX_CONSECUTIVE_VIDEO_POLL_ERRORS,
@@ -41,6 +42,7 @@ interface VideoTaskRow {
   batchId: string
   userId: string
   teamId: string
+  workspaceId: string | null
   creditAccountId: string
   estimatedCredits: number
   externalTaskId: string
@@ -54,24 +56,36 @@ interface VideoTaskRow {
 async function checkVeoTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
+  const endpoint = `/v2/videos/generations/${externalTaskId}`
+  const startedAt = Date.now()
   try {
-    const res = await fetch(`${VEO_API_URL}/v2/videos/generations/${externalTaskId}`, {
+    const res = await fetch(`${VEO_API_URL}${endpoint}`, {
       headers: { Authorization: `Bearer ${VEO_API_KEY}` },
       signal: controller.signal,
     })
     if (!res.ok) {
       const errorBody = await res.text().catch(() => '')
-      return classifyVideoPollHttpError(res.status, errorBody)
+      return {
+        ...classifyVideoPollHttpError(res.status, errorBody),
+        endpoint,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
     }
     const data = (await res.json()) as { status: string; data?: { output?: string }; fail_reason?: string }
     return {
       status: VEO_STATUS_MAP[data.status] ?? 'POLL_ERROR',
       videoUrl: data.data?.output,
       failReason: data.fail_reason,
+      endpoint,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return { status: 'POLL_ERROR', errorMessage: message, retryable: true }
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true, endpoint, durationMs: Date.now() - startedAt }
   } finally {
     clearTimeout(timer)
   }
@@ -80,24 +94,72 @@ async function checkVeoTask(externalTaskId: string): Promise<VideoPollResult> {
 async function checkVolcengineTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
+  const endpoint = `/contents/generations/tasks/${externalTaskId}`
+  const startedAt = Date.now()
   try {
     const volcengineApiUrl = 'https://ark.cn-beijing.volces.com/api/v3'
     const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
-    const res = await fetch(`${volcengineApiUrl}/contents/generations/tasks/${externalTaskId}`, {
+    const res = await fetch(`${volcengineApiUrl}${endpoint}`, {
       headers: { Authorization: `Bearer ${volcengineApiKey}` },
       signal: controller.signal,
     })
     if (!res.ok) {
       const errorBody = await res.text().catch(() => '')
-      return classifyVideoPollHttpError(res.status, errorBody)
+      return {
+        ...classifyVideoPollHttpError(res.status, errorBody),
+        endpoint,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
     }
-    return parseVolcengineTaskResponse(await res.json())
+    const data = await res.json()
+    return {
+      ...parseVolcengineTaskResponse(data),
+      endpoint,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return { status: 'POLL_ERROR', errorMessage: message, retryable: true }
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true, endpoint, durationMs: Date.now() - startedAt }
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function auditVideoPoll(task: VideoTaskRow, result: VideoPollResult): Promise<void> {
+  await recordProviderPollAudit({
+    auditKey: `${task.taskId}:video.query`,
+    batchId: task.batchId,
+    taskId: task.taskId,
+    userId: task.userId,
+    teamId: task.teamId,
+    workspaceId: task.workspaceId,
+    module: 'video',
+    provider: task.provider,
+    model: null,
+    operation: 'video.query',
+    method: 'GET',
+    endpoint: result.endpoint ?? `${task.provider}:query`,
+    requestPayload: result.requestPayload ?? null,
+    responseStatus: result.responseStatus ?? result.httpStatus ?? null,
+    responsePayload: result.responsePayload ?? result,
+    externalTaskId: task.externalTaskId,
+    durationMs: result.durationMs ?? null,
+    status: ['FAILURE', 'POLL_ERROR', 'POLL_AUTH_ERROR'].includes(result.status) ? 'failed' : 'success',
+    errorMessage: result.errorMessage ?? result.failReason ?? null,
+    pollStatus: result.status,
+    keyFields: {
+      status: result.status,
+      video_url: result.videoUrl ?? null,
+      fail_reason: result.failReason ?? null,
+      http_status: result.httpStatus ?? result.responseStatus ?? null,
+      error_message: result.errorMessage ?? null,
+    },
+    final: result.status === 'SUCCESS' || result.status === 'FAILURE' || result.status === 'POLL_AUTH_ERROR',
+  })
 }
 
 async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise<void> {
@@ -301,6 +363,7 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
     const result = task.provider === 'volcengine'
       ? await checkVolcengineTask(task.externalTaskId)
       : await checkVeoTask(task.externalTaskId)
+    await auditVideoPoll(task, result)
 
     if (result.status === 'SUCCESS' && result.videoUrl) {
       pollErrorCounts.delete(task.taskId)
@@ -361,6 +424,7 @@ async function pollVideoTasks(): Promise<void> {
       'tasks.processing_started_at as processingStartedAt',
       'task_batches.team_id as teamId',
       'task_batches.user_id as userId',
+      'task_batches.workspace_id as workspaceId',
       'task_batches.credit_account_id as creditAccountId',
       'task_batches.provider as provider',
       'task_batches.canvas_id as canvasId',

@@ -28,7 +28,12 @@ const route: FastifyPluginAsync = async (app) => {
       const userPrompt = `风格：${style}\n集数：${episodeCount}集，每集约${episodeDuration}秒\n\n故事描述：${description}`
 
       try {
-        const raw = await callLLM(SERIES_OUTLINE_SYSTEM_PROMPT, userPrompt, 6000)
+        const raw = await callLLM(SERIES_OUTLINE_SYSTEM_PROMPT, userPrompt, 6000, {
+          userId: request.user.id,
+          module: 'agent',
+          provider: 'nano-banana',
+          operation: 'video-studio.series-outline.generate',
+        })
         type SeriesCharacter = { name: string; description: string; voiceDescription?: string }
         type SeriesEpisode = { id: string; title: string; synopsis: string; coreConflict?: string; hook?: string }
         type SeriesScene = { name: string; description: string }

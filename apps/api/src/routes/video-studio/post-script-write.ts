@@ -30,7 +30,12 @@ const route: FastifyPluginAsync = async (app) => {
       if (feedback) userPrompt += `\n\n修改意见：${feedback}`
 
       try {
-        const raw = await callLLM(SCRIPT_SYSTEM_PROMPT, userPrompt, 6000)
+        const raw = await callLLM(SCRIPT_SYSTEM_PROMPT, userPrompt, 6000, {
+          userId: request.user.id,
+          module: 'agent',
+          provider: 'nano-banana',
+          operation: 'video-studio.script.generate',
+        })
         type ScriptCharacter = { name: string; description: string; voiceDescription?: string; visualPresence?: boolean }
         type ScriptResult = { title?: string; actCount?: number; script?: string; characters?: ScriptCharacter[]; scenes?: Array<{ name: string; description: string }> }
         const parsed = parseJSON<ScriptResult>(raw)

@@ -15,6 +15,7 @@ export function buildBatchListQuery(db: ReturnType<typeof getDb>, isHidden: bool
     .where('is_hidden', '=', isHidden)
     .where('canvas_id', 'is', null)
     .where('video_studio_project_id', 'is', null)
+    .where('module', 'not in', ['music', 'music_voice_clone'])
     .orderBy('created_at', 'desc')
     .orderBy('id', 'desc')
 }

@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import { Worker, Queue } from 'bullmq'
 import { buildLogger } from './logger.js'
 import type { GenerationJobData } from '@aigc/types'
-import { getDb } from '@aigc/db'
+import { getDb, recordProviderApiLog } from '@aigc/db'
 import { getAdapter } from './adapters/factory.js'
 import { completePipeline } from './pipelines/complete.js'
 import { failPipeline } from './pipelines/fail.js'
@@ -102,12 +102,30 @@ const imageWorker = new Worker<GenerationJobData>(
         '[image-job] 步骤3 开始调用 AI 适配器',
       )
       const aiStart = Date.now()
-      const result = await adapter.generateImage({
+      const providerRequest = {
         model: data.model,
         prompt: data.prompt,
         params: data.params,
-      })
+      }
+      const result = await adapter.generateImage(providerRequest)
       const aiElapsed = Date.now() - aiStart
+      await recordProviderApiLog({
+        batchId: data.batchId,
+        taskId: data.taskId,
+        userId: data.userId,
+        teamId: data.teamId,
+        module: 'image',
+        provider: data.provider,
+        model: data.model,
+        operation: 'image.generate',
+        method: 'POST',
+        endpoint: data.provider === 'volcengine' ? '/images/generations' : '/images/generations',
+        requestPayload: providerRequest,
+        responsePayload: result,
+        durationMs: aiElapsed,
+        status: result.success ? 'success' : 'failed',
+        errorMessage: result.success ? null : result.errorMessage ?? '图片生成失败',
+      })
       logger.info(
         { ...logCtx, success: result.success, elapsedMs: aiElapsed, error: result.errorMessage },
         '[image-job] 步骤3 AI 适配器返回',

@@ -27,6 +27,63 @@
 ### 产出
 - 已写入设计文档：`docs/superpowers/specs/2026-05-25-music-creation-design.md`。
 
+### 2026-05-26 歌词精确时间轴
+- 新增 `music_tracks.lyrics_sections` 与 `music_tracks.duration_seconds`，用于保存 Mureka 官方 `choices[0].lyrics_sections` 和 `duration`。
+- worker 解析并写入 `lyrics_sections`，API 在 `MusicTrackResponse` 中返回该时间轴。
+- 歌曲详情页只根据 `lyrics_sections` 的 `line.start/end` 判断当前歌词，播放进度变化和进度条拖动都会映射到精确歌词行；没有时间轴的历史数据只展示歌词，不做比例同步。
+
+### 2026-05-26 音乐生成状态与流式同步修复
+- 根因：前端生成按钮只覆盖 `POST /music/generate` 的提交期，API 返回后未跟踪 track SSE；列表页也没有订阅进行中的音乐任务，因此 worker 终态发布后列表不会自动更新。
+- 调整：创建任务后把返回的 track 写入 SWR 列表缓存，生成按钮在对应 track 收到 `completed/failed` SSE 前保持加载并禁用重复提交；列表页为所有非终态 track 建立 SSE watcher，详情页收到携带完整 track 的事件后直接更新详情缓存。
+- 根因：worker 只有最终轮询完成后才发布 `stream_url`，导致 Mureka streaming 阶段无法提前播放。
+- 调整：worker 在初始响应或轮询中一旦发现 `stream_url` 就立即写入 `music_tracks.stream_url` 并发布 `stream_url` 事件；API SSE 收到 Redis 消息后重新查询完整 track 快照再推给前端。
+- 根因：官方 `lyrics_sections` 时间单位为毫秒，而播放器 `audio.currentTime` 使用秒，直接比较会导致歌词进度不同步。
+- 调整：新增 `normalizeMurekaLyricsSections`，入库前将疑似毫秒级时间轴转换为秒级；已补充 worker helper 测试覆盖毫秒和秒两种输入。
+- 验证：`pnpm --filter @aigc/worker exec tsx src/workers/music.test.ts`、`pnpm --filter @aigc/api exec tsx src/__tests__/music-validation.test.ts`、`pnpm --filter @aigc/types build`、`pnpm --filter @aigc/api build`、`pnpm --filter @aigc/worker build`、`pnpm --filter @aigc/web build` 均通过。期间发现本地 Next 依赖包缺失，执行 `pnpm install --force` 重铺依赖后 web 构建通过。
+
+### 2026-05-26 音乐 SSE 认证与歌词滚动修复
+- 根因：浏览器原生 `EventSource` 不能设置 `Authorization` header，前端把 JWT 拼到 query 上，但 API 认证插件只接受 `Authorization: Bearer ...`，因此 `/music/tracks/:id/events` 返回 `AUTH_REQUIRED`；EventSource 遇到 401 会自动重连，表现为播放时持续调用接口。
+- 调整：音乐 track SSE 和音色克隆 SSE 改为 `fetch` 读取 `text/event-stream`，统一携带 `Authorization` header，不再把 token 放入 URL，也不在 401 场景自动重连刷接口。
+- 歌词滚动：详情页 `timelineLines` 增加前端兜底转换，历史库里如果已经保存了毫秒级 `lyrics_sections`，播放时也会转换为秒后再和 `audio.currentTime` 对齐。
+- 验证：`pnpm --filter @aigc/web build`、`pnpm --filter @aigc/types build` 均通过。
+
+### 2026-05-26 歌词逐字高亮与 Mureka 提示词封装
+- 歌词视觉：详情页将 `lyrics_sections.lines.words` 纳入渲染，当前行放大、加深背景和橙色强调；当前行内已播放过的 word 按播放进度变为橙色，缺少 word 时间轴时退化为整行高亮。
+- 提示词封装：新增 `buildMurekaGenerationPrompt`，worker 调用 Mureka 前统一封装灵感模式、自定义模式和纯音乐提示词。自定义模式包含“以《标题》为题、使用男声/女声/自动音色、风格、歌词要求”；纯音乐明确“不生成歌词，以旋律、编曲和情绪表达为主”。
+- 验证：`pnpm --filter @aigc/worker exec tsx src/workers/music.test.ts`、`pnpm --filter @aigc/worker build`、`pnpm --filter @aigc/web build` 均通过。本会话未暴露 Browser 工具，因此未做浏览器截图验证。
+
+### 2026-05-26 歌词与风格标签 UI 二次打磨
+- 歌词区按参考图重做视觉：由右侧普通面板改为暖棕沉浸式歌词页，顶部展示歌曲名和演唱者，中间歌词居中滚动，当前行放大为高亮白色，邻近行降低对比，并增加上下渐隐遮罩。
+- 风格标签输入按参考图重做：自定义模式下先展示已选标签，可点击标签内 X 移除；中间是深色高对比输入框，文字和 placeholder 都可见；下方展示推荐标签，点击即可选中/取消，最多保留 10 个。
+- 验证：`pnpm --filter @aigc/web build` 通过。
+
+### 2026-05-26 外部 API 调用审计
+- 决策：不把第三方请求快照塞进 `task_batches.params`，该字段继续保存前端业务参数；新增独立 `provider_api_logs` 表保存 provider 请求/响应链路，便于后续按 batch、task、provider、operation 排查。
+- 数据库：新增 `046_provider_api_logs` 迁移和 `ProviderApiLogsTable` 类型，记录请求参数、响应参数、HTTP 状态、耗时、外部任务 ID、成功/失败状态和错误信息；入库前会脱敏 token/secret/password 等字段，并截断过大 payload。
+- 已接入链路：Mureka 歌词/歌曲/纯音乐/音色克隆提交与查询、音乐封面生成、图片生成 worker、视频提交 worker、MiniMax TTS。
+- 修复：Mureka 测试场景没有 batch/task/user 上下文时不写审计，避免测试和本地无上下文调用触发数据库连接等待。
+- 验证：`pnpm --filter @aigc/db exec tsx src/provider-api-logs.test.ts`、`pnpm --filter @aigc/worker exec tsx src/workers/music.test.ts`、`pnpm --filter @aigc/api exec tsx src/services/minimax-tts.test.ts`、`pnpm --filter @aigc/db build`、`pnpm --filter @aigc/worker build`、`pnpm --filter @aigc/api build` 均通过。
+
+### 2026-05-26 灵感模式音色隔离
+- 灵感模式不再展示“我的音色”和“音色性别”，提交时固定不带 voice clone，避免隐藏字段影响生成。
+- 后端 `validateMusicGeneratePayload` 对 inspiration 模式兜底忽略 `voice_clone_id` 和 `voice_gender`；worker 调 Mureka 生成歌词/歌曲时也不传 `voice_id` 或 `voice_gender`。
+- Mureka client 调整为只有显式传入 `voiceGender` 才发送 `voice_gender`，不再默认补 `auto`。
+- 验证：`pnpm --filter @aigc/worker exec tsx src/workers/music.test.ts`、`pnpm --filter @aigc/worker build`、`pnpm --filter @aigc/api exec tsx src/__tests__/music-validation.test.ts`、`pnpm --filter @aigc/api build`、`pnpm --filter @aigc/web build` 均通过。
+
+### 2026-05-26 查询类外部调用审计采样
+- 新增 `provider-poll-audit` 工具，用 `taskId + provider + operation` 维度缓存上一次查询摘要；首查、状态变化、关键字段变化、最终态和异常会写入 `provider_api_logs`，无变化的高频轮询不落库。
+- Mureka `song.query`、`instrumental.query`、`voice-clone.query` 接入采样审计，关键字段包含 `stream_url`、下载 URL、duration、lyrics_sections 数量、voice_id 和错误信息。
+- video、avatar、action_imitation poller 接入采样审计，记录 provider 查询请求、响应、HTTP 状态、耗时、外部任务 ID，并补充 user/team/workspace/batch/task 维度。
+- 异常查询仍强制落库，便于追踪 provider 500、鉴权失败、超时和响应结构异常。
+- 验证：`pnpm --filter @aigc/worker exec tsx src/lib/provider-poll-audit.test.ts`、`pnpm --filter @aigc/worker exec tsx src/pollers/video-poller-result.test.ts`、`pnpm --filter @aigc/worker exec tsx src/workers/music.test.ts`、`pnpm --filter @aigc/worker build` 均通过。
+
+### 2026-05-26 文本类 LLM 调用审计
+- 新增 API 侧 `provider-api-audit` 工具，统一记录 LLM 请求/响应；流式响应只保存 chunk 数、字节数、文本预览和 finished 状态，避免 SSE 原文过量写入。
+- 已接入 Qwen：`canvas-agent/text-gen`、`canvas-agent/storyboard-split-sync`、worker `storyboard.split`。
+- 已接入 nano-banana OpenAI 兼容 LLM：`canvas-agent/script-write`、video-studio 的 `script-write`、`series-outline`、`asset-prompts`、`storyboard-split`。
+- MiniMax TTS 此前已接入 `tts.generate` 审计，本次保留并复测。
+- 验证：`pnpm --filter @aigc/api exec tsx src/lib/provider-api-audit.test.ts`、`pnpm --filter @aigc/api build`、`pnpm --filter @aigc/worker build`、`pnpm --filter @aigc/worker exec tsx src/workers/music.test.ts`、`pnpm --filter @aigc/api exec tsx src/services/minimax-tts.test.ts` 均通过。
+
 ### 2026-05-25 review 修订
 - 音色克隆增加可选描述字段，限制不超过 1024 字。
 - 自定义模式标题限制为 20 字以内。

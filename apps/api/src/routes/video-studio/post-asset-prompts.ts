@@ -33,7 +33,12 @@ const route: FastifyPluginAsync = async (app) => {
       const userPrompt = `整体风格：${style}\n\n角色列表：\n${charList}\n\n场景列表：\n${sceneList}`
 
       try {
-        const raw = await callLLM(ASSET_PROMPT_SYSTEM_PROMPT, userPrompt, 4000)
+        const raw = await callLLM(ASSET_PROMPT_SYSTEM_PROMPT, userPrompt, 4000, {
+          userId: request.user.id,
+          module: 'agent',
+          provider: 'nano-banana',
+          operation: 'video-studio.asset-prompts.generate',
+        })
         type AssetResult = { styleAnchor?: string; characters?: Array<{ name: string; prompt: string }>; scenes?: Array<{ name: string; prompt: string }> }
         const parsed = parseJSON<AssetResult>(raw)
         return reply.send({

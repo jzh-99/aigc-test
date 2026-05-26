@@ -80,6 +80,26 @@ export interface MusicGenerateRequest {
   canvas_node_id?: string
 }
 
+export interface MusicLyricWord {
+  start: number
+  end: number
+  text: string
+}
+
+export interface MusicLyricLine {
+  start: number
+  end: number
+  text: string
+  words?: MusicLyricWord[]
+}
+
+export interface MusicLyricsSection {
+  section_type: string
+  start: number
+  end: number
+  lines: MusicLyricLine[]
+}
+
 export interface MusicTrackResponse {
   id: string
   batch_id: string
@@ -93,6 +113,7 @@ export interface MusicTrackResponse {
   title: string | null
   prompt: string | null
   lyrics: string | null
+  lyrics_sections: MusicLyricsSection[]
   styles: string[]
   voice_clone_id: string | null
   voice_gender: MusicVoiceGender
@@ -132,8 +153,8 @@ export interface MusicVoiceCloneResponse {
 }
 
 export type MusicSseEvent =
-  | { event: 'status'; status: MusicTrackStatus; message?: string }
-  | { event: 'lyrics_delta'; delta: string; lyrics: string }
-  | { event: 'stream_url'; stream_url: string }
+  | { event: 'status'; status: MusicTrackStatus; message?: string; track?: MusicTrackResponse }
+  | { event: 'lyrics_delta'; delta: string; lyrics: string; track?: MusicTrackResponse }
+  | { event: 'stream_url'; stream_url: string; track?: MusicTrackResponse }
   | { event: 'completed'; track?: MusicTrackResponse; track_id?: string }
-  | { event: 'failed'; error_message: string }
+  | { event: 'failed'; error_message: string; track?: MusicTrackResponse }

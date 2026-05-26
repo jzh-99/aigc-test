@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { recordLlmProviderCall } from '../../lib/provider-api-audit.js'
 
 // POST /canvas-agent/storyboard-split-sync — 同步分镜拆分（供 wizard 流程使用，不走队列）
 const route: FastifyPluginAsync = async (app) => {
@@ -26,41 +27,73 @@ const route: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { script, shotCount } = request.body
+      const endpoint = '/chat/completions'
 
       const countInstruction = shotCount > 0
         ? `分割成 ${shotCount} 个分镜`
         : '根据剧本内容自动决定分镜数量（每个分镜约10秒）'
       const userPrompt = `请将以下剧本${countInstruction}：\n\n${script}`
+      const requestPayload = {
+        model: MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        stream: false,
+        enable_thinking: true,
+        max_tokens: 16000,
+      }
 
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 180_000)
+      const startedAt = Date.now()
 
       let res: Response
       try {
-        res = await fetch(`${API_URL}/chat/completions`, {
+        res = await fetch(`${API_URL}${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${API_KEY}`,
           },
-          body: JSON.stringify({
-            model: MODEL,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: userPrompt },
-            ],
-            stream: false,
-            enable_thinking: true,
-            max_tokens: 16000,
-          }),
+          body: JSON.stringify(requestPayload),
           signal: controller.signal,
         })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await recordLlmProviderCall({
+          userId: request.user.id,
+          module: 'storyboard',
+          provider: 'qwen',
+          model: MODEL,
+          operation: 'storyboard.split.sync',
+          endpoint,
+          requestPayload,
+          durationMs: Date.now() - startedAt,
+          status: 'failed',
+          errorMessage: message,
+        })
+        throw error
       } finally {
         clearTimeout(timer)
       }
 
       if (!res.ok) {
         const errText = await res.text()
+        await recordLlmProviderCall({
+          userId: request.user.id,
+          module: 'storyboard',
+          provider: 'qwen',
+          model: MODEL,
+          operation: 'storyboard.split.sync',
+          endpoint,
+          requestPayload,
+          responseStatus: res.status,
+          responsePayload: { body: errText },
+          durationMs: Date.now() - startedAt,
+          status: 'failed',
+          errorMessage: `Storyboard split sync LLM HTTP ${res.status}: ${errText.slice(0, 500)}`,
+        })
         app.log.error({ status: res.status, body: errText }, 'Storyboard split sync LLM error')
         return reply.status(502).send({ success: false, error: { code: 'AI_ERROR', message: 'AI服务暂时不可用，请稍后重试' } })
       }
@@ -68,6 +101,19 @@ const route: FastifyPluginAsync = async (app) => {
       const data = await res.json() as {
         choices?: Array<{ message?: { content?: string } }>
       }
+      await recordLlmProviderCall({
+        userId: request.user.id,
+        module: 'storyboard',
+        provider: 'qwen',
+        model: MODEL,
+        operation: 'storyboard.split.sync',
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: data,
+        durationMs: Date.now() - startedAt,
+        status: 'success',
+      })
       const raw = data.choices?.[0]?.message?.content ?? ''
 
       const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim()

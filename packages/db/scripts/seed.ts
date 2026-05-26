@@ -904,7 +904,6 @@ async function main() {
   console.log('  Volcengine models seeded')
 
   const murekaApiBaseUrl = process.env.MUREKA_API_URL?.trim()
-  const murekaEnabled = Boolean(murekaApiBaseUrl)
   const murekaConfig = murekaApiBaseUrl ? { api_base_url: murekaApiBaseUrl } : {}
 
   const murekaResult = await db
@@ -914,14 +913,14 @@ async function main() {
       name: 'Mureka',
       region: 'global',
       modules: JSON.stringify(['music', 'music_voice_clone']),
-      is_active: murekaEnabled,
+      is_active: true,
       config: JSON.stringify(murekaConfig),
     })
     .onConflict((oc: any) => oc.column('code').doUpdateSet({
       name: 'Mureka',
       region: 'global',
       modules: JSON.stringify(['music', 'music_voice_clone']),
-      is_active: murekaEnabled,
+      is_active: true,
       config: JSON.stringify(murekaConfig),
     }))
     .returningAll()
@@ -976,20 +975,6 @@ async function main() {
       params_schema: murekaMusicParamsSchema,
     },
     {
-      code: 'mureka-8-voice-clone',
-      name: 'Mureka 8 音色克隆',
-      description: 'Mureka 8 音色克隆独立计费模型',
-      module: 'music_voice_clone' as const,
-      credit_cost: 5,
-      category_references: null,
-      params_pricing: [
-        { resolution: 'voice_clone', model: 'mureka-8', unit_price: 5 },
-      ],
-      params_schema: {
-        source_audio: [],
-      },
-    },
-    {
       code: 'mureka-9',
       name: 'Mureka 9 音乐生成',
       description: '高质量音乐生成模型，覆盖歌词、歌曲、纯音乐、封面和转存成本',
@@ -1004,20 +989,6 @@ async function main() {
         { resolution: 'transfer', model: 'mureka-9', unit_price: 2 },
       ],
       params_schema: murekaMusicParamsSchema,
-    },
-    {
-      code: 'mureka-9-voice-clone',
-      name: 'Mureka 9 音色克隆',
-      description: 'Mureka 9 音色克隆独立计费模型',
-      module: 'music_voice_clone' as const,
-      credit_cost: 8,
-      category_references: null,
-      params_pricing: [
-        { resolution: 'voice_clone', model: 'mureka-9', unit_price: 8 },
-      ],
-      params_schema: {
-        source_audio: [],
-      },
     },
   ]
 
@@ -1034,7 +1005,7 @@ async function main() {
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
-        is_active: murekaEnabled,
+        is_active: true,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
         name: m.name,
@@ -1044,11 +1015,23 @@ async function main() {
         credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
-        is_active: murekaEnabled,
+        is_active: true,
       }))
       .execute()
     console.log(`  provider_models seeded (${m.code})`)
   }
+
+  const staleVoiceCloneModelIds = (await db
+    .selectFrom('provider_models')
+    .select('id')
+    .where('provider_id', '=', murekaProvider.id)
+    .where('code', 'in', ['mureka-8-voice-clone', 'mureka-9-voice-clone', 'mureka-voice-clone'])
+    .execute()).map((row) => row.id)
+  if (staleVoiceCloneModelIds.length) {
+    await db.deleteFrom('team_model_configs').where('model_id', 'in', staleVoiceCloneModelIds).execute()
+    await db.deleteFrom('provider_models').where('id', 'in', staleVoiceCloneModelIds).execute()
+  }
+  console.log('  stale Mureka voice clone model configs removed')
 
   const minimaxResult = await db
     .insertInto('providers')

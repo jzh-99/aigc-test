@@ -17,6 +17,7 @@ import {
   Settings,
   Users,
   Shield,
+  WandSparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -31,6 +32,7 @@ interface NavItem {
 const baseNavItems: NavItem[] = [
   { href: '/', label: '工作台', icon: LayoutDashboard },
   { href: '/generation', label: '创作生成', icon: Sparkles },
+  { href: '/toby-studio', label: 'Toby Studio', icon: WandSparkles },
   { href: '/assets', label: '资产库', icon: Images },
 ]
 

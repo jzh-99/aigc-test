@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { recordLlmProviderCall } from '../../lib/provider-api-audit.js'
 
 // POST /canvas-agent/script-write — AI 剧本生成
 const route: FastifyPluginAsync = async (app) => {
@@ -27,42 +28,87 @@ const route: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { description, style, duration } = request.body
       const shotCount = Math.ceil(duration / 10)
+      const endpoint = '/v1/chat/completions'
 
       const userPrompt = `风格：${style}\n目标时长：${duration}秒（约${shotCount}个镜头）\n\n用户描述：${description}`
+      const requestPayload = {
+        model: AI_MODEL,
+        messages: [
+          { role: 'system', content: SCRIPT_WRITER_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        stream: false,
+        max_tokens: 4000,
+      }
 
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 60_000)
+      const startedAt = Date.now()
 
       let res: Response
       try {
-        res = await fetch(`${AI_API_URL}/v1/chat/completions`, {
+        res = await fetch(`${AI_API_URL}${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${AI_API_KEY}`,
           },
-          body: JSON.stringify({
-            model: AI_MODEL,
-            messages: [
-              { role: 'system', content: SCRIPT_WRITER_SYSTEM_PROMPT },
-              { role: 'user', content: userPrompt },
-            ],
-            stream: false,
-            max_tokens: 4000,
-          }),
+          body: JSON.stringify(requestPayload),
           signal: controller.signal,
         })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await recordLlmProviderCall({
+          userId: request.user.id,
+          module: 'agent',
+          provider: 'nano-banana',
+          model: AI_MODEL,
+          operation: 'script.generate',
+          endpoint,
+          requestPayload,
+          durationMs: Date.now() - startedAt,
+          status: 'failed',
+          errorMessage: message,
+        })
+        throw error
       } finally {
         clearTimeout(timer)
       }
 
       if (!res.ok) {
         const errText = await res.text()
+        await recordLlmProviderCall({
+          userId: request.user.id,
+          module: 'agent',
+          provider: 'nano-banana',
+          model: AI_MODEL,
+          operation: 'script.generate',
+          endpoint,
+          requestPayload,
+          responseStatus: res.status,
+          responsePayload: { body: errText },
+          durationMs: Date.now() - startedAt,
+          status: 'failed',
+          errorMessage: `Script writer LLM HTTP ${res.status}: ${errText.slice(0, 500)}`,
+        })
         app.log.error({ status: res.status, body: errText }, 'Script writer LLM error')
         return reply.status(502).send({ success: false, error: { code: 'AI_ERROR', message: 'AI服务暂时不可用，请稍后重试' } })
       }
 
       const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
+      await recordLlmProviderCall({
+        userId: request.user.id,
+        module: 'agent',
+        provider: 'nano-banana',
+        model: AI_MODEL,
+        operation: 'script.generate',
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: data,
+        durationMs: Date.now() - startedAt,
+        status: 'success',
+      })
       const raw = data.choices?.[0]?.message?.content ?? ''
 
       try {

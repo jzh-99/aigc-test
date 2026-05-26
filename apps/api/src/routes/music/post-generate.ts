@@ -35,6 +35,27 @@ function toTaskResponse(task: any) {
   }
 }
 
+function musicGenerateLogContext(payload: ReturnType<typeof validateMusicGeneratePayload>, userId: string, idempotencyKey: string) {
+  return {
+    userId,
+    workspaceId: payload.workspace_id,
+    idempotencyKey,
+    mode: payload.mode,
+    trackType: payload.track_type,
+    model: payload.model,
+    hasPrompt: Boolean(payload.prompt?.trim()),
+    promptLength: payload.prompt ? [...payload.prompt].length : 0,
+    hasLyrics: Boolean(payload.lyrics?.trim()),
+    lyricsLength: payload.lyrics ? [...payload.lyrics].length : 0,
+    hasTitle: Boolean(payload.title?.trim()),
+    stylesCount: payload.styles.length,
+    voiceGender: payload.voice_gender,
+    hasVoiceClone: Boolean(payload.voice_clone_id),
+    canvasId: payload.canvas_id ?? null,
+    canvasNodeId: payload.canvas_node_id ?? null,
+  }
+}
+
 const route: FastifyPluginAsync = async (app) => {
   app.post('/music/generate', async (request, reply) => {
     let payload: ReturnType<typeof validateMusicGeneratePayload>
@@ -47,6 +68,8 @@ const route: FastifyPluginAsync = async (app) => {
     const db = getDb()
     const userId = request.user.id
     const idempotencyKey = payload.idempotency_key ?? randomUUID()
+    const logCtx = musicGenerateLogContext(payload, userId, idempotencyKey)
+    app.log.info(logCtx, 'Music generate request accepted')
 
     try {
       const access = await assertWorkspaceAccess(db, payload.workspace_id, userId, request.user.role)
@@ -62,6 +85,7 @@ const route: FastifyPluginAsync = async (app) => {
         .executeTakeFirst()
 
       if (existingBatch) {
+        app.log.info({ ...logCtx, batchId: existingBatch.id, batchStatus: existingBatch.status }, 'Music generate idempotency hit')
         const existing = await db
           .selectFrom('music_tracks as mt')
           .leftJoin('tasks as t', 't.id', 'mt.task_id')
@@ -106,11 +130,21 @@ const route: FastifyPluginAsync = async (app) => {
 
       const voice = await assertVoiceCloneReadyForWorkspace(db, payload.workspace_id, payload.voice_clone_id)
       const credits = await resolveMusicCredits(db, access.teamId, payload.model, payload.track_type, payload.mode)
+      app.log.info({
+        ...logCtx,
+        teamId: access.teamId,
+        provider: credits.providerCode,
+        estimatedCredits: credits.estimatedCredits,
+        unitPrices: credits.unitPrices,
+        providerModelId: credits.providerModelId,
+        resolvedVoiceId: voice?.voice_id ?? null,
+      }, 'Music generate credits resolved')
 
       let creditAccountId: string
       try {
         const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits)
         creditAccountId = frozen.creditAccountId
+        app.log.info({ ...logCtx, teamId: access.teamId, creditAccountId, estimatedCredits: credits.estimatedCredits }, 'Music generate credits frozen')
       } catch (error) {
         const message = getExpectedCreditErrorMessage(error)
         if (!message) {
@@ -210,6 +244,14 @@ const route: FastifyPluginAsync = async (app) => {
           estimatedCredits: credits.estimatedCredits,
         }
         await getMusicQueue().add('music-generate', jobData)
+        app.log.info({
+          ...logCtx,
+          batchId: created.batch.id,
+          taskId: created.task.id,
+          trackId: created.track.id,
+          creditAccountId,
+          estimatedCredits: credits.estimatedCredits,
+        }, 'Music generate task queued')
       } catch (error) {
         app.log.error({ err: error }, 'Failed to create music task')
         if (created) {

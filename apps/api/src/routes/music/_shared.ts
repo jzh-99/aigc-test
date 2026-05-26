@@ -7,6 +7,7 @@ import type { Database } from '@aigc/db'
 import type {
   MusicMode,
   MusicModel,
+  MusicSseEvent,
   MusicTrackType,
   MusicVoiceGender,
   MusicVoiceCloneResponse,
@@ -39,17 +40,14 @@ type MusicVoiceCloneRow = Selectable<Database['music_voice_clones']> & {
 type UrlSigner = (url: string | null | undefined) => Promise<string | null>
 type LoggerLike = Pick<FastifyBaseLogger, 'error'>
 
-export const MAX_VOICE_CLONE_AUDIO_SIZE = 50 * 1024 * 1024
+export const MAX_VOICE_CLONE_AUDIO_SIZE = 10 * 1024 * 1024
+export const MIN_VOICE_CLONE_AUDIO_DURATION_SECONDS = 15
 export const MUSIC_QUEUE_DELIVERY_ERROR_MESSAGE = '任务投递失败，请稍后重试'
 
-const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] as const
+const AUDIO_EXTS = ['mp3', 'm4a'] as const
 const AUDIO_MIME_BY_EXT: Record<(typeof AUDIO_EXTS)[number], string[]> = {
   mp3: ['audio/mpeg', 'audio/mp3', 'audio/x-mpeg'],
-  wav: ['audio/wav', 'audio/x-wav', 'audio/wave'],
   m4a: ['audio/mp4', 'audio/x-m4a'],
-  aac: ['audio/aac', 'audio/aacp', 'audio/x-aac'],
-  flac: ['audio/flac', 'audio/x-flac'],
-  ogg: ['audio/ogg', 'application/ogg'],
 }
 
 export class MusicRouteError extends Error {
@@ -91,7 +89,6 @@ export interface ValidatedVoiceClonePayload {
   name: string
   description: string | null
   gender: MusicVoiceGender
-  model: MusicModel
 }
 
 export interface WorkspaceAccess {
@@ -100,9 +97,9 @@ export interface WorkspaceAccess {
 }
 
 export interface ResolvedMusicCredits {
-  providerModelId: string
+  providerModelId: string | null
   providerCode: string
-  providerId: string
+  providerId: string | null
   estimatedCredits: number
   unitPrices: Record<string, number>
 }
@@ -204,17 +201,126 @@ function detectAudioMagic(buffer: Buffer): (typeof AUDIO_EXTS)[number] | null {
   if (buffer.length < 4) return null
   if (hasPrefix(buffer, [0x49, 0x44, 0x33])) return 'mp3'
   if (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) return 'mp3'
-  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WAVE') {
-    return 'wav'
-  }
-  if (buffer.subarray(0, 4).toString('ascii') === 'fLaC') return 'flac'
-  if (buffer.subarray(0, 4).toString('ascii') === 'OggS') return 'ogg'
-  if (buffer[0] === 0xff && (buffer[1] & 0xf6) === 0xf0) return 'aac'
   if (buffer.length >= 12 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
     const brandText = buffer.subarray(8, Math.min(buffer.length, 32)).toString('ascii')
     if (/(M4A|M4B|mp4|isom|iso2)/.test(brandText)) return 'm4a'
   }
   return null
+}
+
+function id3v2Size(buffer: Buffer): number {
+  if (buffer.length < 10 || buffer.subarray(0, 3).toString('ascii') !== 'ID3') return 0
+  return 10
+    + ((buffer[6] & 0x7f) << 21)
+    + ((buffer[7] & 0x7f) << 14)
+    + ((buffer[8] & 0x7f) << 7)
+    + (buffer[9] & 0x7f)
+}
+
+function parseMp3DurationSeconds(buffer: Buffer): number | null {
+  const bitrates: Record<number, number[]> = {
+    1: [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],
+    2: [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
+  }
+  const sampleRates: Record<number, number[]> = {
+    0b11: [44100, 48000, 32000],
+    0b10: [22050, 24000, 16000],
+    0b00: [11025, 12000, 8000],
+  }
+  let offset = id3v2Size(buffer)
+  let duration = 0
+  let frames = 0
+
+  while (offset + 4 <= buffer.length) {
+    if (buffer[offset] !== 0xff || (buffer[offset + 1] & 0xe0) !== 0xe0) {
+      offset += 1
+      continue
+    }
+
+    const versionBits = (buffer[offset + 1] >> 3) & 0x03
+    const layerBits = (buffer[offset + 1] >> 1) & 0x03
+    const bitrateIndex = (buffer[offset + 2] >> 4) & 0x0f
+    const sampleRateIndex = (buffer[offset + 2] >> 2) & 0x03
+    const padding = (buffer[offset + 2] >> 1) & 0x01
+    if (versionBits === 0b01 || layerBits !== 0b01 || bitrateIndex === 0 || bitrateIndex === 0x0f || sampleRateIndex === 0x03) {
+      offset += 1
+      continue
+    }
+
+    const mpegVersion = versionBits === 0b11 ? 1 : 2
+    const bitrate = (bitrates[mpegVersion]?.[bitrateIndex] ?? 0) * 1000
+    const sampleRate = sampleRates[versionBits]?.[sampleRateIndex] ?? 0
+    if (!bitrate || !sampleRate) {
+      offset += 1
+      continue
+    }
+
+    const samplesPerFrame = mpegVersion === 1 ? 1152 : 576
+    const frameSize = Math.floor(((mpegVersion === 1 ? 144 : 72) * bitrate) / sampleRate) + padding
+    if (frameSize <= 4 || offset + frameSize > buffer.length) break
+    duration += samplesPerFrame / sampleRate
+    frames += 1
+    offset += frameSize
+  }
+
+  return frames > 0 ? duration : null
+}
+
+function parseM4aDurationSeconds(buffer: Buffer): number | null {
+  const stack: Array<{ start: number; end: number }> = [{ start: 0, end: buffer.length }]
+  while (stack.length) {
+    const range = stack.pop()
+    if (!range) continue
+    let offset = range.start
+    while (offset + 8 <= range.end) {
+      let size = buffer.readUInt32BE(offset)
+      const type = buffer.subarray(offset + 4, offset + 8).toString('ascii')
+      let headerSize = 8
+      if (size === 1 && offset + 16 <= range.end) {
+        const largeSize = buffer.readBigUInt64BE(offset + 8)
+        if (largeSize > BigInt(Number.MAX_SAFE_INTEGER)) return null
+        size = Number(largeSize)
+        headerSize = 16
+      } else if (size === 0) {
+        size = range.end - offset
+      }
+      const boxEnd = offset + size
+      if (size < headerSize || boxEnd > range.end) break
+
+      if ((type === 'mvhd' || type === 'mdhd') && offset + headerSize + 20 <= boxEnd) {
+        const version = buffer[offset + headerSize]
+        const bodyOffset = offset + headerSize + 4
+        if (version === 0 && bodyOffset + 16 <= boxEnd) {
+          const timescale = buffer.readUInt32BE(bodyOffset + 8)
+          const duration = buffer.readUInt32BE(bodyOffset + 12)
+          if (timescale > 0 && duration > 0) return duration / timescale
+        } else if (version === 1 && bodyOffset + 28 <= boxEnd) {
+          const timescale = buffer.readUInt32BE(bodyOffset + 16)
+          const duration = buffer.readBigUInt64BE(bodyOffset + 20)
+          if (timescale > 0 && duration > 0n) return Number(duration) / timescale
+        }
+      }
+
+      if (['moov', 'trak', 'mdia'].includes(type)) stack.push({ start: offset + headerSize, end: boxEnd })
+      offset = boxEnd
+    }
+  }
+  return null
+}
+
+export function getVoiceCloneAudioDurationSeconds(buffer: Buffer, ext: (typeof AUDIO_EXTS)[number]): number | null {
+  return ext === 'mp3' ? parseMp3DurationSeconds(buffer) : parseM4aDurationSeconds(buffer)
+}
+
+export function assertVoiceCloneAudioDuration(buffer: Buffer, ext: (typeof AUDIO_EXTS)[number]): number {
+  const duration = getVoiceCloneAudioDurationSeconds(buffer, ext)
+  if (duration == null) {
+    routeError(400, 'BAD_REQUEST', '无法识别音频时长，请上传有效的 mp3/m4a 文件')
+  }
+  if (duration < MIN_VOICE_CLONE_AUDIO_DURATION_SECONDS) {
+    routeError(400, 'BAD_REQUEST', `音色克隆音频至少需要 ${MIN_VOICE_CLONE_AUDIO_DURATION_SECONDS} 秒有效人声，请上传更长的人声音频`)
+  }
+  return duration
 }
 
 export function validateVoiceCloneAudioUpload(
@@ -228,7 +334,7 @@ export function validateVoiceCloneAudioUpload(
   }
   if (buffer.length === 0) routeError(400, 'BAD_REQUEST', '音频文件不能为空')
   if (buffer.length > MAX_VOICE_CLONE_AUDIO_SIZE) {
-    routeError(413, 'PAYLOAD_TOO_LARGE', '音频文件过大，最大支持 50 MB')
+    routeError(413, 'PAYLOAD_TOO_LARGE', '音频文件过大，最大支持 10 MB')
   }
 
   const contentType = normalizeMime(mimetype)
@@ -478,6 +584,10 @@ function toIsoString(value: Date | string | null | undefined): string | null {
   return value instanceof Date ? value.toISOString() : String(value)
 }
 
+function normalizeLyricsSections(value: unknown): MusicTrackResponse['lyrics_sections'] {
+  return Array.isArray(value) ? value as MusicTrackResponse['lyrics_sections'] : []
+}
+
 async function signUrlOrNull(url: string | null | undefined, signer: UrlSigner): Promise<string | null> {
   if (!url) return null
   return signer(url)
@@ -503,6 +613,9 @@ export function validateMusicGeneratePayload(body: unknown): ValidatedMusicGener
   const workspaceId = normalizeRequiredString(body.workspace_id, 'workspace_id 不能为空')
   const voiceGender = normalizeVoiceGender(body.voice_gender)
   const voiceCloneId = normalizeOptionalId(body.voice_clone_id)
+  if (voiceCloneId && voiceGender !== 'auto') {
+    validationError('音色和音色性别不能同时选择')
+  }
   const params = {}
 
   if (mode === 'inspiration') {
@@ -523,8 +636,8 @@ export function validateMusicGeneratePayload(body: unknown): ValidatedMusicGener
       lyrics: normalizeOptionalLimitedText(body.lyrics, `歌词不能超过 ${MUSIC_LYRICS_MAX_LENGTH} 字`, MUSIC_LYRICS_MAX_LENGTH),
       title: normalizeOptionalString(body.title),
       styles: normalizeStyles(body.styles),
-      voice_gender: voiceGender,
-      voice_clone_id: voiceCloneId,
+      voice_gender: voiceCloneId ? 'auto' : voiceGender,
+      voice_clone_id: voiceGender === 'auto' ? voiceCloneId : null,
       params,
       canvas_id: normalizeOptionalString(body.canvas_id) ?? undefined,
       canvas_node_id: normalizeOptionalString(body.canvas_node_id) ?? undefined,
@@ -550,8 +663,8 @@ export function validateMusicGeneratePayload(body: unknown): ValidatedMusicGener
       MUSIC_LYRICS_MAX_LENGTH,
     ),
     styles: normalizeStyles(body.styles),
-    voice_gender: voiceGender,
-    voice_clone_id: voiceCloneId,
+    voice_gender: voiceCloneId ? 'auto' : voiceGender,
+    voice_clone_id: voiceGender === 'auto' ? voiceCloneId : null,
     params,
     canvas_id: normalizeOptionalString(body.canvas_id) ?? undefined,
     canvas_node_id: normalizeOptionalString(body.canvas_node_id) ?? undefined,
@@ -564,7 +677,6 @@ export function validateVoiceClonePayload(body: unknown): ValidatedVoiceClonePay
     name: normalizeRequiredString(body.name, '音色名称不能为空'),
     description: normalizeVoiceCloneDescriptionForRequest(normalizeOptionalString(body.description)),
     gender: normalizeVoiceGender(body.gender),
-    model: normalizeModel(body.model ?? 'mureka-8'),
   }
 }
 
@@ -591,6 +703,7 @@ export async function mapMusicTrackResponse(
     title: row.title,
     prompt: row.prompt,
     lyrics: row.lyrics,
+    lyrics_sections: normalizeLyricsSections(row.lyrics_sections),
     styles: row.styles ?? [],
     voice_clone_id: row.voice_clone_id,
     voice_gender: row.voice_gender,
@@ -604,7 +717,7 @@ export async function mapMusicTrackResponse(
     flac_storage_url: flacStorageUrl,
     wav_url: await resolvePlaybackUrl(row.wav_url, row.wav_storage_url, signer),
     wav_storage_url: wavStorageUrl,
-    duration_seconds: null,
+    duration_seconds: row.duration_seconds,
     error_message: row.error_message,
     estimated_credits: row.estimated_credits ?? 0,
     credits_cost: row.credits_cost ?? null,
@@ -632,6 +745,39 @@ export async function mapMusicVoiceCloneResponse(
     created_at: toIsoString(row.created_at) ?? '',
     updated_at: toIsoString(row.updated_at) ?? '',
     completed_at: toIsoString(row.completed_at),
+  }
+}
+
+export function createMusicTrackSsePayload(
+  event: 'status' | 'stream_url' | 'completed' | 'failed',
+  track: MusicTrackResponse,
+): MusicSseEvent {
+  if (event === 'stream_url') {
+    return { event, stream_url: track.stream_url ?? '', track }
+  }
+  if (event === 'completed') {
+    return { event, track }
+  }
+  if (event === 'failed') {
+    return { event, error_message: track.error_message ?? '音乐生成失败', track }
+  }
+  return { event, status: track.status, track }
+}
+
+export function buildMusicAdjacentResponse<T extends { id: string }>(
+  previous: T | null,
+  next: T | null,
+): {
+  previous_id: string | null
+  next_id: string | null
+  previous: T | null
+  next: T | null
+} {
+  return {
+    previous_id: previous?.id ?? null,
+    next_id: next?.id ?? null,
+    previous,
+    next,
   }
 }
 
@@ -787,18 +933,16 @@ export async function resolveMusicCredits(
 }
 
 export async function resolveVoiceCloneCredits(
-  db: Db,
-  teamId: string,
-  model: MusicModel,
+  _db: Db,
+  _teamId: string,
 ): Promise<ResolvedMusicCredits> {
-  const voiceCloneModel = `${model}-voice-clone`
-  const providerModel = await getActiveProviderModel(db, teamId, 'music_voice_clone', voiceCloneModel)
-  const unitPrice = resolveUnitPrice(providerModel.params_pricing, 'voice_clone', providerModel.credit_cost).unitPrice
+  const rawCredits = Number.parseInt(process.env.MUSIC_VOICE_CLONE_CREDITS ?? '5', 10)
+  const unitPrice = Number.isFinite(rawCredits) && rawCredits >= 0 ? rawCredits : 5
 
   return {
-    providerModelId: providerModel.modelId,
-    providerCode: providerModel.providerCode,
-    providerId: providerModel.providerId,
+    providerModelId: null,
+    providerCode: 'mureka',
+    providerId: null,
     estimatedCredits: unitPrice,
     unitPrices: { voice_clone: unitPrice },
   }

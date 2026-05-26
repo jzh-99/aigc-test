@@ -67,6 +67,22 @@ describe('music schema types', () => {
     assert.equal(clone.name, 'demo voice')
   })
 
+  test('music_tracks.lyrics_sections 支持精确歌词时间轴 JSON', () => {
+    const sections = [{
+      section_type: 'verse',
+      start: 0,
+      end: 4,
+      lines: [{ start: 0, end: 4, text: '第一句' }],
+    }]
+    const update: Updateable<Database['music_tracks']> = {
+      lyrics_sections: sections,
+      duration_seconds: 4,
+    }
+
+    assert.deepEqual(update.lyrics_sections, sections)
+    assert.equal(update.duration_seconds, 4)
+  })
+
   test('music_tracks.styles 写入类型支持数组和 JSON 字符串', () => {
     const insertWithArray: Insertable<Database['music_tracks']> = {
       workspace_id: 'workspace_1',
@@ -127,11 +143,21 @@ describe('music migration and seed hardening', () => {
     assert.match(source, /CREATE TRIGGER trg_music_tracks_updated_at/)
   })
 
-  test('Mureka seed 缺少 API URL 时不会写入 active 空 base_url', async () => {
+  test('Mureka seed 缺少 API URL 时不会写入空 base_url 且不禁用模型', async () => {
     const source = await readFile(join(__dirname, '../scripts/seed.ts'), 'utf-8')
 
     assert.match(source, /const murekaApiBaseUrl = process\.env\.MUREKA_API_URL\?\.trim\(\)/)
-    assert.match(source, /const murekaEnabled = Boolean\(murekaApiBaseUrl\)/)
     assert.doesNotMatch(source, /api_base_url: process\.env\.MUREKA_API_URL \?\? ''/)
+    assert.doesNotMatch(source, /const murekaEnabled = Boolean\(murekaApiBaseUrl\)/)
+    assert.match(source, /is_active: true/)
+  })
+
+  test('Mureka seed 不写入音色克隆伪模型并删除旧模型项', async () => {
+    const source = await readFile(join(__dirname, '../scripts/seed.ts'), 'utf-8')
+
+    assert.doesNotMatch(source, /code: 'mureka-voice-clone'/)
+    assert.doesNotMatch(source, /model: 'mureka-voice-clone'/)
+    assert.match(source, /mureka-8-voice-clone', 'mureka-9-voice-clone', 'mureka-voice-clone'/)
+    assert.match(source, /deleteFrom\('provider_models'\)/)
   })
 })
