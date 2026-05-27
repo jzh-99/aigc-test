@@ -8,16 +8,18 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       col.primaryKey().defaultTo(sql`gen_random_uuid()`)
     )
     .addColumn('workspace_id', 'uuid', (col) =>
-      col.notNull().references('workspaces.id')
+      col.notNull().references('workspaces.id').onDelete('cascade')
     )
     .addColumn('team_id', 'uuid', (col) =>
-      col.notNull().references('teams.id')
+      col.notNull().references('teams.id').onDelete('cascade')
     )
     .addColumn('user_id', 'uuid', (col) =>
       col.notNull().references('users.id')
     )
-    .addColumn('title', 'varchar(255)', (col) => col.notNull())
-    .addColumn('prompt', 'text', (col) => col.notNull())
+    .addColumn('title', 'text', (col) =>
+      col.notNull().defaultTo('未命名绘本')
+    )
+    .addColumn('prompt', 'text', (col) => col.notNull().defaultTo(''))
     .addColumn('style', 'varchar(100)', (col) => col.notNull())
     .addColumn('page_count', 'integer', (col) => col.notNull())
     .addColumn('status', 'varchar(30)', (col) =>
@@ -56,19 +58,19 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await db.schema
     .createIndex('idx_picture_book_projects_workspace_updated')
     .on('picture_book_projects')
-    .columns(['workspace_id', 'updated_at'])
+    .columns(['workspace_id', 'updated_at desc'])
     .execute()
 
   await db.schema
     .createIndex('idx_picture_book_projects_workspace_deleted')
     .on('picture_book_projects')
-    .columns(['workspace_id', 'is_deleted', 'deleted_at'])
+    .columns(['workspace_id', 'is_deleted', 'updated_at desc'])
     .execute()
 
   await db.schema
     .createIndex('idx_picture_book_projects_user_updated')
     .on('picture_book_projects')
-    .columns(['user_id', 'updated_at'])
+    .columns(['user_id', 'updated_at desc'])
     .execute()
 
   await db.schema
@@ -77,13 +79,13 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       col.primaryKey().defaultTo(sql`gen_random_uuid()`)
     )
     .addColumn('project_id', 'uuid', (col) =>
-      col.notNull().references('picture_book_projects.id')
+      col.notNull().references('picture_book_projects.id').onDelete('cascade')
     )
     .addColumn('workspace_id', 'uuid', (col) =>
-      col.notNull().references('workspaces.id')
+      col.notNull().references('workspaces.id').onDelete('cascade')
     )
     .addColumn('team_id', 'uuid', (col) =>
-      col.notNull().references('teams.id')
+      col.notNull().references('teams.id').onDelete('cascade')
     )
     .addColumn('user_id', 'uuid', (col) =>
       col.notNull().references('users.id')
@@ -124,12 +126,12 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       col.primaryKey().defaultTo(sql`gen_random_uuid()`)
     )
     .addColumn('project_id', 'uuid', (col) =>
-      col.notNull().references('picture_book_projects.id')
+      col.notNull().references('picture_book_projects.id').onDelete('cascade')
     )
     .addColumn('kind', 'varchar(30)', (col) => col.notNull())
     .addColumn('ref_id', 'varchar(100)', (col) => col.notNull())
     .addColumn('name', 'varchar(255)', (col) => col.notNull())
-    .addColumn('prompt', 'text')
+    .addColumn('prompt', 'text', (col) => col.notNull().defaultTo(''))
     .addColumn('selected_asset_url', 'text')
     .addColumn('selected_asset_id', 'uuid', (col) => col.references('assets.id'))
     .addColumn('batch_id', 'uuid', (col) =>

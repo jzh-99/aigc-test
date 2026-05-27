@@ -569,7 +569,7 @@ export interface PictureBookProjectAssetsTable {
     | 'page_audio_en'
   ref_id: string
   name: string
-  prompt: string | null
+  prompt: string
   selected_asset_url: string | null
   selected_asset_id: string | null
   batch_id: string | null
