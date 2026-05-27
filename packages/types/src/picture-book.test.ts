@@ -5,6 +5,9 @@ import {
   PICTURE_BOOK_STYLES,
   PICTURE_BOOK_TEXT_MODEL,
   PICTURE_BOOK_TTS_MODEL,
+  type PictureBookAssetKind,
+  type PictureBookGenerationStatus,
+  type PictureBookProjectStatus,
   isPictureBookPageCount,
   isPictureBookStyle,
   makeDefaultPictureBookState,
@@ -20,6 +23,13 @@ assert.equal(PICTURE_BOOK_STYLES.includes('梦幻光影厚涂风'), true)
 assert.equal(PICTURE_BOOK_TEXT_MODEL, 'qwen3.6-plus')
 assert.equal(PICTURE_BOOK_IMAGE_MODEL, 'seedream-5.0-lite')
 assert.equal(PICTURE_BOOK_TTS_MODEL, 'speech-2.8-hd')
+
+const projectStatus: PictureBookProjectStatus = 'script_ready'
+const generationStatus: PictureBookGenerationStatus = 'pending'
+const audioKind: PictureBookAssetKind = 'page_audio_en'
+assert.equal(projectStatus, 'script_ready')
+assert.equal(generationStatus, 'pending')
+assert.equal(audioKind, 'page_audio_en')
 
 const state = makeDefaultPictureBookState({ style: '吉卜力风', pageCount: 15 })
 assert.equal(state.steps.active, 'script')

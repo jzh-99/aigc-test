@@ -22,9 +22,9 @@ export const PICTURE_BOOK_TTS_MODEL = 'speech-2.8-hd'
 export type PictureBookStyle = typeof PICTURE_BOOK_STYLES[number]
 export type PictureBookPageCount = typeof PICTURE_BOOK_PAGE_COUNTS[number]
 export type PictureBookStepId = 'script' | 'assets' | 'storyboard' | 'preview'
-export type PictureBookProjectStatus = 'draft' | 'generating' | 'ready' | 'failed' | 'archived'
-export type PictureBookGenerationStatus = 'idle' | 'queued' | 'generating' | 'completed' | 'failed'
-export type PictureBookAssetKind = 'character' | 'background' | 'page_image' | 'voice_zh' | 'voice_en'
+export type PictureBookProjectStatus = 'draft' | 'script_ready' | 'assets_ready' | 'storyboard_ready' | 'completed' | 'failed'
+export type PictureBookGenerationStatus = 'idle' | 'pending' | 'processing' | 'completed' | 'failed'
+export type PictureBookAssetKind = 'character' | 'background' | 'page_image' | 'page_audio_zh' | 'page_audio_en'
 export type PictureBookChargeType = 'project'
 
 export interface PictureBookLocalizedText {
