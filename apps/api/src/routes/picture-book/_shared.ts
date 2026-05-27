@@ -6,6 +6,7 @@ import {
   normalizePictureBookState,
   type PictureBookAssetKind,
 } from '@aigc/types'
+import { recordLlmProviderCall, type LlmProviderAuditContext } from '../../lib/provider-api-audit.js'
 
 export const PICTURE_BOOK_MODELS = {
   text: PICTURE_BOOK_TEXT_MODEL,
@@ -58,6 +59,102 @@ export function calculateProjectChargeTotal(
 
     return total
   }, { estimatedCredits: 0, actualCredits: 0 })
+}
+
+export async function callPictureBookQwen(
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens: number,
+  auditContext: Partial<LlmProviderAuditContext>,
+): Promise<string> {
+  const apiUrl = process.env.QWEN_API_URL ?? ''
+  const apiKey = process.env.QWEN_API_KEY ?? ''
+  const endpoint = '/chat/completions'
+  const requestPayload = {
+    model: PICTURE_BOOK_MODELS.text,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    stream: false,
+    enable_thinking: true,
+    max_tokens: maxTokens,
+  }
+  const startedAt = Date.now()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 180_000)
+
+  try {
+    const res = await fetch(`${apiUrl}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestPayload),
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      await recordLlmProviderCall({
+        module: auditContext.module ?? 'picture-book',
+        provider: 'qwen',
+        model: PICTURE_BOOK_MODELS.text,
+        operation: auditContext.operation ?? 'picture-book.qwen.generate',
+        endpoint,
+        userId: auditContext.userId,
+        teamId: auditContext.teamId,
+        workspaceId: auditContext.workspaceId,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: { body },
+        durationMs: Date.now() - startedAt,
+        status: 'failed',
+        errorMessage: `Qwen HTTP ${res.status}: ${body.slice(0, 500)}`,
+      })
+      throw new Error(`Qwen HTTP ${res.status}`)
+    }
+
+    const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
+    await recordLlmProviderCall({
+      module: auditContext.module ?? 'picture-book',
+      provider: 'qwen',
+      model: PICTURE_BOOK_MODELS.text,
+      operation: auditContext.operation ?? 'picture-book.qwen.generate',
+      endpoint,
+      userId: auditContext.userId,
+      teamId: auditContext.teamId,
+      workspaceId: auditContext.workspaceId,
+      requestPayload,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    })
+
+    return data.choices?.[0]?.message?.content?.replace(/<think>[\s\S]*?<\/think>/g, '').trim() ?? ''
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Qwen HTTP ')) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    await recordLlmProviderCall({
+      module: auditContext.module ?? 'picture-book',
+      provider: 'qwen',
+      model: PICTURE_BOOK_MODELS.text,
+      operation: auditContext.operation ?? 'picture-book.qwen.generate',
+      endpoint,
+      userId: auditContext.userId,
+      teamId: auditContext.teamId,
+      workspaceId: auditContext.workspaceId,
+      requestPayload,
+      durationMs: Date.now() - startedAt,
+      status: 'failed',
+      errorMessage: message,
+    })
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function assertPictureBookWorkspaceAccess(
