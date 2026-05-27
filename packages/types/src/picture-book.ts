@@ -21,42 +21,11 @@ export const PICTURE_BOOK_TTS_MODEL = 'speech-2.8-hd'
 
 export type PictureBookStyle = typeof PICTURE_BOOK_STYLES[number]
 export type PictureBookPageCount = typeof PICTURE_BOOK_PAGE_COUNTS[number]
-
-export type PictureBookStepId =
-  | 'script'
-  | 'storyboard'
-  | 'image'
-  | 'voice'
-  | 'export'
-
-export type PictureBookProjectStatus =
-  | 'draft'
-  | 'generating'
-  | 'ready'
-  | 'failed'
-  | 'archived'
-
-export type PictureBookGenerationStatus =
-  | 'idle'
-  | 'queued'
-  | 'generating'
-  | 'completed'
-  | 'failed'
-
-export type PictureBookAssetKind =
-  | 'cover'
-  | 'page_image'
-  | 'voice_zh'
-  | 'voice_en'
-  | 'export_pdf'
-  | 'export_video'
-
-export type PictureBookChargeType =
-  | 'project'
-  | 'script'
-  | 'image'
-  | 'voice'
-  | 'export'
+export type PictureBookStepId = 'script' | 'assets' | 'storyboard' | 'preview'
+export type PictureBookProjectStatus = 'draft' | 'generating' | 'ready' | 'failed' | 'archived'
+export type PictureBookGenerationStatus = 'idle' | 'queued' | 'generating' | 'completed' | 'failed'
+export type PictureBookAssetKind = 'character' | 'background' | 'page_image' | 'voice_zh' | 'voice_en'
+export type PictureBookChargeType = 'project'
 
 export interface PictureBookLocalizedText {
   zh: string
@@ -65,7 +34,6 @@ export interface PictureBookLocalizedText {
 
 export interface PictureBookPageScript {
   page: number
-  title?: string
   narration: PictureBookLocalizedText
   dialogue: PictureBookLocalizedText
   visualPrompt?: string
@@ -73,7 +41,6 @@ export interface PictureBookPageScript {
 
 export interface PictureBookElement {
   id: string
-  type: 'character' | 'background' | 'prop' | 'text'
   name: string
   prompt: string
   imageUrl?: string | null
@@ -89,58 +56,42 @@ export interface PictureBookStoryboardPage {
     en?: string | null
   }
   status: PictureBookGenerationStatus
-  elements: PictureBookElement[]
 }
 
 export interface PictureBookState {
-  projectId?: string
-  status: PictureBookProjectStatus
   steps: {
     active: PictureBookStepId
     completed: PictureBookStepId[]
   }
+  script: {
+    summaryZh: string
+    pages: PictureBookPageScript[]
+  }
+  assets: {
+    characters: PictureBookElement[]
+    backgrounds: PictureBookElement[]
+  }
+  storyboard: PictureBookStoryboardPage[]
   settings: {
     style: PictureBookStyle
     pageCount: PictureBookPageCount
     textModel: typeof PICTURE_BOOK_TEXT_MODEL
     imageModel: typeof PICTURE_BOOK_IMAGE_MODEL
     ttsModel: typeof PICTURE_BOOK_TTS_MODEL
-    billingMode: PictureBookChargeType
+    voiceZhId?: string
+    voiceEnId?: string
+    billingMode: 'project'
   }
-  scripts: PictureBookPageScript[]
-  elements: PictureBookElement[]
-  storyboard: PictureBookStoryboardPage[]
-  errorMessage?: string | null
-  updatedAt?: string
-}
-
-export interface MakeDefaultPictureBookStateInput {
-  style?: unknown
-  pageCount?: unknown
-}
-
-export interface NormalizePictureBookStateInput {
-  projectId?: unknown
-  status?: unknown
-  steps?: {
-    active?: unknown
-    completed?: unknown
+  draft: {
+    savedAt?: string
+    dirty: boolean
+    lastError?: string
   }
-  settings?: {
-    style?: unknown
-    pageCount?: unknown
-  }
-  scripts?: unknown
-  elements?: unknown
-  storyboard?: unknown
-  errorMessage?: unknown
-  updatedAt?: unknown
 }
 
 const DEFAULT_PICTURE_BOOK_STYLE: PictureBookStyle = '吉卜力风'
 const DEFAULT_PICTURE_BOOK_PAGE_COUNT: PictureBookPageCount = 10
-const PICTURE_BOOK_STEP_IDS: PictureBookStepId[] = ['script', 'storyboard', 'image', 'voice', 'export']
-const PICTURE_BOOK_PROJECT_STATUSES: PictureBookProjectStatus[] = ['draft', 'generating', 'ready', 'failed', 'archived']
+const PICTURE_BOOK_STEP_IDS: PictureBookStepId[] = ['script', 'assets', 'storyboard', 'preview']
 
 export function isPictureBookStyle(value: unknown): value is PictureBookStyle {
   return typeof value === 'string' && PICTURE_BOOK_STYLES.includes(value as PictureBookStyle)
@@ -150,12 +101,12 @@ export function isPictureBookPageCount(value: unknown): value is PictureBookPage
   return typeof value === 'number' && PICTURE_BOOK_PAGE_COUNTS.includes(value as PictureBookPageCount)
 }
 
-function isPictureBookStepId(value: unknown): value is PictureBookStepId {
-  return typeof value === 'string' && PICTURE_BOOK_STEP_IDS.includes(value as PictureBookStepId)
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isPictureBookProjectStatus(value: unknown): value is PictureBookProjectStatus {
-  return typeof value === 'string' && PICTURE_BOOK_PROJECT_STATUSES.includes(value as PictureBookProjectStatus)
+function isPictureBookStepId(value: unknown): value is PictureBookStepId {
+  return typeof value === 'string' && PICTURE_BOOK_STEP_IDS.includes(value as PictureBookStepId)
 }
 
 function normalizeStepIds(value: unknown): PictureBookStepId[] {
@@ -163,44 +114,72 @@ function normalizeStepIds(value: unknown): PictureBookStepId[] {
   return value.filter(isPictureBookStepId)
 }
 
-export function makeDefaultPictureBookState(input: MakeDefaultPictureBookStateInput = {}): PictureBookState {
+function normalizeSettings(value: unknown): PictureBookState['settings'] {
+  const settings = isPlainObject(value) ? value : {}
+
   return {
-    status: 'draft',
+    style: isPictureBookStyle(settings.style) ? settings.style : DEFAULT_PICTURE_BOOK_STYLE,
+    pageCount: isPictureBookPageCount(settings.pageCount) ? settings.pageCount : DEFAULT_PICTURE_BOOK_PAGE_COUNT,
+    textModel: PICTURE_BOOK_TEXT_MODEL,
+    imageModel: PICTURE_BOOK_IMAGE_MODEL,
+    ttsModel: PICTURE_BOOK_TTS_MODEL,
+    voiceZhId: typeof settings.voiceZhId === 'string' ? settings.voiceZhId : undefined,
+    voiceEnId: typeof settings.voiceEnId === 'string' ? settings.voiceEnId : undefined,
+    billingMode: 'project',
+  }
+}
+
+export function makeDefaultPictureBookState(input: unknown = {}): PictureBookState {
+  const value = isPlainObject(input) ? input : {}
+
+  return {
     steps: {
       active: 'script',
       completed: [],
     },
-    settings: {
-      style: isPictureBookStyle(input.style) ? input.style : DEFAULT_PICTURE_BOOK_STYLE,
-      pageCount: isPictureBookPageCount(input.pageCount) ? input.pageCount : DEFAULT_PICTURE_BOOK_PAGE_COUNT,
-      textModel: PICTURE_BOOK_TEXT_MODEL,
-      imageModel: PICTURE_BOOK_IMAGE_MODEL,
-      ttsModel: PICTURE_BOOK_TTS_MODEL,
-      billingMode: 'project',
+    script: {
+      summaryZh: '',
+      pages: [],
     },
-    scripts: [],
-    elements: [],
+    assets: {
+      characters: [],
+      backgrounds: [],
+    },
     storyboard: [],
-    errorMessage: null,
+    settings: normalizeSettings(value),
+    draft: {
+      dirty: false,
+    },
   }
 }
 
-export function normalizePictureBookState(input: NormalizePictureBookStateInput = {}): PictureBookState {
-  const fallback = makeDefaultPictureBookState(input.settings)
+export function normalizePictureBookState(input: unknown = {}): PictureBookState {
+  const value = isPlainObject(input) ? input : {}
+  const fallback = makeDefaultPictureBookState(value.settings)
+  const steps = isPlainObject(value.steps) ? value.steps : {}
+  const script = isPlainObject(value.script) ? value.script : {}
+  const assets = isPlainObject(value.assets) ? value.assets : {}
+  const draft = isPlainObject(value.draft) ? value.draft : {}
 
   return {
-    ...fallback,
-    projectId: typeof input.projectId === 'string' ? input.projectId : fallback.projectId,
-    status: isPictureBookProjectStatus(input.status) ? input.status : fallback.status,
     steps: {
-      active: isPictureBookStepId(input.steps?.active) ? input.steps.active : fallback.steps.active,
-      completed: normalizeStepIds(input.steps?.completed),
+      active: isPictureBookStepId(steps.active) ? steps.active : fallback.steps.active,
+      completed: normalizeStepIds(steps.completed),
     },
+    script: {
+      summaryZh: typeof script.summaryZh === 'string' ? script.summaryZh : fallback.script.summaryZh,
+      pages: Array.isArray(script.pages) ? (script.pages as PictureBookPageScript[]) : fallback.script.pages,
+    },
+    assets: {
+      characters: Array.isArray(assets.characters) ? (assets.characters as PictureBookElement[]) : fallback.assets.characters,
+      backgrounds: Array.isArray(assets.backgrounds) ? (assets.backgrounds as PictureBookElement[]) : fallback.assets.backgrounds,
+    },
+    storyboard: Array.isArray(value.storyboard) ? (value.storyboard as PictureBookStoryboardPage[]) : fallback.storyboard,
     settings: fallback.settings,
-    scripts: Array.isArray(input.scripts) ? (input.scripts as PictureBookPageScript[]) : fallback.scripts,
-    elements: Array.isArray(input.elements) ? (input.elements as PictureBookElement[]) : fallback.elements,
-    storyboard: Array.isArray(input.storyboard) ? (input.storyboard as PictureBookStoryboardPage[]) : fallback.storyboard,
-    errorMessage: typeof input.errorMessage === 'string' ? input.errorMessage : fallback.errorMessage,
-    updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : fallback.updatedAt,
+    draft: {
+      savedAt: typeof draft.savedAt === 'string' ? draft.savedAt : fallback.draft.savedAt,
+      dirty: typeof draft.dirty === 'boolean' ? draft.dirty : fallback.draft.dirty,
+      lastError: typeof draft.lastError === 'string' ? draft.lastError : fallback.draft.lastError,
+    },
   }
 }
