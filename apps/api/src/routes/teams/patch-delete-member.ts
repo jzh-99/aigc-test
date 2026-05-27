@@ -109,7 +109,13 @@ const route: FastifyPluginAsync = async (app) => {
     if (member.role === 'owner') {
       return reply.status(403).send({
         success: false,
-        error: { code: 'CANNOT_REMOVE_OWNER', message: 'Cannot remove the team owner' },
+        error: { code: 'CANNOT_REMOVE_OWNER', message: '无法移除团队所有者' },
+      })
+    }
+    if (member.role === 'admin') {
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'CANNOT_REMOVE_ADMIN', message: '管理员角色不允许直接移除，请先将其降级为普通成员' },
       })
     }
 

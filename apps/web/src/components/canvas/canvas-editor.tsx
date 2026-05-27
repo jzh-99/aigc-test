@@ -724,17 +724,39 @@ function Flow({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [selectedNodeId, selectedNodeIds, selectedEdgeId, removeNodes, onEdgesChange])
 
-  // Drop file onto canvas → create asset node
+  // Drop file onto canvas → create corresponding node by media type
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
+    const rect = wrapperRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    // 侧边栏资产库拖入：读取自定义数据
+    const assetDataRaw = e.dataTransfer.getData('application/x-canvas-asset')
+    if (assetDataRaw) {
+      if (!token) { toast.error('请先登录'); return }
+      try {
+        const assetData = JSON.parse(assetDataRaw) as { url: string; type: string }
+        const position = project({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+        const mediaKind: 'image' | 'video' | 'audio' = assetData.type.startsWith('video') ? 'video' : assetData.type.startsWith('audio') ? 'audio' : 'image'
+        const nodeType = mediaKind === 'video' ? 'video_gen' : mediaKind === 'audio' ? 'audio_gen' : 'image_gen'
+        const nodeId = `node_${generateUUID()}`
+        addNodeWithConfig(nodeType, position, {}, nodeId)
+        const outputId = await createNodeOutput(canvasId, nodeId, assetData.url, token)
+        initNodeState(nodeId)
+        replaceNodeOutput(nodeId, { id: outputId, url: assetData.url, type: mediaKind })
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : '拖入资产失败'
+        toast.error(message)
+      }
+      return
+    }
+
+    // 外部文件拖入
     const files = Array.from(e.dataTransfer.files).filter(
       (f) => f.type.startsWith('image/') || f.type.startsWith('video/') || f.type.startsWith('audio/')
     )
     if (!files.length) return
     if (!token) { toast.error('请先登录'); return }
-
-    const rect = wrapperRef.current?.getBoundingClientRect()
-    if (!rect) return
 
     setUploading(true)
     try {
@@ -745,16 +767,16 @@ function Flow({
           y: e.clientY - rect.top,
         })
         try {
+          const mediaKind = getCanvasUploadMediaKind(file)
+          if (!mediaKind) continue
           const nodeId = `node_${generateUUID()}`
           const url = await uploadAssetFile(file, token, { canvasId, canvasNodeId: nodeId })
-          addNodeWithConfig('asset', position, {
-            url,
-            name: file.name,
-            mimeType: file.type,
-            canvasId,
-          }, nodeId)
-          const mediaKind = getCanvasUploadMediaKind(file)
-          if (mediaKind) await refreshUploadedAssetType(mediaKind)
+          const nodeType = mediaKind === 'video' ? 'video_gen' : mediaKind === 'audio' ? 'audio_gen' : 'image_gen'
+          addNodeWithConfig(nodeType, position, {}, nodeId)
+          const outputId = await createNodeOutput(canvasId, nodeId, url, token)
+          initNodeState(nodeId)
+          replaceNodeOutput(nodeId, { id: outputId, url, type: mediaKind })
+          await refreshUploadedAssetType(mediaKind)
         } catch (err: any) {
           toast.error(`上传 ${file.name} 失败: ${err.message}`)
         }
@@ -762,7 +784,7 @@ function Flow({
     } finally {
       setUploading(false)
     }
-  }, [token, project, addNodeWithConfig, canvasId, refreshUploadedAssetType])
+  }, [token, project, addNodeWithConfig, canvasId, refreshUploadedAssetType, initNodeState, replaceNodeOutput])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()

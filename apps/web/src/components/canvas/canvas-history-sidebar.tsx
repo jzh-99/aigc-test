@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Loader2, ChevronDown, ImageIcon, Film, Music } from 'lucide-react'
+import { X, Loader2, ChevronDown, ImageIcon, Film, Music, Download } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { BatchDetail } from '@/components/history/batch-detail'
 import { cn } from '@/lib/utils'
@@ -393,8 +393,15 @@ function AssetsTab({
                 <button
                   key={asset.id}
                   data-testid={`canvas-asset-item-${asset.id}`}
+                  draggable
+                  onDragStart={(e) => {
+                    const dragUrl = url || ''
+                    const dragType = isAudio ? 'audio' : isVideo ? 'video' : 'image'
+                    e.dataTransfer.setData('application/x-canvas-asset', JSON.stringify({ url: dragUrl, type: dragType }))
+                    e.dataTransfer.effectAllowed = 'copy'
+                  }}
                   onClick={() => (url ? onOpenLightbox(url, isAudio ? 'audio' : isVideo ? 'video' : 'image') : onOpenDetail(asset.batch_id))}
-                  className="group relative rounded-lg overflow-hidden bg-muted aspect-square focus:outline-none"
+                  className="group relative rounded-lg overflow-hidden bg-muted aspect-square focus:outline-none cursor-grab active:cursor-grabbing"
                 >
                   {url ? (
                     isAudio ? (
@@ -414,6 +421,25 @@ function AssetsTab({
                     </div>
                   )}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5">
+                    {url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = asset.prompt || 'asset'
+                          a.target = '_blank'
+                          a.rel = 'noopener noreferrer'
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                        }}
+                        className="absolute top-1.5 right-1.5 p-1 rounded bg-black/40 hover:bg-black/70 transition-colors"
+                        title="下载"
+                      >
+                        <Download className="w-3 h-3 text-white" />
+                      </button>
+                    )}
                     <p className="text-[9px] text-white line-clamp-2 text-left">{asset.prompt || '—'}</p>
                     <p className="text-[9px] text-white/60 mt-0.5 text-left">
                       {new Date(asset.created_at).toLocaleString('zh-CN', {
