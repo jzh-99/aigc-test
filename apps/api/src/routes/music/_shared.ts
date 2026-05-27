@@ -933,11 +933,20 @@ export async function resolveMusicCredits(
 }
 
 export async function resolveVoiceCloneCredits(
-  _db: Db,
+  db: Db,
   _teamId: string,
 ): Promise<ResolvedMusicCredits> {
   const rawCredits = Number.parseInt(process.env.MUSIC_VOICE_CLONE_CREDITS ?? '5', 10)
-  const unitPrice = Number.isFinite(rawCredits) && rawCredits >= 0 ? rawCredits : 5
+  const fallbackUnitPrice = Number.isFinite(rawCredits) && rawCredits >= 0 ? rawCredits : 5
+  const costConfig = await db
+    .selectFrom('system_cost_configs')
+    .select('credit_cost')
+    .where('key', '=', 'music_voice_clone')
+    .executeTakeFirst()
+  const configuredUnitPrice = costConfig?.credit_cost
+  const unitPrice = typeof configuredUnitPrice === 'number' && Number.isFinite(configuredUnitPrice) && configuredUnitPrice >= 0
+    ? configuredUnitPrice
+    : fallbackUnitPrice
 
   return {
     providerModelId: null,

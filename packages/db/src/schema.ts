@@ -416,6 +416,16 @@ export interface ProviderApiLogsTable {
   created_at: Generated<Date>
 }
 
+// ─── System Configs ───────────────────────────────────────────────────────────
+
+export interface SystemCostConfigsTable {
+  key: string
+  label: string
+  description: string | null
+  credit_cost: number
+  updated_at: Generated<Date>
+}
+
 // ─── Music ───────────────────────────────────────────────────────────────────
 
 export interface MusicVoiceClonesTable {
@@ -526,6 +536,7 @@ export interface Database {
   prompt_filter_logs: PromptFilterLogsTable
   webhook_logs: WebhookLogsTable
   provider_api_logs: ProviderApiLogsTable
+  system_cost_configs: SystemCostConfigsTable
   payment_orders: PaymentOrdersTable
   providers: ProvidersTable
   provider_models: ProviderModelsTable

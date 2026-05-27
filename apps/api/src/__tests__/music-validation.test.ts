@@ -451,7 +451,25 @@ describe('music validation helpers', () => {
     })
   })
 
-  test('resolveVoiceCloneCredits 使用环境变量配置价格且不查询模型表', async () => {
+  test('resolveVoiceCloneCredits 优先使用后台费用配置', async () => {
+    const previous = process.env.MUSIC_VOICE_CLONE_CREDITS
+    process.env.MUSIC_VOICE_CLONE_CREDITS = '7'
+    const { db, calls } = createFakeDb({
+      system_cost_configs: [{ credit_cost: 9 }],
+    })
+
+    const credits = await resolveVoiceCloneCredits(db as never, 'team-1')
+
+    assert.equal(credits.providerModelId, null)
+    assert.equal(credits.providerCode, 'mureka')
+    assert.equal(credits.estimatedCredits, 9)
+    assert.deepEqual(credits.unitPrices, { voice_clone: 9 })
+    assert.deepEqual(calls.map((call) => call.table), ['system_cost_configs'])
+    if (previous === undefined) delete process.env.MUSIC_VOICE_CLONE_CREDITS
+    else process.env.MUSIC_VOICE_CLONE_CREDITS = previous
+  })
+
+  test('resolveVoiceCloneCredits 后台费用缺失时回退环境变量', async () => {
     const previous = process.env.MUSIC_VOICE_CLONE_CREDITS
     process.env.MUSIC_VOICE_CLONE_CREDITS = '7'
     const { db, calls } = createFakeDb({})
@@ -462,7 +480,7 @@ describe('music validation helpers', () => {
     assert.equal(credits.providerCode, 'mureka')
     assert.equal(credits.estimatedCredits, 7)
     assert.deepEqual(credits.unitPrices, { voice_clone: 7 })
-    assert.equal(calls.length, 0)
+    assert.deepEqual(calls.map((call) => call.table), ['system_cost_configs'])
     if (previous === undefined) delete process.env.MUSIC_VOICE_CLONE_CREDITS
     else process.env.MUSIC_VOICE_CLONE_CREDITS = previous
   })

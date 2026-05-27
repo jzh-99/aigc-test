@@ -363,6 +363,16 @@ export interface ModelItem {
   provider_code: string
 }
 
+export type SystemCostConfigKey = 'music_voice_clone'
+
+export interface SystemCostConfigItem {
+  key: SystemCostConfigKey
+  label: string
+  description: string | null
+  credit_cost: number
+  updated_at: string
+}
+
 export interface SystemVoiceDemoResponse {
   voice_id: string
   demo_audio_url: string

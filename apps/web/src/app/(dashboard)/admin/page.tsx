@@ -7,6 +7,7 @@ import { CreateTeamForm } from '@/components/admin/create-team-form'
 import { UserTable } from '@/components/admin/user-table'
 import { ErrorDashboard } from '@/components/admin/error-dashboard'
 import { ModelTable } from '@/components/admin/model-table'
+import { OtherCostConfigTable } from '@/components/admin/other-cost-config-table'
 import { cn } from '@/lib/utils'
 
 const tabs = [
@@ -15,6 +16,7 @@ const tabs = [
   { key: 'users', label: '用户列表' },
   { key: 'errors', label: '错误诊断' },
   { key: 'models', label: '模型管理' },
+  { key: 'other-costs', label: '其它费用管理' },
 ] as const
 
 type TabKey = typeof tabs[number]['key']
@@ -56,6 +58,7 @@ export default function AdminPage() {
       {activeTab === 'users' && <UserTable />}
       {activeTab === 'errors' && <ErrorDashboard />}
       {activeTab === 'models' && <ModelTable />}
+      {activeTab === 'other-costs' && <OtherCostConfigTable />}
     </div>
   )
 }
