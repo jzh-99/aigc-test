@@ -1,0 +1,150 @@
+<h2>Toby AI 绘本 · 修正版流程骨架</h2>
+<p class="subtitle">按你的标注调整：入口居中大对话框；顶部横向步骤条；故事摘要仅中文；每页内容用轮播卡片；角色/背景、绘本分镜分成独立页面。</p>
+
+<style>
+  .pb-stage { background:#f7f8fb; border-radius:20px; padding:34px; }
+  .pb-title { text-align:center; font-size:32px; font-weight:800; margin:8px 0 18px; }
+  .pb-dialog { width:min(860px,100%); margin:0 auto; background:#fff; border-radius:28px; padding:22px; box-shadow:0 22px 60px rgba(15,23,42,.08); }
+  .pb-tabs { display:grid; grid-template-columns:1fr 1.1fr 1fr; gap:0; margin:-22px -22px 18px; border-radius:28px 28px 0 0; overflow:hidden; background:#e9edf2; }
+  .pb-tab { padding:18px; text-align:center; font-weight:700; }
+  .pb-tab.active { background:#fff; border-radius:0 0 26px 26px; color:#111827; }
+  .pb-area { height:150px; border:1px solid #e5e7eb; border-radius:20px; padding:18px; color:#9ca3af; }
+  .pb-controls { display:flex; align-items:center; gap:18px; margin-top:16px; }
+  .pb-control { padding:12px 16px; border-radius:12px; background:#fff; border:1px solid #e5e7eb; font-weight:700; }
+  .pb-generate { margin-left:auto; padding:13px 26px; border-radius:999px; background:#111827; color:white; font-weight:800; }
+  .pb-projects { width:min(1180px,100%); margin:42px auto 0; display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
+  .pb-project { background:#eef1f5; border-radius:22px; padding:14px; min-height:170px; }
+  .pb-thumb { height:92px; border-radius:14px; background:linear-gradient(135deg,#f6d365,#dfe7fd); margin-bottom:12px; }
+  .pb-stepbar { display:flex; align-items:center; justify-content:center; gap:22px; margin:20px 0 34px; font-size:18px; font-weight:800; }
+  .pb-step-dot { width:44px; height:44px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:#eee; color:#9ca3af; margin-right:10px; }
+  .pb-step.active .pb-step-dot { background:#6737ff; color:white; }
+  .pb-step.done .pb-step-dot { background:#eadfff; color:#6737ff; }
+  .pb-line { width:60px; border-top:1px dashed #bbb; }
+  .pb-page { padding:24px 56px 86px; background:#fff; border-radius:18px; }
+  .pb-summary { height:180px; overflow:hidden; border:1px solid #ddd; border-radius:14px; padding:24px; line-height:1.8; font-size:16px; }
+  .pb-carousel { display:grid; grid-template-columns:48px 1fr 48px; gap:18px; align-items:center; margin-top:28px; }
+  .pb-arrow { height:48px; border-radius:50%; background:#111827; color:white; display:flex; align-items:center; justify-content:center; }
+  .pb-card { border:1px solid #e5e7eb; border-radius:18px; padding:22px; box-shadow:0 14px 35px rgba(15,23,42,.06); background:#fff; }
+  .pb-card-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .pb-field { border:1px solid #e5e7eb; border-radius:12px; min-height:120px; padding:14px; color:#475569; background:#fafafa; }
+  .pb-assets { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .pb-asset-card { display:grid; grid-template-columns:96px 1fr; gap:16px; border:1px solid #e5e7eb; border-radius:18px; padding:14px; min-height:142px; background:#fff; }
+  .pb-asset-img { border-radius:12px; background:linear-gradient(135deg,#fff7ed,#e0f2fe); }
+  .pb-banner { display:flex; align-items:center; justify-content:space-between; background:#eee8ff; border-radius:16px; padding:20px 24px; margin:18px 0 22px; }
+  .pb-board { background:#101116; color:#e5e7eb; border-radius:18px; padding:22px; }
+  .pb-progress { height:14px; border-radius:999px; background:#625bff; margin:10px 0 20px; }
+  .pb-shot-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+  .pb-shot { border:1px solid #303244; border-radius:16px; overflow:hidden; background:#151720; }
+  .pb-shot-img { height:150px; background:linear-gradient(135deg,#facc15,#22c55e,#60a5fa); }
+  .pb-shot-body { padding:14px; }
+</style>
+
+<div class="mockup">
+  <div class="mockup-header">入口首页</div>
+  <div class="mockup-body">
+    <div class="pb-stage">
+      <div class="pb-title">Toby AI绘本</div>
+      <div class="pb-dialog">
+        <div class="pb-tabs">
+          <div class="pb-tab">上传故事</div>
+          <div class="pb-tab active">AI 生产剧本</div>
+          <div class="pb-tab">自由创作</div>
+        </div>
+        <div class="pb-area">输入你想要的绘本内容...</div>
+        <div class="pb-controls">
+          <div class="pb-control">绘本风格：吉卜力风</div>
+          <div class="pb-control">页数：15页</div>
+          <div class="pb-generate">立即生成</div>
+        </div>
+      </div>
+      <div style="width:min(1180px,100%);margin:34px auto 0;display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">我的绘本</h3>
+        <strong>全部 ›</strong>
+      </div>
+      <div class="pb-projects">
+        <div class="pb-project"><div class="pb-thumb"></div><strong>哈噜的奇妙朋友</strong><p>2026-05-27 · 15页</p></div>
+        <div class="pb-project"><div class="pb-thumb"></div><strong>小月亮回家</strong><p>2026-05-25 · 10页</p></div>
+        <div class="pb-project"><div class="pb-thumb"></div><strong>风里的糖果店</strong><p>2026-05-22 · 20页</p></div>
+        <div class="pb-project"><div class="pb-thumb"></div><strong>云朵邮差</strong><p>2026-05-18 · 15页</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Step 1 · 剧本大纲</div>
+  <div class="mockup-body">
+    <div class="pb-stepbar">
+      <span class="pb-step active"><span class="pb-step-dot">1</span>剧本大纲</span><span class="pb-line"></span>
+      <span class="pb-step"><span class="pb-step-dot">2</span>资产库</span><span class="pb-line"></span>
+      <span class="pb-step"><span class="pb-step-dot">3</span>绘本分镜</span><span class="pb-line"></span>
+      <span class="pb-step"><span class="pb-step-dot">4</span>预览导出</span>
+    </div>
+    <div class="pb-page">
+      <p><strong>绘本风格：</strong>吉卜力风　　<strong>页数：</strong>15页</p>
+      <h3>故事摘要</h3>
+      <div class="pb-summary">这是故事摘要，只保留中文版本。它用于帮助用户理解整体剧情、角色关系、情绪走向和结尾，不参与英文版本切换。</div>
+      <h3 style="margin-top:28px;">每页内容</h3>
+      <div class="pb-carousel">
+        <div class="pb-arrow">‹</div>
+        <div class="pb-card">
+          <h3>第 1 页 · 初遇新朋友</h3>
+          <div class="pb-card-grid">
+            <div>
+              <strong>画面描述</strong>
+              <div class="pb-field">清晨的客厅里，哈士奇哈噜发现手机里出现了一位会发光的新朋友。</div>
+            </div>
+            <div>
+              <strong>独白</strong>
+              <div class="pb-field">哈噜睁大眼睛说：“你好呀，你是从星星里来的吗？”</div>
+            </div>
+          </div>
+          <p style="color:#64748b;margin-bottom:0;">卡片可横向切换 10/15/20 页，每页均可编辑；独白后续会生成中英双语音频。</p>
+        </div>
+        <div class="pb-arrow">›</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Step 2 · 资产库（角色 / 背景单独页）</div>
+  <div class="mockup-body">
+    <div class="pb-stepbar">
+      <span class="pb-step done"><span class="pb-step-dot">✓</span>剧本大纲</span><span class="pb-line"></span>
+      <span class="pb-step active"><span class="pb-step-dot">2</span>资产库</span><span class="pb-line"></span>
+      <span class="pb-step"><span class="pb-step-dot">3</span>绘本分镜</span><span class="pb-line"></span>
+      <span class="pb-step"><span class="pb-step-dot">4</span>预览导出</span>
+    </div>
+    <div class="pb-page">
+      <div style="display:flex;gap:28px;font-size:18px;font-weight:800;margin-bottom:18px;"><span>全部角色 5</span><span style="color:#64748b;">全部背景 4</span></div>
+      <div class="pb-banner"><div><strong>生成或导入角色/背景形象图</strong><br>先生成提示词；编辑确认后可批量生成，也可单卡重新生成。</div><button class="pb-generate" style="margin:0;">多选生成</button></div>
+      <div class="pb-assets">
+        <div class="pb-asset-card"><div class="pb-asset-img"></div><div><strong>哈噜</strong><p>形象 0/1</p><p>儿童绘本风格，三视图，白底，全身照...</p></div></div>
+        <div class="pb-asset-card"><div class="pb-asset-img"></div><div><strong>星星朋友</strong><p>形象 0/1</p><p>温柔发光的小机器人，圆润造型...</p></div></div>
+        <div class="pb-asset-card"><div class="pb-asset-img"></div><div><strong>客厅</strong><p>背景 0/1</p><p>阳光充足的植物客厅，温暖治愈...</p></div></div>
+        <div class="pb-asset-card"><div class="pb-asset-img"></div><div><strong>秘密花园</strong><p>背景 0/1</p><p>夜晚微光花园，萤火虫，梦幻...</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Step 3 · 绘本分镜（单独页）</div>
+  <div class="mockup-body">
+    <div class="pb-board">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="color:#7d8bff;margin:0;">绘本分镜</h3>
+        <button class="pb-generate" style="margin:0;background:#8b95a8;">已锁定</button>
+      </div>
+      <p>完成进度 <span style="float:right;">13/13 页 (100%)</span></p>
+      <div class="pb-progress"></div>
+      <p>点击图片可放大查看；解锁后可修改提示词或重新生成。每页包含图片提示词、中文语音脚本、英文语音脚本。</p>
+      <div class="pb-shot-grid">
+        <div class="pb-shot"><div class="pb-shot-img"></div><div class="pb-shot-body"><strong>1</strong><p>画面提示词（已锁定）</p><p>中文独白 / English narration</p><button class="mock-button">已生成</button></div></div>
+        <div class="pb-shot"><div class="pb-shot-img"></div><div class="pb-shot-body"><strong>2</strong><p>画面提示词（已锁定）</p><p>中文独白 / English narration</p><button class="mock-button">已生成</button></div></div>
+        <div class="pb-shot"><div class="pb-shot-img"></div><div class="pb-shot-body"><strong>3</strong><p>画面提示词（已锁定）</p><p>中文独白 / English narration</p><button class="mock-button">已生成</button></div></div>
+      </div>
+    </div>
+  </div>
+</div>

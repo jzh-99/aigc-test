@@ -392,8 +392,31 @@ apps/worker/src/lib/mureka.ts
 日志只记录长度、状态、ID 和布尔信息，不记录完整歌词、prompt 或 API Key。
 
 ## 项目部署
+### 构建 & Lint
 
-### 项目编译打包
+```bash
+pnpm build          # 全量构建
+pnpm lint           # 全量 lint
+pnpm --filter @aigc/web build     # 单独构建前端
+
+pnpm --filter @aigc/types build # 单独构建types 包
+```
+### 本机操作：构建镜像
+在 monorepo 根目录执行，构建上下文是整个仓库：
+```bash
+bash deploy/build-images.sh all
+# 产物输出到 deploy/dist/
+#   aigc-api.tar.gz
+#   aigc-web.tar.gz
+#   aigc-worker.tar.gz
+```
+
+单独构建某个服务：
+```bash
+bash deploy/build-images.sh api
+bash deploy/build-images.sh web
+bash deploy/build-images.sh worker
+```
 
 ### 服务部署 ---- api / worker / web 服务器（以 api 为例）----
 docker load < aigc-web.tar.gz

@@ -50,6 +50,28 @@
 ### 2026-05-26 歌词逐字高亮与 Mureka 提示词封装
 - 歌词视觉：详情页将 `lyrics_sections.lines.words` 纳入渲染，当前行放大、加深背景和橙色强调；当前行内已播放过的 word 按播放进度变为橙色，缺少 word 时间轴时退化为整行高亮。
 - 提示词封装：新增 `buildMurekaGenerationPrompt`，worker 调用 Mureka 前统一封装灵感模式、自定义模式和纯音乐提示词。自定义模式包含“以《标题》为题、使用男声/女声/自动音色、风格、歌词要求”；纯音乐明确“不生成歌词，以旋律、编曲和情绪表达为主”。
+### 2026-05-27 Toby AI 绘本完整模块设计
+- 需求范围：用户确认要做完整模块，不是前端 mock；模块包含首页、我的绘本、线性创作、角色/背景资产、绘本分镜、图片生成、双语 TTS、项目保存和计费联动。
+- 产品决策：首页只保留 AI 生成绘本；去掉上传故事和自由创作；下方最近项目默认展示 4 个，全部按钮进入我的绘本。
+- 内容决策：故事摘要只保留中文；每页画面描述、中文独白、英文独白可编辑；语音生成中文和英文两套，预览时可切换语言。
+- 流程决策：线性步骤为 `剧本大纲 -> 资产库 -> 绘本分镜 -> 预览导出`；资产库和绘本分镜拆成独立页面。
+- 技术决策：新建独立 picture-book 项目表和 API，不复用 `video_studio_projects`；复用 Qwen、图片生成、MiniMax TTS、task_batches、assets、积分和 provider 审计。
+- 视觉决策：最终 UI 更简约，跟随现有主题变量，支持深色模式，不照搬参考图的重装饰风格。
+- 产出：设计文档已写入 `docs/superpowers/specs/2026-05-27-picture-book-design.md`，等待用户 review 后进入实施计划。
+
+### 2026-05-27 Toby AI 绘本设计 review 修订
+- 补充草稿能力：Step 1 生成剧本后立即创建草稿，编辑故事摘要、页面内容和切换步骤时自动保存，项目卡片可继续编辑草稿。
+- 计费口径调整为项目维度：新增 `picture_book_project_charges` 设计，底层仍可复用 batch/task/credits ledger，但 UI 和项目详情按项目汇总费用。
+- 固定模型：剧本生成和脚本拆分/分镜提示词使用 `qwen3.6-plus`，音频生成使用 MiniMax `speech-2.8-hd`，图片生成使用 `seedream-5.0-lite`。
+- seed 决策：实现计划需要调整 `packages/db/scripts/seed.ts`，确保上述模型作为绘本默认模型；已核对 `seedream-5.0-lite` 是现有 Volc 图片模型，worker 图片适配器已有映射。
+- 语言边界修订：故事摘要和脚本结构不区分中英文；只有每页台词/旁白和语音分中文、英文两套。
+
+### 2026-05-27 Toby AI 绘本实施计划
+- 用户确认设计文档后进入 writing-plans 阶段。
+- 实施计划已写入 `docs/superpowers/plans/2026-05-27-picture-book.md`。
+- 计划拆为 11 个任务：共享类型、数据库、seed、API helper、项目 CRUD/草稿、Qwen 生成、媒体生成、前端 API/hooks、首页/列表、四步编辑器、端到端验证。
+- 自检：计划覆盖草稿、项目计费、固定模型、脚本/台词语言边界、主题适配和验证；未发现未定占位或旧模型残留。
+
 - 验证：`pnpm --filter @aigc/worker exec tsx src/workers/music.test.ts`、`pnpm --filter @aigc/worker build`、`pnpm --filter @aigc/web build` 均通过。本会话未暴露 Browser 工具，因此未做浏览器截图验证。
 
 ### 2026-05-26 歌词与风格标签 UI 二次打磨
