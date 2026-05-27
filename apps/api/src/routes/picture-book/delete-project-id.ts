@@ -55,10 +55,7 @@ const route: FastifyPluginAsync = async (app) => {
     const deletedAccess = activeAccess ? null : await assertDeletedProjectWriteAccess(request.params.id, request.user.id)
     if (!activeAccess && !deletedAccess) return reply.status(404).send(notFound)
 
-    await getDb()
-      .deleteFrom('picture_book_projects')
-      .where('id', '=', request.params.id)
-      .execute()
+    await getDb().deleteFrom('picture_book_projects').where('id', '=', request.params.id).execute()
 
     return reply.send({ success: true })
   })

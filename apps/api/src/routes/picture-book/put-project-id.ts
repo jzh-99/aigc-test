@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { sql } from 'kysely'
 import { isPictureBookPageCount, isPictureBookStyle, normalizePictureBookState } from '@aigc/types'
+import { sql } from 'kysely'
 import { assertPictureBookProjectAccess, assertPictureBookWorkspaceAccess } from './_shared.js'
 
 type ProjectStatus = 'draft' | 'script_ready' | 'assets_ready' | 'storyboard_ready' | 'completed' | 'failed'
