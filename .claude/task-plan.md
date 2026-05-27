@@ -63,3 +63,8 @@
 - [x] 改造创作生成页。
 - [~] 改造画布视频节点：已把节点 config 里的 `videoCategoryLimits` 贯通到默认值和模型切换逻辑，连线校验也改为读取该快照。
 - [x] 完成构建与手测验证。
+## 2026-05-27 消费流水中文源头调整
+- [x] 新增流水描述源头中文化：API/worker 写入 `credits_ledger.description` 时直接使用中文。
+- [x] 不启用前端兜底翻译：消费流水页面继续展示后端返回内容。
+- [x] 新增历史数据迁移：`049_credits_ledger_chinese_descriptions`。
+- [x] 完成构建验证：`@aigc/db build`、`@aigc/api build`、`@aigc/worker build`。

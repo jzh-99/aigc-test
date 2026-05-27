@@ -263,7 +263,7 @@ export const videoSubmitWorker = new Worker<VideoSubmitJobData>(
           type: 'refund',
           task_id: taskId,
           batch_id: batchId,
-          description: `Video submit failed: ${msg.slice(0, 200)}`,
+          description: `视频任务提交失败：${msg.slice(0, 200)}`,
         }).execute()
 
         await trx.updateTable('task_batches')

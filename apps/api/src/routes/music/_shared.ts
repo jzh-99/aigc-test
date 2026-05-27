@@ -345,7 +345,7 @@ export function validateVoiceCloneAudioUpload(
 
   const detected = detectAudioMagic(buffer)
   if (!detected || detected !== ext) {
-    routeError(400, 'BAD_REQUEST', '音频格式与文件内容不匹配')
+    routeError(400, 'BAD_REQUEST', '请上传有效的 mp3/m4a 文件')
   }
 
   return { ext, contentType }

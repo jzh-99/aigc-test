@@ -14,21 +14,12 @@ const TYPE_LABELS: Record<string, string> = {
 const MODULE_LABELS: Record<string, string> = {
   image: '图片生成', video: '视频生成', tts: '语音合成',
   lipsync: '口型同步', agent: '智能体', avatar: '数字人', action_imitation: '动作模仿',
+  music: '音乐生成', music_voice_clone: '音乐音色克隆',
 }
 
 const TYPE_SIGN: Record<string, string> = {
   topup: '+', subscription: '+', bonus: '+', refund: '+',
   freeze: '', confirm: '-', expire: '-',
-}
-
-const DESCRIPTION_LABELS: Record<string, string> = {
-  'image generation confirmed': '图片生成成功',
-  'video generation confirmed': '视频生成成功',
-  'tts generation confirmed': '语音合成成功',
-  'lipsync generation confirmed': '口型同步成功',
-  'agent generation confirmed': '任务成功',
-  'avatar generation confirmed': '数字人生成成功',
-  'action imitation generation confirmed': '动作模仿成功',
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -130,16 +121,10 @@ export function LedgerCard({
   )
 }
 
-function mapLedgerDescription(description: string | null): string {
-  if (!description) return ''
-  const normalized = description.trim().toLowerCase()
-  return DESCRIPTION_LABELS[normalized] ?? description
-}
-
 function LedgerRowItem({ row, showUser }: { row: LedgerRow; showUser: boolean }) {
   const hasTask = row.module || row.model
   const isCanvas = !!row.canvas_id
-  const description = mapLedgerDescription(row.description)
+  const description = row.description?.trim() ?? ''
 
   return (
     <div className="px-6 py-3">

@@ -39,7 +39,7 @@ async function confirmVoiceCloneCredits(data: MusicVoiceCloneJobData, actualCred
       type: 'confirm',
       task_id: data.taskId,
       batch_id: data.batchId,
-      description: 'Music voice clone confirmed',
+      description: '音乐音色克隆成功',
     }).execute()
 
     await trx.updateTable('tasks').set({
@@ -90,7 +90,7 @@ async function failVoiceCloneJob(data: MusicVoiceCloneJobData, message: string):
       type: 'refund',
       task_id: data.taskId,
       batch_id: data.batchId,
-      description: `Music voice clone failed: ${message.slice(0, 200)}`,
+      description: `音乐音色克隆失败：${message.slice(0, 200)}`,
     }).execute()
 
     await trx.updateTable('task_batches').set({

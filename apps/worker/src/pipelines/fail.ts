@@ -68,7 +68,7 @@ export async function failPipeline(
         type: 'refund',
         task_id: taskId,
         batch_id: batchId,
-        description: `Image generation failed: ${errorMessage.slice(0, 200)}`,
+        description: `图片生成失败：${errorMessage.slice(0, 200)}`,
       })
       .execute()
 

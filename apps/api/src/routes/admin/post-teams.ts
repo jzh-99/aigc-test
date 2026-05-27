@@ -151,7 +151,7 @@ const route: FastifyPluginAsync = async (app) => {
         user_id: request.user.id,
         amount: initial_credits,
         type: 'topup',
-        description: 'Initial team credits',
+        description: '团队初始A豆',
       }).execute()
     }
 

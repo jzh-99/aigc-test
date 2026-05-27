@@ -218,7 +218,7 @@ async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promi
       credit_account_id: creditAccountId, user_id: userId,
       amount: -estimatedCredits, type: 'confirm',
       task_id: taskId, batch_id: batchId,
-      description: 'Avatar generation confirmed',
+      description: '数字人生成成功',
     }).execute()
 
     await trx.updateTable('task_batches').set({
@@ -262,7 +262,7 @@ async function handleAvatarFailure(task: AvatarTaskRow, errorMessage: string): P
       credit_account_id: creditAccountId, user_id: userId,
       amount: estimatedCredits, type: 'refund',
       task_id: taskId, batch_id: batchId,
-      description: `Avatar generation failed: ${errorMessage.slice(0, 200)}`,
+      description: `数字人生成失败：${errorMessage.slice(0, 200)}`,
     }).execute()
     await trx.updateTable('task_batches').set({ status: 'failed', failed_count: sql`failed_count + 1` }).where('id', '=', batchId).execute()
   })

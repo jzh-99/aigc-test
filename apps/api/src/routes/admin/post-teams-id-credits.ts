@@ -43,7 +43,7 @@ const route: FastifyPluginAsync = async (app) => {
         user_id: request.user.id,
         amount,
         type: 'topup',
-        description: description ?? 'Admin top-up',
+        description: description ?? '管理员充值A豆',
       }).execute()
     } else {
       const deduction = Math.abs(amount)
@@ -62,7 +62,7 @@ const route: FastifyPluginAsync = async (app) => {
         user_id: request.user.id,
         amount,
         type: 'refund',
-        description: description ?? 'Admin deduction',
+        description: description ?? '管理员扣减A豆',
       }).execute()
     }
 

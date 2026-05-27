@@ -200,7 +200,7 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
       type: 'confirm',
       task_id: taskId,
       batch_id: batchId,
-      description: 'Video generation confirmed',
+      description: '视频生成成功',
     }).execute()
 
     // Update batch to completed
@@ -308,7 +308,7 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
       type: 'refund',
       task_id: taskId,
       batch_id: batchId,
-      description: `Video generation failed: ${errorMessage.slice(0, 200)}`,
+      description: `视频生成失败：${errorMessage.slice(0, 200)}`,
     }).execute()
 
     await trx.updateTable('task_batches')

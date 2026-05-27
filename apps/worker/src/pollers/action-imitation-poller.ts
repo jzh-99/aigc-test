@@ -217,7 +217,7 @@ async function handleActionSuccess(task: ActionTaskRow, videoUrl: string): Promi
       credit_account_id: creditAccountId, user_id: userId,
       amount: -estimatedCredits, type: 'confirm',
       task_id: taskId, batch_id: batchId,
-      description: 'Action Imitation generation confirmed',
+      description: '动作模仿生成成功',
     }).execute()
 
     await trx.updateTable('task_batches').set({
@@ -261,7 +261,7 @@ async function handleActionFailure(task: ActionTaskRow, errorMessage: string): P
       credit_account_id: creditAccountId, user_id: userId,
       amount: estimatedCredits, type: 'refund',
       task_id: taskId, batch_id: batchId,
-      description: `Action Imitation failed: ${errorMessage.slice(0, 200)}`,
+      description: `动作模仿生成失败：${errorMessage.slice(0, 200)}`,
     }).execute()
     await trx.updateTable('task_batches').set({ status: 'failed', failed_count: sql`failed_count + 1` }).where('id', '=', batchId).execute()
   })

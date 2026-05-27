@@ -79,7 +79,7 @@ export async function completePipeline(
         type: 'confirm',
         task_id: taskId,
         batch_id: batchId,
-        description: 'Image generation confirmed',
+        description: '图片生成成功',
       })
       .execute()
 

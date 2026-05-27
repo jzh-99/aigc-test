@@ -66,7 +66,7 @@ async function confirmMusicCredits(data: MusicJobData, actualCredits: number): P
       type: 'confirm',
       task_id: data.taskId,
       batch_id: data.batchId,
-      description: 'Music generation confirmed',
+      description: '音乐生成成功',
     }).execute()
 
     await trx.updateTable('tasks').set({
@@ -125,7 +125,7 @@ async function failMusicJob(data: MusicJobData, message: string): Promise<void> 
       type: 'refund',
       task_id: data.taskId,
       batch_id: data.batchId,
-      description: `Music generation failed: ${message.slice(0, 200)}`,
+      description: `音乐生成失败：${message.slice(0, 200)}`,
     }).execute()
 
     await trx.updateTable('task_batches').set({

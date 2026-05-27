@@ -96,7 +96,7 @@ export async function freezeCredits(
         user_id: userId,
         amount: -amount,
         type: 'freeze',
-        description: 'Credits frozen for image generation',
+        description: '图片生成冻结积分',
       })
       .execute()
 
@@ -136,7 +136,7 @@ export async function confirmCredits(
         type: 'confirm',
         task_id: taskId ?? null,
         batch_id: batchId ?? null,
-        description: 'Credits confirmed for completed task',
+        description: '任务完成确认扣费',
       })
       .execute()
   })
@@ -184,7 +184,7 @@ export async function refundCredits(
         type: 'refund',
         task_id: taskId ?? null,
         batch_id: batchId ?? null,
-        description: 'Credits refunded for failed task',
+        description: '任务失败退回积分',
       })
       .execute()
   })
