@@ -17,6 +17,7 @@ import {
   mapMusicTrackResponse,
   createMusicTrackSsePayload,
   MusicRouteError,
+  resolveMusicCredits,
   resolveVoiceCloneCredits,
   validateVoiceCloneAudioUpload,
   validateMusicGeneratePayload,
@@ -483,6 +484,56 @@ describe('music validation helpers', () => {
     assert.deepEqual(calls.map((call) => call.table), ['system_cost_configs'])
     if (previous === undefined) delete process.env.MUSIC_VOICE_CLONE_CREDITS
     else process.env.MUSIC_VOICE_CLONE_CREDITS = previous
+  })
+
+  test('resolveMusicCredits 按三种业务模式读取 params_pricing 单价', async () => {
+    const baseModel = {
+      modelId: 'model-1',
+      providerCode: 'mureka',
+      providerId: 'provider-1',
+      credit_cost: 99,
+      params_pricing: [
+        { resolution: 'inspiration_song', model: 'mureka-9', unit_price: 18 },
+        { resolution: 'instrumental', model: 'mureka-9', unit_price: 15 },
+        { resolution: 'custom_song', model: 'mureka-9', unit_price: 15 },
+      ],
+    }
+    const { db } = createFakeDb({
+      provider_models: [baseModel, { ...baseModel }, { ...baseModel }],
+    })
+
+    const inspirationSong = await resolveMusicCredits(db as never, 'team-1', 'mureka-9', 'song', 'inspiration')
+    const instrumental = await resolveMusicCredits(db as never, 'team-1', 'mureka-9', 'instrumental', 'inspiration')
+    const customSong = await resolveMusicCredits(db as never, 'team-1', 'mureka-9', 'song', 'custom')
+
+    assert.equal(inspirationSong.estimatedCredits, 18)
+    assert.deepEqual(inspirationSong.unitPrices, { inspiration_song: 18 })
+    assert.equal(instrumental.estimatedCredits, 15)
+    assert.deepEqual(instrumental.unitPrices, { instrumental: 15 })
+    assert.equal(customSong.estimatedCredits, 15)
+    assert.deepEqual(customSong.unitPrices, { custom_song: 15 })
+  })
+
+  test('resolveMusicCredits 缺少业务模式价格时不回退旧拆分项', async () => {
+    const { db } = createFakeDb({
+      provider_models: [{
+        modelId: 'model-1',
+        providerCode: 'mureka',
+        providerId: 'provider-1',
+        credit_cost: 99,
+        params_pricing: [
+          { resolution: 'lyrics', model: 'mureka-9', unit_price: 3 },
+          { resolution: 'song', model: 'mureka-9', unit_price: 12 },
+          { resolution: 'cover', model: 'mureka-9', unit_price: 1 },
+          { resolution: 'transfer', model: 'mureka-9', unit_price: 2 },
+        ],
+      }],
+    })
+
+    await assert.rejects(
+      () => resolveMusicCredits(db as never, 'team-1', 'mureka-9', 'song', 'inspiration'),
+      (error) => error instanceof MusicRouteError && error.code === 'MUSIC_PRICE_NOT_CONFIGURED',
+    )
   })
 
   test('inspiration prompt 超过 1024 字会失败', () => {

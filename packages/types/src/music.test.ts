@@ -3,6 +3,7 @@ import { describe, test } from 'node:test'
 import {
   isMusicModel,
   MUSIC_CUSTOM_TITLE_MAX_LENGTH,
+  resolveMusicPricingKey,
   MUSIC_VOICE_DESCRIPTION_MAX_LENGTH,
   normalizeMusicTitle,
   normalizeVoiceCloneDescription,
@@ -49,5 +50,13 @@ describe('声音克隆描述标准化', () => {
 
   test('声音描述超过 1024 字时抛出错误', () => {
     assert.throws(() => normalizeVoiceCloneDescription('a'.repeat(1025)), /描述不能超过 1024 字/)
+  })
+})
+
+describe('音乐业务计费键', () => {
+  test('三种产品模式映射到三种可配置价格', () => {
+    assert.equal(resolveMusicPricingKey('inspiration', 'song'), 'inspiration_song')
+    assert.equal(resolveMusicPricingKey('inspiration', 'instrumental'), 'instrumental')
+    assert.equal(resolveMusicPricingKey('custom', 'song'), 'custom_song')
   })
 })

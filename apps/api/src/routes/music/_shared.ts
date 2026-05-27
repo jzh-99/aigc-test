@@ -7,6 +7,7 @@ import type { Database } from '@aigc/db'
 import type {
   MusicMode,
   MusicModel,
+  ParamsPricingRule,
   MusicSseEvent,
   MusicTrackType,
   MusicVoiceGender,
@@ -23,8 +24,8 @@ import {
   MUSIC_TRACK_TYPE_VALUES,
   normalizeMusicTitle,
   normalizeVoiceCloneDescription,
+  resolveMusicPricingKey,
 } from '@aigc/types'
-import { resolveUnitPrice } from '../../lib/pricing.js'
 import { signAssetUrl } from '../../lib/storage.js'
 
 type Db = ReturnType<typeof getDb>
@@ -901,6 +902,22 @@ async function getActiveProviderModel(db: Db, teamId: string, module: 'music' | 
   return providerModel
 }
 
+function resolveMusicBusinessModePrice(paramsPricing: unknown, pricingKey: string): number {
+  if (!Array.isArray(paramsPricing)) {
+    throw new MusicRouteError(500, 'MUSIC_PRICE_NOT_CONFIGURED', '音乐价格配置缺失')
+  }
+  const matched = paramsPricing.find((rule): rule is ParamsPricingRule =>
+    typeof rule === 'object' &&
+    rule !== null &&
+    (rule as ParamsPricingRule).resolution === pricingKey &&
+    typeof (rule as ParamsPricingRule).unit_price === 'number',
+  )
+  if (!matched) {
+    throw new MusicRouteError(500, 'MUSIC_PRICE_NOT_CONFIGURED', '音乐价格配置缺失')
+  }
+  return matched.unit_price
+}
+
 export async function resolveMusicCredits(
   db: Db,
   teamId: string,
@@ -909,26 +926,15 @@ export async function resolveMusicCredits(
   mode: MusicMode,
 ): Promise<ResolvedMusicCredits> {
   const providerModel = await getActiveProviderModel(db, teamId, 'music', model)
-  const resolutions = [
-    ...(mode === 'inspiration' && trackType === 'song' ? ['lyrics'] : []),
-    trackType,
-    'cover',
-    'transfer',
-  ]
-  const unitPrices = Object.fromEntries(
-    resolutions.map((resolution) => [
-      resolution,
-      resolveUnitPrice(providerModel.params_pricing, resolution, providerModel.credit_cost).unitPrice,
-    ]),
-  )
-  const estimatedCredits = Object.values(unitPrices).reduce((sum, price) => sum + price, 0)
+  const pricingKey = resolveMusicPricingKey(mode, trackType)
+  const estimatedCredits = resolveMusicBusinessModePrice(providerModel.params_pricing, pricingKey)
 
   return {
     providerModelId: providerModel.modelId,
     providerCode: providerModel.providerCode,
     providerId: providerModel.providerId,
     estimatedCredits,
-    unitPrices,
+    unitPrices: { [pricingKey]: estimatedCredits },
   }
 }
 

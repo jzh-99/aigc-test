@@ -5,6 +5,7 @@ import { Pause, Play, SkipBack, SkipForward } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { MusicDownloadMenu } from './music-download-menu'
 import type { MusicTrackResponse } from '@aigc/types'
 
 interface Props {
@@ -123,6 +124,8 @@ export function MusicPlayer({ track, previousId, nextId, onPlaybackChange }: Pro
         </div>
 
         <p className="mt-4 min-h-5 text-xs text-muted-foreground dark:text-[#d8d4e8]/55">{src ? playing ? '正在播放' : '准备播放' : '暂无可播放音频'}</p>
+
+        <MusicDownloadMenu track={track} className="mt-5 rounded-full border-primary/25 bg-card/70 shadow-sm hover:border-primary/45 hover:bg-primary/10 dark:border-[#2b2667] dark:bg-[#11102a]/85 dark:text-[#d8d4e8] dark:hover:bg-[#191642]" />
       </div>
     </section>
   )

@@ -18,6 +18,12 @@ import {
 import { apiPatch, ApiError } from '@/lib/api-client'
 import type { ModelItem, ParamsPricingRule } from '@aigc/types'
 
+const MUSIC_PRICING_LABELS: Record<string, string> = {
+  inspiration_song: '灵感模式生成歌曲',
+  instrumental: '纯音乐',
+  custom_song: '自定义模式生成歌曲',
+}
+
 interface ModelEditDialogProps {
   model: ModelItem | null
   open: boolean
@@ -33,6 +39,7 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
   // 可编辑的定价规则列表，unit_price 允许修改
   const [pricingRules, setPricingRules] = useState<ParamsPricingRule[]>([])
   const [saving, setSaving] = useState(false)
+  const isMusicModel = model?.module === 'music'
 
   // 每次打开弹窗时，将表单重置为当前模型数据
   useEffect(() => {
@@ -115,14 +122,13 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
           {/* 分辨率定价规则 */}
           {pricingRules.length > 0 && (
             <div className="space-y-2">
-              {/* 图片模型按次计费，视频模型按秒计费 */}
               <Label>
-                分辨率定价（{model?.module === 'video' ? '积分/秒' : '积分/张'}）
+                {isMusicModel ? '音乐模式定价（A豆/次）' : `分辨率定价（${model?.module === 'video' ? '积分/秒' : '积分/张'}）`}
               </Label>
               {/* 表头 */}
               <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground px-1">
                 <span>底层模型</span>
-                <span>分辨率</span>
+                <span>{isMusicModel ? '业务模式' : '分辨率'}</span>
                 <span>积分单价</span>
               </div>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
@@ -136,7 +142,7 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
                     />
                     {/* 分辨率：只读 */}
                     <Input
-                      value={rule.resolution}
+                      value={isMusicModel ? MUSIC_PRICING_LABELS[rule.resolution] ?? rule.resolution : rule.resolution}
                       disabled
                       className="cursor-not-allowed opacity-60 text-xs h-8"
                     />

@@ -9,10 +9,11 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { useModels } from '@/hooks/use-models'
 import { useMusicTrackEvents } from '@/hooks/use-music'
 import { createMusicTrack } from '@/lib/music/api'
 import { useAuthStore } from '@/stores/auth-store'
-import type { MusicModel, MusicMode, MusicSseEvent, MusicTrackResponse, MusicVoiceCloneResponse, MusicVoiceGender } from '@aigc/types'
+import { resolveMusicPricingKey, type MusicModel, type MusicMode, type MusicSseEvent, type MusicTrackResponse, type MusicTrackType, type MusicVoiceCloneResponse, type MusicVoiceGender } from '@aigc/types'
 
 const PROMPT_EXAMPLES = [
   '一首关于星空与思念的中文流行歌曲，旋律舒缓，充满情感',
@@ -27,6 +28,12 @@ const MODEL_OPTIONS: { value: MusicModel; label: string; description: string }[]
   { value: 'mureka-8', label: 'mureka-8', description: '速度更快，适合快速试作' },
 ]
 
+const MUSIC_PRICING_LABELS = {
+  inspiration_song: '灵感模式生成歌曲',
+  instrumental: '纯音乐',
+  custom_song: '自定义模式生成歌曲',
+} as const
+
 interface Props {
   voices: MusicVoiceCloneResponse[]
   onOpenVoiceDialog: () => void
@@ -39,6 +46,7 @@ function count(value: string) {
 
 export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props) {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const { models: musicModels, isLoading: musicModelsLoading } = useModels('music', workspaceId)
   const [mode, setMode] = useState<MusicMode>('inspiration')
   const [instrumental, setInstrumental] = useState(false)
   const [prompt, setPrompt] = useState('')
@@ -55,6 +63,13 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
   const isBusy = submitting || Boolean(generatingTrackId)
 
   const readyVoices = useMemo(() => voices.filter((voice) => voice.status === 'ready'), [voices])
+  const trackType: MusicTrackType = mode === 'inspiration' && instrumental ? 'instrumental' : 'song'
+  const pricingKey = resolveMusicPricingKey(mode, trackType)
+  const musicPricingPreview = useMemo(() => {
+    const selectedModel = musicModels.find((item) => item.code === model)
+    const matchedRule = selectedModel?.params_pricing.find((rule) => rule.resolution === pricingKey)
+    return matchedRule?.unit_price ?? null
+  }, [model, musicModels, pricingKey])
 
   const handleTrackEvent = useCallback((event: MusicSseEvent) => {
     if (event.track) onCreated(event.track)
@@ -114,7 +129,7 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
         idempotency_key: `music_${Date.now()}_${Math.random().toString(16).slice(2)}`,
         workspace_id: workspaceId,
         mode,
-        track_type: mode === 'inspiration' && instrumental ? 'instrumental' : 'song',
+        track_type: trackType,
         model,
         prompt: prompt.trim() || undefined,
         title: mode === 'custom' ? title.trim() : undefined,
@@ -328,11 +343,22 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
           </p>
         </div>
 
+        <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm dark:border-primary/30 dark:bg-primary/10">
+          <span className="text-muted-foreground">预计消耗</span>
+          <span className="font-semibold text-foreground">
+            {musicModelsLoading
+              ? '价格加载中'
+              : musicPricingPreview == null
+                ? `${MUSIC_PRICING_LABELS[pricingKey]}价格未配置`
+                : `${musicPricingPreview} A豆 · ${MUSIC_PRICING_LABELS[pricingKey]}`}
+          </span>
+        </div>
+
         <Button
           className="w-full"
           size="lg"
           onClick={submit}
-          disabled={isBusy || !workspaceId}
+          disabled={isBusy || !workspaceId || (!musicModelsLoading && musicPricingPreview == null)}
           aria-busy={isBusy}
         >
           {isBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}

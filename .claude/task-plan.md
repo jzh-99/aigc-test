@@ -44,6 +44,7 @@
 - [x] 灵感模式音色隔离：灵感模式不展示/提交我的音色和音色性别，后端兜底忽略相关入参，Mureka 调用不发送 voice 参数。
 - [x] 查询审计采样：Mureka、视频、数字人、动作模仿的轮询查询只在首查、状态/关键字段变化、最终态或异常时写入 `provider_api_logs`。
 - [x] 文本类 LLM 审计：Qwen 文本生成/同步分镜/worker 分镜、canvas 剧本生成、video-studio 脚本/大纲/资产提示词/分镜拆分均写入 `provider_api_logs`。
+- [x] 音乐计费模式重构：mureka-8/mureka-9 改为三种业务价格 `inspiration_song`、`instrumental`、`custom_song`，后端计费和前端预览均按业务模式读取。
 
 ## 2026-05-21 — 实现计划阶段
 

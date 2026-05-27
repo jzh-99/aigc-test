@@ -7,6 +7,9 @@ export type MusicTrackType = typeof MUSIC_TRACK_TYPE_VALUES[number]
 export const MUSIC_MODEL_VALUES = ['mureka-8', 'mureka-9'] as const
 export type MusicModel = typeof MUSIC_MODEL_VALUES[number]
 
+export const MUSIC_PRICING_KEY_VALUES = ['inspiration_song', 'instrumental', 'custom_song'] as const
+export type MusicPricingKey = typeof MUSIC_PRICING_KEY_VALUES[number]
+
 export const MUSIC_VOICE_GENDER_VALUES = ['auto', 'male', 'female'] as const
 export type MusicVoiceGender = typeof MUSIC_VOICE_GENDER_VALUES[number]
 
@@ -35,6 +38,11 @@ export function isMusicModel(value: unknown): value is MusicModel {
 
 export function isMusicVoiceGender(value: unknown): value is MusicVoiceGender {
   return typeof value === 'string' && MUSIC_VOICE_GENDER_VALUES.includes(value as MusicVoiceGender)
+}
+
+export function resolveMusicPricingKey(mode: MusicMode, trackType: MusicTrackType): MusicPricingKey {
+  if (trackType === 'instrumental') return 'instrumental'
+  return mode === 'custom' ? 'custom_song' : 'inspiration_song'
 }
 
 function countTextLength(value: string): number {

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Music2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { MusicDownloadMenu } from './music-download-menu'
 import type { MusicTrackResponse } from '@aigc/types'
 
 interface Props {
@@ -47,29 +48,31 @@ export function MusicTrackList({ tracks, isLoading, onLoadMore, hasMore }: Props
   return (
     <div className="space-y-3">
       {tracks.map((track) => (
-        <Link
+        <div
           key={track.id}
-          href={`/toby-studio/music/${track.id}`}
           className="grid grid-cols-[76px_1fr_auto] items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/70"
         >
-          <div className="aspect-square overflow-hidden rounded-lg bg-muted">
+          <Link href={`/toby-studio/music/${track.id}`} className="aspect-square overflow-hidden rounded-lg bg-muted">
             {track.cover_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={track.cover_url} alt={track.title ?? '音乐封面'} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center"><Music2 className="h-6 w-6 text-muted-foreground" /></div>
             )}
-          </div>
-          <div className="min-w-0">
+          </Link>
+          <Link href={`/toby-studio/music/${track.id}`} className="min-w-0">
             <div className="truncate font-medium">{track.title ?? '未命名音乐'}</div>
             <div className="mt-1 truncate text-xs text-muted-foreground">
               {trackTypeText(track.track_type)} · {track.voice_name ?? 'Toby AI'} · {creatorText(track.track_type)}
             </div>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Badge variant={track.status === 'failed' ? 'destructive' : track.status === 'completed' ? 'default' : 'secondary'}>
+              {statusText(track.status)}
+            </Badge>
+            <MusicDownloadMenu track={track} variant="ghost" size="sm" compact className="h-8 w-8 p-0" />
           </div>
-          <Badge variant={track.status === 'failed' ? 'destructive' : track.status === 'completed' ? 'default' : 'secondary'}>
-            {statusText(track.status)}
-          </Badge>
-        </Link>
+        </div>
       ))}
       {hasMore && (
         <Button type="button" variant="outline" className="w-full" onClick={onLoadMore} disabled={isLoading}>

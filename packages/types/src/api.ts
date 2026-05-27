@@ -339,12 +339,12 @@ export interface CreateWorkspaceRequest {
   description?: string
 }
 
-export type AigcModule = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
+export type AigcModule = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation' | 'music' | 'music_voice_clone'
 
-/** 参数定价规则：不同分辨率对应不同底层模型和积分单价 */
+/** 参数定价规则：不同业务参数对应不同底层模型和积分单价。音乐模块的 resolution 表示业务计费键。 */
 export interface ParamsPricingRule {
   model: string       // 实际调用的底层模型 code
-  resolution: string  // 分辨率标识，如 "720p"、"1080p"、"4k"
+  resolution: string  // 参数标识，如分辨率 "1080p"，或音乐计费键 "inspiration_song"
   unit_price: number  // 积分单价
 }
 

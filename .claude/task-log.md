@@ -106,6 +106,13 @@
 - MiniMax TTS 此前已接入 `tts.generate` 审计，本次保留并复测。
 - 验证：`pnpm --filter @aigc/api exec tsx src/lib/provider-api-audit.test.ts`、`pnpm --filter @aigc/api build`、`pnpm --filter @aigc/worker build`、`pnpm --filter @aigc/worker exec tsx src/workers/music.test.ts`、`pnpm --filter @aigc/api exec tsx src/services/minimax-tts.test.ts` 均通过。
 
+### 2026-05-27 音乐业务模式计费
+- 决策：音乐价格配置不再暴露 `lyrics/song/cover/transfer` 等内部步骤，mureka-8/mureka-9 只保留三种业务模式价格：`inspiration_song`（灵感模式生成歌曲）、`instrumental`（纯音乐）、`custom_song`（自定义模式生成歌曲）。
+- 数据迁移：新增 `048_music_business_mode_pricing`，把现有 mureka-8 从旧组合价折算为 12/10/10 A豆，mureka-9 折算为 18/15/15 A豆；seed 同步更新为三条业务模式定价。
+- 后端：`resolveMusicCredits` 改为通过 `resolveMusicPricingKey` 精确读取对应业务价格；缺少业务模式价格时抛 `MUSIC_PRICE_NOT_CONFIGURED`，不再回退旧拆分项或模型基础价。
+- 前端：音乐创建面板通过 `/models?module=music` 读取 `params_pricing`，在生成按钮上方展示当前模式预计 A豆消耗；后台模型编辑弹窗对音乐模型显示“业务模式”而非“分辨率”。
+- 验证：`pnpm --filter @aigc/types build`、`pnpm --filter @aigc/api exec tsx src/__tests__/music-validation.test.ts`、`pnpm --filter @aigc/api build`、`pnpm --filter @aigc/web build`、`pnpm --filter @aigc/api exec tsx ../../packages/types/src/music.test.ts`、`pnpm --filter @aigc/db build` 均通过。
+
 ### 2026-05-25 review 修订
 - 音色克隆增加可选描述字段，限制不超过 1024 字。
 - 自定义模式标题限制为 20 字以内。

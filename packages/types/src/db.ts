@@ -1,4 +1,4 @@
-export type ModuleType = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
+export type ModuleType = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation' | 'music' | 'music_voice_clone'
 export type VideoCategory = 'multimodal' | 'frames'
 export type ImageCategory = 'text_to_image' | 'image_to_image'
 export type TextCategory = 'text_to_text'
