@@ -68,8 +68,7 @@ export function buildMurekaGenerationPrompt(input: {
 
   if (input.mode === 'custom') {
     const title = input.title?.trim() || '未命名歌曲'
-    const lyrics = input.lyrics?.trim() || '围绕主题创作完整歌词'
-    return `以《${title}》为题${styleText}。${voiceSentence}歌词要求是：${lyrics}。请生成一首完整歌曲。`
+    return `以《${title}》为题${styleText}。${voiceSentence}请根据已提供的 lyrics 生成一首完整歌曲。`
   }
 
   const inspiration = input.prompt?.trim() || input.lyrics?.trim() || input.title?.trim() || '创作一首完整歌曲'

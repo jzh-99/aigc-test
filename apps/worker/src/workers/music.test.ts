@@ -292,7 +292,17 @@ test('buildMurekaGenerationPrompt wraps custom, inspiration and instrumental pro
     lyrics: '夜风已冷',
     styles: ['R&B', '流行'],
     voiceGender: 'female',
-  }), '以《落日玫瑰》为题，风格是 R&B、流行。请使用女声。歌词要求是：夜风已冷。请生成一首完整歌曲。')
+  }), '以《落日玫瑰》为题，风格是 R&B、流行。请使用女声。请根据已提供的 lyrics 生成一首完整歌曲。')
+
+  assert.doesNotMatch(buildMurekaGenerationPrompt({
+    mode: 'custom',
+    type: 'song',
+    title: '长歌词歌曲',
+    prompt: null,
+    lyrics: '这是一段不应该进入 prompt 的歌词',
+    styles: [],
+    voiceGender: 'auto',
+  }), /不应该进入 prompt/)
 
   assert.equal(buildMurekaGenerationPrompt({
     mode: 'inspiration',
