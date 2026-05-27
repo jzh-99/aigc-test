@@ -28,6 +28,11 @@ export interface MurekaLyricsRequest {
   model: MusicModel
 }
 
+export interface MurekaLyricsResult {
+  title: string | null
+  lyrics: string
+}
+
 export interface MurekaSongRequest {
   lyrics: string
   model: MusicModel
@@ -170,11 +175,14 @@ function responseErrorMessage(data: unknown): string | null {
   return textField(record, ['message', 'error', 'detail']) ?? textField(nestedError, ['message', 'detail'])
 }
 
-function parseLyrics(data: unknown): string {
+function parseLyrics(data: unknown): MurekaLyricsResult {
   const record = firstRecord(data)
   const lyrics = textField(record, ['lyrics', 'text', 'content'])
   if (!lyrics) throw new MurekaApiError('Mureka 歌词响应缺少 lyrics')
-  return lyrics
+  return {
+    title: textField(record, ['title']),
+    lyrics,
+  }
 }
 
 function parseMediaResult(data: unknown): MurekaMediaResult {
@@ -254,7 +262,7 @@ export class MurekaClient {
     this.auditContext = options.auditContext ?? {}
   }
 
-  async generateLyrics(request: MurekaLyricsRequest): Promise<string> {
+  async generateLyrics(request: MurekaLyricsRequest): Promise<MurekaLyricsResult> {
     const data = await this.postJson('/v1/lyrics/generate', {
       model: request.model,
       prompt: request.prompt,

@@ -33,13 +33,13 @@ test('MurekaClient maps lyrics endpoint headers and payload', async () => {
     apiKey: 'secret-token',
     fetchImpl: (async (url, init) => {
       calls.push({ url: String(url), init: init ?? {}, body: JSON.parse(String(init?.body ?? '{}')) })
-      return jsonResponse({ lyrics: '星空下的歌' })
+      return jsonResponse({ title: '星空来信', lyrics: '星空下的歌' })
     }) as typeof fetch,
   })
 
-  const lyrics = await client.generateLyrics({ prompt: '星空', model: 'mureka-9' })
+  const result = await client.generateLyrics({ prompt: '星空', model: 'mureka-9' })
 
-  assert.equal(lyrics, '星空下的歌')
+  assert.deepEqual(result, { title: '星空来信', lyrics: '星空下的歌' })
   assert.equal(calls[0]?.url, 'https://mureka.example/v1/lyrics/generate')
   assert.equal(new Headers(calls[0]?.init.headers).get('authorization'), 'Bearer secret-token')
   assert.deepEqual(calls[0]?.body, {

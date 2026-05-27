@@ -307,14 +307,21 @@ export const musicWorker = new Worker<MusicJobData>(
       })
 
       let lyrics = row.lyrics
+      let generatedTitle = row.title
       if (row.mode === 'inspiration' && row.type === 'song') {
         logger.info(musicCtx, '开始调用 Mureka 生成歌词')
-        lyrics = await mureka.generateLyrics({
+        const lyricsResult = await mureka.generateLyrics({
           prompt: generationPrompt,
           model,
         })
-        logger.info({ ...musicCtx, generatedLyricsLength: lyrics ? [...lyrics].length : 0 }, 'Mureka 歌词生成完成')
-        await db.updateTable('music_tracks').set({ lyrics }).where('id', '=', row.id).execute()
+        lyrics = lyricsResult.lyrics
+        generatedTitle = lyricsResult.title ?? row.title
+        logger.info({
+          ...musicCtx,
+          generatedLyricsLength: lyrics ? [...lyrics].length : 0,
+          generatedTitleLength: generatedTitle ? [...generatedTitle].length : 0,
+        }, 'Mureka 歌词生成完成')
+        await db.updateTable('music_tracks').set({ title: generatedTitle, lyrics }).where('id', '=', row.id).execute()
         await publishTrackEvent(row.id, { event: 'lyrics_delta', delta: lyrics, lyrics })
       }
 
@@ -329,7 +336,7 @@ export const musicWorker = new Worker<MusicJobData>(
         : await mureka.generateSong({
             lyrics: lyrics ?? '',
             prompt: generationPrompt,
-            title: row.title,
+            title: generatedTitle,
             model,
             voiceId: shouldUseVoiceOptions ? params.voice_id ?? null : null,
             styles: row.styles,
@@ -391,7 +398,7 @@ export const musicWorker = new Worker<MusicJobData>(
         userId: data.userId,
         teamId: data.teamId,
         workspaceId: data.workspaceId,
-        title: media.title ?? row.title ?? 'Toby AI 音乐',
+        title: media.title ?? generatedTitle ?? 'Toby AI 音乐',
         prompt: row.prompt,
         lyrics,
         styles: row.styles,
@@ -400,7 +407,7 @@ export const musicWorker = new Worker<MusicJobData>(
 
       const stored = await transferResultMedia(row.id, media)
       await db.updateTable('music_tracks').set({
-        title: media.title ?? row.title ?? 'Toby AI 音乐',
+        title: media.title ?? generatedTitle ?? 'Toby AI 音乐',
         lyrics,
         stream_url: media.stream_url ?? null,
         audio_url: media.url ?? null,
