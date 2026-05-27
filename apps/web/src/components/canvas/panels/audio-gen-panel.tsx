@@ -261,17 +261,60 @@ function AudioTagEditor({
     const tokenElement = parent?.closest('[data-audio-token]')
     if (tokenElement) {
       event.preventDefault()
-      const tokenText = (tokenElement as HTMLElement).dataset.audioToken ?? ''
-      onChange(value.replace(tokenText, ''))
+      removeTokenFromValue(tokenElement as HTMLElement)
       return
     }
-    const neighbor = event.key === 'Backspace'
-      ? (container.childNodes?.[offset - 1] ?? parent?.previousSibling)
-      : (container.childNodes?.[offset] ?? parent?.nextSibling)
+
+    let neighbor: ChildNode | null | undefined
+    if (container.nodeType === Node.ELEMENT_NODE) {
+      neighbor = event.key === 'Backspace'
+        ? container.childNodes[offset - 1]
+        : container.childNodes[offset]
+    } else {
+      if (event.key === 'Backspace' && offset === 0) {
+        neighbor = container.previousSibling
+      } else if (event.key === 'Delete' && offset === (container.textContent?.length ?? 0)) {
+        neighbor = container.nextSibling
+      }
+    }
+
+    // 跳过浏览器可能插入的零宽字符文本节点或 BR
+    if (neighbor && !(neighbor instanceof HTMLElement && neighbor.dataset.audioToken)) {
+      const next = event.key === 'Backspace' ? neighbor.previousSibling : neighbor.nextSibling
+      if (next instanceof HTMLElement && next.dataset.audioToken) {
+        neighbor = next
+      }
+    }
+
     if (neighbor instanceof HTMLElement && neighbor.dataset.audioToken) {
       event.preventDefault()
-      onChange(value.replace(neighbor.dataset.audioToken, ''))
+      removeTokenFromValue(neighbor)
     }
+  }
+
+  function removeTokenFromValue(tokenEl: HTMLElement) {
+    const editor = editorRef.current
+    if (!editor) return
+    const tokenText = tokenEl.dataset.audioToken ?? ''
+    if (!tokenText) return
+    let charIndex = 0
+    for (const child of Array.from(editor.childNodes)) {
+      if (child === tokenEl) break
+      if (child.nodeType === Node.TEXT_NODE) {
+        charIndex += child.textContent?.length ?? 0
+      } else if (child instanceof HTMLElement && child.dataset.audioToken) {
+        charIndex += child.dataset.audioToken.length
+      } else {
+        charIndex += child.textContent?.length ?? 0
+      }
+    }
+    const before = value.slice(0, charIndex)
+    const after = value.slice(charIndex + tokenText.length)
+    const nextValue = before + after
+    onChange(nextValue)
+    // 编辑器聚焦时 useEffect 不会重新渲染 DOM，需要手动同步
+    renderAudioEditorContent(editor, nextValue)
+    placeCaretAtEnd(editor)
   }
 
   return (
