@@ -40,7 +40,7 @@ describe('picture book validation helpers', () => {
     )
   })
 
-  test('calculateProjectChargeTotal 按状态统计预估和实际积分', () => {
+  test('calculateProjectChargeTotal 混合状态只把非失败预估计入 estimated，实际只累计 actual', () => {
     const total = calculateProjectChargeTotal([
       { estimated_credits: 10, actual_credits: 8, status: 'completed' },
       { estimated_credits: 20, actual_credits: null, status: 'processing' },
@@ -48,6 +48,31 @@ describe('picture book validation helpers', () => {
       { estimated_credits: 40, actual_credits: 35, status: 'refunded' },
     ])
 
-    assert.deepEqual(total, { estimatedCredits: 30, actualCredits: 28 })
+    assert.deepEqual(total, { estimatedCredits: 30, actualCredits: 8 })
+  })
+
+  test('calculateProjectChargeTotal pending 计入预估但不增加实际消耗', () => {
+    const total = calculateProjectChargeTotal([
+      { estimated_credits: 12, actual_credits: null, status: 'pending' },
+    ])
+
+    assert.deepEqual(total, { estimatedCredits: 12, actualCredits: 0 })
+  })
+
+  test('calculateProjectChargeTotal completed actual 为 null 时不增加实际消耗', () => {
+    const total = calculateProjectChargeTotal([
+      { estimated_credits: 12, actual_credits: null, status: 'completed' },
+    ])
+
+    assert.deepEqual(total, { estimatedCredits: 12, actualCredits: 0 })
+  })
+
+  test('calculateProjectChargeTotal failed 和 refunded 不计入预估或实际', () => {
+    const total = calculateProjectChargeTotal([
+      { estimated_credits: 12, actual_credits: 10, status: 'failed' },
+      { estimated_credits: 20, actual_credits: 18, status: 'refunded' },
+    ])
+
+    assert.deepEqual(total, { estimatedCredits: 0, actualCredits: 0 })
   })
 })

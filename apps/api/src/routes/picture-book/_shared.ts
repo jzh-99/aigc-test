@@ -53,22 +53,8 @@ export function calculateProjectChargeTotal(
   return charges.reduce((total, charge) => {
     if (charge.status === 'failed' || charge.status === 'refunded') return total
 
-    if (charge.status === 'completed') {
-      total.estimatedCredits += charge.estimated_credits
-      total.actualCredits += charge.actual_credits ?? charge.estimated_credits
-      return total
-    }
-
-    if (charge.status === 'partial_failed') {
-      total.estimatedCredits += charge.estimated_credits
-      total.actualCredits += charge.actual_credits ?? 0
-      return total
-    }
-
-    if (charge.status === 'pending' || charge.status === 'processing') {
-      total.estimatedCredits += charge.estimated_credits
-      total.actualCredits += charge.estimated_credits
-    }
+    total.estimatedCredits += charge.estimated_credits
+    total.actualCredits += charge.actual_credits ?? 0
 
     return total
   }, { estimatedCredits: 0, actualCredits: 0 })
