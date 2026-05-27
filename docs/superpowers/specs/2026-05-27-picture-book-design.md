@@ -456,15 +456,15 @@ type GenerationStatus = 'idle' | 'pending' | 'processing' | 'completed' | 'faile
     { "kind": "character", "ref_id": "char_halu" },
     { "kind": "background", "ref_id": "bg_living_room" }
   ],
-  "model": "seedance-2.0"
+  "model": "seedream-5.0-lite"
 }
 ```
 
-后端固定使用 `seedance-2.0` 作为绘本图片生成模型。实现时需要调整 `packages/db/scripts/seed.ts` 中对应模型 seed，使其可被绘本图片生成链路按 `image` 能力读取；不能只在前端写死模型 code。后端为每个目标调用现有图片生成链路，写入 `task_batches.picture_book_project_id`，并更新项目 asset 状态。
+后端固定使用 `seedream-5.0-lite` 作为绘本图片生成模型。该模型已属于图片生成能力，实施时需要在 seed 和默认模型选择中确保绘本图片链路读取该模型；不能只在前端写死模型 code。后端为每个目标调用现有图片生成链路，写入 `task_batches.picture_book_project_id`，并更新项目 asset 状态。
 
 - `POST /picture-book/projects/:id/generate-storyboard-images`
 
-批量生成页图片，固定使用 `seedance-2.0`，费用归集为项目 `page_image`。
+批量生成页图片，固定使用 `seedream-5.0-lite`，费用归集为项目 `page_image`。
 
 ### TTS 生成
 
@@ -499,14 +499,14 @@ type GenerationStatus = 'idle' | 'pending' | 'processing' | 'completed' | 'faile
 
 - 剧本生成：`qwen3.6-plus`。
 - 脚本拆分/分镜提示词生成：`qwen3.6-plus`。
-- 图片生成：`seedance-2.0`。
+- 图片生成：`seedream-5.0-lite`。
 - 音频生成：MiniMax `speech-2.8-hd`。
 
 seed 调整：
 
 - `packages/db/scripts/seed.ts` 需要确保 `qwen3.6-plus` 是绘本文本生成默认模型。
 - `packages/db/scripts/seed.ts` 需要确保 `speech-2.8-hd` 是绘本 TTS 默认模型。
-- `packages/db/scripts/seed.ts` 需要为绘本图片生成暴露可用的 `seedance-2.0` 模型能力；当前仓库中 `seedance-2.0` 主要作为视频模型存在，实现时必须补齐绘本图片生成所需的模块、价格和参数读取方式。
+- `packages/db/scripts/seed.ts` 需要确保 `seedream-5.0-lite` 是绘本图片生成默认模型，并保留其图片模块、价格和参数配置。
 
 计费口径：
 
@@ -521,7 +521,7 @@ seed 调整：
 
 图片生成：
 
-- 每个角色、背景、页图片按 `seedance-2.0` 的项目图片价格扣费。
+- 每个角色、背景、页图片按 `seedream-5.0-lite` 的项目图片价格扣费。
 - 批量生成时后端逐目标创建 batch，避免单项失败影响全部状态。
 - 图片失败退回对应目标冻结积分。
 
@@ -610,7 +610,7 @@ pnpm --filter @aigc/worker build
 ## 实施顺序
 
 1. 新增共享类型和数据库迁移。
-2. 调整 seed：补齐绘本默认模型 `qwen3.6-plus`、`speech-2.8-hd`、`seedance-2.0` 的配置。
+2. 调整 seed：补齐绘本默认模型 `qwen3.6-plus`、`speech-2.8-hd`、`seedream-5.0-lite` 的配置。
 3. 新增 API 项目 CRUD、草稿保存和 state 保存。
 4. 接入剧本生成接口。
 5. 接入资产提示词与分镜提示词接口。
@@ -624,7 +624,7 @@ pnpm --filter @aigc/worker build
 
 - 批量生成 20 页时，图片和中英双语音频数量多，必须避免一次性阻塞 UI。
 - TTS 目前是 API 同步生成，批量生成可能较慢；首期应限制并发，必要时后续迁移到 worker。
-- `seedance-2.0` 当前更接近视频生成模型配置，若 provider 实际不支持静态图片输出，需要在实现前确认可用参数或增加绘本专用图片模型映射。
+- `seedream-5.0-lite` 已是图片生成模型，实施时仍需确认绘本默认分辨率、比例和输出格式与现有图片生成接口参数一致。
 - 英文语音需选择适合英文的系统音色，不能默认复用中文音色。
 - 分镜页修改提示词后重生成，会覆盖当前选中结果；需要保留历史可作为后续增强。
 - 故事摘要不做双语，脚本结构也不拆中英文；但每页英文台词/旁白必须存在，否则英文预览和英文语音无法完成。
