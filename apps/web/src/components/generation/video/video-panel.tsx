@@ -45,7 +45,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const [videoMode, setVideoMode] = useState<VideoMode>((initialParams?.videoMode as VideoMode) ?? 'multimodal')
   const [videoModel, setVideoModel] = useState(initialParams?.videoModel ?? 'seedance-2.0')
   const [videoAspectRatio, setVideoAspectRatio] = useState(initialParams?.videoAspectRatio ?? 'adaptive')
-  const [videoUpsample, setVideoUpsample] = useState(initialParams?.videoUpsample ?? false)
+  const [videoResolution, setVideoResolution] = useState(initialParams?.videoResolution ?? '')
   const [videoDuration, setVideoDuration] = useState(initialParams?.videoDuration ?? -1)
   const [videoGenerateAudio, setVideoGenerateAudio] = useState(initialParams?.videoGenerateAudio ?? true)
   const [videoCameraFixed, setVideoCameraFixed] = useState(initialParams?.videoCameraFixed ?? false)
@@ -112,6 +112,17 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     const firstValue = Number(durationOptions[0].value)
     if (!durationOptions.some((opt) => Number(opt.value) === videoDuration)) {
       setVideoDuration(firstValue)
+    }
+  }, [videoModelsReady, videoModels, videoModel])
+
+  useEffect(() => {
+    if (!videoModelsReady || videoModels.length === 0) return
+    const currentModel = videoModels.find((m) => m.code === videoModel)
+    if (!currentModel) return
+    const resolutionOptions = extractSchemaEnums(currentModel.params_schema, 'resolution')
+    if (resolutionOptions.length === 0) return
+    if (!videoResolution || !resolutionOptions.some((opt) => opt.value === videoResolution)) {
+      setVideoResolution(resolutionOptions[0].value)
     }
   }, [videoModelsReady, videoModels, videoModel])
 
@@ -211,14 +222,13 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         reference_video_durations: referenceVideoDurationsParam,
         reference_audios: referenceAudiosParam,
         aspect_ratio: videoAspectRatio || undefined,
+        resolution: videoResolution || undefined,
         ...(isSeedance ? {
           duration: videoDuration,
           generate_audio: videoGenerateAudio,
           ...(videoMode !== 'frames' ? { camera_fixed: videoCameraFixed } : {}),
           watermark,
-        } : {
-          enable_upsample: videoUpsample,
-        }),
+        } : {}),
       })
       if (batch) onBatchCreated(batch)
     } catch (err) {
@@ -236,7 +246,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   }
 
   const handleSaveDefaults = () => {
-    const d = { videoModel, videoAspectRatio, videoUpsample, videoDuration, videoGenerateAudio, videoCameraFixed }
+    const d = { videoModel, videoAspectRatio, videoResolution, videoDuration, videoGenerateAudio, videoCameraFixed }
     saveDefaults({ image: userDefaults ?? undefined, video: d, avatar: avatarDefaults ?? undefined })
     toast.success('已保存为默认参数')
   }
@@ -303,7 +313,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         videoMode={videoMode}
         videoModel={videoModel}
         videoAspectRatio={videoAspectRatio}
-        videoUpsample={videoUpsample}
+        videoResolution={videoResolution}
         videoDuration={videoDuration}
         referenceVideoDurations={multimodalVideos.map((video) => video.duration)}
         videoGenerateAudio={videoGenerateAudio}
@@ -314,7 +324,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         disabled={disabled}
         onModelChange={setVideoModel}
         onAspectRatioChange={setVideoAspectRatio}
-        onUpsampleChange={setVideoUpsample}
+        onResolutionChange={setVideoResolution}
         onDurationChange={setVideoDuration}
         onGenerateAudioChange={setVideoGenerateAudio}
         onCameraFixedChange={setVideoCameraFixed}

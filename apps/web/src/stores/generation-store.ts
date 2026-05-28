@@ -13,7 +13,6 @@ export interface VideoParams {
   videoPrompt: string
   videoModel: string
   videoAspectRatio: string
-  videoUpsample: boolean
   videoResolution?: string
   videoDuration?: number
   videoGenerateAudio?: boolean
@@ -32,7 +31,7 @@ interface UserDefaults {
 interface VideoDefaults {
   videoModel: string
   videoAspectRatio: string
-  videoUpsample: boolean
+  videoResolution?: string
   videoDuration: number
   videoGenerateAudio: boolean
   videoCameraFixed: boolean
@@ -170,7 +169,6 @@ export const useGenerationStore = create<GenerationState>()(
           videoPrompt: batch.prompt,
           videoModel: batch.model,
           videoAspectRatio: (params?.aspect_ratio as string) || '',
-          videoUpsample: (params?.enable_upsample as boolean) || false,
           videoResolution: (params?.resolution as string) || undefined,
           videoDuration: (params?.duration as number) ?? undefined,
           videoGenerateAudio: (params?.generate_audio as boolean) ?? undefined,

@@ -15,7 +15,7 @@ interface VideoParamsProps {
   videoMode: VideoMode
   videoModel: string
   videoAspectRatio: string
-  videoUpsample: boolean
+  videoResolution: string
   videoDuration: number
   referenceVideoDurations: number[]
   videoGenerateAudio: boolean
@@ -26,7 +26,7 @@ interface VideoParamsProps {
   disabled?: boolean
   onModelChange: (v: string) => void
   onAspectRatioChange: (v: string) => void
-  onUpsampleChange: (v: boolean) => void
+  onResolutionChange: (v: string) => void
   onDurationChange: (v: number) => void
   onGenerateAudioChange: (v: boolean) => void
   onCameraFixedChange: (v: boolean) => void
@@ -41,10 +41,10 @@ const toggleBtnCls = (active: boolean, disabled: boolean) => cn(
 )
 
 export function VideoParams({
-  models, videoMode, videoModel, videoAspectRatio, videoUpsample, videoDuration,
+  models, videoMode, videoModel, videoAspectRatio, videoResolution, videoDuration,
   referenceVideoDurations, videoGenerateAudio, videoCameraFixed, isSeedance,
   isGenerating, isUploading, disabled,
-  onModelChange, onAspectRatioChange, onUpsampleChange, onDurationChange,
+  onModelChange, onAspectRatioChange, onResolutionChange, onDurationChange,
   onGenerateAudioChange, onCameraFixedChange,
   onGenerate, onSaveDefaults,
 }: VideoParamsProps) {
@@ -66,9 +66,7 @@ export function VideoParams({
 
   const unitPrice = currentDbModel
     ? (() => {
-        const resolution = dbResolutions.length > 0
-          ? (videoUpsample ? dbResolutions[dbResolutions.length - 1].value : dbResolutions[0].value)
-          : (videoUpsample ? '1080p' : '720p')
+        const resolution = videoResolution || (dbResolutions.length > 0 ? dbResolutions[0].value : '720p')
         return getPriceByResolution(currentDbModel, resolution, currentDbModel.credit_cost)
       })()
     : 0
@@ -130,8 +128,8 @@ export function VideoParams({
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">分辨率</Label>
               <Select
-                value={videoUpsample ? dbResolutions[dbResolutions.length - 1]?.value : dbResolutions[0]?.value}
-                onValueChange={(v) => onUpsampleChange(v === dbResolutions[dbResolutions.length - 1]?.value)}
+                value={videoResolution || dbResolutions[0]?.value}
+                onValueChange={onResolutionChange}
                 disabled={isDisabled || dbResolutions.length === 0}
               >
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>

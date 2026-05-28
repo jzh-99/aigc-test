@@ -46,7 +46,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         videoDefaults: d.video ? {
           videoModel: d.video.videoModel ?? 'seedance-2.0',
           videoAspectRatio: d.video.videoAspectRatio ?? '',
-          videoUpsample: d.video.videoUpsample ?? false,
+          videoResolution: d.video.videoResolution ?? '',
           videoDuration: d.video.videoDuration ?? 5,
           videoGenerateAudio: d.video.videoGenerateAudio ?? true,
           videoCameraFixed: d.video.videoCameraFixed ?? false,
