@@ -15,6 +15,7 @@ import {
   type VideoCategory,
   type VideoReferenceCounts,
 } from '@aigc/types'
+import { extractSchemaEnums } from '../shared/schema-utils'
 import { fetchWithAuth, ApiError, getRequestErrorMessage, reportClientSubmissionError, classifyRequestError } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
 import type { VideoParams } from '@/stores/generation-store'
@@ -101,6 +102,18 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     if (!videoModelsReady || availableVideoModes.length === 0) return
     if (!availableVideoModes.includes(videoMode)) setVideoMode(availableVideoModes[0])
   }, [availableVideoModes, videoMode, videoModelsReady])
+
+  useEffect(() => {
+    if (!videoModelsReady || videoModels.length === 0) return
+    const currentModel = videoModels.find((m) => m.code === videoModel)
+    if (!currentModel) return
+    const durationOptions = extractSchemaEnums(currentModel.params_schema, 'time_length')
+    if (durationOptions.length === 0) return
+    const firstValue = Number(durationOptions[0].value)
+    if (!durationOptions.some((opt) => Number(opt.value) === videoDuration)) {
+      setVideoDuration(firstValue)
+    }
+  }, [videoModelsReady, videoModels, videoModel])
 
   const isSeedance = videoModel.startsWith('seedance-')
 
