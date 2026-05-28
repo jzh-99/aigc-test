@@ -356,6 +356,10 @@ async function main() {
     },
   }
 
+  // Picture book defaults:
+  // - text / script split: qwen3.6-plus
+  // - image: seedream-5.0-lite
+  // - tts: speech-2.8-hd
   const qwenModelCode = process.env.QWEN_MODEL?.trim() || 'qwen3.6-plus'
   const qwenAgentModels = [
     {

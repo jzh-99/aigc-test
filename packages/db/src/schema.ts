@@ -183,6 +183,7 @@ export interface TaskBatchesTable {
   canvas_id: string | null
   canvas_node_id: string | null
   video_studio_project_id: string | null
+  picture_book_project_id: string | null
   created_at: Generated<Date>
   updated_at: Generated<Date>
 }
@@ -501,6 +502,83 @@ export interface AiAssistantErrorsTable {
   created_at: Generated<Date>
 }
 
+// ─── Picture Book ─────────────────────────────────────────────────────────────
+
+export interface PictureBookProjectsTable {
+  id: Generated<string>
+  workspace_id: string
+  team_id: string
+  user_id: string
+  title: string
+  prompt: string
+  style: string
+  page_count: 10 | 15 | 20
+  status: Generated<
+    | 'draft'
+    | 'script_ready'
+    | 'assets_ready'
+    | 'storyboard_ready'
+    | 'completed'
+    | 'failed'
+  >
+  active_step: Generated<'script' | 'assets' | 'storyboard' | 'preview'>
+  cover_url: string | null
+  state: ColumnType<unknown, string | undefined, string>
+  draft_saved_at: Timestamp | null
+  estimated_credits: Generated<number>
+  actual_credits: Generated<number>
+  is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface PictureBookProjectChargesTable {
+  id: Generated<string>
+  project_id: string
+  workspace_id: string
+  team_id: string
+  user_id: string
+  charge_type: string
+  model: string
+  target_count: number
+  estimated_credits: number
+  actual_credits: number | null
+  status: Generated<
+    | 'pending'
+    | 'processing'
+    | 'completed'
+    | 'partial_failed'
+    | 'failed'
+    | 'refunded'
+  >
+  batch_ids: ColumnType<string[], JsonArrayInput<string> | undefined, JsonArrayInput<string>>
+  metadata: ColumnType<unknown, string | undefined, string>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface PictureBookProjectAssetsTable {
+  id: Generated<string>
+  project_id: string
+  kind:
+    | 'character'
+    | 'background'
+    | 'page_image'
+    | 'page_audio_zh'
+    | 'page_audio_en'
+  ref_id: string
+  name: string
+  prompt: string
+  selected_asset_url: string | null
+  selected_asset_id: string | null
+  batch_id: string | null
+  status: Generated<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>
+  metadata: ColumnType<unknown, string | undefined, string>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── Submission Errors ────────────────────────────────────────────────────────
 
 export interface SubmissionErrorsTable {
@@ -550,6 +628,9 @@ export interface Database {
   video_studio_projects: VideoStudioProjectsTable
   music_voice_clones: MusicVoiceClonesTable
   music_tracks: MusicTracksTable
+  picture_book_projects: PictureBookProjectsTable
+  picture_book_project_charges: PictureBookProjectChargesTable
+  picture_book_project_assets: PictureBookProjectAssetsTable
   ai_assistant_errors: AiAssistantErrorsTable
   submission_errors: SubmissionErrorsTable
 }

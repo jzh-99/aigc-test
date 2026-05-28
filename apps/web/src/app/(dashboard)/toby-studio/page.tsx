@@ -17,7 +17,7 @@ const studioModules = [
     description: '面向短剧脚本、分镜与成片工作流的创作模块。',
     href: '/toby-studio/short-drama',
     icon: Video,
-    status: '待开发',
+    status: '待开放',
     available: false,
   },
   {
@@ -25,8 +25,8 @@ const studioModules = [
     description: '面向绘本故事、角色设定与连续画面生成的创作模块。',
     href: '/toby-studio/picture-book',
     icon: BookOpenText,
-    status: '待开发',
-    available: false,
+    status: '已开放',
+    available: true,
   },
 ]
 
@@ -61,7 +61,7 @@ export default function TobyStudioPage() {
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
               </div>
               <Button className="mt-5 w-full" variant={item.available ? 'default' : 'outline'} disabled={!item.available}>
-                {item.available ? '进入模块' : '待开发'}
+                {item.available ? '进入模块' : '待开放'}
               </Button>
             </div>
           )
