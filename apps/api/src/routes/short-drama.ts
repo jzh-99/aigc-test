@@ -8,6 +8,10 @@ import postScriptSummary from './short-drama/post-script-summary.js'
 import postEpisodeOutlines from './short-drama/post-episode-outlines.js'
 import postAssetPrompts from './short-drama/post-asset-prompts.js'
 import postGenerateSegments from './short-drama/post-generate-segments.js'
+import postGenerateAssets from './short-drama/post-generate-assets.js'
+import postUploadAsset from './short-drama/post-upload-asset.js'
+import postGenerateSegmentVideo from './short-drama/post-generate-segment-video.js'
+import postSyncBatches from './short-drama/post-sync-batches.js'
 
 export async function shortDramaRoutes(app: FastifyInstance) {
   // 项目 CRUD
@@ -22,4 +26,10 @@ export async function shortDramaRoutes(app: FastifyInstance) {
   await app.register(postEpisodeOutlines)
   await app.register(postAssetPrompts)
   await app.register(postGenerateSegments)
+
+  // 媒体生成与同步
+  await app.register(postGenerateAssets)
+  await app.register(postUploadAsset)
+  await app.register(postGenerateSegmentVideo)
+  await app.register(postSyncBatches)
 }
