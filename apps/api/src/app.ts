@@ -30,6 +30,7 @@ import { companyARoutes } from './routes/company-a.js'
 import { clientErrorsRoutes } from './routes/client-errors.js'
 import { paymentRoutes } from './routes/payment.js'
 import { modelRoutes } from './routes/models.js'
+import { shortDramaRoutes } from './routes/short-drama.js'
 
 export async function buildApp() {
   const logger = buildLogger()
@@ -62,7 +63,7 @@ export async function buildApp() {
   await app.register(cors, {
     origin: allowedOrigins,
     credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 
@@ -133,6 +134,7 @@ export async function buildApp() {
       await v1.register(clientErrorsRoutes)
       await v1.register(paymentRoutes)
       await v1.register(modelRoutes)
+      await v1.register(shortDramaRoutes)
     },
     { prefix: '/api/v1' },
   )
