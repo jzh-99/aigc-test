@@ -616,7 +616,38 @@ async function main() {
     console.log(`  provider_models seeded (${m.code})`)
   }
 
-  // 11. Prompt filter rule (keyword example) — skip if pattern exists
+  // 11. Short Drama Export Cost Config
+  // 注意：项目中没有 system_configs 表，短剧导出费用通过 provider_models 记录管理
+  // 固定费用：每导出 1 集 AI 短剧 MP4 消耗 2 A豆
+  const shortDramaExportModel = {
+    code: 'short-drama-episode-export',
+    name: 'AI 短剧单集合成导出',
+    description: '每导出 1 集 AI 短剧 MP4 固定消耗的 A豆数量',
+    credit_cost: 2,
+  }
+
+  await db
+    .insertInto('provider_models')
+    .values({
+      provider_id: provider.id,
+      code: shortDramaExportModel.code,
+      name: shortDramaExportModel.name,
+      description: shortDramaExportModel.description,
+      module: 'video',
+      credit_cost: shortDramaExportModel.credit_cost,
+      params_pricing: JSON.stringify([]),
+      params_schema: JSON.stringify({}),
+      is_active: true,
+    })
+    .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      name: shortDramaExportModel.name,
+      description: shortDramaExportModel.description,
+      credit_cost: shortDramaExportModel.credit_cost,
+    }))
+    .execute()
+  console.log(`  provider_models seeded (${shortDramaExportModel.code})`)
+
+  // 12. Prompt filter rule (keyword example) — skip if pattern exists
   const existingRule = await db
     .selectFrom('prompt_filter_rules')
     .selectAll()
