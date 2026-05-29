@@ -620,8 +620,8 @@ async function main() {
   // 注意：项目中没有 system_configs 表，短剧导出费用通过 provider_models 记录管理
   // 固定费用：每导出 1 集 AI 短剧 MP4 消耗 2 A豆
   const shortDramaExportModel = {
-    code: 'short-drama-episode-export',
-    name: 'AI 短剧单集合成导出',
+    code: 'short_drama_episode_export_credits',
+    name: 'AI 短剧单集合成导出费用',
     description: '每导出 1 集 AI 短剧 MP4 固定消耗的 A豆数量',
     credit_cost: 2,
   }

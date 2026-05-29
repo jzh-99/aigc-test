@@ -38,23 +38,23 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await sql`ALTER TABLE short_drama_projects ADD CONSTRAINT chk_short_drama_status CHECK (status IN ('draft','summary_ready','outline_ready','assets_ready','episodes_ready','completed','failed'))`.execute(db)
   await sql`ALTER TABLE short_drama_projects ADD CONSTRAINT chk_short_drama_active_step CHECK (active_step IN ('script','assets','episodes'))`.execute(db)
 
-  // 创建索引（按现有迁移风格，使用 .column() 单列索引）
+  // 创建复合索引，支持常见查询模式
   await db.schema
-    .createIndex('idx_short_drama_projects_workspace_id')
+    .createIndex('idx_short_drama_projects_workspace_updated')
     .on('short_drama_projects')
-    .column('workspace_id')
+    .columns(['workspace_id', 'updated_at desc'])
     .execute()
 
   await db.schema
-    .createIndex('idx_short_drama_projects_updated_at')
+    .createIndex('idx_short_drama_projects_workspace_deleted_updated')
     .on('short_drama_projects')
-    .column('updated_at')
+    .columns(['workspace_id', 'is_deleted', 'updated_at desc'])
     .execute()
 
   await db.schema
-    .createIndex('idx_short_drama_projects_user_id')
+    .createIndex('idx_short_drama_projects_user_updated')
     .on('short_drama_projects')
-    .column('user_id')
+    .columns(['user_id', 'updated_at desc'])
     .execute()
 
   // 扩展 task_batches 表，添加短剧关联字段
