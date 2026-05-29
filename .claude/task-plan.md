@@ -20,8 +20,8 @@
 - [x] Task 2: Database Migration And Schema — 新增 `short_drama_projects` 迁移与 DB 类型
 
 ## 阶段二：API 基础与项目 CRUD
-- [~] Task 3: API Shared Helpers And Tests
-- [ ] Task 4: Project CRUD API
+- [x] Task 3: API Shared Helpers And Tests — 新增短剧 API 共享 helper、fixture 和基础测试
+- [~] Task 4: Project CRUD API
 
 ## 阶段三：生成、资产、同步与导出 API
 - [ ] Task 5: Text Generation API
@@ -63,5 +63,12 @@
 - Task 2 验证命令：
   - `pnpm --filter @aigc/db build` ✅
 
+- Task 3 已完成并通过两阶段 review。
+- Task 3 合并到当前 worktree 的提交：
+  - `4671d5b feat: add short drama api helpers`
+- Task 3 验证命令：
+  - `pnpm --filter @aigc/api exec tsx src/__tests__/short-drama-validation.test.ts` ✅
+  - `pnpm --filter @aigc/api build` ✅
+
 ## 下一步
-- Task 3: API Shared Helpers And Tests — 新增短剧 API 共享 helper、fixture 和基础测试。
+- Task 4: Project CRUD API — 实现短剧项目创建、列表、详情、保存 state 和软删除接口。

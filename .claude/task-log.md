@@ -113,4 +113,52 @@
 - 实现子代理曾在独立 worktree 完成修复；所有最终提交已 cherry-pick 到当前 `short-drama-mvp` worktree。
 
 ### 下一步
-进入 Task 3: API Shared Helpers And Tests。需要新增短剧 API 共享 helper、fixture 和基础测试，为后续项目 CRUD、文本生成、资产生成和导出 API 奠定基础。
+进入 Task 4: Project CRUD API。需要实现短剧项目创建、列表、详情、保存 state 和软删除接口，并基于 Task 3 的共享 helper 完成权限、校验和状态 normalize。
+
+## 2026-05-29 — Task 3 API 共享 helper 与测试完成
+
+### 本轮完成内容
+
+**Task 3: API Shared Helpers And Tests** 已完成：
+- 新增 `apps/api/src/routes/short-drama/_shared.ts`
+- 新增 `apps/api/src/__tests__/short-drama-validation.test.ts`
+
+### 实现内容
+
+1. 新增短剧 API 共享常量：
+   - `SHORT_DRAMA_SOURCE_MODULE = 'toby_studio'`
+   - `SHORT_DRAMA_SOURCE_FEATURE = 'short_drama'`
+   - `SHORT_DRAMA_EXPORT_QUEUE = 'short-drama-export-queue'`
+   - `SHORT_DRAMA_EXPORT_COST_KEY = 'short_drama_episode_export_credits'`
+2. 新增 JSON 提取 helper，支持从 fenced json code block 或普通字符串中提取首个 JSON object，失败时返回中文可读错误。
+3. 新增集数、时长和文本计费 helper，统一后续短剧 API 的基础校验和 A 豆计算。
+4. 新增 `makeShortDramaSourceMetadata`，输出 snake_case 来源字段，用于资产库/历史来源隔离。
+5. 新增 workspace/project access helper，校验 workspace 未删除、用户 membership、viewer 写权限限制、项目未软删，并返回 normalize 后的 `ShortDramaState`。
+6. 新增短剧 validation 单元测试，覆盖 JSON 提取、集数上限、时长档位、文本计费和 source metadata。
+
+### Review 过程
+
+1. 实现子代理完成提交：`4c6d618 feat: add short drama api helpers`。
+2. spec compliance review 通过，确认必需常量、函数语义、测试覆盖和验证命令符合 Task 3 规格。
+3. code quality review 通过，确认类型安全、访问控制、安全性、可维护性和测试质量达标。
+4. review 注意到实现子代理在独立 worktree 中同步了 Task 1/2 基础文件；合并到当前 worktree 时实际只引入 Task 3 新增的 API helper 与测试文件，未覆盖已 review 通过的共享类型和 DB schema。
+
+### 合并到当前 worktree
+
+Task 3 已合并到当前 `short-drama-mvp` worktree：
+- `4671d5b feat: add short drama api helpers`
+
+### 验证结果
+
+在当前 worktree 执行：
+- `pnpm --filter @aigc/api exec tsx src/__tests__/short-drama-validation.test.ts` ✅ 所有测试通过
+- `pnpm --filter @aigc/api build` ✅ TypeScript 构建成功
+
+### 取舍与注意事项
+
+- 当前测试聚焦纯 helper 和 validation，数据库交互型 access helper 未做集成测试；后续 Project CRUD API 会通过路由级测试继续覆盖权限路径。
+- `makeShortDramaSourceMetadata` 使用 snake_case 字段，与数据库和资产/历史来源隔离字段保持一致。
+- JSON 解析失败统一返回 `AI 返回格式错误，请重试`，避免向前端暴露解析细节；如后续需要排障，应在调用方记录安全日志。
+
+### 下一步
+进入 Task 4: Project CRUD API。需要实现短剧项目创建、列表、详情、保存 state 和软删除接口，并基于 Task 3 的共享 helper 完成权限、校验和状态 normalize。
