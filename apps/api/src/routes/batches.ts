@@ -163,6 +163,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
         .where('is_hidden', '=', false)
         .where('canvas_id', 'is', null)
         .where('video_studio_project_id', 'is', null)
+        .where('short_drama_project_id', 'is', null)
         .orderBy('created_at', 'desc')
         .orderBy('id', 'desc')
         .limit(limit + 1) // fetch one extra to determine if there's a next page
@@ -327,6 +328,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
       .where('is_hidden', '=', isHidden)
       .where('canvas_id', 'is', null)
       .where('video_studio_project_id', 'is', null)
+      .where('short_drama_project_id', 'is', null)
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
   }
