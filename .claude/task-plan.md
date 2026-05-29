@@ -17,10 +17,10 @@
 
 ## 阶段一：共享类型与数据层
 - [x] Task 1: Shared Short Drama Types — 新增 `packages/types/src/short-drama.ts`、测试与导出
-- [~] Task 2: Database Migration And Schema — 新增 `short_drama_projects` 迁移与 DB 类型
+- [x] Task 2: Database Migration And Schema — 新增 `short_drama_projects` 迁移与 DB 类型
 
 ## 阶段二：API 基础与项目 CRUD
-- [ ] Task 3: API Shared Helpers And Tests
+- [~] Task 3: API Shared Helpers And Tests
 - [ ] Task 4: Project CRUD API
 
 ## 阶段三：生成、资产、同步与导出 API
@@ -51,6 +51,17 @@
   - `08218e5 feat: add short drama shared types`
   - `87801cd fix: align short drama shared types`
   - `e3bc2b8 chore: sync short drama types lockfile`
-- 验证命令：
+- Task 1 验证命令：
   - `pnpm --filter @aigc/types exec tsx src/short-drama.test.ts` ✅
   - `pnpm --filter @aigc/types build` ✅
+- Task 2 已完成并通过两阶段 review。
+- Task 2 合并到当前 worktree 的提交：
+  - `d47d6ba feat: add short drama database schema`
+  - `7dbb552 fix: align short drama database schema`
+  - `dbc4445 fix: use next short drama migration number`
+  - `b50d1b2 fix: drop short drama indexes in rollback`
+- Task 2 验证命令：
+  - `pnpm --filter @aigc/db build` ✅
+
+## 下一步
+- Task 3: API Shared Helpers And Tests — 新增短剧 API 共享 helper、fixture 和基础测试。
