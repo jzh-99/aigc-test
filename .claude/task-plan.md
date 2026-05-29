@@ -1,4 +1,4 @@
-# Task Plan — 模型管理功能
+# Task Plan — Toby Studio AI 短剧模块
 
 ## 状态说明
 - [ ] 待完成
@@ -7,35 +7,50 @@
 
 ---
 
-## 阶段一：数据库层
-- [x] Task 1: 新增迁移 `031_team_model_configs.ts`
-- [x] Task 2: 更新 `packages/db/src/schema.ts`（新增 TeamModelConfigsTable）
-- [x] Task 3: 补充 seed 数据（数字人/动作模仿模型入库）
+## 实施计划来源
+- 设计文档：`docs/superpowers/specs/2026-05-29-short-drama-design.md`
+- 实施计划：`docs/superpowers/plans/2026-05-29-short-drama.md`
+- 执行模式：Subagent-Driven Development，每个任务实现后先做 spec compliance review，再做 code quality review。
+- 工作区：`.claude/worktrees/short-drama-mvp`
 
-## 阶段二：共享类型
-- [x] Task 4: 更新 `packages/types/src/api.ts`（新增 ModelItem、TeamModelConfig 类型）
+---
 
-## 阶段三：API 层
-- [x] Task 5: `admin.ts` 新增全局模型管理端点（GET/PATCH /admin/models）
-- [x] Task 6: `admin.ts` 新增团队模型配置端点（GET/PUT/DELETE /admin/teams/:id/model-configs）
-- [x] Task 7: 新增 `apps/api/src/routes/models.ts`（GET /models?module= 前端动态获取）
-- [x] Task 8: `avatar.ts` 改为从 DB 动态读取模型 code
-- [x] Task 9: `action-imitation.ts` 改为从 DB 动态读取模型 code
-- [x] Task 10: `videos.ts` 积分改为从 DB 读取 credit_cost
+## 阶段一：共享类型与数据层
+- [x] Task 1: Shared Short Drama Types — 新增 `packages/types/src/short-drama.ts`、测试与导出
+- [~] Task 2: Database Migration And Schema — 新增 `short_drama_projects` 迁移与 DB 类型
 
-## 阶段四：前端层
-- [x] Task 11: 新增 `apps/web/src/hooks/use-models.ts`
-- [x] Task 12: 新增 `components/admin/model-table.tsx`
-- [x] Task 13: 新增 `components/admin/model-edit-dialog.tsx`
-- [x] Task 14: 新增 `components/admin/team-model-config.tsx`
-- [x] Task 15: 更新 `app/(dashboard)/admin/page.tsx`（新增模型管理 tab）
-- [x] Task 16: 更新 `components/admin/team-table.tsx`（新增模型配置入口）
-- [x] Task 17: generation-panel.tsx — 保持现状（credits 是展示估算值，API 层已动态化）
-- [x] Task 18: use-generate.ts + generation-store.ts — 保持现状（MODEL_CODE_MAP 是 resolution 维度映射，不是模型配置）
-- [x] Task 19: video-studio 相关页面 — 保持现状
+## 阶段二：API 基础与项目 CRUD
+- [ ] Task 3: API Shared Helpers And Tests
+- [ ] Task 4: Project CRUD API
 
-## 额外修复
-- [x] `apps/web/src/lib/api-client.ts` 新增 `apiPut` 函数
+## 阶段三：生成、资产、同步与导出 API
+- [ ] Task 5: Text Generation API
+- [ ] Task 6: Asset Image, Upload, Segment Video, And Sync API
+- [ ] Task 7: Export API And Worker Queue Types
 
-## 全部完成 ✅
-构建验证：@aigc/types ✅ | @aigc/web ✅ | @aigc/api ✅
+## 阶段四：Worker
+- [ ] Task 8: Export Worker
+
+## 阶段五：前端基础与首页
+- [ ] Task 9: Frontend API, Styles, And Project Hook
+- [ ] Task 10: Short Drama Home Page
+
+## 阶段六：制作页与单集编辑
+- [ ] Task 11: Project Editor Steps
+- [ ] Task 12: Episode Editor UI
+
+## 阶段七：隔离、文档与验证
+- [ ] Task 13: Asset And History Source Isolation
+- [ ] Task 14: Documentation, Full Verification, And Cleanup
+
+---
+
+## 当前进度
+- Task 1 已完成并通过两阶段 review。
+- Task 1 合并到当前 worktree 的提交：
+  - `08218e5 feat: add short drama shared types`
+  - `87801cd fix: align short drama shared types`
+  - `e3bc2b8 chore: sync short drama types lockfile`
+- 验证命令：
+  - `pnpm --filter @aigc/types exec tsx src/short-drama.test.ts` ✅
+  - `pnpm --filter @aigc/types build` ✅
