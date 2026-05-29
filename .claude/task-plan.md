@@ -24,8 +24,8 @@
 - [x] Task 4: Project CRUD API — 新增短剧项目创建、列表、详情、保存 state 和软删除接口
 
 ## 阶段三：生成、资产、同步与导出 API
-- [~] Task 5: Text Generation API
-- [ ] Task 6: Asset Image, Upload, Segment Video, And Sync API
+- [x] Task 5: Text Generation API — 新增短剧剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口
+- [~] Task 6: Asset Image, Upload, Segment Video, And Sync API
 - [ ] Task 7: Export API And Worker Queue Types
 
 ## 阶段四：Worker
@@ -78,5 +78,11 @@
   - `pnpm --filter @aigc/types build` ✅
   - `pnpm --filter @aigc/api build` ✅
 
+- Task 5 已完成并通过两阶段 review。
+- Task 5 合并到当前 worktree 的提交：
+  - `8d39ca3 feat: add short drama text generation routes`
+- Task 5 验证命令：
+  - `pnpm --filter @aigc/api build` ✅
+
 ## 下一步
-- Task 5: Text Generation API — 实现剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口。
+- Task 6: Asset Image, Upload, Segment Video, And Sync API — 实现资产图片生成、上传替换、片段视频生成和 batch 状态同步接口。

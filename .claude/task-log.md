@@ -1,4 +1,4 @@
-# Task Log — Toby Studio AI 短剧模块
+﻿# Task Log — Toby Studio AI 短剧模块
 
 ## 2026-05-29 — Task 1 共享类型完成
 
@@ -274,3 +274,55 @@ Task 4 已合并到当前 `short-drama-mvp` worktree：
 
 ### 下一步
 进入 Task 5: Text Generation API。需要实现剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口，继续保持权限校验、余额预检查、结构化 JSON 校验和状态回写。
+
+## 2026-05-29 — Task 5 文本生成 API 完成
+
+### 本轮完成内容
+
+**Task 5: Text Generation API** 已完成：
+- 新增 `apps/api/src/routes/short-drama/_text-generation.ts`
+- 新增 `apps/api/src/routes/short-drama/post-script-summary.ts`
+- 新增 `apps/api/src/routes/short-drama/post-episode-outlines.ts`
+- 新增 `apps/api/src/routes/short-drama/post-asset-prompts.ts`
+- 新增 `apps/api/src/routes/short-drama/post-generate-segments.ts`
+- 修改 `apps/api/src/routes/short-drama.ts`，注册 4 个文本生成路由
+
+### 实现内容
+
+1. 新增短剧文本生成共享 helper：封装豆包 OpenAI-compatible 调用、JSON 提取、文本积分计算、安全退款和“状态保存 + 积分结算”原子事务。
+2. `POST /short-drama/projects/:id/script/summary`：生成剧本摘要，校验 `title` / `summary`，写入当前 state 的 `script.refinedPrompt`，并更新项目状态为 `summary_ready`。
+3. `POST /short-drama/projects/:id/script/episode-outlines`：生成恰好 `episodeCount` 条分集梗概，完整校验 `episodeNumber/title/logline/synopsis/characters/scenes/hook`，兼容当前类型写入 `script.outlines` 并初始化 `episodes.items`，项目状态更新为 `outline_ready`。
+4. `POST /short-drama/projects/:id/assets/prompts`：根据剧本摘要和分集梗概生成 `characters/scenes/props/materials` 四类资产提示词，按 normalized name 去重；当前共享类型未包含 `material` kind，因此 materials 兼容映射为 `prop`。
+5. `POST /short-drama/projects/:id/episodes/:episodeNumber/segments`：为单集生成分镜片段，完整校验 `title/prompt/mentionNames/durationSeconds/cameraNote/actionNote/dialogueOrSubtitle`，解析 `mentionNames` 为 `mentionRefs`，并将运镜、动作、字幕信息合并进 prompt 以兼容当前片段类型。
+6. 所有文本生成接口均先冻结预估积分，成功后在单个数据库事务中保存状态、释放冻结积分、按实际输出字符结算、调整 member credit usage 并写入 ledger；失败时通过安全退款 helper 退回冻结积分并记录失败日志。
+
+### Review 过程
+
+1. 实现子代理完成初版提交：`7bcd9c6 feat: add short drama text generation routes`。
+2. spec compliance review 首轮失败，指出缺少余额预检查/冻结/实际结算、项目状态更新和部分结构化字段校验。
+3. 修复子代理完成修复提交：`78eb70d fix: align short drama text generation routes`。
+4. spec compliance 复审失败，仅剩分镜片段缺少 `durationSeconds` 必填校验。
+5. 修复子代理完成修复提交：`aa05ca4 fix: require segment duration in short drama text generation`。
+6. spec compliance 终审通过。
+7. 将三次实现/修复以 `--no-commit` cherry-pick 到当前 worktree 后，code quality review 多轮指出并修复变量命名、数据库保存失败错误处理、状态保存与积分结算原子性，以及积分结算逻辑需对齐 worker complete pipeline。
+8. code quality 终审通过，确认无阻塞性问题。
+
+### 合并到当前 worktree
+
+Task 5 已合并到当前 `short-drama-mvp` worktree：
+- `8d39ca3 feat: add short drama text generation routes`
+
+### 验证结果
+
+在当前 worktree 执行：
+- `pnpm --filter @aigc/api build` ✅ TypeScript 构建成功
+
+### 取舍与注意事项
+
+- 当前共享类型与设计文档中的完整 `ShortDramaState` 有差异，因此 Task 5 在不重写已 review 的 Task 1 类型前提下做了兼容：summary 写入 `script.refinedPrompt`，episode outlines 写入 `script.outlines`，episodes 写入 `episodes.items`。
+- `materials` 资产按规格要求生成和校验，但因当前 `ShortDramaAssetKind` 没有 `material`，暂映射为 `prop`。后续若要独立素材分类，应扩展共享类型和前端 UI。
+- 文本生成预估积分采用固定保守值；实际结算按输出字符计算，并通过事务原子更新状态和积分账户。
+- 所有失败分支均避免记录完整 prompt、AI 原文或密钥，只记录项目 ID、错误对象和必要上下文。
+
+### 下一步
+进入 Task 6: Asset Image, Upload, Segment Video, And Sync API。需要实现资产图片生成、上传替换、片段视频生成和 batch 状态同步接口，并保持短剧来源 metadata、资产归属校验和不信任前端 URL 的安全要求。
