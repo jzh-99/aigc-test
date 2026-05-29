@@ -75,6 +75,11 @@ export async function down(db: Kysely<unknown>): Promise<void> {
     .dropColumn('short_drama_project_id')
     .execute()
 
+  // 删除索引
+  await db.schema.dropIndex('idx_short_drama_projects_user_updated').execute()
+  await db.schema.dropIndex('idx_short_drama_projects_workspace_deleted_updated').execute()
+  await db.schema.dropIndex('idx_short_drama_projects_workspace_updated').execute()
+
   // 删除短剧项目表
   await db.schema.dropTable('short_drama_projects').ifExists().execute()
 }
