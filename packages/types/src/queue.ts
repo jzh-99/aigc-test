@@ -79,3 +79,14 @@ export interface MusicVoiceCloneJobData {
   creditAccountId: string
   estimatedCredits: number
 }
+
+export interface ShortDramaExportEpisodeJobData {
+  projectId: string
+  episodeId: string
+  exportId: string
+  userId: string
+  teamId: string
+  workspaceId: string
+  creditAccountId: string
+  estimatedCredits: number
+}

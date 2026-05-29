@@ -27,6 +27,7 @@ let _videoQueue: Queue | null = null
 let _storyboardQueue: Queue | null = null
 let _musicQueue: Queue<MusicJobData> | null = null
 let _musicVoiceCloneQueue: Queue<MusicVoiceCloneJobData> | null = null
+let _shortDramaExportQueue: Queue | null = null
 
 type CloseableQueue = Pick<Queue, 'close'>
 
@@ -88,6 +89,13 @@ export function getMusicVoiceCloneQueue(): Queue<MusicVoiceCloneJobData> {
   return _musicVoiceCloneQueue
 }
 
+export function getShortDramaExportQueue(): Queue {
+  if (!_shortDramaExportQueue) {
+    _shortDramaExportQueue = new Queue('short-drama-export-queue', { connection: getRedisOptions() })
+  }
+  return _shortDramaExportQueue
+}
+
 export async function closeQueues(): Promise<void> {
   const queues = [
     _imageQueue,
@@ -96,6 +104,7 @@ export async function closeQueues(): Promise<void> {
     _storyboardQueue,
     _musicQueue,
     _musicVoiceCloneQueue,
+    _shortDramaExportQueue,
   ]
 
   _imageQueue = null
@@ -104,6 +113,7 @@ export async function closeQueues(): Promise<void> {
   _storyboardQueue = null
   _musicQueue = null
   _musicVoiceCloneQueue = null
+  _shortDramaExportQueue = null
 
   await Promise.all(queues.map((queue) => queue?.close()))
 }

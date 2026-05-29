@@ -18,6 +18,7 @@ import { storyboardWorker } from './workers/storyboard.js'
 import { musicWorker } from './workers/music.js'
 import { musicVoiceCloneWorker } from './workers/music-voice-clone.js'
 import { cronWorker, scheduleCronJobs } from './workers/cron-worker.js'
+import { shortDramaExportWorker } from './workers/short-drama-export.js'
 import { getRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
 import { startVideoPoller } from './pollers/video-poller.js'
 import { startAvatarPoller } from './pollers/avatar-poller.js'
@@ -245,6 +246,7 @@ const shutdown = async () => {
     musicWorker.close(),
     musicVoiceCloneWorker.close(),
     cronWorker.close(),
+    shortDramaExportWorker.close(),
   ])
   await closeRedis()
   process.exit(0)

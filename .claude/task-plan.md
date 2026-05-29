@@ -1,79 +1,88 @@
-# Task Plan — video_categories 能力限制重设计
-
-## 2026-05-27 — Toby AI 绘本完整模块
+# Task Plan — Toby Studio AI 短剧模块
 
 ## 状态说明
 - [ ] 待完成
 - [x] 已完成
 - [~] 进行中
 
-## 当前任务
-- [x] 需求澄清：完整模块、独立绘本项目、首页只保留 AI 生成、故事摘要仅中文、每页独白和语音中英双语。
-- [x] 可视化草图：完成入口、步骤条、剧本轮播、资产库、绘本分镜和主题适配方向确认。
-- [x] 方案选择：推荐独立 `picture-book` 模块，复用现有生成、TTS、资产、积分和审计基础设施。
-- [x] 设计文档：保存到 `docs/superpowers/specs/2026-05-27-picture-book-design.md`。
-- [x] 用户 review 设计文档：补充草稿、项目计费、固定模型、seed 调整、脚本/台词语言边界；图片模型修正为 `seedream-5.0-lite`。
-- [x] 用户确认修订版设计文档。
-- [x] 编写实施计划：保存到 `docs/superpowers/plans/2026-05-27-picture-book.md`。
-- [~] 等待选择执行方式后开始实现。
+---
 
-## 2026-05-25 — 音乐创作功能
+## 实施计划来源
+- 设计文档：`docs/superpowers/specs/2026-05-29-short-drama-design.md`
+- 实施计划：`docs/superpowers/plans/2026-05-29-short-drama.md`
+- 执行模式：Subagent-Driven Development，每个任务实现后先做 spec compliance review，再做 code quality review。
+- 工作区：`.claude/worktrees/short-drama-mvp`
 
-## 状态说明
-- [ ] 待完成
-- [x] 已完成
-- [~] 进行中
+---
 
-## 当前任务
-- [x] 需求澄清：导航位置、页面结构、模式划分、纯音乐开关、音色下拉、音色克隆、资产库边界、工作区隔离、计费、任务模型、详情页路由。
-- [x] 可视化草图迭代：完成 v1-v9，最终确认单栏制作表单、右侧作品列表、详情页右侧歌词抽屉。
-- [x] 设计文档：保存到 `docs/superpowers/specs/2026-05-25-music-creation-design.md`。
-- [x] 用户 review 设计文档：已补充音色描述、标题限制、列表空状态、voice_id 字段和 mureka 两类计费规则。
-- [x] 编写实施计划：保存到 `docs/superpowers/plans/2026-05-25-music-creation.md`。
-- [x] 音乐详情页歌词同步：Mureka `choices[0].lyrics_sections` 入库，API 返回精确时间轴，前端按时间轴高亮并滚动歌词。
-- [x] 音乐生成状态同步修复：生成按钮在任务终态前保持加载并防重复提交，列表页和详情页通过 track SSE 同步完整最终态。
-- [x] 音乐流式播放修复：worker 获取 `stream_url` 后立即写入并推送，轮询阶段发现新 `stream_url` 也会提前同步。
-- [x] 歌词时间轴修复：Mureka 官方毫秒级 `lyrics_sections` 入库前统一转换为播放器使用的秒级时间轴。
-- [x] 音乐 SSE 认证修复：前端改用 fetch-SSE 携带 Authorization header，避免 EventSource query token 401 后持续重连。
-- [x] 历史歌词滚动兼容：详情页播放时对毫秒级 `lyrics_sections` 做前端兜底转换。
-- [x] 歌词逐字高亮增强：当前行放大高亮，存在 `words` 时间轴时按播放进度逐字变色。
-- [x] Mureka 生成提示词封装：worker 统一封装灵感/自定义/纯音乐提示词，包含标题、音色性别、风格和歌词要求。
-- [x] 歌词视觉重构：详情页歌词改为暖棕沉浸背景、居中排版、上下淡出遮罩和当前行强焦点。
-- [x] 风格标签输入重构：自定义模式改为已选标签、可见输入框、推荐标签三段式标签选择器。
-- [x] 外部调用审计：新增 `provider_api_logs`，音乐/Mureka、音乐封面、图片、视频提交、MiniMax TTS 记录请求参数、响应参数、耗时、状态和外部任务 ID。
-- [x] 灵感模式音色隔离：灵感模式不展示/提交我的音色和音色性别，后端兜底忽略相关入参，Mureka 调用不发送 voice 参数。
-- [x] 查询审计采样：Mureka、视频、数字人、动作模仿的轮询查询只在首查、状态/关键字段变化、最终态或异常时写入 `provider_api_logs`。
-- [x] 文本类 LLM 审计：Qwen 文本生成/同步分镜/worker 分镜、canvas 剧本生成、video-studio 脚本/大纲/资产提示词/分镜拆分均写入 `provider_api_logs`。
-- [x] 音乐计费模式重构：mureka-8/mureka-9 改为三种业务价格 `inspiration_song`、`instrumental`、`custom_song`，后端计费和前端预览均按业务模式读取。
+## 阶段一：共享类型与数据层
+- [x] Task 1: Shared Short Drama Types — 新增 `packages/types/src/short-drama.ts`、测试与导出
+- [x] Task 2: Database Migration And Schema — 新增 `short_drama_projects` 迁移与 DB 类型
 
-## 2026-05-21 — 实现计划阶段
+## 阶段二：API 基础与项目 CRUD
+- [x] Task 3: API Shared Helpers And Tests — 新增短剧 API 共享 helper、fixture 和基础测试
+- [x] Task 4: Project CRUD API — 新增短剧项目创建、列表、详情、保存 state 和软删除接口
 
-## 状态说明
-- [ ] 待完成
-- [x] 已完成
-- [~] 进行中
+## 阶段三：生成、资产、同步与导出 API
+- [x] Task 5: Text Generation API — 新增短剧剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口
+- [x] Task 6: Asset Image, Upload, Segment Video, And Sync API
+- [x] Task 7: Export API And Worker Queue Types
 
-## 当前任务
-- [x] 恢复上下文：读取设计文档、任务日志和任务计划。
-- [x] 探索相关代码：types、seed、API、创作生成页、画布视频节点。
-- [x] 编写实施计划：保存到 `docs/superpowers/plans/2026-05-21-video-categories-limits.md`。
-- [x] 实现共享视频限制类型。
-- [x] 更新视频模型 seed。
-- [x] 后端生成接口兜底校验。
-- [x] 改造创作生成页。
-- [~] 改造画布视频节点：已把节点 config 里的 `videoCategoryLimits` 贯通到默认值和模型切换逻辑，连线校验也改为读取该快照。
-- [x] 完成构建与手测验证。
-## 2026-05-27 消费流水中文源头调整
-- [x] 新增流水描述源头中文化：API/worker 写入 `credits_ledger.description` 时直接使用中文。
-- [x] 不启用前端兜底翻译：消费流水页面继续展示后端返回内容。
-- [x] 新增历史数据迁移：`049_credits_ledger_chinese_descriptions`。
-- [x] 完成构建验证：`@aigc/db build`、`@aigc/api build`、`@aigc/worker build`。
+## 阶段四：Worker
+- [x] Task 8: Export Worker
 
-## 2026-05-28 — 绘本分镜卡片重新设计
-- [x] 编写实施计划：`docs/superpowers/plans/2026-05-28-storyboard-card-redesign.md`，并补充 brainstorm HTML 视觉参考。
-- [x] 后端 prompt 调整：分镜 `imagePrompt` 要求使用 `@角色名` / `@背景名` 标记。
-- [x] 后端生成图片调整：解析分镜 prompt 中的 @ 标记，并把匹配角色/背景图片作为 `params.image` 参考图。
-- [x] 前端组件：新增 `StoryboardMentionEditor` 和 `StoryboardAudioPlayer`。
-- [x] 前端布局：`StepStoryboard` 改为横向单列卡片，接入 @ 编辑器、旁白编辑和双语音频播放器。
-- [x] 进度门控：单页重生成图片/语音时立即清空对应完成态，下一步按钮随进度禁用。
-- [~] 浏览器验证：6006 被占用，6007 dev 受本地 Next 包缺失 `next/dist/pages/_app` 影响未完成；生产构建已通过。
+## 阶段五：前端基础与首页
+- [x] Task 9: Frontend API, Styles, And Project Hook
+- [x] Task 10: Short Drama Home Page
+
+## 阶段六：制作页与单集编辑
+- [x] Task 11: Project Editor Steps
+- [x] Task 12: Episode Editor UI
+
+## 阶段七：隔离、文档与验证
+- [x] Task 13: Asset And History Source Isolation
+- [x] Task 14: Documentation, Full Verification, And Cleanup
+
+---
+
+## 当前进度
+- Task 1 已完成并通过两阶段 review。
+- Task 1 合并到当前 worktree 的提交：
+  - `08218e5 feat: add short drama shared types`
+  - `87801cd fix: align short drama shared types`
+  - `e3bc2b8 chore: sync short drama types lockfile`
+- Task 1 验证命令：
+  - `pnpm --filter @aigc/types exec tsx src/short-drama.test.ts` ✅
+  - `pnpm --filter @aigc/types build` ✅
+- Task 2 已完成并通过两阶段 review。
+- Task 2 合并到当前 worktree 的提交：
+  - `d47d6ba feat: add short drama database schema`
+  - `7dbb552 fix: align short drama database schema`
+  - `dbc4445 fix: use next short drama migration number`
+  - `b50d1b2 fix: drop short drama indexes in rollback`
+- Task 2 验证命令：
+  - `pnpm --filter @aigc/db build` ✅
+
+- Task 3 已完成并通过两阶段 review。
+- Task 3 合并到当前 worktree 的提交：
+  - `4671d5b feat: add short drama api helpers`
+- Task 3 验证命令：
+  - `pnpm --filter @aigc/api exec tsx src/__tests__/short-drama-validation.test.ts` ✅
+  - `pnpm --filter @aigc/api build` ✅
+
+- Task 4 已完成并通过两阶段 review。
+- Task 4 合并到当前 worktree 的提交：
+  - `378e724 feat: add short drama project CRUD routes`
+- Task 4 验证命令：
+  - `pnpm --filter @aigc/types exec tsx src/short-drama.test.ts` ✅
+  - `pnpm --filter @aigc/types build` ✅
+  - `pnpm --filter @aigc/api build` ✅
+
+- Task 5 已完成并通过两阶段 review。
+- Task 5 合并到当前 worktree 的提交：
+  - `8d39ca3 feat: add short drama text generation routes`
+- Task 5 验证命令：
+  - `pnpm --filter @aigc/api build` ✅
+
+## 下一步
+- Task 6: Asset Image, Upload, Segment Video, And Sync API — 实现资产图片生成、上传替换、片段视频生成和 batch 状态同步接口。

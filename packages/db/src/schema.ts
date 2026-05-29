@@ -188,6 +188,9 @@ export interface TaskBatchesTable {
   canvas_node_id: string | null
   video_studio_project_id: string | null
   picture_book_project_id: string | null
+  short_drama_project_id: string | null
+  short_drama_episode_id: string | null
+  short_drama_segment_id: string | null
   created_at: Generated<Date>
   updated_at: Generated<Date>
 }
@@ -496,6 +499,31 @@ export interface MusicTracksTable {
   updated_at: Generated<Date>
 }
 
+// ─── Short Drama ──────────────────────────────────────────────────────────────
+
+export interface ShortDramaProjectsTable {
+  id: Generated<string>
+  workspace_id: string
+  team_id: string
+  user_id: string
+  title: string
+  prompt: string
+  style: string
+  aspect_ratio: string
+  episode_count: number
+  status: string
+  active_step: string
+  cover_url: string | null
+  state: ColumnType<unknown, string, string>
+  estimated_credits: number
+  actual_credits: number
+  draft_saved_at: Timestamp | null
+  is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── AI Assistant Errors ──────────────────────────────────────────────────────
 
 export interface AiAssistantErrorsTable {
@@ -635,6 +663,7 @@ export interface Database {
   picture_book_projects: PictureBookProjectsTable
   picture_book_project_charges: PictureBookProjectChargesTable
   picture_book_project_assets: PictureBookProjectAssetsTable
+  short_drama_projects: ShortDramaProjectsTable
   ai_assistant_errors: AiAssistantErrorsTable
   submission_errors: SubmissionErrorsTable
 }
