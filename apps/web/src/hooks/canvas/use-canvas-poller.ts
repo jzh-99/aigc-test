@@ -46,26 +46,25 @@ export function useCanvasPoller(canvasId: string | null) {
       const outputs = await fetchNodeOutputs(canvasId, nodeId, token || undefined)
       if (!outputs.length) return
       const store = useCanvasExecutionStore.getState()
-      const latest = outputs[outputs.length - 1]
-      const url = latest.output_urls?.[0]
+      const target = outputs.find((o) => o.is_selected) ?? outputs[0]
+      const url = target.output_urls?.[0]
       if (url) {
-        const type: 'video' | 'image' | 'audio' = latest.asset_type === 'audio'
+        const type: 'video' | 'image' | 'audio' = target.asset_type === 'audio'
           ? 'audio'
-          : latest.asset_type === 'video'
+          : target.asset_type === 'video'
           ? 'video'
           : /\.(mp3|wav|ogg|aac|flac|m4a)(\?|$)/i.test(url) ? 'audio' : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
-        store.replaceNodeOutput(nodeId, { id: latest.id, url, type, thumbnailUrl: latest.thumbnail_url ?? undefined })
-      } else if (latest.params_snapshot) {
+        store.replaceNodeOutput(nodeId, { id: target.id, url, type, thumbnailUrl: target.thumbnail_url ?? undefined })
+      } else if (target.params_snapshot) {
         // storyboard_splitter 等无 URL 输出的节点，通过 params_snapshot 传递结构化数据
         store.replaceNodeOutput(nodeId, {
-          id: latest.id,
+          id: target.id,
           url: '',
           type: 'text',
-          paramsSnapshot: latest.params_snapshot as Record<string, unknown>,
+          paramsSnapshot: target.params_snapshot as Record<string, unknown>,
         })
       }
-      const selected = outputs.find((o) => o.is_selected)
-      if (selected) store.selectNodeOutput(nodeId, selected.id)
+      store.selectNodeOutput(nodeId, target.id)
     } catch (e) {
       console.warn('[Canvas Poller] 拉取节点历史失败:', e)
     }
@@ -164,9 +163,18 @@ export function useCanvasPoller(canvasId: string | null) {
         if (prevVersion !== -1 && !loadingAllRef.current) {
           const execState = useCanvasExecutionStore.getState()
           const finishedNodes = Object.entries(execState.nodes)
-            .filter(([, s]) => !s.isGenerating && s.progress === 100 && s.outputs.length === 0)
+            .filter(([, s]) => !s.isGenerating && s.progress === 100)
             .map(([id]) => id)
           await runWithConcurrency(finishedNodes, OUTPUTS_LOAD_CONCURRENCY, loadNodeOutputs)
+        }
+
+        if (anyBatchJustFinished && canvasId && token) {
+          const sidebarStore = useCanvasSidebarDataStore.getState()
+          await Promise.all([
+            sidebarStore.refreshAssets(canvasId, token),
+            sidebarStore.refreshVideoAssets(canvasId, token),
+            sidebarStore.refreshAudioAssets(canvasId, token),
+          ])
         }
       } else if (!hasActiveTasks) {
         idleCountRef.current += 1

@@ -10,11 +10,15 @@ import { CanvasApiError, executeTextGenNode } from '@/lib/canvas/canvas-api'
 interface TextInputPanelProps {
   setTextDraft: (value: string) => void
   commitTextDraft: (value: string) => void
+  onGeneratingChange: (generating: boolean) => void
+  onProgressChange: (progress: number) => void
 }
 
 export function TextInputPanel({
   setTextDraft,
   commitTextDraft,
+  onGeneratingChange,
+  onProgressChange,
 }: TextInputPanelProps) {
   const token = useAuthStore((s) => s.accessToken)
   const [aiPrompt, setAiPrompt] = useState('')
@@ -28,6 +32,8 @@ export function TextInputPanel({
       return
     }
     setGenerating(true)
+    onGeneratingChange(true)
+    onProgressChange(10)
     streamingRef.current = ''
     // 清空当前文本，准备流式填入
     setTextDraft('')
@@ -40,6 +46,7 @@ export function TextInputPanel({
           // flushSync 强制每个 chunk 同步渲染，实现打字机逐字输出效果
           flushSync(() => {
             setTextDraft(streamingRef.current)
+            onProgressChange(60)
           })
         },
         token ?? undefined,
@@ -47,6 +54,7 @@ export function TextInputPanel({
       const finalText = generatedText || streamingRef.current
       setTextDraft(finalText)
       commitTextDraft(finalText)
+      onProgressChange(100)
       toast.success('生成完成')
     } catch (err) {
       const message = err instanceof CanvasApiError ? err.message : '生成失败'
@@ -54,8 +62,9 @@ export function TextInputPanel({
       if (streamingRef.current) commitTextDraft(streamingRef.current)
     } finally {
       setGenerating(false)
+      onGeneratingChange(false)
     }
-  }, [aiPrompt, token, setTextDraft, commitTextDraft])
+  }, [aiPrompt, token, setTextDraft, commitTextDraft, onGeneratingChange, onProgressChange])
 
   return (
     <div className="p-3 space-y-3">

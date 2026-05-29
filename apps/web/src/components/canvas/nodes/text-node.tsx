@@ -5,7 +5,7 @@ import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useShallow } from 'zustand/react/shallow'
-import { Type, X } from 'lucide-react'
+import { Type, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData, TextInputConfig } from '@/lib/canvas/types'
@@ -14,7 +14,7 @@ import { InlineLabel } from './inline-label'
 export const TextNode = memo(function TextNode({ id, data }: { id: string; data: CanvasNodeData<TextInputConfig> }) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
-  const { isGenerating } = useNodeExecutionState(id)
+  const { isGenerating, progress } = useNodeExecutionState(id)
   const isUpstream = useNodeHighlighted(id)
   const theme = getCanvasNodeTheme('text_input')
 
@@ -78,11 +78,19 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
         <X size={11} />
       </button>
 
-      <div className={cn('flex items-center gap-1.5 px-3 py-1.5 border-b border-border rounded-t-xl', theme.headerClassName)}>
-        <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-current/10', theme.iconClassName)}>
-          <Type size={12} />
-        </span>
-        <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
+      <div className={cn('flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border rounded-t-xl', theme.headerClassName)}>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-current/10', theme.iconClassName)}>
+            <Type size={12} />
+          </span>
+          <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
+        </div>
+        {isGenerating && (
+          <div className="flex shrink-0 items-center gap-1 text-blue-500">
+            <span className="font-mono text-[10px]">{Math.round(progress)}%</span>
+            <Loader2 className="h-3 w-3 animate-spin" />
+          </div>
+        )}
       </div>
 
       <div className="p-2 flex-1">
@@ -96,12 +104,13 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
           </div>
         )}
         <textarea
-          className="w-full h-20 p-2 text-xs bg-muted rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-blue-400/50 placeholder:text-muted-foreground text-foreground"
+          className="nodrag nowheel w-full h-20 p-2 text-xs bg-muted rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-blue-400/50 placeholder:text-muted-foreground text-foreground select-text"
           placeholder="输入提示词内容..."
           value={localText}
           onChange={handleChange}
           onBlur={handleBlur}
           onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         />
       </div>
 

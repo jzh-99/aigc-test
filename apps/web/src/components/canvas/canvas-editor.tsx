@@ -252,6 +252,15 @@ const NODE_CANVAS_W: Record<string, number> = {
   video_stitch: 280,
 }
 
+const PARAM_PANEL_INTERACTIVE_NODE_TYPES = new Set(['text_input', 'script_writer', 'storyboard_splitter'])
+
+function isInteractiveNodeClick(event: unknown): boolean {
+  if (!(event instanceof MouseEvent)) return false
+  const target = event.target
+  if (!(target instanceof HTMLElement)) return false
+  return Boolean(target.closest('button, input, textarea, select, [data-canvas-node-interactive="true"]'))
+}
+
 function FloatingParamPanel({
   node,
   canvasId,
@@ -485,8 +494,12 @@ function Flow({
     const maxX = Math.max(...sourceNodes.map((n) => n.position.x))
     const avgY = sourceNodes.reduce((sum, n) => sum + n.position.y, 0) / sourceNodes.length
     setSelectedEdgeId(null)
-    if (sourceNodeIds.length > 1) setSelectedNodeIds(sourceNodeIds)
-    else setSelectedNodeId(node.id)
+    setSelectedNodeIds((prev) => {
+      if (sourceNodeIds.length <= 1) return prev.length === 0 ? prev : []
+      return prev.length === sourceNodeIds.length && prev.every((id, index) => id === sourceNodeIds[index])
+        ? prev
+        : sourceNodeIds
+    })
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -843,8 +856,9 @@ function Flow({
     setSelectedNodeIds((prev) => (prev.length === 0 ? prev : []))
   }, [])
 
-  const handleNodeClick = useCallback((_e: unknown, node: AppNode) => {
+  const handleNodeClick = useCallback((event: unknown, node: AppNode) => {
     if (onNodeSelected?.(node.id)) return // consumed by agent — skip selection
+    if (!PARAM_PANEL_INTERACTIVE_NODE_TYPES.has(node.type ?? '') && isInteractiveNodeClick(event)) return
     setSelectedEdgeId(null)
     setSelectedNodeId((prev) => (prev === node.id ? null : node.id))
   }, [onNodeSelected])

@@ -256,6 +256,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
         quantity={quantity}
         isGenerating={isGenerating}
         disabled={disabled}
+        promptEmpty={!prompt.trim()}
         onModelChange={(v) => {
             setModelType(v)
             // 切换模型时自动选中新模型的首个可用分辨率

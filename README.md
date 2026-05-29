@@ -46,6 +46,341 @@ pnpm db:migrate     # 执行迁移
 pnpm db:seed        # 填充种子数据
 ```
 
+## AI 短剧生成链路设计
+
+> 本节记录 Toby Studio / AI 短剧模块已确认的生成链路、任务同步与计费流程，作为后续详细设计和实现计划的输入。
+
+### 1. 首页创建项目与剧本摘要生成
+
+用户在 AI 短剧首页点击 `立即生成` 后，流程拆成两个动作：
+
+1. `POST /short-drama/projects`
+   - 创建短剧项目。
+   - 保存原始创意、风格、比例、集数、模型设置。
+   - 返回 `projectId`，前端进入制作页。
+2. `POST /short-drama/projects/:id/script-summary`
+   - 自动调用文本模型生成剧本摘要。
+   - 支持流式返回。
+   - 按实际输出字符数计费。
+   - 写回 `state.script.summary`。
+   - 更新项目状态为 `summary_ready`。
+
+这样可以先进入制作页，再展示摘要生成过程；失败时项目仍保留，可重试。
+
+### 2. 生成全部分集梗概
+
+用户编辑剧本摘要后点击 `生成分集梗概`：
+
+```text
+余额预检查
+→ 调用文本模型
+→ 一次性生成 episodeCount 条分集梗概
+→ 写入 state.script.episodeOutlines
+→ 初始化 state.episodes
+→ 状态更新为 outline_ready
+```
+
+接口：
+
+```text
+POST /short-drama/projects/:id/episode-outlines
+```
+
+每集梗概包含：
+
+- 集数；
+- 标题；
+- 一句话看点；
+- 剧情梗概；
+- 本集主要角色；
+- 本集主要场景；
+- 结尾钩子；
+- 分镜生成状态。
+
+自定义集数建议第一版设置上限，例如 `50`。如果模型输出集数不完整，后端需要补齐或返回结构化错误。
+
+### 3. 生成全剧资产提示词与图片
+
+剧本大纲确认后进入资产库阶段。
+
+#### 3.1 生成资产提示词
+
+接口：
+
+```text
+POST /short-drama/projects/:id/asset-prompts
+```
+
+输入包括：
+
+- 剧本摘要；
+- 全部分集梗概；
+- 风格；
+- 比例；
+- 去重策略。
+
+输出全剧资产：
+
+- `character`：核心角色；
+- `scene`：常驻场景；
+- `prop`：关键道具；
+- `material`：可复用素材。
+
+规则：优先生成全剧稳定资产，去重同名/近义角色；同一角色不同阶段默认只生成一个主形象，差异通过片段 prompt 表达。
+
+#### 3.2 生成资产图片
+
+接口：
+
+```text
+POST /short-drama/projects/:id/assets/generate
+```
+
+支持批量生成、单个生成、失败重试、上传替换。
+
+```text
+前端选择资产
+→ 后端余额预检查
+→ 提交到现有图片生成链路
+→ 获得 batchId
+→ 写入资产 status/batchId
+→ 前端轮询或 sync-batches
+→ 任务完成后写入 imageUrl/assetId
+```
+
+资产沉淀到现有资产库/历史，并添加来源字段：
+
+- `source_module = 'toby_studio'`
+- `source_feature = 'short_drama'`
+- `source_project_id`
+- `source_episode_id` 可为空
+
+其他模块默认不返回这些 Toby Studio 短剧产物。
+
+### 4. 单集详细分镜/片段生成
+
+进入分集视频阶段后，每集初始只有梗概。用户进入单集编辑页后，可点击 `生成本集分镜`。
+
+接口：
+
+```text
+POST /short-drama/projects/:id/episodes/:episodeId/segments
+```
+
+输入包括：
+
+- 全剧摘要；
+- 当前集梗概；
+- 全剧资产；
+- 当前集补充资产；
+- 风格；
+- 比例；
+- 视频模型能力；
+- 默认时长档位。
+
+输出 `ShortDramaSegment[]`，每个片段包含：
+
+- 片段标题；
+- 画面提示词；
+- 推荐引用资产；
+- 默认时长；
+- 镜头说明；
+- 动作/情绪；
+- 可选对白或字幕提示。
+
+每集约 1 分钟，分镜数量由视频模型时长能力推导。例如默认 4 秒约 15 个片段，默认 5 秒约 12 个片段。用户可以新增、删除、复制、拖拽排序片段。
+
+每个片段默认有一个不可删除的时长标签，只能在当前模型支持档位中选择。
+
+### 5. 片段视频生成
+
+接口：
+
+```text
+POST /short-drama/projects/:id/episodes/:episodeId/segments/:segmentId/generate-video
+```
+
+流程：
+
+```text
+校验片段 prompt / 时长 / 引用资产
+→ 获取 mentionRefs 对应图片 URL
+→ 余额预检查
+→ 调用现有视频生成服务/队列
+→ 写入 batchId/status
+→ 任务完成后同步 videoUrl/assetId
+```
+
+复用现有视频生成链路，但短剧需要包装业务参数：
+
+```ts
+{
+  prompt: string
+  imageReferences: string[]
+  aspectRatio: '9:16' | '16:9'
+  durationSeconds: number
+  model: string
+  sourceModule: 'toby_studio'
+  sourceFeature: 'short_drama'
+  sourceProjectId: string
+  sourceEpisodeId: string
+  sourceSegmentId: string
+}
+```
+
+片段视频也进入资产库/历史，但仅在 Toby Studio 短剧范围返回。重新生成成功后，短剧项目默认指向最新视频结果。
+
+### 6. 任务同步
+
+参考 AI 绘本的 `post-sync-batches`，短剧也需要同步接口：
+
+```text
+POST /short-drama/projects/:id/sync-batches
+```
+
+同步对象包括：
+
+- 全剧资产图片 batch；
+- 单集补充资产图片 batch；
+- 片段视频 batch；
+- 可选导出 job 状态。
+
+前端策略：
+
+- 制作页和单集编辑页检测到 `pending` / `processing` 时，每 `10s` 同步一次；
+- 单个生成动作返回后立即刷新；
+- 页面失焦时降低轮询频率或停止；
+- 失败状态显示具体错误和重试按钮。
+
+### 7. 单集合成导出
+
+接口：
+
+```text
+POST /short-drama/projects/:id/episodes/:episodeId/export
+```
+
+前置校验：
+
+- 该集至少有一个片段；
+- 所有参与导出的片段都有 `videoUrl`；
+- 片段顺序合法；
+- 余额满足后台配置的固定导出费用；
+- 项目资产阶段已确认；
+- 当前不在导出中。
+
+流程：
+
+```text
+后端读取后台配置费用
+→ 余额预检查
+→ 创建导出记录
+→ 提交 worker job: short-drama-export-episode
+→ 写入 state.exports.episodeExports
+→ worker 合成 MP4
+→ 上传对象存储
+→ 写回 outputUrl/assetId/status
+→ 实际扣费或确认扣费
+```
+
+导出费用不写死在前端，读取后台配置，类似音色克隆功能。每导出 1 集收取固定 A豆，批量导出按集数累计。
+
+Worker 合成逻辑：
+
+```text
+下载片段视频
+→ 校验编码/分辨率/帧率
+→ 必要时转码统一参数
+→ ffmpeg concat 合并
+→ 输出 MP4
+→ 上传 S3/MinIO
+→ 创建 Toby Studio 短剧资产记录
+→ 更新项目 state
+```
+
+### 8. 批量导出
+
+接口：
+
+```text
+POST /short-drama/projects/:id/export-batch
+```
+
+输入：
+
+```ts
+{
+  episodeIds: string[]
+}
+```
+
+流程：
+
+```text
+筛选可导出的集
+→ 计算总费用
+→ 余额预检查
+→ 为每集创建导出任务
+→ 返回批量导出状态
+```
+
+第一版不做 ZIP 打包。批量导出只是批量触发单集合成，完成后在分集 card 上逐集下载，并在顶部展示批量进度。
+
+### 9. 计费策略
+
+#### 9.1 预估
+
+前端所有生成/导出按钮附近展示预估：
+
+- 剧本摘要：预计输出字符；
+- 分集梗概：按集数估算字符；
+- 资产图片：按资产数量 × 模型单价；
+- 片段视频：按模型、时长、比例、数量；
+- 导出：按后台配置固定费用 × 集数。
+
+预估可以由各生成接口返回，也可以后续抽成独立接口：
+
+```text
+POST /short-drama/projects/:id/estimate
+```
+
+#### 9.2 实际结算
+
+- 文本：按实际输出字符；
+- 图片：按任务实际消耗；
+- 视频：复用现有视频生成扣费；
+- 导出：按后台配置固定费用。
+
+#### 9.3 余额不足
+
+每个生成前检查余额。余额不足时不提交任务，并提示用户充值或减少生成范围。
+
+批量任务第一版建议采用：**全部余额足够才开始**，避免用户困惑。
+
+### 10. 失败与重试
+
+失败粒度：
+
+- 剧本摘要失败：可重试；
+- 分集梗概失败：可重试；
+- 资产提示词失败：可重试；
+- 单个资产图失败：可单独重试；
+- 单集分镜失败：可重试；
+- 单个片段视频失败：可单独重试；
+- 单集导出失败：可重试；
+- 批量导出部分失败：失败集可单独重试。
+
+所有失败都写入：
+
+```ts
+{
+  status: 'failed',
+  error: string
+}
+```
+
+前端需要展示错误提示和重试按钮，不吞掉失败原因，也不因为部分失败阻塞其他集继续制作。
+
 ## 音乐生成流程
 
 音乐功能由 `apps/web` 发起，`apps/api` 创建任务并冻结积分，`apps/worker` 调用 Mureka 生成歌曲/纯音乐，最后通过 SSE 推送状态给前端。

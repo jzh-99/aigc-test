@@ -693,6 +693,8 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
         <TextInputPanel
           setTextDraft={setTextDraft}
           commitTextDraft={commitTextDraft}
+          onGeneratingChange={(generating) => setNodeStatus(node.id, generating ? 'processing' : 'completed')}
+          onProgressChange={(progress) => setNodeStatus(node.id, progress >= 100 ? 'completed' : 'processing', { progress })}
         />
       )}
 

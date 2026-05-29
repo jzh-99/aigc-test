@@ -24,6 +24,7 @@ interface VideoParamsProps {
   isGenerating: boolean
   isUploading: boolean
   disabled?: boolean
+  promptEmpty?: boolean
   onModelChange: (v: string) => void
   onAspectRatioChange: (v: string) => void
   onResolutionChange: (v: string) => void
@@ -43,7 +44,7 @@ const toggleBtnCls = (active: boolean, disabled: boolean) => cn(
 export function VideoParams({
   models, videoMode, videoModel, videoAspectRatio, videoResolution, videoDuration,
   referenceVideoDurations, videoGenerateAudio, videoCameraFixed, isSeedance,
-  isGenerating, isUploading, disabled,
+  isGenerating, isUploading, disabled, promptEmpty,
   onModelChange, onAspectRatioChange, onResolutionChange, onDurationChange,
   onGenerateAudioChange, onCameraFixedChange,
   onGenerate, onSaveDefaults,
@@ -236,7 +237,7 @@ export function VideoParams({
           <Coins className="h-4 w-4 text-amber-500" />
           <span>{estimatedCredits} 积分</span>
         </div>
-        <Button variant="gradient" size="lg" className="gap-2 px-8" onClick={onGenerate} disabled={isDisabled}>
+        <Button variant="gradient" size="lg" className="gap-2 px-8" onClick={onGenerate} disabled={isDisabled || promptEmpty}>
           {isUploading ? <><Loader2 className="h-4 w-4 animate-spin" />上传中...</>
             : isGenerating ? <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>
             : <><Sparkles className="h-4 w-4" />生成</>}

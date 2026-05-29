@@ -1,0 +1,77 @@
+<h2>AI 短剧：页面结构线框图</h2>
+<p class="subtitle">展示首页、三阶段制作页、单集编辑页的整体信息架构。请重点看流程是否顺、空间分配是否符合预期。</p>
+
+<div class="section">
+  <h3>1. 首页：创意输入 + 参数选择 + 我的作品</h3>
+  <div class="mockup">
+    <div class="mockup-header">/toby-studio/short-drama</div>
+    <div class="mockup-body">
+      <div class="placeholder" style="height:54px;">Toby AI短剧 · 让一句创意变成连续短剧</div>
+      <div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin-top:12px;">
+        <div class="mock-input" style="height:88px;display:flex;align-items:flex-start;padding-top:12px;">输入短剧创意，例如：落魄千金回村创业，意外绑定 AI 管家...</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 140px;gap:10px;margin-top:12px;">
+          <button class="mock-button">风格库：真人都市</button>
+          <button class="mock-button">比例：9:16</button>
+          <button class="mock-button">集数：20集</button>
+          <button class="mock-button">立即生成</button>
+        </div>
+        <p class="subtitle" style="margin-top:10px;">文本模型计费说明：生成 1000 字符消耗 X A豆，实际按最终输出结算</p>
+      </div>
+      <div class="mock-nav" style="margin-top:16px;">我的短剧 · 最近项目卡片 4 个 · 查看全部</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. 制作页：三大阶段线性推进</h3>
+  <div class="mockup">
+    <div class="mockup-header">/toby-studio/short-drama/[id]</div>
+    <div class="mockup-body">
+      <div class="mock-nav">步骤条：① 剧本大纲 → ② 资产库 → ③ 分集视频</div>
+      <div style="display:grid;grid-template-columns:220px 1fr;gap:14px;margin-top:14px;">
+        <div class="mock-sidebar">
+          <div>项目概览</div><br>
+          <div>风格 / 比例 / 集数</div><br>
+          <div>费用预估</div><br>
+          <div>锁定状态</div>
+        </div>
+        <div class="mock-content">
+          当前阶段主内容区<br><br>
+          剧本大纲：原始创意 / 剧本摘要 / 全部分集梗概<br>
+          资产库：全剧资产 / 单集补充资产 / 批量生成<br>
+          分集视频：集卡片列表 / 预览 / 编辑 / 导出
+        </div>
+      </div>
+      <button class="mock-button" style="margin-top:14px;float:right;">确认当前阶段并进入下一步</button>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>3. 单集编辑页：资产预览 + 片段编排 + 实时预览</h3>
+  <div class="mockup">
+    <div class="mockup-header">/toby-studio/short-drama/[id]/episodes/[episodeId]</div>
+    <div class="mockup-body">
+      <div style="display:grid;grid-template-columns:260px 1fr 320px;gap:14px;min-height:360px;">
+        <div class="mock-sidebar">
+          左侧资源库<br><br>
+          Tabs：角色 / 场景 / 素材 / 道具<br><br>
+          全剧资产 + 本集补充资产<br><br>
+          上传：全剧可用 / 仅本集可用
+        </div>
+        <div class="mock-content">
+          中间片段列表<br><br>
+          [片段 1] 时长标签 4s · @角色 · @场景 · 提示词 · 生成按钮<br><br>
+          [片段 2] 时长标签 5s · 可拖拽排序 · 删除 / 复制 / 预览<br><br>
+          + 新增片段 / 自动生成本集分镜
+        </div>
+        <div class="mock-sidebar">
+          右侧整集预览<br><br>
+          连续播放多个片段<br><br>
+          导出单集 MP4<br><br>
+          展示导出费用与状态
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

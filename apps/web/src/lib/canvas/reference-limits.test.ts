@@ -13,7 +13,7 @@ describe('validateReferenceKindLimit', () => {
       existingCount: 0,
     })
 
-    assert.equal(result, '图生图最多允许 0 个音频参考素材')
+    assert.equal(result, '图生图不允许音频参考素材')
   })
 
   test('按首尾帧 category_references 禁止视频节点引用音频', () => {
@@ -24,7 +24,7 @@ describe('validateReferenceKindLimit', () => {
       existingCount: 0,
     })
 
-    assert.equal(result, '首尾帧最多允许 0 个音频参考素材')
+    assert.equal(result, '首尾帧不允许音频参考素材')
   })
 
   test('按 text_to_text category_references 禁止文本节点引用文本', () => {
@@ -35,6 +35,6 @@ describe('validateReferenceKindLimit', () => {
       existingCount: 0,
     })
 
-    assert.equal(result, '文本生成最多允许 0 个文本参考素材')
+    assert.equal(result, '文本生成不允许文本参考素材')
   })
 })

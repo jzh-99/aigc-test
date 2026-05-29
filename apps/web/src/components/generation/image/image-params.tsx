@@ -17,6 +17,7 @@ interface ImageParamsProps {
   quantity: number
   isGenerating: boolean
   disabled?: boolean
+  promptEmpty?: boolean
   onModelChange: (v: string) => void
   onResolutionChange: (v: string) => void
   onAspectRatioChange: (v: string) => void
@@ -39,7 +40,7 @@ function AspectRatioIcon({ ratio, active }: { ratio: string; active: boolean }) 
 
 export function ImageParams({
   models, modelType, resolution, aspectRatio, quantity,
-  isGenerating, disabled,
+  isGenerating, disabled, promptEmpty,
   onModelChange, onResolutionChange, onAspectRatioChange, onQuantityChange,
   onGenerate, onSaveDefaults,
 }: ImageParamsProps) {
@@ -157,7 +158,7 @@ export function ImageParams({
           <Coins className="h-4 w-4 text-amber-500" />
           <span>{estimatedCredits} 积分</span>
         </div>
-        <Button variant="gradient" size="lg" className="gap-2 px-8" onClick={onGenerate} disabled={isGenerating || disabled}>
+        <Button variant="gradient" size="lg" className="gap-2 px-8" onClick={onGenerate} disabled={isGenerating || disabled || promptEmpty}>
           {isGenerating ? <><Loader2 className="h-4 w-4 animate-spin" />生成中...</> : <><Sparkles className="h-4 w-4" />生成</>}
         </Button>
       </div>

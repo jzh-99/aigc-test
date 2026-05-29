@@ -21,6 +21,7 @@ export function validateReferenceKindLimit(input: ValidateReferenceKindLimitInpu
 
   if (input.existingCount >= limit.max) {
     const label = REFERENCE_KIND_LABELS[input.referenceKind]
+    if (limit.max <= 0) return `${config.label}不允许${label}参考素材`
     return `${config.label}最多允许 ${limit.max} 个${label}参考素材`
   }
 

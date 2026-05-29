@@ -7,6 +7,17 @@ const route: FastifyPluginAsync = async (app) => {
   const API_KEY = process.env.QWEN_API_KEY ?? ''
   const MODEL = process.env.QWEN_MODEL ?? 'qwen3.6-plus'
   const SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_STORYBOARD_SPLIT ?? ''
+  const STORYBOARD_SEGMENT_DURATION_INSTRUCTION = '每个分镜约3-5秒，该时段内展示的分镜不宜过长'
+  const CHINESE_STORYBOARD_OUTPUT_INSTRUCTION = [
+    '语言要求：所有输出内容必须使用简体中文。',
+    '尤其是 compositionPrompt（构图提示词）和 cameraMotionPrompt（运镜提示词）必须是中文完整句子，不要输出英文短语、英文镜头术语或中英混写。',
+    '如需表达 shot type、camera movement、lighting、composition 等概念，请翻译为自然中文，例如“中景”“缓慢推进”“柔和侧光”“三分法构图”。',
+  ].join('\n')
+  const STORYBOARD_SYSTEM_PROMPT = [
+    SYSTEM_PROMPT,
+    CHINESE_STORYBOARD_OUTPUT_INSTRUCTION,
+    `分镜时长要求：${STORYBOARD_SEGMENT_DURATION_INSTRUCTION}。`,
+  ].filter(Boolean).join('\n\n')
 
   app.post<{
     Body: { script: string; shotCount: number }
@@ -30,13 +41,13 @@ const route: FastifyPluginAsync = async (app) => {
       const endpoint = '/chat/completions'
 
       const countInstruction = shotCount > 0
-        ? `分割成 ${shotCount} 个分镜`
-        : '根据剧本内容自动决定分镜数量（每个分镜约10秒）'
+        ? `分割成 ${shotCount} 个分镜，每个分镜约3-5秒`
+        : `根据剧本内容自动决定分镜数量，${STORYBOARD_SEGMENT_DURATION_INSTRUCTION}`
       const userPrompt = `请将以下剧本${countInstruction}：\n\n${script}`
       const requestPayload = {
         model: MODEL,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: STORYBOARD_SYSTEM_PROMPT },
           { role: 'user', content: userPrompt },
         ],
         stream: false,

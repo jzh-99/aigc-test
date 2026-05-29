@@ -29,6 +29,18 @@ test('sanitizeProviderApiPayload redacts secrets and summarizes binary-like fiel
   })
 })
 
+test('sanitizeProviderApiPayload keeps model max token parameter fields', () => {
+  const sanitized = sanitizeProviderApiPayload({
+    max_tokens: 16000,
+    token: 'secret',
+  })
+
+  assert.deepEqual(sanitized, {
+    max_tokens: 16000,
+    token: '[REDACTED]',
+  })
+})
+
 test('truncateProviderApiPayload marks oversized payloads', () => {
   const result = truncateProviderApiPayload({ text: 'x'.repeat(200) }, 80)
 

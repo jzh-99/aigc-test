@@ -322,6 +322,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         isGenerating={isVideoGenerating}
         isUploading={isVideoUploading}
         disabled={disabled}
+        promptEmpty={!videoPrompt.trim()}
         onModelChange={setVideoModel}
         onAspectRatioChange={setVideoAspectRatio}
         onResolutionChange={setVideoResolution}
