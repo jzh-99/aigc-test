@@ -1,6 +1,9 @@
+// 6008 组部署配置：web:6008 / api:7002 / Redis db 2 / 数据库 aigc_dev
+// 启动前：cp deploy/6008/.env .env && pnpm --filter @aigc/web build
+// 启动：pm2 start ecosystem.6008.config.cjs
 const path = require('path')
 const ROOT = __dirname
-const LOGS = path.join(ROOT, 'logs')
+const LOGS = path.join(ROOT, 'logs/6008')
 
 const script = (name) => {
   const local = path.join(ROOT, `${name}.sh`)
