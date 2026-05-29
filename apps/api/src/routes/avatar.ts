@@ -26,7 +26,7 @@ const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|mp3|wav|m4a|aac)$/
 
 const OMNI_REQ_KEY = 'jimeng_realman_avatar_picture_omni_v15'
 const OMNI_API_VERSION = '2022-08-31'
-const CREDITS_PER_SECOND = 50
+const CREDITS_PER_SECOND = 10
 
 export async function avatarRoutes(app: FastifyInstance): Promise<void> {
   await mkdir(UPLOAD_DIR, { recursive: true })

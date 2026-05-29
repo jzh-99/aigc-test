@@ -21,7 +21,7 @@ const SAFE_ID = /^[\w-]+\.(mp4|mov|webm)$/
 
 const ACTION_REQ_KEY = 'jimeng_dreamactor_m20_gen_video'
 const ACTION_API_VERSION = '2022-08-31'
-const CREDITS_PER_SECOND = 20
+const CREDITS_PER_SECOND = 4
 
 export async function actionImitationRoutes(app: FastifyInstance): Promise<void> {
   await mkdir(UPLOAD_DIR, { recursive: true })

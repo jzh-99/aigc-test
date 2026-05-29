@@ -290,7 +290,11 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Calculate credits: seedance uses per-second pricing, others use flat rate
-    const CREDITS_PER_SECOND = VIDEO_CREDITS_MAP[model] ?? 5
+    // For seedance, look up by model+resolution key, fall back to model key (720p default)
+    const creditModelKey = isSeedance && resolution
+      ? (`${model}-${resolution}` in VIDEO_CREDITS_MAP ? `${model}-${resolution}` : model)
+      : model
+    const CREDITS_PER_SECOND = VIDEO_CREDITS_MAP[creditModelKey] ?? 5
     const videoDuration = isSeedance ? (duration ?? 5) : undefined
     const VIDEO_CREDITS = isSeedance
       ? (videoDuration === -1 ? 15 : videoDuration!) * CREDITS_PER_SECOND

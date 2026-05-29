@@ -13,9 +13,14 @@
  * 总费用 = 时长(秒) × VIDEO_PER_SECOND_CREDITS[model]
  */
 export const VIDEO_PER_SECOND_CREDITS: Record<string, number> = {
-  'seedance-1.5-pro':  5,
-  'seedance-2.0':      5,
-  'seedance-2.0-fast': 5,
+  'seedance-1.5-pro':        5,
+  'seedance-2.0-480p':       5,
+  'seedance-2.0':           10,   // 720p default
+  'seedance-2.0-720p':      10,
+  'seedance-2.0-1080p':     25,
+  'seedance-2.0-fast-480p':  4,
+  'seedance-2.0-fast':       8,   // 720p default
+  'seedance-2.0-fast-720p':  8,
 }
 
 /**

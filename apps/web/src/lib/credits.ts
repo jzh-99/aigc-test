@@ -9,15 +9,16 @@
 
 // ─── 图片模型积分（每张）───────────────────────────────────────────────────
 export const IMAGE_MODEL_CREDITS: Record<
-  'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0',
+  'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'nano-banana-2' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0',
   number
 > = {
-  'gemini':            5,
-  'gpt-image-2':       5,
-  'nano-banana-pro':  10,
-  'seedream-5.0-lite': 10,
-  'seedream-4.5':     10,
-  'seedream-4.0':     10,
+  'gemini':            1,
+  'gpt-image-2':       1,
+  'nano-banana-2':     2,
+  'nano-banana-pro':   3,
+  'seedream-5.0-lite': 3,
+  'seedream-4.5':      3,
+  'seedream-4.0':      3,
 }
 
 // ─── 视频模型积分 ──────────────────────────────────────────────────────────
@@ -26,9 +27,14 @@ export const IMAGE_MODEL_CREDITS: Record<
  * 总费用 = 时长(秒) × PER_SECOND_CREDITS[model]
  */
 export const VIDEO_PER_SECOND_CREDITS: Record<string, number> = {
-  'seedance-1.5-pro':  5,
-  'seedance-2.0':      5,
-  'seedance-2.0-fast': 5,
+  'seedance-1.5-pro':       5,
+  'seedance-2.0-480p':      5,
+  'seedance-2.0':          10,   // 720p default
+  'seedance-2.0-720p':     10,
+  'seedance-2.0-1080p':    25,
+  'seedance-2.0-fast-480p': 4,
+  'seedance-2.0-fast':      8,   // 720p default
+  'seedance-2.0-fast-720p': 8,
 }
 
 /**
