@@ -123,7 +123,11 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
               provider: providerModel.providerCode,
               model: modelCode,
               prompt: targetAssets.map(a => a.description).join(' | '),
-              params: JSON.stringify({ scope, source: 'short_drama' }),
+              params: JSON.stringify({
+                scope,
+                source: 'short_drama',
+                assetIdMap: targetAssets.map((a, i) => ({ versionIndex: i, assetId: a.id })),
+              }),
               quantity: targetAssets.length,
               status: 'pending',
               estimated_credits: totalCost,

@@ -84,13 +84,24 @@ async function syncImageBatch(
     .where('batch_id', '=', batch.id)
     .execute()
 
+  // 从 batch.params 中读取 assetIdMap 映射
+  let assetIdMap: Array<{ versionIndex: number; assetId: string }> = []
+  try {
+    const params = typeof batch.params === 'string' ? JSON.parse(batch.params) : batch.params
+    if (Array.isArray(params?.assetIdMap)) {
+      assetIdMap = params.assetIdMap
+    }
+  } catch { /* ignore parse errors */ }
+
   for (const task of tasks) {
-    // 通过 task.version_index 匹配 asset
-    // batch 创建时 assetIds 顺序对应 version_index
-    const assets = state.assets.items
+    // 通过 assetIdMap 精确匹配 assetId
+    const mapping = assetIdMap.find(m => m.versionIndex === task.version_index)
+    if (!mapping) continue
+
+    const targetAsset = state.assets.items.find((a: any) => a.id === mapping.assetId)
+    if (!targetAsset || (targetAsset.status !== 'pending' && targetAsset.status !== 'generating')) continue
 
     if (task.status === 'completed') {
-      // 查找对应的 asset 产出
       const assetRecord = await db
         .selectFrom('assets')
         .select(['storage_url', 'original_url'])
@@ -98,21 +109,13 @@ async function syncImageBatch(
         .executeTakeFirst()
 
       if (assetRecord) {
-        const imageUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
-        // 根据 version_index 更新对应 asset
-        const targetAsset = assets[task.version_index]
-        if (targetAsset && targetAsset.status === 'pending') {
-          targetAsset.imageUrl = imageUrl
-          targetAsset.status = 'completed'
-          targetAsset.updatedAt = new Date().toISOString()
-        }
-      }
-    } else if (task.status === 'failed') {
-      const targetAsset = assets[task.version_index]
-      if (targetAsset && targetAsset.status === 'pending') {
-        targetAsset.status = 'failed'
+        targetAsset.imageUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
+        targetAsset.status = 'completed'
         targetAsset.updatedAt = new Date().toISOString()
       }
+    } else if (task.status === 'failed') {
+      targetAsset.status = 'failed'
+      targetAsset.updatedAt = new Date().toISOString()
     }
   }
 }
@@ -135,6 +138,9 @@ async function syncVideoBatch(
 
   const segment = episode.segments.find((s: any) => s.id === segmentId)
   if (!segment) return
+
+  // 已完成/失败的 segment 不重复覆盖
+  if (segment.status === 'completed' || segment.status === 'failed') return
 
   const tasks = await db
     .selectFrom('tasks')
