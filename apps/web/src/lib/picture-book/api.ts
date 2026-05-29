@@ -1,7 +1,9 @@
 import { fetchWithAuth } from '@/lib/api-client'
+import { useAuthStore } from '@/stores/auth-store'
 import type {
   PictureBookCharge,
   PictureBookChargeSummary,
+  PictureBookAspectRatio,
   PictureBookPageCount,
   PictureBookProject,
   PictureBookProjectListItem,
@@ -11,6 +13,7 @@ import type {
 } from './types'
 
 const BASE = '/picture-book'
+const API_BASE = '/api/v1'
 
 function jsonInit(method: string, body?: unknown): RequestInit {
   return {
@@ -18,6 +21,50 @@ function jsonInit(method: string, body?: unknown): RequestInit {
     headers: { 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }
+}
+
+async function consumeSSEStream<T>(res: Response, onChunk?: (text: string) => void): Promise<T> {
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let result: T | null = null
+  let currentEvent = ''
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent = line.slice(7).trim()
+        continue
+      }
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice(6).trim()
+      if (!data) continue
+
+      try {
+        const json = JSON.parse(data)
+        if (currentEvent === 'chunk' && onChunk) {
+          onChunk(json.text)
+        } else if (currentEvent === 'done') {
+          result = json as T
+        } else if (currentEvent === 'error') {
+          throw new Error(json.message ?? '操作失败')
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message !== 'Unexpected end of JSON input') throw err
+      }
+      currentEvent = ''
+    }
+  }
+
+  if (!result) throw new Error('未收到完成事件')
+  return result
 }
 
 export function listPictureBookProjects(workspaceId: string, limit = 30) {
@@ -38,17 +85,49 @@ export function getPictureBookCharges(projectId: string) {
   return fetchWithAuth<{ charges: PictureBookCharge[]; summary: PictureBookChargeSummary }>(`${BASE}/projects/${projectId}/charges`)
 }
 
-export function generatePictureBookScript(input: {
+export interface GenerateScriptStreamOptions {
   workspace_id: string
   prompt: string
   style: PictureBookStyle
   page_count: PictureBookPageCount
+  aspect_ratio: PictureBookAspectRatio
   title?: string
-}) {
-  return fetchWithAuth<{ success: boolean; projectId: string; title: string; state: PictureBookState }>(
-    `${BASE}/script`,
-    jsonInit('POST', input),
-  )
+  onChunk?: (text: string) => void
+}
+
+export interface GenerateScriptResult {
+  success: boolean
+  projectId: string
+  title: string
+  state: PictureBookState
+}
+
+export async function generatePictureBookScript(input: GenerateScriptStreamOptions): Promise<GenerateScriptResult> {
+  const token = useAuthStore.getState().accessToken
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${BASE}/script`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({
+      workspace_id: input.workspace_id,
+      prompt: input.prompt,
+      style: input.style,
+      page_count: input.page_count,
+      aspect_ratio: input.aspect_ratio,
+      title: input.title,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const msg = (err as any)?.error?.message ?? '生成剧本失败'
+    throw new Error(msg)
+  }
+
+  return consumeSSEStream<GenerateScriptResult>(res, input.onChunk)
 }
 
 export function savePictureBookProject(projectId: string, input: {
@@ -82,18 +161,46 @@ export function deletePictureBookProject(projectId: string) {
   return fetchWithAuth<{ success: boolean }>(`${BASE}/projects/${projectId}`, { method: 'DELETE' })
 }
 
-export function generatePictureBookAssetPrompts(projectId: string) {
-  return fetchWithAuth<{ success: boolean; state: PictureBookState }>(
-    `${BASE}/asset-prompts`,
-    jsonInit('POST', { project_id: projectId }),
-  )
+export async function generatePictureBookAssetPrompts(projectId: string, onChunk?: (text: string) => void): Promise<{ success: boolean; state: PictureBookState }> {
+  const token = useAuthStore.getState().accessToken
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${BASE}/asset-prompts`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({ project_id: projectId }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const msg = (err as any)?.error?.message ?? '生成素材提示词失败'
+    throw new Error(msg)
+  }
+
+  return consumeSSEStream<{ success: boolean; state: PictureBookState }>(res, onChunk)
 }
 
-export function generatePictureBookStoryboardPrompts(projectId: string) {
-  return fetchWithAuth<{ success: boolean; state: PictureBookState }>(
-    `${BASE}/storyboard-prompts`,
-    jsonInit('POST', { project_id: projectId }),
-  )
+export async function generatePictureBookStoryboardPrompts(projectId: string, onChunk?: (text: string) => void): Promise<{ success: boolean; state: PictureBookState }> {
+  const token = useAuthStore.getState().accessToken
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${BASE}/storyboard-prompts`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({ project_id: projectId }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const msg = (err as any)?.error?.message ?? '生成分镜提示词失败'
+    throw new Error(msg)
+  }
+
+  return consumeSSEStream<{ success: boolean; state: PictureBookState }>(res, onChunk)
 }
 
 export function generatePictureBookAssets(projectId: string, targets?: PictureBookTarget[], params?: Record<string, unknown>) {

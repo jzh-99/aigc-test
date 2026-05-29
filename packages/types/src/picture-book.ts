@@ -14,6 +14,7 @@ export const PICTURE_BOOK_STYLES = [
 ] as const
 
 export const PICTURE_BOOK_PAGE_COUNTS = [10, 15, 20] as const
+export const PICTURE_BOOK_ASPECT_RATIOS = ['16:9', '9:16', '1:1'] as const
 
 export const PICTURE_BOOK_TEXT_MODEL = 'qwen3.6-plus'
 export const PICTURE_BOOK_IMAGE_MODEL = 'seedream-5.0-lite'
@@ -21,6 +22,7 @@ export const PICTURE_BOOK_TTS_MODEL = 'speech-2.8-hd'
 
 export type PictureBookStyle = typeof PICTURE_BOOK_STYLES[number]
 export type PictureBookPageCount = typeof PICTURE_BOOK_PAGE_COUNTS[number]
+export type PictureBookAspectRatio = typeof PICTURE_BOOK_ASPECT_RATIOS[number]
 export type PictureBookStepId = 'script' | 'assets' | 'storyboard' | 'preview'
 export type PictureBookProjectStatus = 'draft' | 'script_ready' | 'assets_ready' | 'storyboard_ready' | 'completed' | 'failed'
 export type PictureBookGenerationStatus = 'idle' | 'pending' | 'processing' | 'completed' | 'failed'
@@ -44,6 +46,7 @@ export interface PictureBookElement {
   name: string
   prompt: string
   imageUrl?: string | null
+  status?: PictureBookGenerationStatus
 }
 
 export interface PictureBookStoryboardPage {
@@ -63,6 +66,10 @@ export interface PictureBookState {
     active: PictureBookStepId
     completed: PictureBookStepId[]
   }
+  locks?: {
+    script?: boolean
+    assets?: boolean
+  }
   script: {
     summaryZh: string
     pages: PictureBookPageScript[]
@@ -75,6 +82,7 @@ export interface PictureBookState {
   settings: {
     style: PictureBookStyle
     pageCount: PictureBookPageCount
+    aspectRatio: PictureBookAspectRatio
     textModel: typeof PICTURE_BOOK_TEXT_MODEL
     imageModel: typeof PICTURE_BOOK_IMAGE_MODEL
     ttsModel: typeof PICTURE_BOOK_TTS_MODEL
@@ -91,6 +99,7 @@ export interface PictureBookState {
 
 const DEFAULT_PICTURE_BOOK_STYLE: PictureBookStyle = '吉卜力风'
 const DEFAULT_PICTURE_BOOK_PAGE_COUNT: PictureBookPageCount = 10
+const DEFAULT_PICTURE_BOOK_ASPECT_RATIO: PictureBookAspectRatio = '16:9'
 const PICTURE_BOOK_STEP_IDS: PictureBookStepId[] = ['script', 'assets', 'storyboard', 'preview']
 
 export function isPictureBookStyle(value: unknown): value is PictureBookStyle {
@@ -99,6 +108,10 @@ export function isPictureBookStyle(value: unknown): value is PictureBookStyle {
 
 export function isPictureBookPageCount(value: unknown): value is PictureBookPageCount {
   return typeof value === 'number' && PICTURE_BOOK_PAGE_COUNTS.includes(value as PictureBookPageCount)
+}
+
+export function isPictureBookAspectRatio(value: unknown): value is PictureBookAspectRatio {
+  return typeof value === 'string' && PICTURE_BOOK_ASPECT_RATIOS.includes(value as PictureBookAspectRatio)
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -120,6 +133,7 @@ function normalizeSettings(value: unknown): PictureBookState['settings'] {
   return {
     style: isPictureBookStyle(settings.style) ? settings.style : DEFAULT_PICTURE_BOOK_STYLE,
     pageCount: isPictureBookPageCount(settings.pageCount) ? settings.pageCount : DEFAULT_PICTURE_BOOK_PAGE_COUNT,
+    aspectRatio: isPictureBookAspectRatio(settings.aspectRatio) ? settings.aspectRatio : DEFAULT_PICTURE_BOOK_ASPECT_RATIO,
     textModel: PICTURE_BOOK_TEXT_MODEL,
     imageModel: PICTURE_BOOK_IMAGE_MODEL,
     ttsModel: PICTURE_BOOK_TTS_MODEL,
@@ -136,6 +150,10 @@ export function makeDefaultPictureBookState(input: unknown = {}): PictureBookSta
     steps: {
       active: 'script',
       completed: [],
+    },
+    locks: {
+      script: false,
+      assets: false,
     },
     script: {
       summaryZh: '',
@@ -157,6 +175,7 @@ export function normalizePictureBookState(input: unknown = {}): PictureBookState
   const value = isPlainObject(input) ? input : {}
   const fallback = makeDefaultPictureBookState(value.settings)
   const steps = isPlainObject(value.steps) ? value.steps : {}
+  const locks = isPlainObject(value.locks) ? value.locks : {}
   const script = isPlainObject(value.script) ? value.script : {}
   const assets = isPlainObject(value.assets) ? value.assets : {}
   const draft = isPlainObject(value.draft) ? value.draft : {}
@@ -165,6 +184,10 @@ export function normalizePictureBookState(input: unknown = {}): PictureBookState
     steps: {
       active: isPictureBookStepId(steps.active) ? steps.active : fallback.steps.active,
       completed: normalizeStepIds(steps.completed),
+    },
+    locks: {
+      script: typeof locks.script === 'boolean' ? locks.script : fallback.locks?.script,
+      assets: typeof locks.assets === 'boolean' ? locks.assets : fallback.locks?.assets,
     },
     script: {
       summaryZh: typeof script.summaryZh === 'string' ? script.summaryZh : fallback.script.summaryZh,

@@ -164,3 +164,12 @@
 - 调整范围：音乐生成、音乐音色克隆、图片生成、视频生成、数字人、动作模仿、任务提交失败、积分冻结/确认/退回、团队初始 A 豆和管理员充值/扣减的流水描述。
 - 数据迁移：新增 `049_credits_ledger_chinese_descriptions`，将历史英文流水描述迁移为中文，down 可反向恢复。
 - 验证：`@aigc/db build`、`@aigc/api build`、`@aigc/worker build` 均通过。
+
+### 2026-05-28 绘本分镜卡片重新设计
+- 决策：按 `docs/superpowers/specs/2026-05-28-storyboard-card-redesign.md` 执行，视觉参考 `.superpowers/brainstorm/3840-1779954183/content/storyboard-final.html`；语气词/停顿只作为后续版本参考，本次不实现。
+- 后端：`post-storyboard-prompts.ts` 增加 @ 引用规则和角色/背景可引用清单；`post-generate-storyboard-images.ts` 新增 `extractStoryboardMentionLabels` 与 `findStoryboardReferenceImages`，命中角色/背景后把图片 URL 放入图片生成 `params.image`。
+- 前端：新增 `storyboard-mention-editor.tsx`，使用 contentEditable + pill token 保存纯文本 @ 标记；新增 `storyboard-audio-player.tsx`，用原生 `<audio>` 包装播放/暂停、进度和时长。
+- UI：`step-storyboard.tsx` 从三列卡片改为横向单列卡片，左侧为图片、双语音频和重生成按钮，右侧为画面提示词与中英文旁白 Textarea。
+- 门控：单页重新生成图片时本地清空 `imageUrl` 并设 `status: pending`，重新生成语音时清空 `voice.zh/en`，确保进度和「下一步」立即反映生成中状态。
+- 验证：`pnpm --filter @aigc/api exec tsx --test src/__tests__/picture-book-generation.test.ts src/__tests__/picture-book-media.test.ts` 通过；`pnpm --filter @aigc/web build` 在清理并重装 pnpm 依赖后通过；`pnpm lint` 通过但 turbo 未执行任何 lint task。
+- 浏览器验证限制：Browser 工具不可调用，Playwright 兜底时 6006 已被占用；6007 的 Next dev/start 被本地 Next 包缺失 `next/dist/pages/_app` / `next/dist/bin/next` 阻塞，未完成真实页面截图验证。

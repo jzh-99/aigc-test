@@ -159,6 +159,7 @@ const route: FastifyPluginAsync = async (app) => {
               workspace_id: workspaceId,
               credit_account_id: creditAccountId,
               idempotency_key: randomUUID(),
+              source: 'studio',
               module: 'music_voice_clone',
               provider: credits.providerCode,
               model: 'voice_clone',

@@ -14,9 +14,11 @@ export const PICTURE_BOOK_STYLES = [
 ] as const
 
 export const PICTURE_BOOK_PAGE_COUNTS = [10, 15, 20] as const
+export const PICTURE_BOOK_ASPECT_RATIOS = ['16:9', '9:16', '1:1'] as const
 
 export type PictureBookStyle = typeof PICTURE_BOOK_STYLES[number]
 export type PictureBookPageCount = typeof PICTURE_BOOK_PAGE_COUNTS[number]
+export type PictureBookAspectRatio = typeof PICTURE_BOOK_ASPECT_RATIOS[number]
 export type PictureBookStepId = 'script' | 'assets' | 'storyboard' | 'preview'
 export type PictureBookProjectStatus = 'draft' | 'script_ready' | 'assets_ready' | 'storyboard_ready' | 'completed' | 'failed'
 export type PictureBookGenerationStatus = 'idle' | 'pending' | 'processing' | 'completed' | 'failed'
@@ -39,6 +41,7 @@ export interface PictureBookElement {
   name: string
   prompt: string
   imageUrl?: string | null
+  status?: PictureBookGenerationStatus
 }
 
 export interface PictureBookStoryboardPage {
@@ -58,6 +61,10 @@ export interface PictureBookState {
     active: PictureBookStepId
     completed: PictureBookStepId[]
   }
+  locks?: {
+    script?: boolean
+    assets?: boolean
+  }
   script: {
     summaryZh: string
     pages: PictureBookPageScript[]
@@ -70,6 +77,7 @@ export interface PictureBookState {
   settings: {
     style: PictureBookStyle
     pageCount: PictureBookPageCount
+    aspectRatio: PictureBookAspectRatio
     textModel: 'qwen3.6-plus'
     imageModel: 'seedream-5.0-lite'
     ttsModel: 'speech-2.8-hd'

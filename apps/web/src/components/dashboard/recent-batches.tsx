@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react'
 const TERMINAL_STATUSES = ['completed', 'failed', 'partial_complete']
 
 export function RecentBatches() {
-  const { batches, isLoadingInitial, updateBatchInList } = useBatches()
+  const { batches, isLoadingInitial, updateBatchInList } = useBatches('generation')
   
   const activeBatchIds = batches
     .filter(b => !TERMINAL_STATUSES.includes(b.status))

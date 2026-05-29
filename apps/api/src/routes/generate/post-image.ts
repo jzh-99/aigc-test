@@ -485,6 +485,7 @@ const route: FastifyPluginAsync = async (app) => {
             workspace_id: workspaceId,
             credit_account_id: creditAccountId,
             idempotency_key,
+            source: 'generation',
             module: 'image',
             provider: providerModel.providerCode,
             model,

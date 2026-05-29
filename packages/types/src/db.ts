@@ -1,4 +1,5 @@
-export type ModuleType = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation' | 'music' | 'music_voice_clone'
+export type BatchSource = 'generation' | 'studio' | 'canvas'
+export type ModuleType = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation' | 'storyboard' | 'upload' | 'music' | 'music_voice_clone' | 'picture_book' | 'short_drama'
 export type VideoCategory = 'multimodal' | 'frames'
 export type ImageCategory = 'text_to_image' | 'image_to_image'
 export type TextCategory = 'text_to_text'

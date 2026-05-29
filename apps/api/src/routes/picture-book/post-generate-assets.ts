@@ -3,15 +3,16 @@ import { getDb } from '@aigc/db'
 import { type PictureBookState } from '@aigc/types'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'kysely'
-import { assertPictureBookProjectAccess, PICTURE_BOOK_MODELS } from './_shared.js'
+import { assertPictureBookProjectAccess, jsonbArray, PICTURE_BOOK_MODELS } from './_shared.js'
 
 type AssetTargetKind = 'character' | 'background'
 type RequestedTarget = { kind: AssetTargetKind; ref_id: string }
 type ResolvedTarget = { kind: AssetTargetKind; refId: string; name: string; prompt: string }
 
-export function makePictureBookImageParams(projectId: string, refId: string, style: string): Record<string, unknown> {
+export function makePictureBookImageParams(projectId: string, refId: string, style: string, aspectRatio = '16:9'): Record<string, unknown> {
   return {
     resolution: '2K',
+    aspect_ratio: aspectRatio,
     watermark: false,
     style,
     seed: stableSeed(`${projectId}:${refId}`),
@@ -37,7 +38,10 @@ async function injectJson(app: FastifyInstance, request: FastifyRequest, url: st
     payload: payload as any,
   })
   const body = response.json() as any
-  if (response.statusCode >= 400) throw new Error(body?.error?.message ?? `request failed: ${response.statusCode}`)
+  if (response.statusCode >= 400) {
+    app.log.error({ url, statusCode: response.statusCode, body }, 'injectJson failed')
+    throw new Error(body?.error?.message ?? `request failed: ${response.statusCode}`)
+  }
   return body
 }
 
@@ -96,7 +100,7 @@ async function recordImageBatch(input: {
         estimated_credits: estimatedCredits,
         actual_credits: null,
         status: 'processing',
-        batch_ids: [input.batch.id],
+        batch_ids: jsonbArray([input.batch.id]),
         metadata: JSON.stringify({ operation: 'asset_image', kind: input.target.kind, ref_id: input.target.refId }),
       })
       .execute()
@@ -139,14 +143,14 @@ const route: FastifyPluginAsync = async (app) => {
       const failures: Array<{ ref_id: string; message: string }> = []
       for (const target of targets) {
         try {
-          const batch = await injectJson(app, request, '/generate/image', {
+          const batch = await injectJson(app, request, '/api/v1/generate/image', {
             idempotency_key: `picture_book_${request.body.project_id}_${target.kind}_${target.refId}_${randomUUID()}`,
             model: PICTURE_BOOK_MODELS.image,
             prompt: target.prompt,
             quantity: 1,
             workspace_id: access.workspaceId,
             params: {
-              ...makePictureBookImageParams(request.body.project_id, target.refId, access.style),
+              ...makePictureBookImageParams(request.body.project_id, target.refId, access.style, access.state.settings.aspectRatio ?? '16:9'),
               ...(request.body.params ?? {}),
             },
           })

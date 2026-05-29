@@ -66,8 +66,8 @@ export default function ImagePage() {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [rightTab, setRightTab] = useState<'history' | 'assets'>('history')
-  const { batches: hiddenBatches } = useHiddenBatches(true)
-  const { batches } = useBatches()
+  const { batches: hiddenBatches } = useHiddenBatches(true, 'generation')
+  const { batches } = useBatches('generation')
   const hasHidden = hiddenBatches.length > 0
 
   const user = useAuthStore((s) => s.user)

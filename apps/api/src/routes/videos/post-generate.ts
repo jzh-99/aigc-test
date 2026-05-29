@@ -226,6 +226,7 @@ const route: FastifyPluginAsync = async (app) => {
             workspace_id: workspaceId,
             credit_account_id: creditAccountId,
             idempotency_key: `${userId}-${Date.now()}`,
+            source: 'generation',
             module: 'video',
             provider: providerModel.providerCode,
             model,

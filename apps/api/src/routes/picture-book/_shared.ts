@@ -14,6 +14,10 @@ export const PICTURE_BOOK_MODELS = {
   tts: PICTURE_BOOK_TTS_MODEL,
 } as const
 
+export function jsonbArray<T>(items: T[]): string {
+  return JSON.stringify(items)
+}
+
 export function parsePictureBookJson(raw: string): any {
   const candidates = [
     ...Array.from(raw.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi), match => match[1]),
@@ -59,6 +63,152 @@ export function calculateProjectChargeTotal(
 
     return total
   }, { estimatedCredits: 0, actualCredits: 0 })
+}
+
+export interface PictureBookStreamCallbacks {
+  onChunk: (text: string) => void
+  onThinking: () => void
+  onDone: (fullText: string) => void
+  onError: (error: Error) => void
+}
+
+export async function callPictureBookQwenStream(
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens: number,
+  auditContext: Partial<LlmProviderAuditContext>,
+  callbacks: PictureBookStreamCallbacks,
+): Promise<string> {
+  const apiUrl = process.env.QWEN_API_URL ?? ''
+  const apiKey = process.env.QWEN_API_KEY ?? ''
+  const endpoint = '/chat/completions'
+  const requestPayload = {
+    model: PICTURE_BOOK_MODELS.text,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    stream: true,
+    enable_thinking: false,
+    max_tokens: maxTokens,
+  }
+  const startedAt = Date.now()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 180_000)
+
+  try {
+    const res = await fetch(`${apiUrl}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestPayload),
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      await recordLlmProviderCall({
+        module: auditContext.module ?? 'picture-book',
+        provider: 'qwen',
+        model: PICTURE_BOOK_MODELS.text,
+        operation: auditContext.operation ?? 'picture-book.qwen.generate',
+        endpoint,
+        userId: auditContext.userId,
+        teamId: auditContext.teamId,
+        workspaceId: auditContext.workspaceId,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: { body },
+        durationMs: Date.now() - startedAt,
+        status: 'failed',
+        errorMessage: `Qwen HTTP ${res.status}: ${body.slice(0, 500)}`,
+      })
+      throw new Error(`Qwen HTTP ${res.status}`)
+    }
+
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let fullText = ''
+    let inThinking = false
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6).trim()
+        if (data === '[DONE]') break
+
+        try {
+          const json = JSON.parse(data)
+          const delta = json.choices?.[0]?.delta
+          if (!delta) continue
+
+          if (delta.reasoning_content) {
+            inThinking = true
+            callbacks.onThinking()
+            continue
+          }
+          if (inThinking && delta.content) {
+            inThinking = false
+          }
+          if (delta.content && !inThinking) {
+            fullText += delta.content
+            callbacks.onChunk(delta.content)
+          }
+        } catch {
+          // 忽略格式异常的 SSE 行
+        }
+      }
+    }
+
+    await recordLlmProviderCall({
+      module: auditContext.module ?? 'picture-book',
+      provider: 'qwen',
+      model: PICTURE_BOOK_MODELS.text,
+      operation: auditContext.operation ?? 'picture-book.qwen.generate',
+      endpoint,
+      userId: auditContext.userId,
+      teamId: auditContext.teamId,
+      workspaceId: auditContext.workspaceId,
+      requestPayload,
+      responseStatus: res.status,
+      responsePayload: { text_preview: fullText.slice(0, 200), stream: true },
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    })
+
+    callbacks.onDone(fullText)
+    return fullText
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Qwen HTTP ')) {
+      callbacks.onError(error)
+      throw error
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    await recordLlmProviderCall({
+      module: auditContext.module ?? 'picture-book',
+      provider: 'qwen',
+      model: PICTURE_BOOK_MODELS.text,
+      operation: auditContext.operation ?? 'picture-book.qwen.generate',
+      endpoint,
+      userId: auditContext.userId,
+      teamId: auditContext.teamId,
+      workspaceId: auditContext.workspaceId,
+      requestPayload,
+      durationMs: Date.now() - startedAt,
+      status: 'failed',
+      errorMessage: message,
+    })
+    callbacks.onError(error instanceof Error ? error : new Error(message))
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function callPictureBookQwen(

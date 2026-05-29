@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { type PictureBookState, type PictureBookStoryboardPage } from '@aigc/types'
 import { sql } from 'kysely'
-import { assertPictureBookProjectAccess, PICTURE_BOOK_MODELS } from './_shared.js'
+import { assertPictureBookProjectAccess, jsonbArray, PICTURE_BOOK_MODELS } from './_shared.js'
 import { makePictureBookImageParams } from './post-generate-assets.js'
 
 type RequestedPageTarget = { ref_id: string }
@@ -19,10 +19,38 @@ export function selectStoryboardImageTargets(state: PictureBookState, targets?: 
 }
 
 export function makeStoryboardAudioText(page: PictureBookStoryboardPage, language: 'zh' | 'en'): string {
-  return [page.script.narration[language], page.script.dialogue[language]]
-    .map(item => item?.trim())
-    .filter(Boolean)
-    .join('\n')
+  return page?.script?.narration?.[language]?.trim() ?? ''
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+export function extractStoryboardMentionLabels(prompt: string, labels: string[]): string[] {
+  const sortedLabels = labels.filter(Boolean).sort((a, b) => b.length - a.length)
+  if (sortedLabels.length === 0) return []
+
+  const pattern = new RegExp(`@(${sortedLabels.map(escapeRegExp).join('|')})(?=\\s|$|[，。,.、；;！!？?])`, 'g')
+  const matched: string[] = []
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(prompt))) {
+    if (!matched.includes(match[1])) matched.push(match[1])
+  }
+  return matched
+}
+
+export function findStoryboardReferenceImages(prompt: string, state: PictureBookState): string[] {
+  const assets = state.assets.characters.concat(state.assets.backgrounds)
+  const labels = assets.map(item => item.name)
+  const mentionLabels = extractStoryboardMentionLabels(prompt, labels)
+  const imageUrls: string[] = []
+
+  for (const label of mentionLabels) {
+    const asset = assets.find(item => item.name === label)
+    if (asset?.imageUrl && !imageUrls.includes(asset.imageUrl)) imageUrls.push(asset.imageUrl)
+  }
+
+  return imageUrls
 }
 
 const route: FastifyPluginAsync = async (app) => {
@@ -52,9 +80,10 @@ const route: FastifyPluginAsync = async (app) => {
       const failures: Array<{ ref_id: string; message: string }> = []
       for (const target of targets) {
         try {
+          const referenceImages = findStoryboardReferenceImages(target.prompt, access.state)
           const imageResponse = await (app.inject as any)({
             method: 'POST',
-            url: '/generate/image',
+            url: '/api/v1/generate/image',
             headers: request.headers.authorization ? { authorization: request.headers.authorization } : {},
             payload: {
               idempotency_key: `picture_book_${request.body.project_id}_${target.refId}_${Date.now()}`,
@@ -63,7 +92,8 @@ const route: FastifyPluginAsync = async (app) => {
               quantity: 1,
               workspace_id: access.workspaceId,
               params: {
-                ...makePictureBookImageParams(request.body.project_id, target.refId, access.style),
+                ...makePictureBookImageParams(request.body.project_id, target.refId, access.style, access.state.settings.aspectRatio ?? '16:9'),
+                ...(referenceImages.length > 0 ? { image: referenceImages } : {}),
                 ...(request.body.params ?? {}),
               },
             } as any,
@@ -130,7 +160,7 @@ async function linkStoryboardBatch(
         estimated_credits: estimatedCredits,
         actual_credits: null,
         status: 'processing',
-        batch_ids: [batch.id],
+        batch_ids: jsonbArray([batch.id]),
         metadata: JSON.stringify({ operation: 'page_image', ref_id: target.refId }),
       })
       .execute()

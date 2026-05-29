@@ -1,5 +1,5 @@
 import { getDb } from '@aigc/db'
-import { signAssetUrl } from './storage.js'
+import { signAssetUrl, encryptProxyUrl } from './storage.js'
 
 /**
  * 获取批次快照（含任务列表和资产信息）
@@ -46,6 +46,7 @@ export async function getBatchSnapshot(batchId: string) {
     estimated_credits: batch.estimated_credits,
     actual_credits: batch.actual_credits,
     created_at: batch.created_at.toISOString?.() ?? String(batch.created_at),
+    source: batch.source,
     tasks: await Promise.all(tasks.map(async (t: any) => {
       const asset = assetByTask.get(t.id)
       return {
@@ -61,9 +62,16 @@ export async function getBatchSnapshot(batchId: string) {
           ? {
               id: asset.id,
               type: asset.type,
-              original_url: asset.original_url,
-              // storage_url 为空（transfer 未完成）时用 original_url 兜底，确保前端能立即展示图片
-              storage_url: (await signAssetUrl(asset.storage_url)) ?? asset.original_url ?? null,
+              original_url: asset.original_url
+                ? (asset.original_url.startsWith('http://')
+                    ? `/api/v1/assets/proxy?token=${encryptProxyUrl(asset.original_url)}`
+                    : await signAssetUrl(asset.original_url))
+                : null,
+              storage_url: asset.storage_url
+                ? (asset.storage_url.startsWith('http://')
+                    ? `/api/v1/assets/proxy?token=${encryptProxyUrl(asset.storage_url)}`
+                    : await signAssetUrl(asset.storage_url))
+                : asset.original_url ?? null,
               transfer_status: asset.transfer_status,
               file_size: asset.file_size,
               width: asset.width,

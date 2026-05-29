@@ -21,7 +21,7 @@ interface BatchListProps {
 }
 
 export const BatchList = forwardRef<BatchListHandle, BatchListProps>(function BatchList({ onSelect }, ref) {
-  const { batches, isLoadingInitial, isLoadingMore, hasMore, loadMore, error, mutate, prependBatch, updateBatchInList, hideBatch } = useBatches()
+  const { batches, isLoadingInitial, isLoadingMore, hasMore, loadMore, error, mutate, prependBatch, updateBatchInList, hideBatch } = useBatches('generation')
   const [hiddenDrawerOpen, setHiddenDrawerOpen] = useState(false)
 
   useImperativeHandle(ref, () => ({
@@ -57,7 +57,7 @@ export const BatchList = forwardRef<BatchListHandle, BatchListProps>(function Ba
           <p className="text-muted-foreground">暂无生成记录</p>
           <p className="text-xs text-muted-foreground mt-1">开始你的第一次创作吧</p>
         </div>
-        <HiddenBatchesDrawer open={hiddenDrawerOpen} onOpenChange={setHiddenDrawerOpen} />
+        <HiddenBatchesDrawer open={hiddenDrawerOpen} onOpenChange={setHiddenDrawerOpen} source="generation" />
       </>
     )
   }
@@ -84,7 +84,7 @@ export const BatchList = forwardRef<BatchListHandle, BatchListProps>(function Ba
         )}
       </div>
 
-      <HiddenBatchesDrawer open={hiddenDrawerOpen} onOpenChange={setHiddenDrawerOpen} />
+      <HiddenBatchesDrawer open={hiddenDrawerOpen} onOpenChange={setHiddenDrawerOpen} source="generation" />
     </>
   )
 })

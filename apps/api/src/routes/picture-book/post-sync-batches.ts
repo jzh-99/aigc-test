@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { assertPictureBookProjectAccess, calculateProjectChargeTotal } from './_shared.js'
+import { assertPictureBookProjectAccess, calculateProjectChargeTotal, jsonbArray, PICTURE_BOOK_MODELS } from './_shared.js'
 
 const route: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { project_id: string } }>(
@@ -18,6 +18,8 @@ const route: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const access = await assertPictureBookProjectAccess(request.body.project_id, request.user.id, true)
       if (!access) return reply.status(404).send({ error: { code: 'PROJECT_NOT_FOUND', message: '绘本项目不存在' } })
+
+      await recoverMissingAssetLinks(request.body.project_id, access)
 
       const rows = await getDb()
         .selectFrom('picture_book_project_assets as pba')
@@ -54,8 +56,10 @@ const route: FastifyPluginAsync = async (app) => {
             .execute()
         }
 
-        applySyncedAssetToState(state, row.kind, row.refId, url)
+        applySyncedAssetToState(state, row.kind, row.refId, url, status)
       }
+
+      state.steps = normalizeStepsAfterSync(state)
 
       const charges = await getDb()
         .selectFrom('picture_book_project_charges')
@@ -85,10 +89,13 @@ const route: FastifyPluginAsync = async (app) => {
         .execute()
       const totals = calculateProjectChargeTotal(updatedCharges)
 
+      const coverUrl = state.storyboard?.find((page: any) => page.imageUrl)?.imageUrl ?? null
+
       await getDb()
         .updateTable('picture_book_projects')
         .set({
           state: JSON.stringify({ ...state, draft: { dirty: false, savedAt: new Date().toISOString() } }) as any,
+          cover_url: coverUrl,
           estimated_credits: totals.estimatedCredits,
           actual_credits: totals.actualCredits,
           updated_at: sql`now()`,
@@ -101,6 +108,78 @@ const route: FastifyPluginAsync = async (app) => {
   )
 }
 
+async function recoverMissingAssetLinks(projectId: string, access: any): Promise<void> {
+  const db = getDb()
+  const targets = [
+    ...(access.state.assets?.characters ?? []).map((item: any) => ({ ...item, kind: 'character' as const })),
+    ...(access.state.assets?.backgrounds ?? []).map((item: any) => ({ ...item, kind: 'background' as const })),
+  ].filter((item: any) => item.id && item.prompt)
+
+  for (const target of targets) {
+    const existing = await db
+      .selectFrom('picture_book_project_assets')
+      .select('id')
+      .where('project_id', '=', projectId)
+      .where('kind', '=', target.kind)
+      .where('ref_id', '=', target.id)
+      .executeTakeFirst()
+    if (existing) continue
+
+    const batch = await db
+      .selectFrom('task_batches')
+      .select(['id', 'estimated_credits as estimatedCredits'])
+      .where('idempotency_key', 'like', `picture_book_${projectId}_${target.kind}_${target.id}_%`)
+      .where('module', '=', 'image')
+      .orderBy('created_at', 'desc')
+      .executeTakeFirst()
+    if (!batch) continue
+
+    const estimatedCredits = Number(batch.estimatedCredits ?? 0)
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('task_batches')
+        .set({ picture_book_project_id: projectId })
+        .where('id', '=', batch.id)
+        .execute()
+
+      await trx
+        .insertInto('picture_book_project_assets')
+        .values({
+          project_id: projectId,
+          kind: target.kind,
+          ref_id: target.id,
+          name: target.name,
+          prompt: target.prompt,
+          batch_id: batch.id,
+          status: 'pending',
+          metadata: JSON.stringify({ model: PICTURE_BOOK_MODELS.image, recovered: true }),
+        })
+        .onConflict((oc) =>
+          oc.columns(['project_id', 'kind', 'ref_id']).doNothing(),
+        )
+        .execute()
+
+      await trx
+        .insertInto('picture_book_project_charges')
+        .values({
+          project_id: projectId,
+          workspace_id: access.workspaceId,
+          team_id: access.teamId,
+          user_id: access.ownerId,
+          charge_type: 'project',
+          model: PICTURE_BOOK_MODELS.image,
+          target_count: 1,
+          estimated_credits: estimatedCredits,
+          actual_credits: null,
+          status: 'processing',
+          batch_ids: jsonbArray([batch.id]),
+          metadata: JSON.stringify({ operation: 'asset_image', kind: target.kind, ref_id: target.id, recovered: true }),
+        })
+        .execute()
+    })
+  }
+}
+
 function normalizeAssetStatus(status: string | null): 'pending' | 'processing' | 'completed' | 'failed' {
   if (status === 'completed') return 'completed'
   if (status === 'failed') return 'failed'
@@ -108,16 +187,16 @@ function normalizeAssetStatus(status: string | null): 'pending' | 'processing' |
   return 'pending'
 }
 
-function applySyncedAssetToState(state: any, kind: string, refId: string, url: string | null): void {
-  if (!url) return
+function applySyncedAssetToState(state: any, kind: string, refId: string, url: string | null, status: string): void {
   if (kind === 'character') {
-    state.assets.characters = state.assets.characters.map((item: any) => item.id === refId ? { ...item, imageUrl: url } : item)
+    state.assets.characters = state.assets.characters.map((item: any) => item.id === refId ? { ...item, imageUrl: url ?? item.imageUrl ?? null, status } : item)
     return
   }
   if (kind === 'background') {
-    state.assets.backgrounds = state.assets.backgrounds.map((item: any) => item.id === refId ? { ...item, imageUrl: url } : item)
+    state.assets.backgrounds = state.assets.backgrounds.map((item: any) => item.id === refId ? { ...item, imageUrl: url ?? item.imageUrl ?? null, status } : item)
     return
   }
+  if (!url) return
   if (kind === 'page_image') {
     state.storyboard = state.storyboard.map((page: any) => `page_${page.page}` === refId ? { ...page, imageUrl: url } : page)
     return
@@ -128,6 +207,29 @@ function applySyncedAssetToState(state: any, kind: string, refId: string, url: s
   }
   if (kind === 'page_audio_en') {
     state.storyboard = state.storyboard.map((page: any) => `page_${page.page}` === refId ? { ...page, voice: { ...page.voice, en: url } } : page)
+  }
+}
+
+function normalizeStepsAfterSync(state: any): any {
+  const completed = new Set(Array.isArray(state.steps?.completed) ? state.steps.completed : [])
+  const characters = Array.isArray(state.assets?.characters) ? state.assets.characters : []
+  const backgrounds = Array.isArray(state.assets?.backgrounds) ? state.assets.backgrounds : []
+  const storyboard = Array.isArray(state.storyboard) ? state.storyboard : []
+
+  if (characters.length + backgrounds.length > 0 && characters.concat(backgrounds).every((item: any) => item.imageUrl)) {
+    completed.add('script')
+    completed.add('assets')
+  }
+
+  if (storyboard.length > 0 && storyboard.every((page: any) => page.imageUrl && page.voice?.zh && page.voice?.en)) {
+    completed.add('script')
+    completed.add('assets')
+    completed.add('storyboard')
+  }
+
+  return {
+    active: state.steps?.active ?? 'script',
+    completed: Array.from(completed),
   }
 }
 

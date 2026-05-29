@@ -217,6 +217,7 @@ const route: FastifyPluginAsync = async (app) => {
             workspace_id: workspaceId,
             credit_account_id: creditAccountId,
             idempotency_key: request.body.idempotency_key ?? `tts_${userId}_${Date.now()}`,
+            source: 'generation',
             module: 'tts',
             provider: providerModel.providerCode,
             model,

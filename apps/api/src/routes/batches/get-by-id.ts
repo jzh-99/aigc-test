@@ -1,8 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { signAssetUrl } from '../../lib/storage.js'
-// storage_url 是 TOS 永久公网 URL，不签名，前端可直接 fetch（TOS 已配置 CORS）
-// original_url 可能是 AI 提供商内网 HTTP 地址，仍需走加密代理
+import { signAssetUrl, encryptProxyUrl } from '../../lib/storage.js'
 
 const route: FastifyPluginAsync = async (app) => {
   // GET /batches/:id — batch detail with tasks + assets
@@ -63,13 +61,6 @@ const route: FastifyPluginAsync = async (app) => {
 
     const assetByTask: Map<string, any> = new Map(assets.map((a: any) => [a.task_id, a]))
 
-    // Sign asset URLs
-    // for (const asset of assets) {
-    //   if ((asset as any).storage_url) {
-    //     (asset as any).storage_url = await signAssetUrl((asset as any).storage_url)
-    //   }
-    // }
-
     // Fetch batch creator info
     const creator = await db
       .selectFrom('users')
@@ -102,6 +93,7 @@ const route: FastifyPluginAsync = async (app) => {
       estimated_credits: batch.estimated_credits,
       actual_credits: batch.actual_credits,
       created_at: batch.created_at.toISOString?.() ?? String(batch.created_at),
+      source: batch.source,
       queue_position: queuePosition,
       user: creator ? { id: creator.id, username: creator.username, avatar_url: creator.avatar_url ?? null } : undefined,
       tasks: await Promise.all(tasks.map(async (t: any) => {
@@ -119,8 +111,14 @@ const route: FastifyPluginAsync = async (app) => {
             ? {
                 id: asset.id,
                 type: asset.type,
-                original_url: await signAssetUrl(asset.original_url),
-                storage_url: asset.storage_url ?? null,
+                original_url: asset.original_url?.startsWith('http://')
+                  ? `/api/v1/assets/proxy?token=${encryptProxyUrl(asset.original_url)}`
+                  : await signAssetUrl(asset.original_url),
+                storage_url: asset.storage_url
+                  ? (asset.storage_url.startsWith('http://')
+                      ? `/api/v1/assets/proxy?token=${encryptProxyUrl(asset.storage_url)}`
+                      : await signAssetUrl(asset.storage_url))
+                  : null,
                 transfer_status: asset.transfer_status,
                 file_size: asset.file_size,
                 width: asset.width,

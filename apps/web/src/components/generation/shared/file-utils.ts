@@ -1,5 +1,6 @@
 import { generateUUID } from '@/lib/utils'
 import { toast } from 'sonner'
+
 import type { FrameImage } from './types'
 import {
   ALLOWED_IMAGE_TYPES, ALLOWED_IMAGE_EXTS,
@@ -7,6 +8,7 @@ import {
   ALLOWED_AUDIO_TYPES, ALLOWED_AUDIO_EXTS,
   MAX_FILE_MB,
 } from './constants'
+export { fetchAssetFile } from './asset-file'
 
 export function isValidImageFile(file: File): boolean {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
@@ -50,16 +52,6 @@ export function getDraggedAsset(dataTransfer: DataTransfer): { url: string; type
     url: dataTransfer.getData('application/x-aigc-asset-url') || dataTransfer.getData('text/uri-list') || dataTransfer.getData('text/plain'),
     type: dataTransfer.getData('application/x-aigc-asset-type'),
   }
-}
-
-export async function fetchAssetFile(url: string, assetType: string, baseName: string): Promise<File> {
-  const resp = await fetch(url)
-  if (!resp.ok) throw new Error('fetch failed')
-  const blob = await resp.blob()
-  const fallbackExt = assetType === 'video' ? 'mp4' : assetType === 'audio' ? 'mp3' : 'jpg'
-  const ext = blob.type.split('/')[1] || fallbackExt
-  const mime = blob.type || (assetType === 'video' ? 'video/mp4' : assetType === 'audio' ? 'audio/mpeg' : 'image/jpeg')
-  return new File([blob], `${baseName}.${ext}`, { type: mime })
 }
 
 export async function getActionImagePayload(image: FrameImage): Promise<{ base64: string; mime: 'image/jpeg' | 'image/png' }> {

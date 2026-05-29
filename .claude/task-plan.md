@@ -68,3 +68,12 @@
 - [x] 不启用前端兜底翻译：消费流水页面继续展示后端返回内容。
 - [x] 新增历史数据迁移：`049_credits_ledger_chinese_descriptions`。
 - [x] 完成构建验证：`@aigc/db build`、`@aigc/api build`、`@aigc/worker build`。
+
+## 2026-05-28 — 绘本分镜卡片重新设计
+- [x] 编写实施计划：`docs/superpowers/plans/2026-05-28-storyboard-card-redesign.md`，并补充 brainstorm HTML 视觉参考。
+- [x] 后端 prompt 调整：分镜 `imagePrompt` 要求使用 `@角色名` / `@背景名` 标记。
+- [x] 后端生成图片调整：解析分镜 prompt 中的 @ 标记，并把匹配角色/背景图片作为 `params.image` 参考图。
+- [x] 前端组件：新增 `StoryboardMentionEditor` 和 `StoryboardAudioPlayer`。
+- [x] 前端布局：`StepStoryboard` 改为横向单列卡片，接入 @ 编辑器、旁白编辑和双语音频播放器。
+- [x] 进度门控：单页重生成图片/语音时立即清空对应完成态，下一步按钮随进度禁用。
+- [~] 浏览器验证：6006 被占用，6007 dev 受本地 Next 包缺失 `next/dist/pages/_app` 影响未完成；生产构建已通过。

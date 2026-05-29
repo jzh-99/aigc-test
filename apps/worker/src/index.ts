@@ -156,6 +156,8 @@ const imageWorker = new Worker<GenerationJobData>(
     // AI 调用最长 5 分钟 + 图片下载时间，lockDuration 必须覆盖整个 job 执行周期
     // BullMQ 默认 30s 会导致长耗时 job 被误判为 stalled 并重新入队
     lockDuration: 600_000, // 10 分钟
+    stalledInterval: 30_000, // 每 30 秒检查一次 stalled job，重启后快速恢复
+    maxStalledCount: 2,
   },
 )
 
@@ -169,6 +171,41 @@ logger.info('Video submit worker started — listening on video-queue')
 logger.info('Storyboard worker started — listening on storyboard-queue')
 logger.info('Music worker started — listening on music-queue')
 logger.info('Music voice clone worker started — listening on music-voice-clone-queue')
+
+// ─── 启动时恢复 stalled/active job ──────────────────────────────────────────
+// Worker 重启后，之前正在执行的 job lock 可能还没过期，手动将它们标记为 failed 并重试
+async function recoverStalledJobs() {
+  const queues = [
+    new Queue('image-queue', { connection: getBullMQConnection() }),
+    new Queue('transfer-queue', { connection: getBullMQConnection() }),
+    new Queue('video-queue', { connection: getBullMQConnection() }),
+    new Queue('storyboard-queue', { connection: getBullMQConnection() }),
+  ]
+
+  for (const queue of queues) {
+    try {
+      const activeJobs = await queue.getJobs(['active'])
+      if (activeJobs.length > 0) {
+        logger.info({ queue: queue.name, count: activeJobs.length }, '发现残留 active job，正在恢复')
+        for (const job of activeJobs) {
+          try {
+            await job.moveToFailed(new Error('worker restarted — auto retry'), 'worker-restart', true)
+            await job.retry()
+          } catch {
+            // job 可能已经被其他逻辑处理，忽略
+          }
+        }
+        logger.info({ queue: queue.name, count: activeJobs.length }, 'active job 已全部重新入队')
+      }
+    } catch (err) {
+      logger.error({ queue: queue.name, err }, '恢复 stalled job 失败')
+    } finally {
+      await queue.close()
+    }
+  }
+}
+
+await recoverStalledJobs()
 
 // ─── Cron Jobs（BullMQ repeat）────────────────────────────────────────────────
 // upsertJobScheduler 是幂等的，多台机器同时调用也只会存在一个调度

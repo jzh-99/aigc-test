@@ -1,15 +1,24 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { signAssetUrl, encryptProxyUrl } from '../../lib/storage.js'
+import { normalizeBatchSource } from './source-filter.js'
 
 const route: FastifyPluginAsync = async (app) => {
   // GET /batches — list with cursor pagination
-  app.get<{ Querystring: { cursor?: string; limit?: string } }>(
+  app.get<{ Querystring: { workspace_id?: string; source?: string; cursor?: string; limit?: string } }>(
     '/batches',
     async (request, reply) => {
       const db = getDb()
 
       const userId = request.user.id
+
+      // 解析并验证 source 参数
+      let source: 'generation' | 'studio' | 'canvas'
+      try {
+        source = normalizeBatchSource(request.query.source)
+      } catch {
+        return reply.badRequest('Invalid batch source')
+      }
 
       const limit = Math.min(parseInt(request.query.limit ?? '20', 10) || 20, 100)
       const cursor = request.query.cursor
@@ -28,13 +37,11 @@ const route: FastifyPluginAsync = async (app) => {
         .select([
           'id', 'module', 'provider', 'model', 'prompt', 'params', 'quantity',
           'completed_count', 'failed_count', 'status', 'estimated_credits',
-          'actual_credits', 'created_at', 'user_id', 'workspace_id', 'is_deleted',
+          'actual_credits', 'created_at', 'user_id', 'workspace_id', 'is_deleted', 'source',
         ])
         .where('is_deleted', '=', false)
         .where('is_hidden', '=', false)
-        .where('canvas_id', 'is', null)
-        .where('video_studio_project_id', 'is', null)
-        .where('module', 'not in', ['music', 'music_voice_clone'])
+        .where('source', '=', source)
         .orderBy('created_at', 'desc')
         .orderBy('id', 'desc')
         .limit(limit + 1) // fetch one extra to determine if there's a next page
@@ -85,6 +92,7 @@ const route: FastifyPluginAsync = async (app) => {
       // Fetch thumbnail URLs for all batches — sign in parallel to avoid sequential await bottleneck
       const batchIds = batches.map((b: any) => b.id)
       const thumbnailMap = new Map<string, string[]>()
+      const resourceMap = new Map<string, Array<{ url: string; type: 'image' | 'video' | 'audio' }>>()
       if (batchIds.length > 0) {
         const assets = await db
           .selectFrom('assets')
@@ -96,7 +104,8 @@ const route: FastifyPluginAsync = async (app) => {
         const signed = await Promise.all(assets.map(async (a) => {
           const rawUrl: string | null = (a as any).storage_url ?? (a as any).original_url
           if (!rawUrl) return null
-          const isVideo = (a as any).type === 'video'
+          const assetType = (a as any).type as 'image' | 'video' | 'audio'
+          const isVideo = assetType === 'video'
           let thumbnailUrl: string
           if (rawUrl.startsWith('http://')) {
             // Encrypt URL to hide storage server IP from browser network tab
@@ -107,14 +116,18 @@ const route: FastifyPluginAsync = async (app) => {
             if (!s) return null
             thumbnailUrl = s
           }
-          return { batchId: (a as any).batch_id as string, thumbnailUrl }
+          return { batchId: (a as any).batch_id as string, url: thumbnailUrl, type: assetType }
         }))
 
         for (const entry of signed) {
           if (!entry) continue
-          const list = thumbnailMap.get(entry.batchId) ?? []
-          list.push(entry.thumbnailUrl)
-          thumbnailMap.set(entry.batchId, list)
+          const thumbList = thumbnailMap.get(entry.batchId) ?? []
+          thumbList.push(entry.url)
+          thumbnailMap.set(entry.batchId, thumbList)
+
+          const resList = resourceMap.get(entry.batchId) ?? []
+          resList.push({ url: entry.url, type: entry.type })
+          resourceMap.set(entry.batchId, resList)
         }
       }
 
@@ -176,8 +189,10 @@ const route: FastifyPluginAsync = async (app) => {
           estimated_credits: b.estimated_credits,
           actual_credits: b.actual_credits,
           created_at: b.created_at.toISOString?.() ?? String(b.created_at),
+          source: b.source,
           tasks: [],
           thumbnail_urls: thumbnailMap.get(b.id) ?? [],
+          resources: resourceMap.get(b.id) ?? [],
           error_message: errorMap.get(b.id) ?? null,
           user: userMap.get(b.user_id) ?? undefined,
         })),

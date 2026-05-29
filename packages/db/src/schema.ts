@@ -156,6 +156,7 @@ export interface TaskBatchesTable {
   credit_account_id: string
   parent_batch_id: string | null
   idempotency_key: string
+  source: 'generation' | 'studio' | 'canvas'
   module:
     | 'image'
     | 'video'
@@ -165,8 +166,11 @@ export interface TaskBatchesTable {
     | 'avatar'
     | 'action_imitation'
     | 'storyboard'
+    | 'upload'
     | 'music'
     | 'music_voice_clone'
+    | 'picture_book'
+    | 'short_drama'
   provider: string
   model: string
   prompt: string

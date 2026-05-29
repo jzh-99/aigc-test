@@ -8,11 +8,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Loader2, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
-import type { BatchResponse } from '@aigc/types'
+import type { BatchResponse, BatchSource } from '@aigc/types'
 
 interface HiddenBatchesDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  source?: BatchSource
 }
 
 const statusLabels: Record<string, string> = {
@@ -23,8 +24,8 @@ const statusLabels: Record<string, string> = {
   failed: '失败',
 }
 
-export function HiddenBatchesDrawer({ open, onOpenChange }: HiddenBatchesDrawerProps) {
-  const { batches, isLoadingInitial, isLoadingMore, hasMore, loadMore, unhideBatch } = useHiddenBatches(open)
+export function HiddenBatchesDrawer({ open, onOpenChange, source }: HiddenBatchesDrawerProps) {
+  const { batches, isLoadingInitial, isLoadingMore, hasMore, loadMore, unhideBatch } = useHiddenBatches(open, source ?? 'generation')
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
   async function handleUnhide(batch: BatchResponse) {

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
+import { signAssetUrl } from '../../lib/storage.js'
 import { assertPictureBookWorkspaceAccess } from './_shared.js'
 
 function normalizeLimit(value: number | undefined, fallback: number, max: number): number {
@@ -47,7 +48,10 @@ const route: FastifyPluginAsync = async (app) => {
         .limit(limit)
         .execute()
 
-      return reply.send(projects)
+      const result = await Promise.all(
+        projects.map(async (p) => ({ ...p, cover_url: await signAssetUrl(p.cover_url) })),
+      )
+      return reply.send(result)
     },
   )
 
@@ -68,7 +72,10 @@ const route: FastifyPluginAsync = async (app) => {
       .limit(limit)
       .execute()
 
-    return reply.send(projects)
+    const result = await Promise.all(
+      projects.map(async (p) => ({ ...p, cover_url: await signAssetUrl(p.cover_url) })),
+    )
+    return reply.send(result)
   })
 }
 

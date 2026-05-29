@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { type PictureBookStoryboardPage } from '@aigc/types'
 import { sql } from 'kysely'
-import { assertPictureBookProjectAccess, PICTURE_BOOK_MODELS } from './_shared.js'
+import { assertPictureBookProjectAccess, jsonbArray, PICTURE_BOOK_MODELS } from './_shared.js'
 import { makeStoryboardAudioText } from './post-generate-storyboard-images.js'
 
 type AudioLanguage = 'zh' | 'en'
@@ -51,7 +51,13 @@ const route: FastifyPluginAsync = async (app) => {
           continue
         }
 
-        const text = makeStoryboardAudioText(target.page, target.language)
+        let text: string
+        try {
+          text = makeStoryboardAudioText(target.page, target.language)
+        } catch {
+          failures.push({ ref_id: target.refId, language: target.language, message: 'audio text parse error' })
+          continue
+        }
         if (!text) {
           failures.push({ ref_id: target.refId, language: target.language, message: 'audio text empty' })
           continue
@@ -60,7 +66,7 @@ const route: FastifyPluginAsync = async (app) => {
         try {
           const response = await (app.inject as any)({
             method: 'POST',
-            url: '/tts/generate',
+            url: '/api/v1/tts/generate',
             headers: request.headers.authorization ? { authorization: request.headers.authorization } : {},
             payload: {
               idempotency_key: `picture_book_${request.body.project_id}_${target.refId}_${target.language}_${Date.now()}`,
@@ -176,7 +182,7 @@ async function recordAudioAsset(input: {
         estimated_credits: estimatedCredits,
         actual_credits: actualCredits,
         status: 'completed',
-        batch_ids: [input.batch.id],
+        batch_ids: jsonbArray([input.batch.id]),
         metadata: JSON.stringify({ operation: kind, ref_id: input.target.refId }),
       })
       .execute()

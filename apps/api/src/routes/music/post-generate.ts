@@ -184,6 +184,7 @@ const route: FastifyPluginAsync = async (app) => {
               workspace_id: payload.workspace_id,
               credit_account_id: creditAccountId,
               idempotency_key: idempotencyKey,
+              source: 'studio',
               module: 'music',
               provider: credits.providerCode,
               model: payload.model,

@@ -79,6 +79,7 @@ const route: FastifyPluginAsync = async (app) => {
             workspace_id: canvas.workspace_id,
             credit_account_id: creditAccount.id,
             idempotency_key: crypto.randomUUID(),
+            source: 'canvas',
             module: 'storyboard',
             provider: 'qwen',
             model: process.env.QWEN_MODEL ?? 'qwen3.6-plus',

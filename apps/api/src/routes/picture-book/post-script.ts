@@ -2,22 +2,25 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import {
   isPictureBookPageCount,
+  isPictureBookAspectRatio,
   isPictureBookStyle,
   makeDefaultPictureBookState,
   type PictureBookPageCount,
+  type PictureBookAspectRatio,
   type PictureBookPageScript,
   type PictureBookState,
   type PictureBookStyle,
 } from '@aigc/types'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'kysely'
-import { assertPictureBookWorkspaceAccess, callPictureBookQwen, parsePictureBookJson, PICTURE_BOOK_MODELS } from './_shared.js'
+import { assertPictureBookWorkspaceAccess, callPictureBookQwenStream, parsePictureBookJson, PICTURE_BOOK_MODELS } from './_shared.js'
 
 interface ScriptBody {
   workspace_id: string
   prompt: string
   style: PictureBookStyle
   page_count: PictureBookPageCount
+  aspect_ratio?: PictureBookAspectRatio
   title?: string
 }
 
@@ -30,8 +33,8 @@ interface ScriptResult {
 const DEFAULT_SYSTEM_PROMPT = [
   '你是儿童 AI 绘本剧本策划师。',
   '必须输出严格 JSON object，不要输出 Markdown。',
-  '故事摘要只输出中文。',
-  '每一页要有画面描述 visualPrompt，以及台词/旁白的中英双语版本。',
+  '完整故事只输出中文。',
+  '每一页要有中文画面描述 visualPrompt，以及台词/旁白的中英双语版本。',
 ].join('\n')
 
 export function buildScriptUserPrompt(input: { prompt: string; style: string; pageCount: number }): string {
@@ -41,18 +44,19 @@ export function buildScriptUserPrompt(input: { prompt: string; style: string; pa
     `页数：${input.pageCount} 页`,
     '',
     '请生成适合儿童绘本的剧本大纲。',
-    '故事摘要只输出中文，不要提供英文摘要。',
+    'summaryZh 字段请输出中文完整故事，不要写成短摘要，不要提供英文版本。',
+    'visualPrompt 字段只输出中文，用于“环境描述和本页剧情”，不要输出英文画面提示词。',
     '脚本结构不区分中英文；只有 dialogue 和 narration 需要中英双语。',
     '每页必须填写 narration.zh、narration.en、dialogue.zh、dialogue.en 四个字段。',
     '',
     '输出 JSON 格式：',
     '{',
     '  "title": "绘本标题",',
-    '  "summaryZh": "中文故事摘要",',
+    '  "summaryZh": "中文完整故事",',
     '  "pages": [',
     '    {',
     '      "page": 1,',
-    '      "visualPrompt": "这一页的画面描述",',
+    '      "visualPrompt": "中文环境描述和本页剧情",',
     '      "narration": { "zh": "中文旁白", "en": "English narration" },',
     '      "dialogue": { "zh": "中文台词", "en": "English dialogue" }',
     '    }',
@@ -102,6 +106,7 @@ const route: FastifyPluginAsync = async (app) => {
             prompt: { type: 'string', minLength: 1, maxLength: 3000 },
             style: { type: 'string' },
             page_count: { type: 'number', enum: [10, 15, 20] },
+            aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1'] },
             title: { type: 'string', maxLength: 200 },
           },
         },
@@ -111,12 +116,30 @@ const route: FastifyPluginAsync = async (app) => {
       const body = request.body
       if (!isPictureBookStyle(body.style)) return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: '绘本风格不支持' } })
       if (!isPictureBookPageCount(body.page_count)) return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: '页数不支持' } })
+      const aspectRatio = isPictureBookAspectRatio(body.aspect_ratio) ? body.aspect_ratio : '16:9'
 
       const access = await assertPictureBookWorkspaceAccess(body.workspace_id, request.user.id, true)
       if (!access) return reply.status(403).send({ error: { code: 'FORBIDDEN', message: '无权修改该工作区' } })
 
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      })
+      reply.hijack()
+      reply.raw.write(': connected\n\n')
+
+      const sendEvent = (event: string, data: unknown) => {
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      }
+
+      const sendPing = () => {
+        reply.raw.write(': ping\n\n')
+      }
+
       try {
-        const raw = await callPictureBookQwen(
+        const fullText = await callPictureBookQwenStream(
           process.env.AI_PROMPT_PICTURE_BOOK_SCRIPT ?? DEFAULT_SYSTEM_PROMPT,
           buildScriptUserPrompt({ prompt: body.prompt, style: body.style, pageCount: body.page_count }),
           12000,
@@ -126,10 +149,20 @@ const route: FastifyPluginAsync = async (app) => {
             workspaceId: body.workspace_id,
             operation: 'picture-book.script.generate',
           },
+          {
+            onChunk: (text) => sendEvent('chunk', { text }),
+            onThinking: () => sendPing(),
+            onDone: () => {},
+            onError: () => {},
+          },
         )
-        const result = normalizeScriptResult(parsePictureBookJson(raw), body.page_count)
+
+        const result = normalizeScriptResult(parsePictureBookJson(fullText), body.page_count)
         const state: PictureBookState = {
           ...makeDefaultPictureBookState({ style: body.style, pageCount: body.page_count }),
+          settings: {
+            ...makeDefaultPictureBookState({ style: body.style, pageCount: body.page_count, aspectRatio }).settings,
+          },
           steps: { active: 'script', completed: ['script'] },
           script: { summaryZh: result.summaryZh, pages: result.pages },
           draft: { dirty: false, savedAt: new Date().toISOString() },
@@ -173,10 +206,12 @@ const route: FastifyPluginAsync = async (app) => {
           })
           .execute()
 
-        return reply.send({ success: true, projectId, title: result.title, state })
+        sendEvent('done', { success: true, projectId, title: result.title, state })
       } catch (err) {
         app.log.error(err, 'picture-book script generate error')
-        return reply.status(502).send({ success: false, error: { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' } })
+        sendEvent('error', { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' })
+      } finally {
+        reply.raw.end()
       }
     },
   )

@@ -1,4 +1,4 @@
-import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory, ImageCategory, TextCategory, CategoryReferenceKey } from './db.js'
+import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory, ImageCategory, TextCategory, CategoryReferenceKey, BatchSource, ModuleType } from './db.js'
 
 export type ReferenceKind = 'image' | 'video' | 'audio' | 'text'
 
@@ -201,7 +201,8 @@ export interface BatchUser {
 
 export interface BatchResponse {
   id: string
-  module: string
+  source: BatchSource
+  module: ModuleType
   provider: string
   model: string
   prompt: string
@@ -215,6 +216,7 @@ export interface BatchResponse {
   created_at: string
   queue_position?: number | null
   tasks: TaskResponse[]
+  resources?: Array<{ url: string; type: 'image' | 'video' | 'audio' }>
   user?: BatchUser
 }
 
@@ -339,7 +341,7 @@ export interface CreateWorkspaceRequest {
   description?: string
 }
 
-export type AigcModule = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation' | 'music' | 'music_voice_clone'
+export type AigcModule = ModuleType
 
 /** 参数定价规则：不同业务参数对应不同底层模型和积分单价。音乐模块的 resolution 表示业务计费键。 */
 export interface ParamsPricingRule {

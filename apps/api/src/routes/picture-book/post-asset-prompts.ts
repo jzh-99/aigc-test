@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { type PictureBookElement, type PictureBookPageScript } from '@aigc/types'
 import { sql } from 'kysely'
-import { assertPictureBookProjectAccess, callPictureBookQwen, parsePictureBookJson, PICTURE_BOOK_MODELS } from './_shared.js'
+import { assertPictureBookProjectAccess, callPictureBookQwenStream, parsePictureBookJson, PICTURE_BOOK_MODELS } from './_shared.js'
 
 interface AssetPromptInput {
   style: string
@@ -13,6 +13,7 @@ interface AssetPromptInput {
 const DEFAULT_SYSTEM_PROMPT = [
   '你是儿童绘本角色和背景设定提示词专家。',
   '必须输出严格 JSON object，不要输出 Markdown。',
+  '所有 name 和 prompt 必须使用简体中文，不要输出英文资产名称或英文提示词。',
   '只生成提示词，不生成图片，不返回图片 URL。',
 ].join('\n')
 
@@ -23,13 +24,14 @@ export function buildAssetPromptUserPrompt(input: AssetPromptInput): string {
     '',
     '请从故事中提炼角色和背景，分别放入 characters 与 backgrounds。',
     '只生成提示词，用户会编辑后再批量生成图片。',
-    '角色提示词建议包含：儿童绘本风格、所选风格、三视图、正面、侧面、背面、白底、全身照、角色设定图。',
-    '背景提示词建议包含：儿童绘本风格、所选风格、场景设定图、全景、光线、氛围、空间元素。',
+    '所有角色名称、背景名称、提示词均必须使用简体中文。',
+    '角色提示词建议包含：儿童绘本风格、所选风格、三视图、正面、侧面、背面、白底、全身照、角色设定图、外观、服饰、表情、气质。',
+    '背景提示词建议包含：儿童绘本风格、所选风格、场景设定图、全景、光线、氛围、空间元素、主要道具。',
     '',
     '输出 JSON 格式：',
     '{',
-    '  "characters": [{ "name": "角色名", "prompt": "角色提示词" }],',
-    '  "backgrounds": [{ "name": "背景名", "prompt": "背景提示词" }]',
+    '  "characters": [{ "name": "角色名称", "prompt": "中文角色提示词" }],',
+    '  "backgrounds": [{ "name": "背景名称", "prompt": "中文背景提示词" }]',
     '}',
     '',
     `分页内容：${JSON.stringify(input.pages)}`,
@@ -73,9 +75,26 @@ const route: FastifyPluginAsync = async (app) => {
       const access = await assertPictureBookProjectAccess(request.body.project_id, request.user.id, true)
       if (!access) return reply.status(404).send({ error: { code: 'PROJECT_NOT_FOUND', message: '绘本项目不存在' } })
 
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      })
+      reply.hijack()
+      reply.raw.write(': connected\n\n')
+
+      const sendEvent = (event: string, data: unknown) => {
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      }
+
+      const sendPing = () => {
+        reply.raw.write(': ping\n\n')
+      }
+
       try {
         const state = access.state
-        const raw = await callPictureBookQwen(
+        const fullText = await callPictureBookQwenStream(
           process.env.AI_PROMPT_PICTURE_BOOK_ASSETS ?? DEFAULT_SYSTEM_PROMPT,
           buildAssetPromptUserPrompt({
             style: access.style,
@@ -89,8 +108,15 @@ const route: FastifyPluginAsync = async (app) => {
             workspaceId: access.workspaceId,
             operation: 'picture-book.asset-prompts.generate',
           },
+          {
+            onChunk: (text) => sendEvent('chunk', { text }),
+            onThinking: () => sendPing(),
+            onDone: () => {},
+            onError: () => {},
+          },
         )
-        const result = normalizeAssetPromptResult(parsePictureBookJson(raw))
+
+        const result = normalizeAssetPromptResult(parsePictureBookJson(fullText))
         const nextState = {
           ...state,
           steps: { active: 'assets' as const, completed: ['script' as const] },
@@ -129,10 +155,12 @@ const route: FastifyPluginAsync = async (app) => {
           })
           .execute()
 
-        return reply.send({ success: true, assets: result, state: nextState })
+        sendEvent('done', { success: true, assets: result, state: nextState })
       } catch (err) {
         app.log.error(err, 'picture-book asset prompts error')
-        return reply.status(502).send({ success: false, error: { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' } })
+        sendEvent('error', { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' })
+      } finally {
+        reply.raw.end()
       }
     },
   )

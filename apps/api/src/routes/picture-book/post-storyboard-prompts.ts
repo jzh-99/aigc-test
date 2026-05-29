@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { type PictureBookElement, type PictureBookPageScript, type PictureBookStoryboardPage } from '@aigc/types'
 import { sql } from 'kysely'
-import { assertPictureBookProjectAccess, callPictureBookQwen, parsePictureBookJson, PICTURE_BOOK_MODELS } from './_shared.js'
+import { assertPictureBookProjectAccess, callPictureBookQwenStream, parsePictureBookJson, PICTURE_BOOK_MODELS } from './_shared.js'
 
 interface StoryboardPromptInput {
   style: string
@@ -15,6 +15,9 @@ const DEFAULT_SYSTEM_PROMPT = [
   '你是儿童绘本分镜提示词和双语语音脚本专家。',
   '必须输出严格 JSON object，不要输出 Markdown。',
   '脚本不区分中英文；只有台词/旁白、语音文案需要中英双语。',
+  'imagePrompt 必须在需要引用资产时使用 @角色名 / @背景名 字面量，例如 @小狗、@森林。',
+  '@ 引用只允许出现在 imagePrompt 中，audioText.zh 和 audioText.en 禁止出现 @ 标记。',
+  '如果角色或背景列表为空，不要虚构 @ 标记。',
 ].join('\n')
 
 export function buildStoryboardPromptUserPrompt(input: StoryboardPromptInput): string {
@@ -23,6 +26,8 @@ export function buildStoryboardPromptUserPrompt(input: StoryboardPromptInput): s
     '',
     '请为每一页生成图片提示词 imagePrompt，以及用于语音合成的 audioText.zh 和 audioText.en。',
     'imagePrompt 要参考角色和背景设定，保持整本绘本一致性。',
+    '当画面出现某个角色或背景时，必须直接写入对应资产名称的 @ 标记，例如 @角色名 或 @背景名。',
+    '只在 imagePrompt 中使用 @ 标记；audioText.zh 与 audioText.en 不使用 @ 标记。',
     'audioText.zh 与 audioText.en 来自该页旁白和台词，不要改变页数。',
     '',
     '输出 JSON 格式：',
@@ -34,6 +39,8 @@ export function buildStoryboardPromptUserPrompt(input: StoryboardPromptInput): s
     '  }]',
     '}',
     '',
+    `可引用角色名称：${input.characters.map(item => `@${item.name}`).join('、') || '无'}`,
+    `可引用背景名称：${input.backgrounds.map(item => `@${item.name}`).join('、') || '无'}`,
     `角色：${JSON.stringify(input.characters)}`,
     `背景：${JSON.stringify(input.backgrounds)}`,
     `分页脚本：${JSON.stringify(input.pages)}`,
@@ -91,9 +98,26 @@ const route: FastifyPluginAsync = async (app) => {
       const access = await assertPictureBookProjectAccess(request.body.project_id, request.user.id, true)
       if (!access) return reply.status(404).send({ error: { code: 'PROJECT_NOT_FOUND', message: '绘本项目不存在' } })
 
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      })
+      reply.hijack()
+      reply.raw.write(': connected\n\n')
+
+      const sendEvent = (event: string, data: unknown) => {
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      }
+
+      const sendPing = () => {
+        reply.raw.write(': ping\n\n')
+      }
+
       try {
         const state = access.state
-        const raw = await callPictureBookQwen(
+        const fullText = await callPictureBookQwenStream(
           process.env.AI_PROMPT_PICTURE_BOOK_STORYBOARD ?? DEFAULT_SYSTEM_PROMPT,
           buildStoryboardPromptUserPrompt({
             style: access.style,
@@ -108,8 +132,15 @@ const route: FastifyPluginAsync = async (app) => {
             workspaceId: access.workspaceId,
             operation: 'picture-book.storyboard-prompts.generate',
           },
+          {
+            onChunk: (text) => sendEvent('chunk', { text }),
+            onThinking: () => sendPing(),
+            onDone: () => {},
+            onError: () => {},
+          },
         )
-        const storyboard = normalizeStoryboardPromptResult(parsePictureBookJson(raw), state.script.pages)
+
+        const storyboard = normalizeStoryboardPromptResult(parsePictureBookJson(fullText), state.script.pages)
         const nextState = {
           ...state,
           steps: { active: 'storyboard' as const, completed: ['script' as const, 'assets' as const] },
@@ -148,10 +179,12 @@ const route: FastifyPluginAsync = async (app) => {
           })
           .execute()
 
-        return reply.send({ success: true, storyboard, state: nextState })
+        sendEvent('done', { success: true, storyboard, state: nextState })
       } catch (err) {
         app.log.error(err, 'picture-book storyboard prompts error')
-        return reply.status(502).send({ success: false, error: { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' } })
+        sendEvent('error', { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' })
+      } finally {
+        reply.raw.end()
       }
     },
   )

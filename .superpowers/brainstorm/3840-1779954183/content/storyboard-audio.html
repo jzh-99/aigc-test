@@ -1,0 +1,109 @@
+<h2>旁白编辑 + 语气词/停顿标记设计</h2>
+<p class="subtitle">中英文旁白可编辑，支持插入语气词和停顿标记，生成音频时解析标记</p>
+
+<div class="mockup">
+  <div class="mockup-header">旁白编辑器 — 语气词 & 停顿标记</div>
+  <div class="mockup-body" style="background:#1a1a2e;padding:20px;">
+    <!-- 中文旁白编辑器 -->
+    <div style="background:#16213e;border-radius:8px;border:1px solid #334155;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:11px;color:#64748b;">中文旁白</div>
+        <div style="display:flex;gap:6px;">
+          <div style="padding:3px 8px;background:#1e293b;border:1px solid #475569;border-radius:4px;font-size:10px;color:#06b6d4;cursor:pointer;">⏸ 停顿</div>
+          <div style="padding:3px 8px;background:#1e293b;border:1px solid #475569;border-radius:4px;font-size:10px;color:#a78bfa;cursor:pointer;">😊 语气词</div>
+        </div>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:12px;min-height:60px;border:1px solid #475569;">
+        <span style="color:#cbd5e1;font-size:13px;">小狗抬头看着月亮，</span>
+        <span style="display:inline-flex;align-items:center;gap:2px;background:#164e63;border:1px solid #0891b2;border-radius:4px;padding:1px 6px;font-size:11px;color:#67e8f9;vertical-align:middle;">⏸ 0.5s</span>
+        <span style="color:#cbd5e1;font-size:13px;"> 心里充满了勇气。</span>
+        <span style="display:inline-flex;align-items:center;gap:2px;background:#3b0764;border:1px solid #7c3aed;border-radius:4px;padding:1px 6px;font-size:11px;color:#c4b5fd;vertical-align:middle;">(轻叹)</span>
+        <span style="color:#cbd5e1;font-size:13px;"> "我不怕黑了！"</span>
+      </div>
+    </div>
+
+    <!-- 停顿下拉 -->
+    <div style="display:flex;gap:16px;margin-bottom:16px;">
+      <div style="flex:1;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:#06b6d4;font-weight:600;margin-bottom:8px;">停顿预设</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <span style="padding:3px 8px;background:#164e63;border-radius:4px;font-size:11px;color:#67e8f9;">0.25s</span>
+          <span style="padding:3px 8px;background:#164e63;border-radius:4px;font-size:11px;color:#67e8f9;">0.5s</span>
+          <span style="padding:3px 8px;background:#164e63;border-radius:4px;font-size:11px;color:#67e8f9;">1.0s</span>
+          <span style="padding:3px 8px;background:#164e63;border-radius:4px;font-size:11px;color:#67e8f9;">1.5s</span>
+          <span style="padding:3px 8px;background:#164e63;border-radius:4px;font-size:11px;color:#67e8f9;border:1px dashed #0891b2;">自定义...</span>
+        </div>
+      </div>
+      <div style="flex:1;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:#a78bfa;font-weight:600;margin-bottom:8px;">语气词</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <span style="padding:3px 8px;background:#3b0764;border-radius:4px;font-size:11px;color:#c4b5fd;">(笑声)</span>
+          <span style="padding:3px 8px;background:#3b0764;border-radius:4px;font-size:11px;color:#c4b5fd;">(轻叹)</span>
+          <span style="padding:3px 8px;background:#3b0764;border-radius:4px;font-size:11px;color:#c4b5fd;">(惊讶)</span>
+          <span style="padding:3px 8px;background:#3b0764;border-radius:4px;font-size:11px;color:#c4b5fd;">(嗯)</span>
+          <span style="padding:3px 8px;background:#3b0764;border-radius:4px;font-size:11px;color:#c4b5fd;">(哭泣)</span>
+          <span style="padding:3px 8px;background:#3b0764;border-radius:4px;font-size:11px;color:#c4b5fd;">更多...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 英文旁白 -->
+    <div style="background:#16213e;border-radius:8px;border:1px solid #334155;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:11px;color:#64748b;">English Narration</div>
+        <div style="display:flex;gap:6px;">
+          <div style="padding:3px 8px;background:#1e293b;border:1px solid #475569;border-radius:4px;font-size:10px;color:#06b6d4;cursor:pointer;">⏸ Pause</div>
+          <div style="padding:3px 8px;background:#1e293b;border:1px solid #475569;border-radius:4px;font-size:10px;color:#a78bfa;cursor:pointer;">😊 Tone</div>
+        </div>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:12px;min-height:60px;border:1px solid #475569;">
+        <span style="color:#cbd5e1;font-size:13px;">The puppy looked up at the moon,</span>
+        <span style="display:inline-flex;align-items:center;gap:2px;background:#164e63;border:1px solid #0891b2;border-radius:4px;padding:1px 6px;font-size:11px;color:#67e8f9;vertical-align:middle;">⏸ 0.5s</span>
+        <span style="color:#cbd5e1;font-size:13px;"> feeling brave.</span>
+        <span style="display:inline-flex;align-items:center;gap:2px;background:#3b0764;border:1px solid #7c3aed;border-radius:4px;padding:1px 6px;font-size:11px;color:#c4b5fd;vertical-align:middle;">(sighs)</span>
+        <span style="color:#cbd5e1;font-size:13px;"> "I'm not afraid anymore!"</span>
+      </div>
+    </div>
+
+    <!-- 音频播放器 -->
+    <div style="background:#16213e;border-radius:8px;border:1px solid #334155;padding:12px;">
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;">配音播放</div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;background:#1e293b;border-radius:6px;padding:8px 12px;">
+          <div style="width:24px;height:24px;background:#4338ca;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:white;">▶</div>
+          <div style="flex:1;height:3px;background:#334155;border-radius:2px;position:relative;">
+            <div style="width:40%;height:100%;background:#a5b4fc;border-radius:2px;"></div>
+          </div>
+          <span style="font-size:10px;color:#94a3b8;">0:03 / 0:08</span>
+          <span style="padding:2px 6px;background:#312e81;border-radius:3px;font-size:9px;color:#a5b4fc;">中文</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;background:#1e293b;border-radius:6px;padding:8px 12px;">
+          <div style="width:24px;height:24px;background:#1e293b;border:1px solid #475569;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#94a3b8;">▶</div>
+          <div style="flex:1;height:3px;background:#334155;border-radius:2px;"></div>
+          <span style="font-size:10px;color:#94a3b8;">0:00 / 0:07</span>
+          <span style="padding:2px 6px;background:#1e293b;border:1px solid #475569;border-radius:3px;font-size:9px;color:#94a3b8;">EN</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 style="margin-top:32px;">AI 自动生成带标记的旁白</h2>
+<p class="subtitle">和图片提示词类似，AI 生成旁白时自动插入语气词和停顿标记</p>
+
+<div class="options">
+  <div class="option" data-choice="auto-prosody" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>AI 自动标注语气和停顿（推荐）</h3>
+      <p>修改 storyboard-prompts 的 system prompt，让 AI 在生成旁白时自动插入 <code>&lt;#0.5#&gt;</code> 停顿和 <code>(laughs)</code> 语气词。前端渲染为彩色 pill，用户可手动增删调整。生成音频时原样传给 TTS 模型。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="manual-prosody" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>仅手动标注</h3>
+      <p>AI 生成纯文本旁白，用户通过工具栏按钮手动插入停顿和语气词。精确但操作成本高。</p>
+    </div>
+  </div>
+</div>

@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { useGenerationStore } from '@/stores/generation-store'
 import { translateTaskError } from '@/lib/error-messages'
 import { apiDelete } from '@/lib/api-client'
+import { getBatchImagePreviewUrls, getBatchVideoPreviewUrl, getBatchResourceTypes } from './batch-preview'
 
 interface BatchListCardProps {
   batch: BatchResponse & { thumbnail_urls?: string[] }
@@ -25,6 +26,12 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
   completed: { label: '已完成', variant: 'success' },
   partial_complete: { label: '部分完成', variant: 'warning' },
   failed: { label: '失败', variant: 'destructive' },
+}
+
+const resourceTypeLabels: Record<string, string> = {
+  image: '图片',
+  video: '视频',
+  audio: '音频',
 }
 
 /** 将 "16:9" 格式的宽高比转为 CSS aspect-ratio 值 "16 / 9" */
@@ -314,12 +321,8 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
     setTimeout(() => setApplied(false), 1500)
   }
 
-  // Use thumbnail_urls from list API, fall back to tasks data
-  const thumbnails: string[] = (batch as any).thumbnail_urls?.length
-    ? (batch as any).thumbnail_urls
-    : batch.tasks
-        .filter((t) => t.status === 'completed' && (t.asset?.storage_url || t.asset?.original_url))
-        .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
+  const thumbnails = getBatchImagePreviewUrls(batch)
+  const resourceTypes = getBatchResourceTypes(batch)
 
   const time = new Date(batch.created_at)
   const thumbnailAspect = parseAspectRatio((batch as any).params?.aspect_ratio)
@@ -331,11 +334,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
     ?? null
 
   const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
-  const videoUrl = isVideo
-    ? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.storage_url
-      ?? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.original_url
-      ?? (batch as any).thumbnail_urls?.[0]  // fallback: list API puts video URL here
-    : undefined
+  const videoUrl = isVideo ? getBatchVideoPreviewUrl(batch) : undefined
   const firstProcessingStartedAt = batch.tasks
     .map((task) => task.processing_started_at)
     .find(Boolean)
@@ -361,6 +360,11 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               <Badge variant={status.variant} className="text-[10px]">
                 {status.label}
               </Badge>
+              {resourceTypes.map((type) => (
+                <Badge key={type} variant="outline" className="text-[10px]">
+                  {resourceTypeLabels[type] ?? type}
+                </Badge>
+              ))}
               <span className="text-xs text-muted-foreground">
                 {batch.completed_count}/{batch.quantity}
               </span>

@@ -129,6 +129,7 @@ const route: FastifyPluginAsync = async (app) => {
             team_id: teamId,
             workspace_id: workspaceId,
             credit_account_id: creditAccountId,
+            source: 'generation',
             module: 'action_imitation',
             provider: 'volcengine',
             model: ACTION_REQ_KEY,

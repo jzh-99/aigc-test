@@ -1,18 +1,24 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
+import { jsonbArray } from '../routes/picture-book/_shared.js'
 import { buildAssetPromptUserPrompt, normalizeAssetPromptResult } from '../routes/picture-book/post-asset-prompts.js'
 import { buildScriptUserPrompt, normalizeScriptResult } from '../routes/picture-book/post-script.js'
 import { buildStoryboardPromptUserPrompt, normalizeStoryboardPromptResult } from '../routes/picture-book/post-storyboard-prompts.js'
 
 describe('picture book Qwen generation helpers', () => {
-  test('buildScriptUserPrompt 明确故事摘要仅中文且每页台词/旁白双语', () => {
+  test('jsonbArray 序列化为 JSON 字符串，避免 pg 数组写入 jsonb 失败', () => {
+    assert.equal(jsonbArray(['batch-1']), '["batch-1"]')
+  })
+
+  test('buildScriptUserPrompt 明确完整故事仅中文且每页台词/旁白双语', () => {
     const prompt = buildScriptUserPrompt({
       prompt: '一只小狗第一次去月亮上交朋友',
       style: '吉卜力风',
       pageCount: 10,
     })
 
-    assert.match(prompt, /故事摘要只输出中文/)
+    assert.match(prompt, /中文完整故事/)
+    assert.match(prompt, /visualPrompt 字段只输出中文/)
     assert.match(prompt, /10 页/)
     assert.match(prompt, /dialogue\.zh/)
     assert.match(prompt, /narration\.en/)
@@ -45,6 +51,7 @@ describe('picture book Qwen generation helpers', () => {
     })
 
     assert.match(prompt, /只生成提示词/)
+    assert.match(prompt, /必须使用简体中文/)
     assert.match(prompt, /characters/)
     assert.match(prompt, /backgrounds/)
 
@@ -63,12 +70,16 @@ describe('picture book Qwen generation helpers', () => {
       style: '经典水彩风',
       pages: [{ page: 1, narration: { zh: '你好。', en: 'Hello.' }, dialogue: { zh: '', en: '' }, visualPrompt: '花园' }],
       characters: [{ id: 'character_1', name: '小狗', prompt: '小狗设定图', imageUrl: null }],
-      backgrounds: [],
+      backgrounds: [{ id: 'background_1', name: '花园', prompt: '花园背景设定图', imageUrl: 'https://img.test/garden.png' }],
     })
 
     assert.match(prompt, /imagePrompt/)
     assert.match(prompt, /audioText\.zh/)
     assert.match(prompt, /audioText\.en/)
+    assert.match(prompt, /@角色名/)
+    assert.match(prompt, /@背景名/)
+    assert.match(prompt, /小狗/)
+    assert.match(prompt, /只在 imagePrompt 中使用 @/)
 
     const result = normalizeStoryboardPromptResult({
       pages: [{ imagePrompt: '水彩花园里的小狗', audioText: { zh: '你好。', en: 'Hello.' } }],
