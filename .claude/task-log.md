@@ -113,7 +113,63 @@
 - 实现子代理曾在独立 worktree 完成修复；所有最终提交已 cherry-pick 到当前 `short-drama-mvp` worktree。
 
 ### 下一步
-进入 Task 4: Project CRUD API。需要实现短剧项目创建、列表、详情、保存 state 和软删除接口，并基于 Task 3 的共享 helper 完成权限、校验和状态 normalize。
+进入 Task 5: Text Generation API。需要实现剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口，继续保持权限校验、余额预检查、结构化 JSON 校验和状态回写。
+
+## 2026-05-29 — Task 4 项目 CRUD API 完成
+
+### 本轮完成内容
+
+**Task 4: Project CRUD API** 已完成：
+- 新增 `apps/api/src/routes/short-drama.ts`
+- 新增 `apps/api/src/routes/short-drama/post-projects.ts`
+- 新增 `apps/api/src/routes/short-drama/get-projects.ts`
+- 新增 `apps/api/src/routes/short-drama/get-project-id.ts`
+- 新增 `apps/api/src/routes/short-drama/put-project-id.ts`
+- 新增 `apps/api/src/routes/short-drama/delete-project-id.ts`
+- 修改 `apps/api/src/app.ts`，注册短剧路由并补充 CORS `PUT` 方法
+
+### 实现内容
+
+1. `POST /short-drama/projects`：创建短剧项目，校验 workspace 写权限、创意、比例和集数，初始化默认 state 并返回 `projectId`。
+2. `GET /short-drama/projects`：按 workspace 查询未删除项目，支持 `cursor` 和 `limit`，按 `updated_at desc` 分页，limit 上限 100。
+3. `GET /short-drama/projects/recent`：查询最近短剧项目，limit 上限 20。
+4. `GET /short-drama/projects/:id`：校验项目访问权限并返回详情。
+5. `GET /short-drama/projects/:id/export-status`：返回当前项目 `state.exports`。
+6. `PUT /short-drama/projects/:id`：校验写权限，保存 state、标题、封面、状态、active step，并更新草稿时间。
+7. `DELETE /short-drama/projects/:id`：校验写权限后执行软删除。
+8. 所有短剧 API 统一挂载到 `/api/v1/short-drama/*`，由全局 JWT 插件保护认证。
+
+### Review 过程
+
+1. 实现子代理完成初版提交：`0213e73 feat: add short drama project CRUD routes`。
+2. spec compliance review 首轮失败，指出实现子代理 worktree 中 `packages/db/src/schema.ts` 回退了 Task 2 的 `task_batches` 短剧关联字段。
+3. 修复子代理恢复字段并提交：`810e53c fix: preserve short drama batch schema fields`。
+4. 将实现和修复以 `--no-commit` cherry-pick 到当前 worktree 后，确认当前 worktree 没有 `packages/db/src/schema.ts` diff，避免覆盖已 review 通过的数据层代码。
+5. code quality review 首轮指出状态枚举、标题长度魔法数字、`text_model` 说明和 state normalize 返回需要修复；同时指出 auth guard 但经核查全局 `jwt-auth` 已覆盖 `/api/v1/short-drama/*`。
+6. 修复子代理在当前 worktree 修复上述实际问题。
+7. code quality 复审又指出 CORS methods 缺少 `PUT`，已在 `apps/api/src/app.ts` 中补充。
+8. 最终 code quality 复审通过，确认 Task 4 无阻塞性问题。
+
+### 合并到当前 worktree
+
+Task 4 已合并到当前 `short-drama-mvp` worktree：
+- `378e724 feat: add short drama project CRUD routes`
+
+### 验证结果
+
+在当前 worktree 执行：
+- `pnpm --filter @aigc/types exec tsx src/short-drama.test.ts` ✅ 输出 `✓ All tests passed`
+- `pnpm --filter @aigc/types build` ✅ TypeScript 构建成功
+- `pnpm --filter @aigc/api build` ✅ TypeScript 构建成功
+
+### 取舍与注意事项
+
+- `text_model` 作为创建项目入参保留以符合 API 设计，但第一版由共享默认模型管理，后端不信任也不使用前端传入模型。
+- 短剧路由没有重复添加局部 auth guard，因为全局 `jwt-auth` 插件已对非 PUBLIC_ROUTES 强制认证，`/api/v1/short-drama/*` 不在公开路由列表中。
+- 合并时只引入 Task 4 路由和 `app.ts` 注册/CORS 变更，没有覆盖 Task 1/2/3 已 review 通过的共享类型、DB schema 和 API helper。
+
+### 下一步
+进入 Task 5: Text Generation API。需要实现剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口，继续保持权限校验、余额预检查、结构化 JSON 校验和状态回写。
 
 ## 2026-05-29 — Task 3 API 共享 helper 与测试完成
 
@@ -161,4 +217,60 @@ Task 3 已合并到当前 `short-drama-mvp` worktree：
 - JSON 解析失败统一返回 `AI 返回格式错误，请重试`，避免向前端暴露解析细节；如后续需要排障，应在调用方记录安全日志。
 
 ### 下一步
-进入 Task 4: Project CRUD API。需要实现短剧项目创建、列表、详情、保存 state 和软删除接口，并基于 Task 3 的共享 helper 完成权限、校验和状态 normalize。
+进入 Task 5: Text Generation API。需要实现剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口，继续保持权限校验、余额预检查、结构化 JSON 校验和状态回写。
+
+## 2026-05-29 — Task 4 项目 CRUD API 完成
+
+### 本轮完成内容
+
+**Task 4: Project CRUD API** 已完成：
+- 新增 `apps/api/src/routes/short-drama.ts`
+- 新增 `apps/api/src/routes/short-drama/post-projects.ts`
+- 新增 `apps/api/src/routes/short-drama/get-projects.ts`
+- 新增 `apps/api/src/routes/short-drama/get-project-id.ts`
+- 新增 `apps/api/src/routes/short-drama/put-project-id.ts`
+- 新增 `apps/api/src/routes/short-drama/delete-project-id.ts`
+- 修改 `apps/api/src/app.ts`，注册短剧路由并补充 CORS `PUT` 方法
+
+### 实现内容
+
+1. `POST /short-drama/projects`：创建短剧项目，校验 workspace 写权限、创意、比例和集数，初始化默认 state 并返回 `projectId`。
+2. `GET /short-drama/projects`：按 workspace 查询未删除项目，支持 `cursor` 和 `limit`，按 `updated_at desc` 分页，limit 上限 100。
+3. `GET /short-drama/projects/recent`：查询最近短剧项目，limit 上限 20。
+4. `GET /short-drama/projects/:id`：校验项目访问权限并返回详情。
+5. `GET /short-drama/projects/:id/export-status`：返回当前项目 `state.exports`。
+6. `PUT /short-drama/projects/:id`：校验写权限，保存 state、标题、封面、状态、active step，并更新草稿时间。
+7. `DELETE /short-drama/projects/:id`：校验写权限后执行软删除。
+8. 所有短剧 API 统一挂载到 `/api/v1/short-drama/*`，由全局 JWT 插件保护认证。
+
+### Review 过程
+
+1. 实现子代理完成初版提交：`0213e73 feat: add short drama project CRUD routes`。
+2. spec compliance review 首轮失败，指出实现子代理 worktree 中 `packages/db/src/schema.ts` 回退了 Task 2 的 `task_batches` 短剧关联字段。
+3. 修复子代理恢复字段并提交：`810e53c fix: preserve short drama batch schema fields`。
+4. 将实现和修复以 `--no-commit` cherry-pick 到当前 worktree 后，确认当前 worktree 没有 `packages/db/src/schema.ts` diff，避免覆盖已 review 通过的数据层代码。
+5. code quality review 首轮指出状态枚举、标题长度魔法数字、`text_model` 说明和 state normalize 返回需要修复；同时指出 auth guard 但经核查全局 `jwt-auth` 已覆盖 `/api/v1/short-drama/*`。
+6. 修复子代理在当前 worktree 修复上述实际问题。
+7. code quality 复审又指出 CORS methods 缺少 `PUT`，已在 `apps/api/src/app.ts` 中补充。
+8. 最终 code quality 复审通过，确认 Task 4 无阻塞性问题。
+
+### 合并到当前 worktree
+
+Task 4 已合并到当前 `short-drama-mvp` worktree：
+- `378e724 feat: add short drama project CRUD routes`
+
+### 验证结果
+
+在当前 worktree 执行：
+- `pnpm --filter @aigc/types exec tsx src/short-drama.test.ts` ✅ 输出 `✓ All tests passed`
+- `pnpm --filter @aigc/types build` ✅ TypeScript 构建成功
+- `pnpm --filter @aigc/api build` ✅ TypeScript 构建成功
+
+### 取舍与注意事项
+
+- `text_model` 作为创建项目入参保留以符合 API 设计，但第一版由共享默认模型管理，后端不信任也不使用前端传入模型。
+- 短剧路由没有重复添加局部 auth guard，因为全局 `jwt-auth` 插件已对非 PUBLIC_ROUTES 强制认证，`/api/v1/short-drama/*` 不在公开路由列表中。
+- 合并时只引入 Task 4 路由和 `app.ts` 注册/CORS 变更，没有覆盖 Task 1/2/3 已 review 通过的共享类型、DB schema 和 API helper。
+
+### 下一步
+进入 Task 5: Text Generation API。需要实现剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口，继续保持权限校验、余额预检查、结构化 JSON 校验和状态回写。

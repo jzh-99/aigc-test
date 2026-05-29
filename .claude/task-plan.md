@@ -21,10 +21,10 @@
 
 ## 阶段二：API 基础与项目 CRUD
 - [x] Task 3: API Shared Helpers And Tests — 新增短剧 API 共享 helper、fixture 和基础测试
-- [~] Task 4: Project CRUD API
+- [x] Task 4: Project CRUD API — 新增短剧项目创建、列表、详情、保存 state 和软删除接口
 
 ## 阶段三：生成、资产、同步与导出 API
-- [ ] Task 5: Text Generation API
+- [~] Task 5: Text Generation API
 - [ ] Task 6: Asset Image, Upload, Segment Video, And Sync API
 - [ ] Task 7: Export API And Worker Queue Types
 
@@ -70,5 +70,13 @@
   - `pnpm --filter @aigc/api exec tsx src/__tests__/short-drama-validation.test.ts` ✅
   - `pnpm --filter @aigc/api build` ✅
 
+- Task 4 已完成并通过两阶段 review。
+- Task 4 合并到当前 worktree 的提交：
+  - `378e724 feat: add short drama project CRUD routes`
+- Task 4 验证命令：
+  - `pnpm --filter @aigc/types exec tsx src/short-drama.test.ts` ✅
+  - `pnpm --filter @aigc/types build` ✅
+  - `pnpm --filter @aigc/api build` ✅
+
 ## 下一步
-- Task 4: Project CRUD API — 实现短剧项目创建、列表、详情、保存 state 和软删除接口。
+- Task 5: Text Generation API — 实现剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口。
