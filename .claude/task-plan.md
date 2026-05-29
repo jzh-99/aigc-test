@@ -25,23 +25,23 @@
 
 ## 阶段三：生成、资产、同步与导出 API
 - [x] Task 5: Text Generation API — 新增短剧剧本摘要、分集梗概、资产提示词和单集分镜文本生成接口
-- [~] Task 6: Asset Image, Upload, Segment Video, And Sync API
-- [ ] Task 7: Export API And Worker Queue Types
+- [x] Task 6: Asset Image, Upload, Segment Video, And Sync API
+- [x] Task 7: Export API And Worker Queue Types
 
 ## 阶段四：Worker
-- [ ] Task 8: Export Worker
+- [x] Task 8: Export Worker
 
 ## 阶段五：前端基础与首页
-- [ ] Task 9: Frontend API, Styles, And Project Hook
-- [ ] Task 10: Short Drama Home Page
+- [x] Task 9: Frontend API, Styles, And Project Hook
+- [x] Task 10: Short Drama Home Page
 
 ## 阶段六：制作页与单集编辑
-- [ ] Task 11: Project Editor Steps
-- [ ] Task 12: Episode Editor UI
+- [x] Task 11: Project Editor Steps
+- [x] Task 12: Episode Editor UI
 
 ## 阶段七：隔离、文档与验证
-- [ ] Task 13: Asset And History Source Isolation
-- [ ] Task 14: Documentation, Full Verification, And Cleanup
+- [x] Task 13: Asset And History Source Isolation
+- [x] Task 14: Documentation, Full Verification, And Cleanup
 
 ---
 
