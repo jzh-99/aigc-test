@@ -12,7 +12,7 @@ import { usePendingBatchWatcher } from '@/hooks/video-studio/use-pending-batch-w
 import { VIDEO_PER_SECOND_CREDITS } from '@/lib/credits'
 
 type VideoModel = 'seedance-2.0' | 'seedance-2.0-fast' | 'seedance-1.5-pro'
-type VideoResolution = '720p' | '1080p'
+type VideoResolution = '480p' | '720p' | '1080p'
 
 interface VideoParams {
   model: VideoModel
@@ -21,24 +21,26 @@ interface VideoParams {
   style: string
 }
 
-const VIDEO_MODEL_OPTIONS: Array<{ value: VideoModel; label: string; creditsPerSec: number }> = [
-  { value: 'seedance-2.0',      label: 'Seedance 2.0',      creditsPerSec: VIDEO_PER_SECOND_CREDITS['seedance-2.0'] },
-  { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', creditsPerSec: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'] },
-  { value: 'seedance-1.5-pro',  label: 'Seedance 1.5 Pro',  creditsPerSec: VIDEO_PER_SECOND_CREDITS['seedance-1.5-pro'] },
+const VIDEO_MODEL_OPTIONS: Array<{ value: VideoModel; label: string }> = [
+  { value: 'seedance-2.0',      label: 'Seedance 2.0' },
+  { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast' },
+  { value: 'seedance-1.5-pro',  label: 'Seedance 1.5 Pro' },
 ]
 
 const VIDEO_RESOLUTION_OPTIONS: Array<{ value: VideoResolution; label: string; desc: string }> = [
-  { value: '720p', label: '720p', desc: '标准' },
+  { value: '480p',  label: '480p',  desc: '流畅' },
+  { value: '720p',  label: '720p',  desc: '标准' },
   { value: '1080p', label: '1080p', desc: '高清' },
 ]
 
-const FRAGMENT_DURATION_OPTIONS = [null, 4, 5, 6, 8, 10] as const
+const FRAGMENT_DURATION_OPTIONS = [null, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const
 const DEFAULT_VIDEO_PARAMS: Omit<VideoParams, 'style'> = { model: 'seedance-2.0', resolution: '720p', durationOverride: null }
 const VIDEO_PROMPT_SUFFIX = '画面稳定流畅，面部清晰不变形，人体结构正常，无文字伪影，无多余手指。视频需要有台词和音效，不要有字幕和bgm。'
 
 function calcVideoCost(fragment: Fragment, params: VideoParams, durationOverride?: number | null): number {
   const dur = Math.min(Math.max(Math.round(durationOverride ?? params.durationOverride ?? fragment.duration), 4), 15)
-  const cps = VIDEO_MODEL_OPTIONS.find(m => m.value === params.model)?.creditsPerSec ?? 5
+  const key = `${params.model}-${params.resolution}`
+  const cps = VIDEO_PER_SECOND_CREDITS[key] ?? VIDEO_PER_SECOND_CREDITS[params.model] ?? 5
   return dur * cps
 }
 
@@ -642,14 +644,14 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
                       className={`text-left px-2 py-1 rounded text-xs transition-colors ${videoParams.model === m.value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     >
                       {m.label}
-                      <span className="ml-1 opacity-60">{m.creditsPerSec}积分/秒</span>
+                      <span className="ml-1 opacity-60">{VIDEO_PER_SECOND_CREDITS[`${m.value}-${videoParams.resolution}`] ?? VIDEO_PER_SECOND_CREDITS[m.value] ?? 5}积分/秒</span>
                     </button>
                   ))}
                 </div>
               </div>
               <div className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">清晰度</p>
-                <div className="grid grid-cols-2 gap-1">
+                <div className="grid grid-cols-3 gap-1">
                   {VIDEO_RESOLUTION_OPTIONS.filter((resolution) => !(resolution.value === '1080p' && videoParams.model === 'seedance-2.0-fast')).map((resolution) => (
                     <button
                       key={resolution.value}

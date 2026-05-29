@@ -42,6 +42,7 @@ export interface VideoGenConfig {
   videoMode: VideoMode
   aspectRatio: string
   duration: number
+  resolution: '480p' | '720p' | '1080p'
   generateAudio: boolean
   cameraFixed: boolean
   watermark: boolean

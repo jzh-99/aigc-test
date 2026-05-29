@@ -1,6 +1,6 @@
 import { Film, ImageIcon, Loader2, Music, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { VideoMode } from '@/lib/canvas/types'
+import type { VideoMode, VideoGenConfig } from '@/lib/canvas/types'
 import {
   SEEDANCE_DURATION_OPTIONS,
   VIDEO_ASPECT_RATIOS_SEEDANCE,
@@ -26,6 +26,7 @@ interface VideoGenPanelProps {
   videoMode: VideoMode
   videoAspect: string
   videoDuration: number
+  videoResolution: VideoGenConfig['resolution']
   generateAudio: boolean
   cameraFixed: boolean
   executing: boolean
@@ -52,6 +53,7 @@ export function VideoGenPanel({
   videoMode,
   videoAspect,
   videoDuration,
+  videoResolution,
   generateAudio,
   cameraFixed,
   executing,
@@ -63,8 +65,9 @@ export function VideoGenPanel({
 }: VideoGenPanelProps) {
   const currentVideoModel = VIDEO_MODEL_OPTIONS.find((m) => m.value === videoModel) ?? VIDEO_MODEL_OPTIONS[0]
   const isSeedance = currentVideoModel.isSeedance
+  const creditKey = isSeedance ? (`${videoModel}-${videoResolution}` in VIDEO_CREDITS_PER_SEC ? `${videoModel}-${videoResolution}` : videoModel) : videoModel
   const videoCredits = isSeedance
-    ? (VIDEO_CREDITS_PER_SEC[videoModel] ?? 3) * (videoDuration === -1 ? 15 : videoDuration)
+    ? (VIDEO_CREDITS_PER_SEC[creditKey] ?? 5) * (videoDuration === -1 ? 15 : videoDuration)
     : (VIDEO_CREDITS_PER_SEC[videoModel] ?? 10)
 
   return (
@@ -265,6 +268,28 @@ export function VideoGenPanel({
                 <option key={opt.value} value={String(opt.value)}>{opt.label}</option>
               ))}
             </select>
+          </div>
+        )}
+
+        {isSeedance && (
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium text-muted-foreground">清晰度</label>
+            <div className="flex gap-1">
+              {(['480p', '720p', '1080p'] as const)
+                .filter((r) => !(r === '1080p' && videoModel === 'seedance-2.0-fast'))
+                .map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => onUpdateCfg({ resolution: r })}
+                    className={cn(
+                      'flex-1 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                      videoResolution === r ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted'
+                    )}
+                  >
+                    {r}
+                  </button>
+                ))}
+            </div>
           </div>
         )}
 

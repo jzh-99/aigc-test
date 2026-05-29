@@ -69,6 +69,7 @@ const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
   videoMode: 'multiref',
   aspectRatio: 'adaptive',
   duration: 5,
+  resolution: '720p',
   generateAudio: true,
   cameraFixed: false,
   watermark: false,
@@ -99,6 +100,11 @@ function normalizeVideoConfig(config: unknown): VideoGenConfig {
   const model = VIDEO_MODEL_OPTIONS.find((m) => m.value === raw.model) ?? VIDEO_MODEL_OPTIONS[0]
   const videoMode = raw.videoMode === 'keyframe' || raw.videoMode === 'multiref' ? raw.videoMode : DEFAULT_VIDEO_CONFIG.videoMode
   const duration = typeof raw.duration === 'number' ? raw.duration : DEFAULT_VIDEO_CONFIG.duration
+  const rawRes = raw.resolution
+  const validResolutions: VideoGenConfig['resolution'][] = ['480p', '720p', '1080p']
+  const resolution: VideoGenConfig['resolution'] = validResolutions.includes(rawRes as VideoGenConfig['resolution'])
+    ? (rawRes as VideoGenConfig['resolution'])
+    : DEFAULT_VIDEO_CONFIG.resolution
 
   return {
     ...DEFAULT_VIDEO_CONFIG,
@@ -106,6 +112,7 @@ function normalizeVideoConfig(config: unknown): VideoGenConfig {
     model: model.value,
     videoMode,
     duration,
+    resolution,
   }
 }
 
@@ -192,6 +199,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const videoMode = videoCfg.videoMode
   const videoAspect = videoCfg.aspectRatio
   const videoDuration = videoCfg.duration
+  const videoResolution = videoCfg.resolution
   const generateAudio = videoCfg.generateAudio
   const cameraFixed = videoCfg.cameraFixed
   const videoWatermark = globalWatermark
@@ -292,8 +300,10 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
 
     const newMode = videoMode === 'multiref' && !model.supportsMultiref ? 'keyframe' : videoMode
     const newAspect = model.isSeedance ? (videoAspect || 'adaptive') : ''
-    updateCfg({ model: val, videoMode: newMode, aspectRatio: newAspect })
-  }, [updateCfg, videoAspect, videoMode])
+    // fast model doesn't support 1080p
+    const newResolution = val === 'seedance-2.0-fast' && videoResolution === '1080p' ? '720p' : videoResolution
+    updateCfg({ model: val, videoMode: newMode, aspectRatio: newAspect, resolution: newResolution })
+  }, [updateCfg, videoAspect, videoMode, videoResolution])
 
   const handleVideoModeChange = useCallback((newMode: VideoGenConfig['videoMode']) => {
     if (newMode === videoMode) return
@@ -322,6 +332,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           videoMode,
           aspectRatio: videoAspect || undefined,
           duration: videoDuration,
+          resolution: videoResolution,
           generateAudio,
           cameraFixed,
           watermark: videoWatermark,
@@ -449,6 +460,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           videoMode={videoMode}
           videoAspect={videoAspect}
           videoDuration={videoDuration}
+          videoResolution={videoResolution}
           generateAudio={generateAudio}
           cameraFixed={cameraFixed}
           executing={executing}

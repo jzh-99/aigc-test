@@ -60,6 +60,7 @@ export class NodeRegistry {
         videoMode: 'multiref',
         aspectRatio: 'adaptive',
         duration: 5,
+        resolution: '720p',
         generateAudio: true,
         cameraFixed: false,
         watermark: false,
