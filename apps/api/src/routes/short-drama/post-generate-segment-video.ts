@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { SHORT_DRAMA_VIDEO_MODEL } from '@aigc/types'
-import { freezeCredits } from '../../services/credit.js'
+import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { encryptProxyUrl } from '../../lib/storage.js'
 import {
@@ -235,9 +235,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
       } catch (err) {
         app.log.error({ err }, 'Failed to create segment video batch, refunding')
         try {
-          await db.updateTable('credit_accounts')
-            .set({ frozen_credits: sql`frozen_credits - ${totalCost}` })
-            .where('id', '=', creditAccountId).execute()
+          await refundCredits(teamId, creditAccountId, userId, totalCost)
         } catch (refundErr) {
           app.log.error({ refundErr }, 'CRITICAL: Failed to refund after batch creation failure')
         }
@@ -333,23 +331,26 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         })
       }
 
-      // 回写 external_task_id
-      await db.updateTable('tasks')
-        .set({ external_task_id: externalTaskId })
-        .where('id', '=', taskId)
-        .execute()
+      // 回写 external_task_id 并更新 segment 状态
+      try {
+        await db.updateTable('tasks')
+          .set({ external_task_id: externalTaskId })
+          .where('id', '=', taskId)
+          .execute()
 
-      // 更新 segment 状态
-      segment.status = 'generating'
+        segment.status = 'generating'
 
-      await db
-        .updateTable('short_drama_projects')
-        .set({
-          state: JSON.stringify(state),
-          updated_at: new Date(),
-        })
-        .where('id', '=', project.id)
-        .execute()
+        await db
+          .updateTable('short_drama_projects')
+          .set({
+            state: JSON.stringify(state),
+            updated_at: new Date(),
+          })
+          .where('id', '=', project.id)
+          .execute()
+      } catch (err) {
+        app.log.error({ err, taskId, batchId }, 'Failed to save external_task_id or state after video API success')
+      }
 
       return reply.status(201).send({
         success: true,

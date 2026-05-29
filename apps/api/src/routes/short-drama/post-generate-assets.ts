@@ -158,7 +158,26 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
           return { batch, tasks }
         })
 
-        // 入队 BullMQ
+        // 更新 state 中 asset 状态
+        const batchId = batchResult.batch.id
+        for (const asset of targetAssets) {
+          const stateAsset = state.assets.items.find(a => a.id === asset.id)
+          if (stateAsset) {
+            stateAsset.status = 'pending'
+          }
+        }
+
+        // 保存 state（在入队前，避免入队成功但 state 未更新）
+        await db
+          .updateTable('short_drama_projects')
+          .set({
+            state: JSON.stringify(state),
+            updated_at: new Date(),
+          })
+          .where('id', '=', project.id)
+          .execute()
+
+        // 入队 BullMQ（最后执行，前面步骤失败会退款）
         const jobPayloads = batchResult.tasks.map((task: any, i: number) => ({
           name: 'generate',
           data: {
@@ -176,25 +195,6 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
           opts: { priority: 10 },
         }))
         await getImageQueue().addBulk(jobPayloads)
-
-        // 更新 state 中 asset 状态
-        const batchId = batchResult.batch.id
-        for (const asset of targetAssets) {
-          const stateAsset = state.assets.items.find(a => a.id === asset.id)
-          if (stateAsset) {
-            stateAsset.status = 'pending'
-          }
-        }
-
-        // 保存 state
-        await db
-          .updateTable('short_drama_projects')
-          .set({
-            state: JSON.stringify(state),
-            updated_at: new Date(),
-          })
-          .where('id', '=', project.id)
-          .execute()
 
         return reply.status(201).send({
           success: true,

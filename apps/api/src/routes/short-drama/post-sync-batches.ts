@@ -37,23 +37,23 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
       let syncedCount = 0
 
       for (const batch of batches) {
-        const batchId = batch.id
         const module = batch.module
         const batchStatus = batch.status
 
-        // 只处理已完成或失败的 batch
         if (batchStatus !== 'completed' && batchStatus !== 'failed') {
           continue
         }
 
-        if (module === 'image') {
-          // 图片素材生成 → 同步到 assets
-          await syncImageBatch(db, state, batch)
-          syncedCount++
-        } else if (module === 'video') {
-          // 视频分镜生成 → 同步到 episodes.segments
-          await syncVideoBatch(db, state, batch)
-          syncedCount++
+        try {
+          if (module === 'image') {
+            await syncImageBatch(db, state, batch)
+            syncedCount++
+          } else if (module === 'video') {
+            await syncVideoBatch(db, state, batch)
+            syncedCount++
+          }
+        } catch (err) {
+          app.log.warn({ err, batchId: batch.id }, 'Failed to sync batch, skipping')
         }
       }
 
