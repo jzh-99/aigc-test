@@ -17,8 +17,8 @@ const studioModules = [
     description: '面向短剧脚本、分镜与成片工作流的创作模块。',
     href: '/toby-studio/short-drama',
     icon: Video,
-    status: '待开放',
-    available: false,
+    status: '已开放',
+    available: true,
   },
   {
     title: 'AI 绘本',
