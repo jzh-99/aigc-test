@@ -17,6 +17,7 @@ import { runTimeoutGuardian } from './jobs/timeout-guardian.js'
 import { runPurgeOldRecords } from './jobs/purge-old-records.js'
 import { runPurgeDeletedProjects } from './jobs/purge-deleted-projects.js'
 import { transferWorker } from './workers/transfer.js'
+import { shortDramaExportWorker } from './workers/short-drama-export.js'
 import { getRedis, closeRedis } from './lib/redis.js'
 import { startVideoPoller } from './pollers/video-poller.js'
 import { startAvatarPoller } from './pollers/avatar-poller.js'
@@ -127,6 +128,7 @@ const shutdown = async () => {
   clearInterval(actionImitationPollerTimer)
   await imageWorker.close()
   await transferWorker.close()
+  await shortDramaExportWorker.close()
   await closeRedis()
   process.exit(0)
 }
