@@ -333,6 +333,7 @@ function WizardContent() {
             scenes={[...(wizard.sharedScenes ?? []), ...wizard.scriptData.scenes]}
             initial={wizard.fragments.length > 0 ? wizard.fragments : undefined}
             defaultFragmentCount={wizard.scriptData.actCount}
+            onGenerated={wizard.setFragments}
             onComplete={(fragments) => {
               wizard.setFragments(fragments)
               wizard.completeStep('storyboard')

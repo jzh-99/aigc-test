@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { splitStoryboard } from '@/lib/video-studio-api'
 import type { Fragment, Shot } from '@/lib/video-studio-api'
 import type { DescribeData } from '@/hooks/video-studio/use-wizard-state'
+import { JsonImportDialog } from './json-import-dialog'
 
 interface Props {
   describeData: DescribeData
@@ -15,10 +16,11 @@ interface Props {
   scenes?: Array<{ name: string; description: string }>
   initial?: Fragment[]
   defaultFragmentCount?: number
+  onGenerated?: (fragments: Fragment[]) => void
   onComplete: (fragments: Fragment[]) => void
 }
 
-export function StepStoryboard({ describeData, script, characters, scenes, initial, defaultFragmentCount, onComplete }: Props) {
+export function StepStoryboard({ describeData, script, characters, scenes, initial, defaultFragmentCount, onGenerated, onComplete }: Props) {
   const token = useAuthStore((s) => s.accessToken)
   const [loading, setLoading] = useState(false)
   const [fragments, setFragments] = useState<Fragment[]>(initial ?? [])
@@ -100,6 +102,25 @@ export function StepStoryboard({ describeData, script, characters, scenes, initi
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           {loading ? '生成中…' : fragments.length > 0 ? '重新生成' : '生成片段'}
         </button>
+
+        <JsonImportDialog<Fragment[]>
+          label="导入片段 JSON"
+          hint={`期望结构（fragments 数组或直接数组）：\n{\n  "fragments": [\n    {\n      "id": "fragment_1",\n      "label": "片段1",\n      "duration": 12,\n      "transition": "过渡描述",\n      "shots": [\n        {\n          "id": "shot_1_1",\n          "label": "分镜1",\n          "content": "画面描述",\n          "cameraMove": "固定镜头",\n          "duration": 5\n        }\n      ]\n    }\n  ]\n}`}
+          validate={(p) => {
+            const arr = Array.isArray(p) ? p : (p as Record<string, unknown>)?.fragments
+            if (!Array.isArray(arr) || arr.length === 0) return null
+            for (const f of arr) {
+              if (typeof f !== 'object' || f === null) return null
+              if (!Array.isArray((f as Record<string, unknown>).shots)) return null
+            }
+            return arr as Fragment[]
+          }}
+          onImport={(data) => {
+            setFragments(data)
+            onGenerated?.(data)
+            toast.success(`导入 ${data.length} 个片段成功`)
+          }}
+        />
 
         {fragments.length > 0 && (
           <button

@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { writeScript } from '@/lib/video-studio-api'
 import type { DescribeData } from '@/hooks/video-studio/use-wizard-state'
 import type { ScriptResult } from '@/lib/video-studio-api'
+import { JsonImportDialog } from './json-import-dialog'
 
 interface Props {
   describeData: DescribeData
@@ -97,14 +98,39 @@ export function StepScript({ describeData, episodeContext, initial, scriptHistor
         </div>
 
         {!result ? (
-          <button
-            onClick={() => generate()}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 text-sm bg-primary text-primary-foreground py-2.5 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {loading ? '生成中…' : '✨ 生成剧本'}
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => generate()}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 text-sm bg-primary text-primary-foreground py-2.5 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {loading ? '生成中…' : '✨ 生成剧本'}
+            </button>
+            <JsonImportDialog<Omit<ScriptResult, 'success'>>
+              label="导入剧本 JSON"
+              hint={`期望结构：\n{\n  "title": "剧本标题",\n  "script": "剧本全文",\n  "characters": [{ "name": "角色名", "description": "描述", "voiceDescription": "音色" }],\n  "scenes": [{ "name": "场景名", "description": "描述" }]\n}`}
+              validate={(p) => {
+                if (typeof p !== 'object' || p === null) return null
+                const o = p as Record<string, unknown>
+                if (typeof o.script !== 'string' || !o.script) return null
+                return {
+                  title: typeof o.title === 'string' ? o.title : '',
+                  script: o.script,
+                  characters: Array.isArray(o.characters) ? o.characters as ScriptResult['characters'] : [],
+                  scenes: Array.isArray(o.scenes) ? o.scenes as ScriptResult['scenes'] : [],
+                  actCount: typeof o.actCount === 'number' ? o.actCount : undefined,
+                }
+              }}
+              onImport={(data) => {
+                setResult(data)
+                setEditedScript(data.script)
+                setHistoryIndex(-1)
+                onGenerated?.(data)
+                toast.success('剧本 JSON 导入成功')
+              }}
+            />
+          </div>
         ) : (
           <div className="space-y-3">
             {totalVersions > 1 && (
@@ -165,6 +191,30 @@ export function StepScript({ describeData, episodeContext, initial, scriptHistor
               确认剧本，进入分镜
               <ArrowRight className="w-4 h-4" />
             </button>
+
+            <JsonImportDialog<Omit<ScriptResult, 'success'>>
+              label="替换为 JSON 剧本"
+              hint={`期望结构：\n{\n  "title": "剧本标题",\n  "script": "剧本全文",\n  "characters": [{ "name": "角色名", "description": "描述", "voiceDescription": "音色" }],\n  "scenes": [{ "name": "场景名", "description": "描述" }]\n}`}
+              validate={(p) => {
+                if (typeof p !== 'object' || p === null) return null
+                const o = p as Record<string, unknown>
+                if (typeof o.script !== 'string' || !o.script) return null
+                return {
+                  title: typeof o.title === 'string' ? o.title : '',
+                  script: o.script,
+                  characters: Array.isArray(o.characters) ? o.characters as ScriptResult['characters'] : [],
+                  scenes: Array.isArray(o.scenes) ? o.scenes as ScriptResult['scenes'] : [],
+                  actCount: typeof o.actCount === 'number' ? o.actCount : undefined,
+                }
+              }}
+              onImport={(data) => {
+                setResult(data)
+                setEditedScript(data.script)
+                setHistoryIndex(-1)
+                onGenerated?.(data)
+                toast.success('剧本 JSON 导入成功')
+              }}
+            />
           </div>
         )}
       </div>

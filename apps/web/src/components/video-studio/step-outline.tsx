@@ -6,6 +6,8 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { generateSeriesOutline } from '@/lib/video-studio-api'
 import type { DescribeData, SeriesOutline } from '@/hooks/video-studio/use-wizard-state'
+import type { SeriesOutlineResult } from '@/lib/video-studio-api'
+import { JsonImportDialog } from './json-import-dialog'
 
 interface Props {
   describeData: DescribeData
@@ -72,6 +74,31 @@ export function StepOutline({ describeData, episodeCount, initial, activeEpisode
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           {loading ? '生成中…' : outline ? '重新生成大纲' : '生成剧集大纲'}
         </button>
+
+        <JsonImportDialog<SeriesOutline>
+          label="导入大纲 JSON"
+          hint={`期望结构：\n{\n  "title": "剧名",\n  "synopsis": "剧情简介",\n  "worldbuilding": "世界观",\n  "mainCharacters": [{ "name": "角色名", "description": "描述" }],\n  "mainScenes": [{ "name": "场景名", "description": "描述" }],\n  "episodes": [{ "id": "ep_1", "title": "集标题", "synopsis": "集简介" }]\n}`}
+          validate={(p) => {
+            if (typeof p !== 'object' || p === null) return null
+            const o = p as Record<string, unknown>
+            if (!Array.isArray(o.episodes) || o.episodes.length === 0) return null
+            return {
+              title: typeof o.title === 'string' ? o.title : '',
+              synopsis: typeof o.synopsis === 'string' ? o.synopsis : '',
+              worldbuilding: typeof o.worldbuilding === 'string' ? o.worldbuilding : '',
+              mainCharacters: Array.isArray(o.mainCharacters) ? o.mainCharacters as SeriesOutlineResult['mainCharacters'] : [],
+              mainScenes: Array.isArray(o.mainScenes) ? o.mainScenes as SeriesOutlineResult['mainScenes'] : [],
+              relationships: Array.isArray(o.relationships) ? o.relationships as SeriesOutlineResult['relationships'] : [],
+              episodes: o.episodes as SeriesOutlineResult['episodes'],
+            }
+          }}
+          onImport={(data) => {
+            setOutline(data)
+            onGenerated(data)
+            if (data.episodes[0]) onSelectEpisode(data.episodes[0].id)
+            toast.success('大纲 JSON 导入成功')
+          }}
+        />
 
         {outline && selectedEpisodeId && (
           <button

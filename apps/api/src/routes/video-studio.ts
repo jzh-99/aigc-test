@@ -1,8 +1,15 @@
 import type { FastifyInstance } from 'fastify'
+import { createWriteStream } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { pipeline } from 'node:stream/promises'
+import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { signAssetUrl } from '../lib/storage.js'
+import { signAssetUrl, uploadToS3 } from '../lib/storage.js'
 import { purgeVideoStudioProject, restoreProjectAssets, softDeleteProjectAssets } from '../lib/project-purge.js'
+
+const VS_UPLOAD_DIR = '/tmp/vs-uploads'
 
 export async function videoStudioRoutes(app: FastifyInstance) {
   const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
@@ -13,9 +20,9 @@ export async function videoStudioRoutes(app: FastifyInstance) {
   const ASSET_PROMPT_SYSTEM_PROMPT = process.env.AI_PROMPT_STUDIO_ASSET ?? ''
   const SERIES_OUTLINE_SYSTEM_PROMPT = process.env.AI_PROMPT_STUDIO_SERIES_OUTLINE ?? ''
 
-  async function callLLM(systemPrompt: string, userPrompt: string, maxTokens = 4000): Promise<string> {
+  async function callLLM(systemPrompt: string, userPrompt: string, maxTokens = 4000, timeoutMs = 90_000): Promise<string> {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 90_000)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
       const res = await fetch(`${AI_API_URL}/v1/chat/completions`, {
         method: 'POST',
@@ -38,7 +45,11 @@ export async function videoStudioRoutes(app: FastifyInstance) {
 
   function parseJSON<T>(raw: string): T | null {
     try {
-      const m = raw.match(/\{[\s\S]*\}/)
+      // 先尝试剥离 markdown 代码块
+      const codeBlock = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
+      const text = codeBlock ? codeBlock[1].trim() : raw
+      // 提取最外层 JSON 对象
+      const m = text.match(/\{[\s\S]*\}/)
       if (!m) return null
       return JSON.parse(m[0]) as T
     } catch {
@@ -78,10 +89,10 @@ export async function videoStudioRoutes(app: FastifyInstance) {
           type: 'object',
           required: ['description', 'style', 'duration'],
           properties: {
-            description: { type: 'string', maxLength: 3000 },
+            description: { type: 'string', maxLength: 50000 },
             style: { type: 'string', maxLength: 200 },
             duration: { type: 'number', minimum: 10, maximum: 600 },
-            feedback: { type: 'string', maxLength: 1000 },
+            feedback: { type: 'string', maxLength: 50000 },
           },
         },
       },
@@ -93,7 +104,7 @@ export async function videoStudioRoutes(app: FastifyInstance) {
       if (feedback) userPrompt += `\n\n修改意见：${feedback}`
 
       try {
-        const raw = await callLLM(SCRIPT_SYSTEM_PROMPT, userPrompt, 6000)
+        const raw = await callLLM(SCRIPT_SYSTEM_PROMPT, userPrompt, 6000, 120_000)
         type ScriptCharacter = { name: string; description: string; voiceDescription?: string; visualPresence?: boolean }
         type ScriptResult = { title?: string; actCount?: number; script?: string; characters?: ScriptCharacter[]; scenes?: Array<{ name: string; description: string }> }
         const parsed = parseJSON<ScriptResult>(raw)
@@ -133,7 +144,7 @@ export async function videoStudioRoutes(app: FastifyInstance) {
           type: 'object',
           required: ['script'],
           properties: {
-            script: { type: 'string', maxLength: 10000 },
+            script: { type: 'string', maxLength: 50000 },
             shotCount: { type: 'number', minimum: 0, maximum: 50 },
             fragmentCount: { type: 'number', minimum: 0, maximum: 50 },
             duration: { type: 'number', minimum: 10, maximum: 600 },
@@ -156,11 +167,12 @@ export async function videoStudioRoutes(app: FastifyInstance) {
       const userPrompt = `请将以下剧本${countInstruction}${ratioNote}${styleNote}${charList}${sceneList}。\n\n每个片段必须填写 transition 和 duration；每个分镜必须填写 characters、scene、duration、content 和 visualPrompt。content 必须与 visualPrompt 保持一致或高度一致。详细景别、角度、构图、焦点变化和运镜过程必须写进 visualPrompt。台词直接写在 visualPrompt 里；有台词时，台词后写“【角色名音色】语气：...”。\n\n剧本：\n\n${script}`
 
       try {
-        const raw = await callLLM(STORYBOARD_SYSTEM_PROMPT, userPrompt, 8000)
+        const raw = await callLLM(STORYBOARD_SYSTEM_PROMPT, userPrompt, 8000, 180_000)
         type ShotRaw = { id: string; label: string; content: string; characters?: string[]; scene?: string; duration: number; visualPrompt?: string }
         type FragmentRaw = { id: string; label: string; duration: number; transition?: string; shots: ShotRaw[] }
         type StoryboardResult = { fragments?: FragmentRaw[]; shots?: ShotRaw[] }
         const parsed = parseJSON<StoryboardResult>(raw)
+        app.log.info({ parsedOk: !!parsed, fragmentCount: parsed?.fragments?.length ?? 0, rawLength: raw.length, rawHead: raw.slice(0, 300) }, 'storyboard-split parse result')
         const fragments = parsed?.fragments ?? (parsed?.shots ? [{ id: 'fragment_1', label: '片段1', duration: parsed.shots.reduce((sum, shot) => sum + (shot.duration || 0), 0), shots: parsed.shots }] : [])
         return reply.send({ success: true, fragments, shots: fragments.flatMap((fragment) => fragment.shots ?? []) })
       } catch (err) {
@@ -869,5 +881,89 @@ export async function videoStudioRoutes(app: FastifyInstance) {
 
     await purgeVideoStudioProject(db, request.params.id)
     return reply.send({ success: true })
+  })
+
+  // POST /video-studio/upload-image — upload a reference image to persistent storage
+  app.post('/video-studio/upload-image', async (request, reply) => {
+    await mkdir(VS_UPLOAD_DIR, { recursive: true })
+    const data = await (request as any).file({ limits: { fileSize: 20 * 1024 * 1024 } })
+    if (!data) return reply.badRequest('No file provided')
+
+    const mimeType: string = data.mimetype ?? ''
+    if (!mimeType.startsWith('image/')) return reply.badRequest('Only image files are supported')
+
+    const ext = (data.filename as string).split('.').pop()?.toLowerCase() ?? 'jpg'
+    const fileId = `${randomUUID()}.${ext}`
+    const filePath = join(VS_UPLOAD_DIR, fileId)
+
+    await pipeline(data.file, createWriteStream(filePath))
+
+    try {
+      const hasS3 = !!(process.env.S3_ENDPOINT && process.env.S3_BUCKET && process.env.S3_ACCESS_KEY && process.env.S3_SECRET_KEY)
+      const externalStorageUrl = process.env.EXTERNAL_STORAGE_URL
+      let storageUrl: string
+
+      if (hasS3) {
+        const buf = await import('node:fs/promises').then((m) => m.readFile(filePath))
+        storageUrl = await uploadToS3(`vs-assets/${fileId}`, buf, mimeType)
+      } else if (externalStorageUrl) {
+        // Push to external storage: give it a temporary URL to pull from, get back a persistent URL
+        const baseUrl = process.env.AI_UPLOAD_BASE_URL ?? process.env.INTERNAL_API_URL ?? ''
+        const tempUrl = `${baseUrl}/api/v1/video-studio/uploads/${fileId}`
+        const res = await fetch(externalStorageUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid: randomUUID(), url: tempUrl, type: 'jpg' }),
+        })
+        if (!res.ok) throw new Error(`外部存储服务异常(${res.status})`)
+        const payload = await res.json() as any
+        if (payload?.code !== 10000 || !payload?.data?.url) throw new Error(payload?.msg ?? '外部存储返回异常')
+        // Rewrite host if EXTERNAL_STORAGE_BASE is set
+        const rawUrl: string = payload.data.url
+        const storageBase = process.env.EXTERNAL_STORAGE_BASE
+        if (storageBase) {
+          try {
+            const parsed = new URL(rawUrl)
+            const internal = new URL(storageBase)
+            parsed.protocol = internal.protocol
+            parsed.host = internal.host
+            storageUrl = parsed.toString()
+          } catch {
+            storageUrl = rawUrl
+          }
+        } else {
+          storageUrl = rawUrl
+        }
+      } else {
+        // No external storage — serve from local temp (valid as long as the process runs)
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? process.env.INTERNAL_API_URL ?? ''
+        storageUrl = `${baseUrl}/api/v1/video-studio/uploads/${fileId}`
+      }
+
+      const signedUrl = await signAssetUrl(storageUrl)
+      return reply.send({ url: signedUrl ?? storageUrl, storageUrl })
+    } catch (err: any) {
+      app.log.error({ err: err?.message ?? String(err) }, 'VS image upload failed')
+      return reply.status(502).send({ success: false, error: { code: 'UPLOAD_FAILED', message: '上传失败' } })
+    }
+  })
+
+  // GET /video-studio/uploads/:id — serve temp files so external storage can pull them
+  app.get<{ Params: { id: string } }>('/video-studio/uploads/:id', async (request, reply) => {
+    const { id } = request.params
+    if (!/^[\w.-]+$/.test(id)) return reply.status(400).send('invalid id')
+    const filePath = join(VS_UPLOAD_DIR, id)
+    try {
+      const { createReadStream, statSync } = await import('node:fs')
+      const s = statSync(filePath)
+      const ext = id.split('.').pop()?.toLowerCase() ?? 'jpg'
+      const mimeMap: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' }
+      reply.header('Content-Type', mimeMap[ext] ?? 'image/jpeg')
+      reply.header('Content-Length', s.size)
+      reply.header('Cache-Control', 'no-store')
+      return reply.send(createReadStream(filePath))
+    } catch {
+      return reply.status(404).send('not found')
+    }
   })
 }

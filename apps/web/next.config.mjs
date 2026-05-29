@@ -9,6 +9,9 @@ const storagePort = process.env.NEXT_PUBLIC_STORAGE_PORT ?? '9000'
 const nextConfig = {
   pageExtensions: ['ts', 'tsx', 'md', 'mdx'],
   transpilePackages: ['@aigc/types'],
+  experimental: {
+    proxyTimeout: 300_000,
+  },
   async rewrites() {
     return [
       {
