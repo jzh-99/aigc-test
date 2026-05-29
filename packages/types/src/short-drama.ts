@@ -2,7 +2,7 @@
 // Constants
 // ============================================================================
 
-export const SHORT_DRAMA_STYLE_TABS = ['真人都市', '真人古风', '动漫'] as const
+export const SHORT_DRAMA_STYLE_TABS = ['全部', '真人', '2D', '3D'] as const
 
 export const SHORT_DRAMA_ASPECT_RATIOS = ['9:16', '16:9'] as const
 
@@ -12,11 +12,11 @@ export const SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT = 50
 
 export const SHORT_DRAMA_DEFAULT_DURATION_SECONDS = 4
 
-export const SHORT_DRAMA_TEXT_MODEL = 'gemini-2.0-flash-exp'
+export const SHORT_DRAMA_TEXT_MODEL = 'qwen3.6-plus'
 
-export const SHORT_DRAMA_IMAGE_MODEL = 'volcengine-doubao-1.5-pro'
+export const SHORT_DRAMA_IMAGE_MODEL = 'seedream-5.0-lite'
 
-export const SHORT_DRAMA_VIDEO_MODEL = 'volcengine-doubao-1.5-pro'
+export const SHORT_DRAMA_VIDEO_MODEL = 'seedance-1.0-lite'
 
 // ============================================================================
 // Types
@@ -26,7 +26,7 @@ export type ShortDramaStyleTab = (typeof SHORT_DRAMA_STYLE_TABS)[number]
 
 export type ShortDramaAspectRatio = (typeof SHORT_DRAMA_ASPECT_RATIOS)[number]
 
-export type ShortDramaStepId = 'script' | 'assets' | 'episodes' | 'export'
+export type ShortDramaStepId = 'script' | 'assets' | 'episodes'
 
 export type ShortDramaProjectStatus = 'draft' | 'generating' | 'completed' | 'failed'
 
@@ -166,6 +166,12 @@ export function isShortDramaDurationSeconds(value: number, allowed: number[]): b
 // Helpers
 // ============================================================================
 
+type DeepPartial<T> = T extends object
+  ? {
+      [P in keyof T]?: DeepPartial<T[P]>
+    }
+  : T
+
 export function sortShortDramaSegments(segments: ShortDramaSegment[]): ShortDramaSegment[] {
   return [...segments].sort((a, b) => a.order - b.order)
 }
@@ -213,28 +219,31 @@ export function makeDefaultShortDramaState(params: {
   }
 }
 
-export function normalizeShortDramaState(partial: Partial<ShortDramaState>): ShortDramaState {
+export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>): ShortDramaState {
   const aspectRatio = partial.settings?.aspectRatio
   const episodeCount = partial.settings?.episodeCount
 
   return {
-    steps: partial.steps ?? { active: 'script', completed: [] },
-    script: partial.script ?? {
-      originalPrompt: '',
-      refinedPrompt: null,
-      outlines: [],
-      status: 'idle',
+    steps: {
+      active: partial.steps?.active ?? 'script',
+      completed: (partial.steps?.completed ?? []) as ShortDramaStepId[],
     },
-    assets: partial.assets ?? {
-      items: [],
-      status: 'idle',
+    script: {
+      originalPrompt: partial.script?.originalPrompt ?? '',
+      refinedPrompt: partial.script?.refinedPrompt ?? null,
+      outlines: (partial.script?.outlines ?? []) as ShortDramaEpisodeOutline[],
+      status: partial.script?.status ?? 'idle',
     },
-    episodes: partial.episodes ?? {
-      items: [],
-      status: 'idle',
+    assets: {
+      items: (partial.assets?.items ?? []) as ShortDramaAsset[],
+      status: partial.assets?.status ?? 'idle',
     },
-    exports: partial.exports ?? {
-      batches: [],
+    episodes: {
+      items: (partial.episodes?.items ?? []) as ShortDramaEpisode[],
+      status: partial.episodes?.status ?? 'idle',
+    },
+    exports: {
+      batches: (partial.exports?.batches ?? []) as ShortDramaBatchExport[],
     },
     settings: {
       style: partial.settings?.style ?? '真人都市',
@@ -245,22 +254,28 @@ export function normalizeShortDramaState(partial: Partial<ShortDramaState>): Sho
       durationSeconds: partial.settings?.durationSeconds ?? SHORT_DRAMA_DEFAULT_DURATION_SECONDS,
       billingMode: partial.settings?.billingMode ?? 'estimate_actual',
     },
-    locks: partial.locks ?? {
-      script: false,
-      assets: false,
-      episodes: false,
+    locks: {
+      script: partial.locks?.script ?? false,
+      assets: partial.locks?.assets ?? false,
+      episodes: partial.locks?.episodes ?? false,
     },
   }
 }
 
 export function canEnterShortDramaStep(state: ShortDramaState, step: ShortDramaStepId): boolean {
-  const stepOrder: ShortDramaStepId[] = ['script', 'assets', 'episodes', 'export']
-  const targetIndex = stepOrder.indexOf(step)
-
-  if (targetIndex === 0) {
+  if (step === 'script') {
     return true
   }
 
-  const previousStep = stepOrder[targetIndex - 1]
-  return state.steps.completed.includes(previousStep)
+  if (step === 'assets') {
+    return state.steps.completed.includes('script') || state.locks.script
+  }
+
+  if (step === 'episodes') {
+    const scriptReady = state.steps.completed.includes('script') || state.locks.script
+    const assetsReady = state.steps.completed.includes('assets') || state.locks.assets
+    return scriptReady && assetsReady
+  }
+
+  return false
 }
