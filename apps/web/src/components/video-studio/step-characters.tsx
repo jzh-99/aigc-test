@@ -80,6 +80,7 @@ interface ImageCardProps {
 
 function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isPending, onUpdate, onBatchSubmitted, registerGenerate }: ImageCardProps) {
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [editedPrompt, setEditedPrompt] = useState(item.prompt)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -226,18 +227,36 @@ function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isP
             {loading || isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             {loading || isPending ? '生成中…' : item.urls.length > 0 ? `重新生成 · ${(IMAGE_MODEL_CREDITS[item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel] ?? 10) * imageParams.quantity}积分` : `生成参考图 · ${(IMAGE_MODEL_CREDITS[item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel] ?? 10) * imageParams.quantity}积分`}
           </button>
-          <label className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1.5 border rounded-lg transition-colors">
-            <Upload className="w-3.5 h-3.5" />
-            上传
+          <label className={`flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1.5 border rounded-lg transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {uploading ? '上传中…' : '上传'}
             <input
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const file = e.target.files?.[0]
                 if (!file) return
-                const url = URL.createObjectURL(file)
-                onUpdate({ urls: [url], selectedUrl: url })
+                // Reset input so the same file can be re-selected
+                e.target.value = ''
+                const token = useAuthStore.getState().accessToken
+                const formData = new FormData()
+                formData.append('file', file)
+                setUploading(true)
+                try {
+                  const res = await fetch('/api/v1/video-studio/upload-image', {
+                    method: 'POST',
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    body: formData,
+                  })
+                  if (!res.ok) throw new Error(`上传失败 ${res.status}`)
+                  const { url } = await res.json() as { url: string }
+                  onUpdate({ urls: [url], selectedUrl: url })
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : '图片上传失败')
+                } finally {
+                  setUploading(false)
+                }
               }}
             />
           </label>
