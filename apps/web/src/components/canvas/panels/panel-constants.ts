@@ -87,19 +87,29 @@ export const VIDEO_ASPECT_RATIOS_VEO = [
 ] as const
 
 export const SEEDANCE_DURATION_OPTIONS = [
-  { value: -1, label: '自动' },
-  { value: 4, label: '4秒' },
-  { value: 5, label: '5秒' },
-  { value: 6, label: '6秒' },
-  { value: 8, label: '8秒' },
-  { value: 10, label: '10秒' },
-  { value: 12, label: '12秒' },
-  { value: 15, label: '15秒' },
+  { value: -1,  label: '自动' },
+  { value: 4,   label: '4秒' },
+  { value: 5,   label: '5秒' },
+  { value: 6,   label: '6秒' },
+  { value: 7,   label: '7秒' },
+  { value: 8,   label: '8秒' },
+  { value: 9,   label: '9秒' },
+  { value: 10,  label: '10秒' },
+  { value: 11,  label: '11秒' },
+  { value: 12,  label: '12秒' },
+  { value: 13,  label: '13秒' },
+  { value: 14,  label: '14秒' },
+  { value: 15,  label: '15秒' },
 ] as const
 
 export const VIDEO_CREDITS_PER_SEC: Record<string, number> = {
-  'seedance-2.0': 5,
-  'seedance-2.0-fast': 3,
-  'seedance-1.5-pro': 4,
-  'veo3.1-fast': 10,
+  'seedance-2.0-480p':       5,
+  'seedance-2.0':           10,
+  'seedance-2.0-720p':      10,
+  'seedance-2.0-1080p':     25,
+  'seedance-2.0-fast-480p':  4,
+  'seedance-2.0-fast':       8,
+  'seedance-2.0-fast-720p':  8,
+  'seedance-1.5-pro':        5,
+  'veo3.1-fast':            10,
 }

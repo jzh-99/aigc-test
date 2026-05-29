@@ -172,18 +172,24 @@ const VIDEO_ASPECT_RATIOS_SEEDANCE = [
 ]
 
 const VIDEO_RESOLUTIONS = [
-  { value: false, label: '720p', desc: '标准' },
-  { value: true, label: '1080p', desc: '高清' },
-] as const
+  { value: '480p' as const, label: '480p', desc: '流畅 · 5积分/秒' },
+  { value: '720p' as const, label: '720p', desc: '标准 · 10积分/秒' },
+  { value: '1080p' as const, label: '1080p', desc: '高清 · 25积分/秒' },
+]
 
 const SEEDANCE_DURATION_OPTIONS = [
   { value: -1,  label: '自动' },
   { value: 4,   label: '4秒' },
   { value: 5,   label: '5秒' },
   { value: 6,   label: '6秒' },
+  { value: 7,   label: '7秒' },
   { value: 8,   label: '8秒' },
+  { value: 9,   label: '9秒' },
   { value: 10,  label: '10秒' },
+  { value: 11,  label: '11秒' },
   { value: 12,  label: '12秒' },
+  { value: 13,  label: '13秒' },
+  { value: 14,  label: '14秒' },
   { value: 15,  label: '15秒' },
 ] as const
 
@@ -257,7 +263,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       if (d.video) {
         if (d.video.videoModel) setVideoModel(d.video.videoModel)
         if (d.video.videoAspectRatio !== undefined) setVideoAspectRatio(d.video.videoAspectRatio)
-        if (d.video.videoUpsample !== undefined) setVideoUpsample(d.video.videoUpsample)
+        if (d.video.videoUpsample !== undefined) setVideoResolution(d.video.videoUpsample ? '1080p' : '720p')
         if (d.video.videoDuration !== undefined) setVideoDuration(d.video.videoDuration)
         if (d.video.videoGenerateAudio !== undefined) setVideoGenerateAudio(d.video.videoGenerateAudio)
         if (d.video.videoCameraFixed !== undefined) setVideoCameraFixed(d.video.videoCameraFixed)
@@ -305,7 +311,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const [videoPrompt, setVideoPrompt] = useState('')
   const [videoModel, setVideoModel] = useState(() => videoDefaults?.videoModel ?? 'seedance-2.0')
   const [videoAspectRatio, setVideoAspectRatio] = useState(() => videoDefaults?.videoAspectRatio ?? '')
-  const [videoUpsample, setVideoUpsample] = useState(() => videoDefaults?.videoUpsample ?? false)
+  const [videoResolution, setVideoResolution] = useState<'480p' | '720p' | '1080p'>(() => videoDefaults?.videoUpsample ? '1080p' : '720p')
   const [videoDuration, setVideoDuration] = useState<number>(() => videoDefaults?.videoDuration ?? 5)
   const [videoGenerateAudio, setVideoGenerateAudio] = useState(() => videoDefaults?.videoGenerateAudio ?? true)
   const [videoCameraFixed, setVideoCameraFixed] = useState(() => videoDefaults?.videoCameraFixed ?? false)
@@ -370,7 +376,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         setVideoPrompt(videoParams.videoPrompt)
         setVideoModel(videoParams.videoModel)
         setVideoAspectRatio(videoParams.videoAspectRatio)
-        setVideoUpsample(videoParams.videoUpsample)
+        setVideoResolution((videoParams.videoUpsample ? '1080p' : '720p') as '480p' | '720p' | '1080p')
         if (videoParams.videoDuration !== undefined) setVideoDuration(videoParams.videoDuration)
         if (videoParams.videoGenerateAudio !== undefined) setVideoGenerateAudio(videoParams.videoGenerateAudio)
         if (videoParams.videoCameraFixed !== undefined) setVideoCameraFixed(videoParams.videoCameraFixed)
@@ -404,8 +410,8 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       setVideoAspectRatio('')
     }
     // seedance-2.0-fast does not support 1080p — downgrade if needed
-    if (videoModel === 'seedance-2.0-fast' && videoUpsample) {
-      setVideoUpsample(false)
+    if (videoModel === 'seedance-2.0-fast' && videoResolution === '1080p') {
+      setVideoResolution('720p')
     }
   }, [videoModel]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1172,11 +1178,12 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         aspect_ratio: videoAspectRatio || undefined,
         ...(isSeedance ? {
           duration: videoDuration,
+          resolution: videoResolution,
           generate_audio: videoGenerateAudio,
           ...(videoMode !== 'frames' ? { camera_fixed: videoCameraFixed } : {}),
           watermark: watermark,
         } : {
-          enable_upsample: videoUpsample,
+          enable_upsample: videoResolution === '1080p',
         }),
       })
       if (batch) onBatchCreated(batch)
@@ -2485,7 +2492,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               className="absolute top-2 right-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
               disabled={isVideoGenerating || disabled}
               onClick={() => {
-                const d = { videoModel, videoAspectRatio, videoUpsample, videoDuration, videoGenerateAudio, videoCameraFixed }
+                const d = { videoModel, videoAspectRatio, videoUpsample: videoResolution === '1080p', videoDuration, videoGenerateAudio, videoCameraFixed }
                 saveVideoDefaults(d)
                 saveDefaults({
                   image: userDefaults ?? undefined,
@@ -2530,16 +2537,16 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                 <div>
                   <Label className="text-xs text-muted-foreground mb-1 block">分辨率</Label>
                   <Select
-                    value={String(videoUpsample)}
-                    onValueChange={(v) => setVideoUpsample(v === 'true')}
+                    value={videoResolution}
+                    onValueChange={(v) => setVideoResolution(v as '480p' | '720p' | '1080p')}
                     disabled={isVideoGenerating || disabled}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {VIDEO_RESOLUTIONS.filter((r) => !(r.value === true && videoModel === 'seedance-2.0-fast')).map((r) => (
-                        <SelectItem key={String(r.value)} value={String(r.value)}>
+                      {VIDEO_RESOLUTIONS.filter((r) => !(r.value === '1080p' && videoModel === 'seedance-2.0-fast')).map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
                           <span className="font-medium">{r.label}</span>
                           <span className="text-xs text-muted-foreground ml-1.5">{r.desc}</span>
                         </SelectItem>
@@ -2683,7 +2690,11 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
               {isSeedance
-                ? <span>{(videoDuration === -1 ? 15 : videoDuration) * (VIDEO_MODEL_OPTIONS[videoMode as keyof typeof VIDEO_MODEL_OPTIONS]?.find((m: any) => m.value === videoModel)?.credits ?? 5)} 积分</span>
+                ? (() => {
+                    const key = `${videoModel}-${videoResolution}`
+                    const perSec = VIDEO_PER_SECOND_CREDITS[key] ?? VIDEO_PER_SECOND_CREDITS[videoModel] ?? 5
+                    return <span>{(videoDuration === -1 ? 15 : videoDuration) * perSec} 积分</span>
+                  })()
                 : <span>{VIDEO_MODEL_OPTIONS[videoMode].find(m => m.value === videoModel)?.credits ?? 10} 积分</span>
               }
             </div>
@@ -2755,7 +2766,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex-1" />
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
-              <span>{avatarAudio ? `${Math.ceil(avatarAudio.duration) * 50} 积分` : '50 积分/秒'}</span>
+              <span>{avatarAudio ? `${Math.ceil(avatarAudio.duration) * 10} 积分` : '10 积分/秒'}</span>
             </div>
             <Button
               variant="gradient"
@@ -2781,7 +2792,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
             <div className="flex-1" />
             <div className="flex items-center gap-1.5 text-sm font-medium">
               <Coins className="h-4 w-4 text-amber-500" />
-              <span>{actionVideo ? `${Math.ceil(actionVideo.duration) * 20} 积分` : '20 积分/秒'}</span>
+              <span>{actionVideo ? `${Math.ceil(actionVideo.duration) * 4} 积分` : '4 积分/秒'}</span>
             </div>
             <Button
               variant="gradient"
