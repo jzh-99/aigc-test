@@ -12,6 +12,8 @@ import postGenerateAssets from './short-drama/post-generate-assets.js'
 import postUploadAsset from './short-drama/post-upload-asset.js'
 import postGenerateSegmentVideo from './short-drama/post-generate-segment-video.js'
 import postSyncBatches from './short-drama/post-sync-batches.js'
+import postExportEpisode from './short-drama/post-export-episode.js'
+import postExportBatch from './short-drama/post-export-batch.js'
 
 export async function shortDramaRoutes(app: FastifyInstance) {
   // 项目 CRUD
@@ -32,4 +34,8 @@ export async function shortDramaRoutes(app: FastifyInstance) {
   await app.register(postUploadAsset)
   await app.register(postGenerateSegmentVideo)
   await app.register(postSyncBatches)
+
+  // 导出
+  await app.register(postExportEpisode)
+  await app.register(postExportBatch)
 }

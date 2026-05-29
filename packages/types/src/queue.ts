@@ -30,3 +30,14 @@ export interface TransferJobData {
   originalUrl: string
   assetType?: 'image' | 'video'
 }
+
+export interface ShortDramaExportEpisodeJobData {
+  projectId: string
+  episodeId: string
+  exportId: string
+  userId: string
+  teamId: string
+  workspaceId: string
+  creditAccountId: string
+  estimatedCredits: number
+}

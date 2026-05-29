@@ -27,3 +27,12 @@ export function getTransferQueue(): Queue {
   }
   return _transferQueue
 }
+
+let _shortDramaExportQueue: Queue | null = null
+
+export function getShortDramaExportQueue(): Queue {
+  if (!_shortDramaExportQueue) {
+    _shortDramaExportQueue = new Queue('short-drama-export-queue', { connection: getConnection() })
+  }
+  return _shortDramaExportQueue
+}
