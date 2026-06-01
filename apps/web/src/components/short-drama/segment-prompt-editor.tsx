@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import type { ShortDramaSegment, ShortDramaAsset, ShortDramaMentionRef } from '@aigc/types'
 import {
   SHORT_DRAMA_SHOT_DURATION_SECONDS,
@@ -28,6 +29,12 @@ export function SegmentPromptEditor({
   onPromptAndMentionRefsChange,
   disabled,
 }: SegmentPromptEditorProps) {
+  const latestPromptRef = useRef(segment.prompt)
+
+  useEffect(() => {
+    latestPromptRef.current = segment.prompt
+  }, [segment.prompt])
+
   const availableAssets = assets.filter(a => a.imageUrl)
   const mentionResources: StoryboardMentionResource[] = availableAssets.map(asset => ({
     id: asset.id,
@@ -43,6 +50,7 @@ export function SegmentPromptEditor({
   }
 
   const handlePromptChange = (prompt: string) => {
+    latestPromptRef.current = prompt
     const refs = extractMentionRefs(prompt)
     if (onPromptAndMentionRefsChange) {
       onPromptAndMentionRefsChange(prompt, refs)
@@ -55,8 +63,9 @@ export function SegmentPromptEditor({
   const shotDurations = extractShortDramaShotDurations(segment.prompt)
 
   const handleShotDurationChange = (shotNumber: number, durationSeconds: number) => {
-    const nextPrompt = updateShortDramaShotDuration(segment.prompt, shotNumber, durationSeconds)
-    if (nextPrompt === segment.prompt) return
+    const currentPrompt = latestPromptRef.current
+    const nextPrompt = updateShortDramaShotDuration(currentPrompt, shotNumber, durationSeconds)
+    if (nextPrompt === currentPrompt) return
     handlePromptChange(nextPrompt)
   }
 
