@@ -16,6 +16,28 @@ interface GenerateAssetsBody {
   episodeId?: string
 }
 
+function buildAssetImagePrompt(asset: { kind: string; name: string; description: string }): string {
+  const basePrompt = `${asset.name}：${asset.description}`.trim()
+
+  if (asset.kind === 'character') {
+    return [
+      basePrompt,
+      '人物形象要求：正面半身或胸像，单人出镜，白色纯净背景，光线均匀，五官清晰。',
+      '禁止：多人合影、剧情场景、文字标注、边框、图表、装饰物、手持道具、额外物品、复杂背景。',
+    ].join('\n')
+  }
+
+  if (asset.kind === 'scene') {
+    return [
+      basePrompt,
+      '场景形象要求：只展示环境空间和地点氛围，不出现任何人物、人体、脸部、背影或人群。',
+      '禁止：角色入镜、人物肖像、手部特写、文字标注、关系图、剧情分镜拼图。',
+    ].join('\n')
+  }
+
+  return basePrompt
+}
+
 export default async function postGenerateAssets(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string }; Body: GenerateAssetsBody }>(
     '/short-drama/projects/:id/assets/generate',
@@ -104,6 +126,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
       }
 
       // 创建 batch + tasks，入队
+      const targetPrompts = targetAssets.map(buildAssetImagePrompt)
       const sourceMetadata = makeShortDramaSourceMetadata({
         projectId: project.id,
         episodeId: episodeId ?? undefined,
@@ -122,7 +145,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
               module: 'image',
               provider: providerModel.providerCode,
               model: modelCode,
-              prompt: targetAssets.map(a => a.description).join(' | '),
+              prompt: targetPrompts.join(' | '),
               params: JSON.stringify({
                 scope,
                 source: 'short_drama',
@@ -164,6 +187,8 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
           const stateAsset = state.assets.items.find(a => a.id === asset.id)
           if (stateAsset) {
             stateAsset.status = 'pending'
+            stateAsset.imageUrl = null
+            stateAsset.updatedAt = new Date().toISOString()
           }
         }
 
@@ -188,7 +213,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
             creditAccountId,
             provider: providerModel.providerCode,
             model: modelCode,
-            prompt: targetAssets[i].description,
+            prompt: targetPrompts[i],
             params: { aspect_ratio: state.settings.aspectRatio },
             estimatedCredits: unitPrice,
           },

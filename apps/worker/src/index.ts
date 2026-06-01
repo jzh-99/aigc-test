@@ -80,6 +80,14 @@ const imageWorker = new Worker<GenerationJobData>(
       .execute()
     logger.info(logCtx, '[image-job] 步骤2 task 状态已更新为 processing')
 
+    await db
+      .updateTable('task_batches')
+      .set({ status: 'processing' })
+      .where('id', '=', data.batchId)
+      .where('status', '=', 'pending')
+      .execute()
+    logger.info(logCtx, '[image-job] 步骤2 batch 状态已更新为 processing')
+
     try {
       // ── 步骤 3：调用 AI 前检查任务状态，防止超时退款后重连重复消费 ──────────
       const currentTask = await db

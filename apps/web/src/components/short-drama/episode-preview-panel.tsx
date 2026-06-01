@@ -9,11 +9,21 @@ interface EpisodePreviewPanelProps {
   state: ShortDramaState
   onExport: () => void
   exporting: boolean
+  onBatchGenerateVideos: () => void
+  batchGenerating: boolean
 }
 
-export function EpisodePreviewPanel({ episode, state, onExport, exporting }: EpisodePreviewPanelProps) {
+export function EpisodePreviewPanel({
+  episode,
+  state,
+  onExport,
+  exporting,
+  onBatchGenerateVideos,
+  batchGenerating,
+}: EpisodePreviewPanelProps) {
   const segments = episode.segments
   const completedSegments = segments.filter(s => !!s.videoUrl)
+  const pendingVideoCount = segments.filter(s => !s.videoUrl && s.status !== 'pending' && s.status !== 'generating').length
   const missingCount = segments.length - completedSegments.length
 
   const exportBatch = state.exports.batches.find(b =>
@@ -22,14 +32,14 @@ export function EpisodePreviewPanel({ episode, state, onExport, exporting }: Epi
   const episodeExport = exportBatch?.exports.find(e => e.episodeNumber === episode.episodeNumber)
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-sm font-medium">预览与导出</h3>
+    <aside className="rounded-2xl border bg-card/80 p-3">
+      <h3 className="text-sm font-semibold">预览与导出</h3>
 
-      <div className="space-y-2">
+      <div className="mt-4 space-y-2">
         {completedSegments.length > 0 ? (
           <div className="space-y-2 max-h-[300px] overflow-y-auto">
             {completedSegments.map((segment, i) => (
-              <div key={segment.id} className="rounded border overflow-hidden">
+              <div key={segment.id} className="overflow-hidden rounded-xl border bg-background/50">
                 <video
                   src={segment.videoUrl!}
                   className="w-full aspect-video bg-black"
@@ -51,6 +61,19 @@ export function EpisodePreviewPanel({ episode, state, onExport, exporting }: Epi
         <p className="text-xs text-amber-600">
           还有 {missingCount} 个分镜未生成视频
         </p>
+      )}
+
+      {pendingVideoCount > 0 && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onBatchGenerateVideos}
+          disabled={batchGenerating}
+          className="w-full"
+        >
+          {batchGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+          批量生成视频 ({pendingVideoCount})
+        </Button>
       )}
 
       {episodeExport && (
@@ -77,6 +100,6 @@ export function EpisodePreviewPanel({ episode, state, onExport, exporting }: Epi
           导出本集
         </Button>
       )}
-    </div>
+    </aside>
   )
 }

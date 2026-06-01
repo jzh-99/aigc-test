@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Sparkles, Check, Upload } from 'lucide-react'
+import { Loader2, Sparkles, Check, Upload, ZoomIn } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { ImageLightbox } from '@/components/ui/image-lightbox'
 import type { ShortDramaState, ShortDramaAssetKind } from '@aigc/types'
 import { areShortDramaAssetsReady } from '@aigc/types'
 import {
@@ -28,7 +29,9 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   const [generatingPrompts, setGeneratingPrompts] = useState(false)
   const [generatingImages, setGeneratingImages] = useState(false)
   const [generatingAssetId, setGeneratingAssetId] = useState<string | null>(null)
+  const [submittedAssetIds, setSubmittedAssetIds] = useState<Set<string>>(() => new Set())
   const [confirming, setConfirming] = useState(false)
+  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null)
   const [assetPromptStreamText, setAssetPromptStreamText] = useState('')
   const [assetPromptProgressMessage, setAssetPromptProgressMessage] = useState('')
   const [assetPromptWarningMessage, setAssetPromptWarningMessage] = useState('')
@@ -39,6 +42,11 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   const assetsReady = areShortDramaAssetsReady(state)
   const requiredAssets = assets.filter(asset => asset.kind === 'character' || asset.kind === 'scene')
   const completedRequiredAssets = requiredAssets.filter(asset => asset.status === 'completed' && !!asset.imageUrl).length
+  const getKindProgress = (kind: ShortDramaAssetKind) => {
+    const kindAssets = assets.filter(asset => asset.kind === kind)
+    const completed = kindAssets.filter(asset => asset.status === 'completed' && !!asset.imageUrl).length
+    return { completed, total: kindAssets.length }
+  }
   const processedOutlineCount = state.assets.processedOutlineCount
   const totalOutlineCount = state.script.outlines.length
   const canContinuePrompts = processedOutlineCount > 0 && processedOutlineCount < totalOutlineCount
@@ -48,14 +56,30 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       ? '继续生成描述'
       : '生成描述'
   const filteredAssets = assets.filter(a => a.kind === activeTab)
+  const previewAsset = previewAssetId ? assets.find(asset => asset.id === previewAssetId) : null
 
   const getAssetGenerationLabel = (asset: (typeof assets)[number]) => {
     if (generatingAssetId === asset.id) return '提交中...'
+    if (submittedAssetIds.has(asset.id)) return '任务已提交'
     if (asset.status === 'pending') return '任务已提交'
     if (asset.status === 'generating') return '生成中...'
     if (asset.status === 'failed') return '生成失败'
     return '待生成'
   }
+
+  useEffect(() => {
+    setSubmittedAssetIds((prev) => {
+      const next = new Set(prev)
+      let changed = false
+      for (const asset of assets) {
+        if (!next.has(asset.id)) continue
+        if (asset.status === 'pending' || asset.status === 'generating') continue
+        next.delete(asset.id)
+        changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [assets])
 
   const handleGeneratePrompts = async () => {
     setGeneratingPrompts(true)
@@ -116,6 +140,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
         assetIds: [assetId],
         scope: 'global',
       })
+      setSubmittedAssetIds((prev) => new Set(prev).add(assetId))
       onStateChange()
       toast.success(`已提交「${targetAsset.name}」生成`)
     } catch (err) {
@@ -238,15 +263,25 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
         <div className="flex items-center justify-between">
           <div className="flex gap-2">
             {ASSET_TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  activeTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                {tab.label}
-              </button>
+              (() => {
+                const progress = getKindProgress(tab.id)
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                      activeTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[11px] leading-none ${
+                      activeTab === tab.id ? 'bg-white/18 text-primary-foreground' : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {progress.completed}/{progress.total}
+                    </span>
+                  </button>
+                )
+              })()
             ))}
           </div>
           {!isLocked && (
@@ -295,15 +330,33 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
           {filteredAssets.map(asset => {
             const isAssetGenerating =
               generatingAssetId === asset.id ||
+              submittedAssetIds.has(asset.id) ||
               asset.status === 'pending' ||
               asset.status === 'generating'
             const generationLabel = getAssetGenerationLabel(asset)
+            const shouldShowImage = Boolean(asset.imageUrl) && !isAssetGenerating
 
             return (
             <div key={asset.id} className="overflow-hidden rounded-xl border bg-card shadow-sm transition-colors hover:border-primary/30">
               <div className="aspect-square bg-muted flex items-center justify-center overflow-hidden">
-                {asset.imageUrl ? (
-                  <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover" />
+                {shouldShowImage ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewAssetId(asset.id)}
+                    className="group relative h-full w-full overflow-hidden text-left"
+                    aria-label={`放大查看${asset.name}`}
+                  >
+                    <img
+                      src={`${asset.imageUrl}?t=${new Date(asset.updatedAt).getTime()}`}
+                      alt={asset.name}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
+                      <span className="flex h-10 w-10 scale-90 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition-all group-hover:scale-100 group-hover:opacity-100">
+                        <ZoomIn className="h-5 w-5" />
+                      </span>
+                    </span>
+                  </button>
                 ) : (
                   <span className="rounded-full bg-background/80 px-3 py-1 text-xs text-muted-foreground shadow-sm">
                     {generationLabel}
@@ -359,6 +412,20 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
         <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-center text-sm text-amber-800">
           素材已确认过，但仍有角色或场景图未完成，请等待全部生成结束后再进入分集
         </div>
+      )}
+
+      {previewAsset?.imageUrl && (
+        <ImageLightbox
+          url={`${previewAsset.imageUrl}?t=${new Date(previewAsset.updatedAt).getTime()}`}
+          alt={previewAsset.name}
+          onClose={() => setPreviewAssetId(null)}
+          footer={
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-white">{previewAsset.name}</div>
+              <div className="mt-1 line-clamp-2 text-xs text-white/60">{previewAsset.description}</div>
+            </div>
+          }
+        />
       )}
     </div>
   )

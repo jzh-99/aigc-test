@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import { assertShortDramaProjectAccess } from './_shared.js'
 
+const SYNCABLE_BATCH_STATUSES = ['pending', 'processing', 'completed', 'partial_complete', 'failed'] as const
+
 export default async function postSyncBatches(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>(
     '/short-drama/projects/:id/sync',
@@ -22,12 +24,13 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
       const state = project.state
       const db = getDb()
 
-      // 查询该项目所有 pending/processing/completed/failed 的 batch
+      // 查询该项目所有可同步的 batch，按创建时间倒序，确保最新的 batch 最后处理
       const batches = await db
         .selectFrom('task_batches')
         .selectAll()
         .where('short_drama_project_id', '=', projectId)
-        .where('status', 'in', ['pending', 'processing', 'completed', 'failed'])
+        .where('status', 'in', SYNCABLE_BATCH_STATUSES)
+        .orderBy('created_at', 'asc') // 旧的先处理，新的后处理，确保新数据覆盖旧数据
         .execute()
 
       if (batches.length === 0) {
@@ -40,21 +43,20 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
         const module = batch.module
         const batchStatus = batch.status
 
-        if (module === 'image' && (batchStatus === 'pending' || batchStatus === 'processing')) {
-          const changed = syncImageBatchProgress(state, batch)
-          if (changed) syncedCount++
+        if (module === 'image') {
+          try {
+            const changed = await syncImageBatch(db, state, batch)
+            if (changed) syncedCount++
+          } catch (err) {
+            app.log.warn({ err, batchId: batch.id }, 'Failed to sync image batch, skipping')
+          }
           continue
         }
 
-        if (batchStatus !== 'completed' && batchStatus !== 'failed') {
-          continue
-        }
+        if (batchStatus !== 'completed' && batchStatus !== 'partial_complete' && batchStatus !== 'failed') continue
 
         try {
-          if (module === 'image') {
-            await syncImageBatch(db, state, batch)
-            syncedCount++
-          } else if (module === 'video') {
+          if (module === 'video') {
             await syncVideoBatch(db, state, batch)
             syncedCount++
           }
@@ -90,30 +92,11 @@ function readAssetIdMap(batch: any): Array<{ versionIndex: number; assetId: stri
   return []
 }
 
-function syncImageBatchProgress(state: any, batch: any): boolean {
-  const assetIdMap = readAssetIdMap(batch)
-  const nextStatus = batch.status === 'processing' ? 'generating' : 'pending'
-  let changed = false
-
-  for (const mapping of assetIdMap) {
-    const targetAsset = state.assets.items.find((a: any) => a.id === mapping.assetId)
-    if (!targetAsset || targetAsset.status === 'completed' || targetAsset.status === 'failed') continue
-
-    if (targetAsset.status !== nextStatus) {
-      targetAsset.status = nextStatus
-      targetAsset.updatedAt = new Date().toISOString()
-      changed = true
-    }
-  }
-
-  return changed
-}
-
 async function syncImageBatch(
   db: ReturnType<typeof getDb>,
   state: any,
   batch: any
-): Promise<void> {
+): Promise<boolean> {
   const tasks = await db
     .selectFrom('tasks')
     .selectAll()
@@ -122,6 +105,7 @@ async function syncImageBatch(
 
   // 从 batch.params 中读取 assetIdMap 映射
   const assetIdMap = readAssetIdMap(batch)
+  let changed = false
 
   for (const task of tasks) {
     // 通过 assetIdMap 精确匹配 assetId
@@ -129,7 +113,7 @@ async function syncImageBatch(
     if (!mapping) continue
 
     const targetAsset = state.assets.items.find((a: any) => a.id === mapping.assetId)
-    if (!targetAsset || (targetAsset.status !== 'pending' && targetAsset.status !== 'generating')) continue
+    if (!targetAsset) continue
 
     if (task.status === 'completed') {
       const assetRecord = await db
@@ -139,15 +123,42 @@ async function syncImageBatch(
         .executeTakeFirst()
 
       if (assetRecord) {
-        targetAsset.imageUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
-        targetAsset.status = 'completed'
-        targetAsset.updatedAt = new Date().toISOString()
+        const imageUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
+        // 始终更新状态和时间戳，确保前端能通过 updatedAt 变化刷新图片缓存
+        // 由于 batch 按创建时间升序处理，最新的 batch 会最后执行
+        if (targetAsset.status !== 'completed' || targetAsset.imageUrl !== imageUrl) {
+          targetAsset.imageUrl = imageUrl
+          targetAsset.status = 'completed'
+          targetAsset.updatedAt = new Date().toISOString()
+          changed = true
+        } else if (targetAsset.status === 'completed') {
+          // 即使 URL 相同，也更新时间戳，让前端能通过 ?t= 参数刷新缓存
+          const currentUpdatedAt = new Date(targetAsset.updatedAt).getTime()
+          const newUpdatedAt = new Date().toISOString()
+          // 只有当时间戳真的不同时才更新（避免同一次 sync 中重复更新）
+          if (new Date(newUpdatedAt).getTime() > currentUpdatedAt) {
+            targetAsset.updatedAt = newUpdatedAt
+            changed = true
+          }
+        }
       }
     } else if (task.status === 'failed') {
-      targetAsset.status = 'failed'
-      targetAsset.updatedAt = new Date().toISOString()
+      if (targetAsset.status !== 'completed' && targetAsset.status !== 'failed') {
+        targetAsset.status = 'failed'
+        targetAsset.updatedAt = new Date().toISOString()
+        changed = true
+      }
+    } else {
+      const nextStatus = task.status === 'processing' ? 'generating' : 'pending'
+      if (targetAsset.status !== 'completed' && targetAsset.status !== 'failed' && targetAsset.status !== nextStatus) {
+        targetAsset.status = nextStatus
+        targetAsset.updatedAt = new Date().toISOString()
+        changed = true
+      }
     }
   }
+
+  return changed
 }
 
 async function syncVideoBatch(

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 const PROMPT_MAX_LENGTH = 1200
 const CHARACTER_TOKEN_CLASS = 'border-primary/30 bg-primary/15 text-primary'
-const BACKGROUND_TOKEN_CLASS = 'border-border bg-muted text-foreground'
+const BACKGROUND_TOKEN_CLASS = 'border-emerald-400/40 bg-emerald-400/15 text-emerald-200'
 
 export interface StoryboardMentionResource {
   id: string
@@ -21,6 +21,7 @@ interface StoryboardMentionEditorProps {
   placeholder?: string
   onChange: (value: string) => void
   onBlur?: () => void
+  disabled?: boolean
 }
 
 type Segment =
@@ -193,6 +194,7 @@ export function StoryboardMentionEditor({
   placeholder = '输入画面提示词，使用 @ 引用角色或背景',
   onChange,
   onBlur,
+  disabled = false,
 }: StoryboardMentionEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null)
   const isComposingRef = useRef(false)
@@ -290,9 +292,12 @@ export function StoryboardMentionEditor({
         data-testid="storyboard-mention-editor"
         role="textbox"
         aria-label={placeholder}
-        contentEditable
+        contentEditable={!disabled}
         suppressContentEditableWarning
-        className="min-h-24 w-full whitespace-pre-wrap break-words rounded-md border bg-muted/40 px-3 py-2 text-sm leading-7 outline-none transition focus:ring-2 focus:ring-primary/30"
+        className={cn(
+          'min-h-24 w-full whitespace-pre-wrap break-words rounded-md border bg-muted/40 px-3 py-2 text-sm leading-7 outline-none transition focus:ring-2 focus:ring-primary/30',
+          disabled && 'cursor-not-allowed opacity-70',
+        )}
         onFocus={() => setIsFocused(true)}
         onBlur={() => {
           setIsFocused(false)
@@ -324,7 +329,7 @@ export function StoryboardMentionEditor({
         <span>{Array.from(value).length}/{PROMPT_MAX_LENGTH}</span>
       </div>
 
-      {showPicker ? (
+      {showPicker && !disabled ? (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border bg-popover p-1 shadow-xl">
           {resources.length === 0 ? (
             <div className="px-2 py-2 text-xs text-muted-foreground">暂无可引用角色或背景</div>

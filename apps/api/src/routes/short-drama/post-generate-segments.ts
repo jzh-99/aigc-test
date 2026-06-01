@@ -3,11 +3,10 @@ import { randomUUID } from 'node:crypto'
 import { SHORT_DRAMA_DEFAULT_DURATION_SECONDS } from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
-  callDoubaoForText,
+  callDoubaoForTextStream,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
-  parseAndValidateJson,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 
@@ -98,24 +97,64 @@ const route: FastifyPluginAsync = async (app) => {
     const allAssets = [...globalAssets, ...episodeAssets]
 
     const assetsText = allAssets
-      .map((a) => `- ${a.kind}：${a.name}（${a.description}）`)
+      .map((a) => `- ${a.kind}：@${a.name}（${a.description}）`)
       .join('\n')
 
     // 调用 AI 生成分镜（要求完整字段）
-    const REDACTED = `你是专业短剧分镜师。请根据剧本摘要、分集梗概和素材，为该集生成详细的分镜脚本。只输出 JSON 数组，每个元素包含 title、prompt、mentionNames、durationSeconds、cameraNote、actionNote、dialogueOrSubtitle 字段，不要输出 markdown。`
+    const REDACTED = [
+      '你是专业短剧分镜师。请根据剧本摘要、分集梗概和素材，为该集生成详细的分镜脚本。',
+      '只输出 JSON 数组，每个元素包含 title、prompt、mentionNames、durationSeconds、cameraNote、actionNote、dialogueOrSubtitle 字段，不要输出 markdown。',
+      'prompt 必须是可用于视频生成的画面描述；当镜头出现某个角色或场景时，必须在 prompt 中直接写对应的 @素材名，例如 @祁同伟、@汉东政法大学校园。',
+      'mentionNames 必须填写本镜头实际引用的素材名称，不带 @，且只能使用可用素材列表中的名称。',
+      '不要虚构素材名称；没有引用素材时 mentionNames 返回空数组。',
+    ].join('\n')
 
-    const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n第${episodeNumber}集梗概：${episode.title}\n${episode.summary}\n\n可用素材：\n${assetsText}\n\n画面比例：${state.settings.aspectRatio}\n默认时长：${state.settings.durationSeconds}秒\n\n请生成该集的分镜脚本（建议 8-12 个镜头），每个镜头包含：\n- title: 镜头标题\n- prompt: 视频生成提示词（详细描述画面内容、动作、氛围）\n- mentionNames: 提及的素材名称列表（从可用素材中选择）\n- durationSeconds: 镜头时长（默认 ${state.settings.durationSeconds} 秒）\n- cameraNote: 镜头运镜说明（如推拉摇移、特写、全景等）\n- actionNote: 动作说明（角色动作、场景变化等）\n- dialogueOrSubtitle: 对白或字幕内容`
+    const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n第${episodeNumber}集梗概：${episode.title}\n${episode.summary}\n\n可用素材：\n${assetsText}\n\n画面比例：${state.settings.aspectRatio}\n默认时长：${state.settings.durationSeconds}秒\n\n请生成该集的分镜脚本。剧情较复杂时可生成 12-18 个镜头，普通剧情生成 8-12 个镜头。每个镜头包含：\n- title: 镜头标题\n- prompt: 视频生成提示词，必须在出现素材时使用 @素材名，并详细描述画面内容、动作、氛围\n- mentionNames: 提及的素材名称列表，只能从可用素材中选择，名称不带 @\n- durationSeconds: 镜头时长（默认 ${state.settings.durationSeconds} 秒）\n- cameraNote: 镜头运镜说明（如推拉摇移、特写、全景等）\n- actionNote: 动作说明（角色动作、场景变化等）\n- dialogueOrSubtitle: 对白或字幕内容`
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    reply.hijack()
+    reply.raw.write(': connected\n\n')
+
+    const sendEvent = (event: string, data: unknown): void => {
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+    }
+
+    const sendPing = (): void => {
+      reply.raw.write(': ping\n\n')
+    }
+
+    const failStream = async (
+      code: string,
+      message: string,
+      error: unknown,
+      refundContext: string,
+    ): Promise<void> => {
+      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, refundContext)
+      app.log.error({ error, projectId, episodeNumber }, message)
+      sendEvent('error', { code, message })
+      reply.raw.end()
+    }
+
+    sendEvent('progress', {
+      message: `开始生成第 ${episodeNumber} 集分镜脚本`,
+      completedCount: 0,
+      totalCount: 1,
+    })
 
     let aiResponse: string
     try {
-      aiResponse = await callDoubaoForText(REDACTED, userPrompt)
-    } catch (error) {
-      // AI 调用失败，退还积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      app.log.error({ error, projectId, episodeNumber }, 'AI 调用失败')
-      return reply.status(502).send({
-        error: { code: 'AI_ERROR', message: 'AI 生成失败，请稍后重试' },
+      aiResponse = await callDoubaoForTextStream(REDACTED, userPrompt, 8000, {
+        onChunk: (text) => sendEvent('chunk', { text, episodeNumber }),
+        onPing: sendPing,
       })
+    } catch (error) {
+      await failStream('AI_ERROR', 'AI 生成失败，请稍后重试', error, '分镜脚本生成失败')
+      return
     }
 
     // 解析 AI 返回的 JSON 数组
@@ -143,25 +182,26 @@ const route: FastifyPluginAsync = async (app) => {
       }
     } catch (error) {
       // JSON 解析失败，退还积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      app.log.error({ error, projectId, episodeNumber }, 'AI 返回格式错误')
-      return reply.status(502).send({
-        error: { code: 'VALIDATION_ERROR', message: 'AI 返回格式错误，请重试' },
-      })
+      await failStream('VALIDATION_ERROR', 'AI 返回格式错误，请重试', error, 'AI 返回格式错误')
+      return
     }
 
     // 校验数组
     if (!Array.isArray(segments) || segments.length === 0) {
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      return reply.status(502).send({
-        error: { code: 'VALIDATION_ERROR', message: 'AI 返回的分镜数量为空' },
-      })
+      await failStream('VALIDATION_ERROR', 'AI 返回的分镜数量为空', new Error('empty segments'), 'AI 返回分镜为空')
+      return
     }
 
     // 构建素材名称到 ID 的映射
     const assetNameToId = new Map<string, string>()
     for (const asset of allAssets) {
       assetNameToId.set(asset.name.toLowerCase(), asset.id)
+    }
+
+    const extractMentionNamesFromPrompt = (prompt: string): string[] => {
+      return allAssets
+        .filter(asset => prompt.includes(`@${asset.name}`))
+        .map(asset => asset.name)
     }
 
     // 校验每个分镜的完整字段（spec 要求）
@@ -181,19 +221,30 @@ const route: FastifyPluginAsync = async (app) => {
         typeof seg.actionNote !== 'string' ||
         typeof seg.dialogueOrSubtitle !== 'string'
       ) {
-        await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-        return reply.status(502).send({
-          error: { code: 'VALIDATION_ERROR', message: `第 ${i + 1} 个镜头的字段格式错误或缺少必需字段` },
-        })
+        await failStream(
+          'VALIDATION_ERROR',
+          `第 ${i + 1} 个镜头的字段格式错误或缺少必需字段`,
+          new Error(`segment ${i + 1} invalid`),
+          'AI 返回分镜字段错误',
+        )
+        return
       }
 
       // 解析 mentionNames 为 mentionRefs
       const mentionRefs = []
-      for (const name of seg.mentionNames) {
+      const mentionNames = Array.from(new Set([
+        ...seg.mentionNames,
+        ...extractMentionNamesFromPrompt(seg.prompt),
+      ]))
+
+      const mentionedAssetIds = new Set<string>()
+      for (const name of mentionNames) {
         if (typeof name === 'string') {
-          const assetId = assetNameToId.get(name.toLowerCase())
-          if (assetId) {
-            mentionRefs.push({ assetId, assetName: name })
+          const normalizedName = name.replace(/^@/, '')
+          const assetId = assetNameToId.get(normalizedName.toLowerCase())
+          if (assetId && !mentionedAssetIds.has(assetId)) {
+            mentionRefs.push({ assetId, assetName: normalizedName })
+            mentionedAssetIds.add(assetId)
           }
         }
       }
@@ -228,6 +279,7 @@ const route: FastifyPluginAsync = async (app) => {
     episode.segments = parsedSegments
     episode.status = 'idle'
     episode.updatedAt = now
+    state.episodes.status = state.episodes.items.some(ep => ep.segments.length === 0) ? 'generating' : 'completed'
 
     // 计算实际积分消耗
     const actualCredits = calculateTextGenerationCredits(aiResponse)
@@ -246,19 +298,24 @@ const route: FastifyPluginAsync = async (app) => {
       })).settledCredits
     } catch (error) {
       // 状态保存/结算失败，安全退还全额积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '状态保存/结算失败')
-      app.log.error({ error, projectId, episodeNumber }, '短剧文本生成状态保存/结算失败')
-      return reply.status(500).send({
-        error: { code: 'DATABASE_ERROR', message: '保存失败，积分已退还' },
-      })
+      await failStream('DATABASE_ERROR', '保存失败，积分已退还', error, '状态保存/结算失败')
+      return
     }
 
-    return {
+    sendEvent('progress', {
+      message: `第 ${episodeNumber} 集分镜脚本生成完成`,
+      completedCount: 1,
+      totalCount: 1,
+    })
+
+    sendEvent('done', {
+      success: true,
       episodeNumber,
       segments: parsedSegments,
       credits: settledCredits,
       state,
-    }
+    })
+    reply.raw.end()
   })
 }
 

@@ -1,4 +1,4 @@
-const { chromium } = require('playwright');
+const { chromium } = require('@playwright/test');
 
 (async () => {
   console.log('正在启动浏览器...');

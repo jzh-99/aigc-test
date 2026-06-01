@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { randomUUID } from 'crypto'
+import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import type { ShortDramaState, ShortDramaEpisode, ShortDramaSegment } from '@aigc/types'
 import { SegmentList } from './segment-list'
@@ -22,7 +21,15 @@ interface EpisodeEditorProps {
 
 export function EpisodeEditor({ projectId, episode, state, onStateChange }: EpisodeEditorProps) {
   const [generatingSegmentId, setGeneratingSegmentId] = useState<string | null>(null)
+  const [batchGeneratingVideos, setBatchGeneratingVideos] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(0)
+
+  useEffect(() => {
+    if (selectedSegmentIndex >= episode.segments.length) {
+      setSelectedSegmentIndex(Math.max(0, episode.segments.length - 1))
+    }
+  }, [episode.segments.length, selectedSegmentIndex])
 
   const handleSegmentUpdate = useCallback(async (index: number, updated: ShortDramaSegment) => {
     const newSegments = [...episode.segments]
@@ -36,6 +43,7 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
       await saveShortDramaProject(projectId, {
         state: { ...state, episodes: { ...state.episodes, items: newEpisodes } },
       })
+      setSelectedSegmentIndex(index)
       onStateChange()
     } catch (err) {
       toast.error('保存失败')
@@ -63,6 +71,7 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
       await saveShortDramaProject(projectId, {
         state: { ...state, episodes: { ...state.episodes, items: newEpisodes } },
       })
+      setSelectedSegmentIndex(newSegments.length - 1)
       onStateChange()
     } catch (err) {
       toast.error('添加失败')
@@ -80,6 +89,7 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
       await saveShortDramaProject(projectId, {
         state: { ...state, episodes: { ...state.episodes, items: newEpisodes } },
       })
+      setSelectedSegmentIndex(prev => Math.min(prev, Math.max(0, newSegments.length - 1)))
       onStateChange()
     } catch (err) {
       toast.error('删除失败')
@@ -101,6 +111,7 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
       await saveShortDramaProject(projectId, {
         state: { ...state, episodes: { ...state.episodes, items: newEpisodes } },
       })
+      setSelectedSegmentIndex(to)
       onStateChange()
     } catch (err) {
       toast.error('移动失败')
@@ -120,6 +131,34 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
     }
   }, [projectId, episode.episodeNumber, onStateChange])
 
+  const handleBatchGenerateVideos = useCallback(async () => {
+    const targets = episode.segments.filter(segment =>
+      !segment.videoUrl &&
+      segment.status !== 'pending' &&
+      segment.status !== 'generating'
+    )
+
+    if (targets.length === 0) {
+      toast.info('没有需要生成的视频')
+      return
+    }
+
+    setBatchGeneratingVideos(true)
+    try {
+      for (const segment of targets) {
+        setGeneratingSegmentId(segment.id)
+        await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segment.id)
+        onStateChange()
+      }
+      toast.success(`已提交 ${targets.length} 个分镜视频生成`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '批量生成失败')
+    } finally {
+      setGeneratingSegmentId(null)
+      setBatchGeneratingVideos(false)
+    }
+  }, [projectId, episode.episodeNumber, episode.segments, onStateChange])
+
   const handleExport = useCallback(async () => {
     setExporting(true)
     try {
@@ -135,14 +174,16 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
 
   return (
     <div className="grid grid-cols-12 gap-4">
-      <div className="col-span-3">
+      <div className="col-span-12 lg:col-span-3">
         <AssetLibraryPanel assets={state.assets.items} episodeNumber={episode.episodeNumber} />
       </div>
 
-      <div className="col-span-6">
+      <div className="col-span-12 lg:col-span-6">
         <SegmentList
           segments={episode.segments}
           assets={state.assets.items}
+          selectedIndex={selectedSegmentIndex}
+          onSelectSegment={setSelectedSegmentIndex}
           onSegmentUpdate={handleSegmentUpdate}
           onSegmentAdd={handleSegmentAdd}
           onSegmentDelete={handleSegmentDelete}
@@ -152,12 +193,14 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
         />
       </div>
 
-      <div className="col-span-3">
+      <div className="col-span-12 lg:col-span-3">
         <EpisodePreviewPanel
           episode={episode}
           state={state}
           onExport={handleExport}
           exporting={exporting}
+          onBatchGenerateVideos={handleBatchGenerateVideos}
+          batchGenerating={batchGeneratingVideos}
         />
       </div>
     </div>

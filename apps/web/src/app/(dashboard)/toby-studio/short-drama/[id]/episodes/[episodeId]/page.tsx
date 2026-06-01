@@ -44,12 +44,13 @@ export default function EpisodeEditorPage() {
   }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center gap-4">
+    <div className="min-h-[calc(100vh-3.5rem)] bg-background">
+      <div className="mx-auto max-w-7xl space-y-5 p-6">
+      <div className="flex items-center gap-4 rounded-2xl border bg-card/80 px-4 py-3">
         <Link href={`/toby-studio/short-drama/${projectId}`}>
           <Button variant="ghost" size="sm">← 返回</Button>
         </Link>
-        <h1 className="text-lg font-bold">
+        <h1 className="text-lg font-bold tracking-tight">
           第 {episodeNumber} 集：{episode.title}
         </h1>
       </div>
@@ -60,6 +61,7 @@ export default function EpisodeEditorPage() {
         state={state}
         onStateChange={() => mutate()}
       />
+      </div>
     </div>
   )
 }

@@ -285,11 +285,13 @@ export function uploadShortDramaAsset(
 
 export function generateShortDramaEpisodeSegments(
   projectId: string,
-  episodeNumber: number
-): Promise<ShortDramaProjectDetail> {
-  return fetchWithAuth(`/short-drama/projects/${projectId}/episodes/${episodeNumber}/segments`, {
-    method: 'POST',
-  })
+  episodeNumber: number,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
+    `/short-drama/projects/${projectId}/episodes/${episodeNumber}/segments`,
+    options
+  )
 }
 
 export function generateShortDramaSegmentVideo(

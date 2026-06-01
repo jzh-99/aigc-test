@@ -22,6 +22,8 @@ dist/
 
 .mcp.json
 
+temp
+
 # Build artifacts and caches
 *.tsbuildinfo
 apps/docs/out/
