@@ -18,7 +18,7 @@ export const SHORT_DRAMA_TEXT_MODEL = 'qwen3.6-plus'
 
 export const SHORT_DRAMA_IMAGE_MODEL = 'seedream-5.0-lite'
 
-export const SHORT_DRAMA_VIDEO_MODEL = 'seedance-1.0-lite'
+export const SHORT_DRAMA_VIDEO_MODEL = 'seedance-2.0'
 
 // ============================================================================
 // Types

@@ -27,7 +27,7 @@ import {
 assert.deepEqual(SHORT_DRAMA_STYLE_TABS, ['全部', '真人', '2D', '3D'])
 assert.equal(SHORT_DRAMA_TEXT_MODEL, 'qwen3.6-plus')
 assert.equal(SHORT_DRAMA_IMAGE_MODEL, 'seedream-5.0-lite')
-assert.equal(SHORT_DRAMA_VIDEO_MODEL, 'seedance-1.0-lite')
+assert.equal(SHORT_DRAMA_VIDEO_MODEL, 'seedance-2.0')
 assert.deepEqual(SHORT_DRAMA_ASPECT_RATIOS, ['9:16', '16:9'])
 assert.deepEqual(SHORT_DRAMA_EPISODE_COUNTS, [5, 10, 15, 20])
 assert.equal(SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT, 50)
