@@ -252,17 +252,19 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
       const volcengineBody: Record<string, unknown> = {
         model: VOLCENGINE_MODEL_ID[actualModel] ?? actualModel,
         content: [{ type: 'text', text: segment.prompt }],
-        duration: durationSeconds,
-        generate_audio: true,
-        watermark: false,
+        parameters: {
+          duration: durationSeconds,
+          generate_audio: true,
+          watermark: false,
+        },
       }
-      if (aspectRatio) volcengineBody.ratio = aspectRatio
+      if (aspectRatio) (volcengineBody.parameters as any).aspect_ratio = aspectRatio
       if (imageReferences.length > 0) {
         for (const img of imageReferences) {
           ;(volcengineBody.content as any[]).push({
             type: 'image_url',
             image_url: { url: img },
-            role: 'first_frame',
+            role: 'reference_image',
           })
         }
       }
