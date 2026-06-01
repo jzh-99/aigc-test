@@ -12,6 +12,8 @@ export const SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT = 50
 
 export const SHORT_DRAMA_DEFAULT_DURATION_SECONDS = 4
 
+export const SHORT_DRAMA_SHOT_DURATION_SECONDS = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const
+
 export const SHORT_DRAMA_TEXT_MODEL = 'qwen3.6-plus'
 
 export const SHORT_DRAMA_IMAGE_MODEL = 'seedream-5.0-lite'
@@ -67,6 +69,11 @@ export interface ShortDramaAsset {
 export interface ShortDramaMentionRef {
   assetId: string
   assetName: string
+}
+
+export interface ShortDramaShotDuration {
+  shotNumber: number
+  durationSeconds: number
 }
 
 export interface ShortDramaSegment {
@@ -167,11 +174,67 @@ export function isShortDramaDurationSeconds(value: number, allowed: number[]): b
 // Helpers
 // ============================================================================
 
+const SHORT_DRAMA_SHOT_DURATION_PATTERN = /分镜\s*(\d+)\s*[·.\-:：]?\s*(\d{1,2})\s*s/gi
+
 type DeepPartial<T> = T extends object
   ? {
       [P in keyof T]?: DeepPartial<T[P]>
     }
   : T
+
+export function isShortDramaShotDurationSeconds(value: number): boolean {
+  return (SHORT_DRAMA_SHOT_DURATION_SECONDS as readonly number[]).includes(value)
+}
+
+export function extractShortDramaShotDurations(prompt: string): ShortDramaShotDuration[] {
+  const shots: ShortDramaShotDuration[] = []
+  const seen = new Set<number>()
+
+  for (const match of prompt.matchAll(SHORT_DRAMA_SHOT_DURATION_PATTERN)) {
+    const shotNumber = Number(match[1])
+    const durationSeconds = Number(match[2])
+    if (
+      Number.isInteger(shotNumber) &&
+      shotNumber > 0 &&
+      isShortDramaShotDurationSeconds(durationSeconds) &&
+      !seen.has(shotNumber)
+    ) {
+      shots.push({ shotNumber, durationSeconds })
+      seen.add(shotNumber)
+    }
+  }
+
+  return shots
+}
+
+export function calculateShortDramaSegmentDuration(prompt: string, fallbackSeconds: number): number {
+  const total = extractShortDramaShotDurations(prompt).reduce(
+    (sum, shot) => sum + shot.durationSeconds,
+    0
+  )
+
+  return total > 0 ? total : fallbackSeconds
+}
+
+export function updateShortDramaShotDuration(
+  prompt: string,
+  shotNumber: number,
+  nextDurationSeconds: number
+): string {
+  if (!isShortDramaShotDurationSeconds(nextDurationSeconds)) {
+    return prompt
+  }
+
+  let updated = false
+  return prompt.replace(SHORT_DRAMA_SHOT_DURATION_PATTERN, (fullMatch, rawShotNumber) => {
+    if (updated || Number(rawShotNumber) !== shotNumber) {
+      return fullMatch
+    }
+
+    updated = true
+    return fullMatch.replace(/\d{1,2}\s*s/i, `${nextDurationSeconds}s`)
+  })
+}
 
 export function sortShortDramaSegments(segments: ShortDramaSegment[]): ShortDramaSegment[] {
   return [...segments].sort((a, b) => a.order - b.order)

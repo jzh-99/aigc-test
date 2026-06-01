@@ -5,17 +5,21 @@ import {
   SHORT_DRAMA_EPISODE_COUNTS,
   SHORT_DRAMA_IMAGE_MODEL,
   SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT,
+  SHORT_DRAMA_SHOT_DURATION_SECONDS,
   SHORT_DRAMA_STYLE_TABS,
   SHORT_DRAMA_TEXT_MODEL,
   SHORT_DRAMA_VIDEO_MODEL,
   areShortDramaAssetsReady,
+  calculateShortDramaSegmentDuration,
   canEnterShortDramaStep,
+  extractShortDramaShotDurations,
   isShortDramaAspectRatio,
   isShortDramaDurationSeconds,
   isShortDramaEpisodeCount,
   makeDefaultShortDramaState,
   normalizeShortDramaState,
   sortShortDramaSegments,
+  updateShortDramaShotDuration,
 } from './short-drama.js'
 
 // 常量验证
@@ -36,6 +40,31 @@ assert.equal(isShortDramaEpisodeCount(50), true)
 assert.equal(isShortDramaEpisodeCount(51), false)
 assert.equal(isShortDramaDurationSeconds(4, [4, 5, 8]), true)
 assert.equal(isShortDramaDurationSeconds(6, [4, 5, 8]), false)
+
+assert.deepEqual(SHORT_DRAMA_SHOT_DURATION_SECONDS, [2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+const structuredPrompt = [
+  '本片段场景设定在：@旧教室，白天，自然光。',
+  '',
+  '分镜1 · 4s：远景，固定机位，拍摄空教室。',
+  '',
+  '分镜2 · 5s：中景，@林微 整理旧物。',
+  '',
+  '分镜3 · 6s：近景，@林微 挂断电话。',
+].join('\n')
+
+assert.deepEqual(extractShortDramaShotDurations(structuredPrompt), [
+  { shotNumber: 1, durationSeconds: 4 },
+  { shotNumber: 2, durationSeconds: 5 },
+  { shotNumber: 3, durationSeconds: 6 },
+])
+assert.equal(calculateShortDramaSegmentDuration(structuredPrompt, 4), 15)
+assert.equal(calculateShortDramaSegmentDuration('没有分镜时长', 4), 4)
+assert.equal(
+  updateShortDramaShotDuration(structuredPrompt, 2, 8).includes('分镜2 · 8s：中景'),
+  true
+)
+assert.equal(updateShortDramaShotDuration(structuredPrompt, 2, 1), structuredPrompt)
 
 // makeDefaultShortDramaState
 const state = makeDefaultShortDramaState({
