@@ -137,7 +137,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
         onClick={(e) => { e.stopPropagation(); triggerUpload() }}
         onMouseDown={(e) => e.stopPropagation()}
         disabled={nodeUploading}
-        className="absolute -top-3 left-1/2 -translate-x-1/2 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-blue-500 border-border disabled:opacity-40"
+        className="absolute -top-3 left-1/2 z-50 rounded-full border border-border bg-card p-1 text-muted-foreground opacity-0 shadow transition-opacity -translate-x-1/2 scale-90 hover:scale-100 hover:text-blue-500 group-hover:opacity-100 disabled:opacity-40"
         title="上传图片"
       >
         {nodeUploading ? <Loader2 size={11} className="animate-spin" /> : <span className="text-xs font-bold leading-none">+</span>}

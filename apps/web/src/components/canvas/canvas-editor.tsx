@@ -189,7 +189,7 @@ function ContextNodeMenu({
             className="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
           >
             <span>+ {category.baseLabel}</span>
-            <span className="text-border">›</span>
+            {/* <span className="text-border">›</span> */}
           </button>
           {/* <div className="pointer-events-none absolute left-full top-0 ml-1 min-w-[140px] rounded-xl border border-border bg-background py-1 opacity-0 shadow-xl group-hover/item:pointer-events-auto group-hover/item:opacity-100">
             <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground">{category.label}</div>

@@ -217,7 +217,7 @@ export function VideoMultimodalZone({
           <ImagePlus className="h-6 w-6 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium text-primary leading-tight">上传素材</div>
-            <div className="text-[11px] text-primary/60 leading-tight mt-0.5">图片 / 音频 / 视频（最高支持 720p）</div>
+            <div className="text-[11px] text-primary/60 leading-tight mt-0.5">图片 / 音频 / 视频</div>
           </div>
         </div>
       )}

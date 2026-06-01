@@ -9,6 +9,7 @@ import type { AudioGenConfig, CanvasNodeData } from '@/lib/canvas/types'
 import { useCanvasExecutionStore, useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { InlineLabel } from './inline-label'
+import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
 
 function useElapsedTimer(startedAt: number | null): string {
   const [elapsed, setElapsed] = useState(0)
@@ -26,10 +27,12 @@ export const AudioGenNode = memo(function AudioGenNode({ id, data }: { id: strin
   const execState = useNodeExecutionState(id)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
+  const canvasId = useCanvasStructureStore((s) => s.canvasId)
   const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
   const isUpstream = useNodeHighlighted(id)
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const { inputRef, uploading: nodeUploading, triggerUpload, handleChange } = useNodeUpload(id, canvasId ?? '', 'audio/*')
 
   const { isGenerating, progress, errorMessage, warningMessage, outputs, selectedOutputId, startedAt, submissionStatus } = execState
   const currentIndex = outputs.findIndex((o) => o.id === selectedOutputId)
@@ -84,6 +87,23 @@ export const AudioGenNode = memo(function AudioGenNode({ id, data }: { id: strin
         className="absolute -right-2.5 -top-2.5 z-50 rounded-full border border-border bg-card p-1 text-muted-foreground opacity-0 shadow transition-opacity hover:text-red-500 group-hover:opacity-100"
       >
         <X size={11} />
+      </button>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={handleChange}
+      />
+      <button
+        onClick={(event) => { event.stopPropagation(); triggerUpload() }}
+        onMouseDown={(event) => event.stopPropagation()}
+        disabled={nodeUploading}
+        className="absolute -top-3 left-1/2 z-50 rounded-full border border-border bg-card p-1 text-muted-foreground opacity-0 shadow transition-opacity -translate-x-1/2 scale-90 hover:scale-100 hover:text-emerald-500 group-hover:opacity-100 disabled:opacity-40"
+        title="上传音频"
+      >
+        {nodeUploading ? <Loader2 size={11} className="animate-spin" /> : <span className="text-xs font-bold leading-none">+</span>}
       </button>
 
       <div className={cn('flex items-center justify-between rounded-t-xl border-b border-border px-3 py-1.5', theme.headerClassName)}>
