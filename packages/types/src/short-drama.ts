@@ -174,7 +174,7 @@ export function isShortDramaDurationSeconds(value: number, allowed: number[]): b
 // Helpers
 // ============================================================================
 
-const SHORT_DRAMA_SHOT_DURATION_PATTERN = /分镜\s*(\d+)\s*[·.\-:：]?\s*(\d{1,2})\s*s/gi
+const SHORT_DRAMA_SHOT_DURATION_PATTERN = /分镜\s*(\d+)(?:\s*[·.\-:：]\s*|\s+)(10|[2-9])\s*s\b/gi
 
 type DeepPartial<T> = T extends object
   ? {

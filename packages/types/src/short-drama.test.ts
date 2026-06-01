@@ -63,13 +63,22 @@ assert.deepEqual(extractShortDramaShotDurations(structuredPrompt), [
   { shotNumber: 2, durationSeconds: 5 },
   { shotNumber: 3, durationSeconds: 6 },
 ])
+assert.deepEqual(extractShortDramaShotDurations('分镜4 10s：补充镜头'), [
+  { shotNumber: 4, durationSeconds: 10 },
+])
+assert.deepEqual(extractShortDramaShotDurations('分镜12s：这个格式缺少分隔符'), [])
 assert.equal(calculateShortDramaSegmentDuration(structuredPrompt, 4), 15)
 assert.equal(calculateShortDramaSegmentDuration('没有分镜时长', 4), 4)
+assert.equal(calculateShortDramaSegmentDuration('分镜12s：这个格式缺少分隔符', 4), 4)
 assert.equal(
   updateShortDramaShotDuration(structuredPrompt, 2, 8).includes('分镜2 · 8s：中景'),
   true
 )
 assert.equal(updateShortDramaShotDuration(structuredPrompt, 2, 1), structuredPrompt)
+assert.equal(
+  updateShortDramaShotDuration('分镜12s：这个格式缺少分隔符', 1, 8),
+  '分镜12s：这个格式缺少分隔符'
+)
 
 // makeDefaultShortDramaState
 const state = makeDefaultShortDramaState({
