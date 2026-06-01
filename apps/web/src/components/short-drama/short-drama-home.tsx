@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Sparkles } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuthStore } from '@/stores/auth-store'
-import { SHORT_DRAMA_ASPECT_RATIOS, SHORT_DRAMA_EPISODE_COUNTS } from '@aigc/types'
+import { SHORT_DRAMA_ASPECT_RATIOS, SHORT_DRAMA_EPISODE_COUNTS, SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT } from '@aigc/types'
 import type { ShortDramaAspectRatio } from '@aigc/types'
 import { ShortDramaStyleDialog } from './short-drama-style-dialog'
 import { ShortDramaProjectCard } from './short-drama-project-card'
@@ -18,6 +19,11 @@ import {
   type ShortDramaProjectListItem,
 } from '@/lib/short-drama/api'
 
+type DramaSelectOption<T extends string | number> = {
+  value: T
+  label: string
+}
+
 export function ShortDramaHome() {
   const router = useRouter()
   const workspaceId = useAuthStore(s => s.activeWorkspaceId)
@@ -26,7 +32,13 @@ export function ShortDramaHome() {
   const [style, setStyle] = useState('真人都市')
   const [aspectRatio, setAspectRatio] = useState<ShortDramaAspectRatio>('9:16')
   const [episodeCount, setEpisodeCount] = useState(10)
+  const [episodeInput, setEpisodeInput] = useState('10')
   const [submitting, setSubmitting] = useState(false)
+  const parsedEpisodeCount = Number(episodeInput)
+  const isEpisodeCountValid =
+    Number.isInteger(parsedEpisodeCount) &&
+    parsedEpisodeCount > 0 &&
+    parsedEpisodeCount <= SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT
 
   const { data: recentProjects, isLoading: loadingProjects } = useSWR<ShortDramaProjectListItem[]>(
     workspaceId ? ['short-drama-recent', workspaceId] : null,
@@ -36,6 +48,10 @@ export function ShortDramaHome() {
 
   const handleSubmit = async () => {
     if (!prompt.trim() || !workspaceId) return
+    if (!isEpisodeCountValid) {
+      toast.error(`集数需为 1-${SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT} 的整数`)
+      return
+    }
     setSubmitting(true)
     try {
       const result = await createShortDramaProject({
@@ -43,7 +59,7 @@ export function ShortDramaHome() {
         prompt: prompt.trim(),
         style,
         aspectRatio,
-        episodeCount,
+        episodeCount: parsedEpisodeCount,
       })
       toast.success('项目创建成功')
       router.push(`/toby-studio/short-drama/${result.projectId}`)
@@ -51,6 +67,31 @@ export function ShortDramaHome() {
       toast.error(err instanceof Error ? err.message : '创建失败')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleEpisodeInputChange = (value: string) => {
+    const normalized = value.replace(/\D/g, '')
+    setEpisodeInput(normalized)
+    const nextCount = Number(normalized)
+    if (
+      Number.isInteger(nextCount) &&
+      nextCount > 0 &&
+      nextCount <= SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT
+    ) {
+      setEpisodeCount(nextCount)
+    }
+  }
+
+  const handleEpisodePresetChange = (value: string) => {
+    const nextCount = Number(value)
+    setEpisodeCount(nextCount)
+    setEpisodeInput(value)
+  }
+
+  const handleEpisodeInputBlur = () => {
+    if (!episodeInput) {
+      setEpisodeInput(String(episodeCount))
     }
   }
 
@@ -73,33 +114,41 @@ export function ShortDramaHome() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">视觉风格</label>
-            <ShortDramaStyleDialog value={style} onChange={setStyle} />
+            <ShortDramaStyleDialog value={style} onChange={setStyle}>
+              <button
+                type="button"
+                className="group flex h-11 w-full items-center justify-between rounded-full border border-transparent bg-[#f6f4f8] px-4 text-left text-sm font-semibold text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_28px_rgba(70,56,98,0.08)] transition-all hover:bg-white hover:shadow-[0_16px_34px_rgba(70,56,98,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
+              >
+                <span className="truncate">{style || '选择风格'}</span>
+                <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-hover:-rotate-180" />
+              </button>
+            </ShortDramaStyleDialog>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">画面比例</label>
-            <select
+            <DramaPillSelect
               value={aspectRatio}
-              onChange={e => setAspectRatio(e.target.value as ShortDramaAspectRatio)}
-              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
-            >
-              {SHORT_DRAMA_ASPECT_RATIOS.map(r => (
-                <option key={r} value={r}>{r === '9:16' ? '竖屏 9:16' : '横屏 16:9'}</option>
-              ))}
-            </select>
+              options={SHORT_DRAMA_ASPECT_RATIOS.map(r => ({ value: r, label: r }))}
+              onChange={value => setAspectRatio(value)}
+            />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">集数</label>
-            <select
+            <EpisodeCountSelect
               value={episodeCount}
-              onChange={e => setEpisodeCount(Number(e.target.value))}
-              className="w-full h-10 px-3 rounded-md border bg-background text-sm"
-            >
-              {SHORT_DRAMA_EPISODE_COUNTS.map(c => (
-                <option key={c} value={c}>{c} 集</option>
-              ))}
-            </select>
+              inputValue={episodeInput}
+              valid={isEpisodeCountValid}
+              onPresetChange={handleEpisodePresetChange}
+              onInputChange={handleEpisodeInputChange}
+              onInputBlur={handleEpisodeInputBlur}
+            />
+            {episodeInput && !isEpisodeCountValid && (
+              <p className="text-xs text-red-500">
+                请输入 1-{SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT} 的整数
+              </p>
+            )}
           </div>
         </div>
 
@@ -109,7 +158,7 @@ export function ShortDramaHome() {
           </p>
           <Button
             onClick={handleSubmit}
-            disabled={!prompt.trim() || submitting || !workspaceId}
+            disabled={!prompt.trim() || submitting || !workspaceId || !isEpisodeCountValid}
           >
             {submitting ? (
               <><Loader2 className="w-4 h-4 animate-spin mr-2" />创建中...</>
@@ -140,5 +189,152 @@ export function ShortDramaHome() {
         )}
       </div>
     </div>
+  )
+}
+
+function DramaPillSelect<T extends string | number>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T
+  options: DramaSelectOption<T>[]
+  onChange: (value: T) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = options.find(option => option.value === value)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="group flex h-11 w-full items-center justify-between rounded-full border border-transparent bg-[#f6f4f8] px-4 text-sm font-semibold text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_28px_rgba(70,56,98,0.08)] transition-all hover:bg-white hover:shadow-[0_16px_34px_rgba(70,56,98,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 data-[state=open]:bg-white"
+        >
+          <span>{selected?.label ?? value}</span>
+          <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-data-[state=open]:-rotate-180" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={12}
+        className="w-[220px] rounded-[2rem] border-0 bg-white/95 p-3 shadow-[0_28px_70px_rgba(35,31,51,0.18)] backdrop-blur"
+      >
+        <div className="space-y-1">
+          {options.map(option => (
+            <DramaMenuItem
+              key={String(option.value)}
+              selected={option.value === value}
+              onClick={() => {
+                onChange(option.value)
+                setOpen(false)
+              }}
+            >
+              {option.label}
+            </DramaMenuItem>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function EpisodeCountSelect({
+  value,
+  inputValue,
+  valid,
+  onPresetChange,
+  onInputChange,
+  onInputBlur,
+}: {
+  value: number
+  inputValue: string
+  valid: boolean
+  onPresetChange: (value: string) => void
+  onInputChange: (value: string) => void
+  onInputBlur: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const isPresetValue = SHORT_DRAMA_EPISODE_COUNTS.includes(value as (typeof SHORT_DRAMA_EPISODE_COUNTS)[number])
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`group inline-flex h-11 w-full items-center justify-between rounded-full border border-transparent bg-[#f6f4f8] px-4 text-sm font-semibold text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_28px_rgba(70,56,98,0.08)] transition-all hover:bg-white hover:shadow-[0_16px_34px_rgba(70,56,98,0.12)] focus-visible:outline-none focus-visible:ring-2 data-[state=open]:bg-white ${
+            valid ? 'focus-visible:ring-violet-200' : 'ring-2 ring-red-100 focus-visible:ring-red-200'
+          }`}
+        >
+          <span>{valid ? `${value} 集` : '自定义集数'}</span>
+          <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-data-[state=open]:-rotate-180" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={10}
+        className="w-44 rounded-[1.75rem] border-0 bg-white/95 p-2.5 shadow-[0_24px_60px_rgba(36,34,46,0.18)] backdrop-blur"
+      >
+        <div className="space-y-1">
+          {SHORT_DRAMA_EPISODE_COUNTS.map(count => (
+            <DramaMenuItem
+              key={count}
+              selected={count === value && isPresetValue}
+              muted={count !== value}
+              onClick={() => {
+                onPresetChange(String(count))
+                setOpen(false)
+              }}
+            >
+              {count.toString().padStart(2, '0')} 集
+            </DramaMenuItem>
+          ))}
+
+          <div className="flex min-w-0 items-center gap-2 px-1 pt-1">
+            <span className="h-1 w-1 rounded-full bg-slate-200" />
+            <div className="flex h-9 min-w-0 flex-1 items-center rounded-xl bg-[#f4f3f6] px-2.5">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={inputValue}
+                onChange={e => onInputChange(e.target.value)}
+                onBlur={onInputBlur}
+                className="w-0 min-w-0 flex-1 bg-transparent text-center text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                placeholder="自定义"
+                aria-label="自定义集数"
+              />
+              <span className="shrink-0 text-sm text-slate-500">集</span>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function DramaMenuItem({
+  selected,
+  muted = false,
+  onClick,
+  children,
+}: {
+  selected: boolean
+  muted?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`grid h-9 w-full grid-cols-[22px_1fr] items-center rounded-xl px-1.5 text-sm transition-colors ${
+        selected ? 'bg-[#f2f1f4] text-slate-950' : 'text-slate-500 hover:bg-[#f7f6f8]'
+      }`}
+    >
+      <span className="flex justify-center">
+        {selected ? <Check className="h-3.5 w-3.5 text-slate-950" /> : <span className="h-1 w-1 rounded-full bg-slate-200" />}
+      </span>
+      <span className={`text-center ${muted ? 'font-normal' : 'font-medium'}`}>{children}</span>
+    </button>
   )
 }

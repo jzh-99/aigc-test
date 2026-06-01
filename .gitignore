@@ -9,6 +9,7 @@ dist/
 .worktrees/
 
 .vscode/
+.superpowers/
 
 # Local Claude/session state
 .claude

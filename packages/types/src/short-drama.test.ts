@@ -8,6 +8,7 @@ import {
   SHORT_DRAMA_STYLE_TABS,
   SHORT_DRAMA_TEXT_MODEL,
   SHORT_DRAMA_VIDEO_MODEL,
+  areShortDramaAssetsReady,
   canEnterShortDramaStep,
   isShortDramaAspectRatio,
   isShortDramaDurationSeconds,
@@ -102,14 +103,28 @@ assert.equal(canEnterShortDramaStep(scriptLocked, 'episodes'), false)
 // canEnterShortDramaStep - script+assets 完成后可进 episodes
 const assetsCompleted = normalizeShortDramaState({
   steps: { active: 'assets', completed: ['script', 'assets'] },
+  assets: {
+    items: [
+      { id: 'c1', kind: 'character', scope: 'global', name: '角色', description: '', imageUrl: 'https://example.com/c.png', referenceImageUrl: null, episodeNumber: null, status: 'completed', createdAt: '', updatedAt: '' },
+      { id: 's1', kind: 'scene', scope: 'global', name: '场景', description: '', imageUrl: 'https://example.com/s.png', referenceImageUrl: null, episodeNumber: null, status: 'completed', createdAt: '', updatedAt: '' },
+    ],
+    status: 'completed',
+  },
 })
+assert.equal(areShortDramaAssetsReady(assetsCompleted), true)
 assert.equal(canEnterShortDramaStep(assetsCompleted, 'episodes'), true)
 
-// canEnterShortDramaStep - script+assets 锁定后可进 episodes
+// canEnterShortDramaStep - assets 锁定但图片未完成时不能进 episodes
 const bothLocked = normalizeShortDramaState({
   locks: { script: true, assets: true, episodes: false },
+  assets: {
+    items: [
+      { id: 'c1', kind: 'character', scope: 'global', name: '角色', description: '', imageUrl: null, referenceImageUrl: null, episodeNumber: null, status: 'pending', createdAt: '', updatedAt: '' },
+    ],
+  },
 })
-assert.equal(canEnterShortDramaStep(bothLocked, 'episodes'), true)
+assert.equal(areShortDramaAssetsReady(bothLocked), false)
+assert.equal(canEnterShortDramaStep(bothLocked, 'episodes'), false)
 
 // sortShortDramaSegments
 const sorted = sortShortDramaSegments([

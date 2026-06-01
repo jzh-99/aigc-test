@@ -1,4 +1,5 @@
 import { fetchWithAuth } from '@/lib/api-client'
+import { useAuthStore } from '@/stores/auth-store'
 import type { ShortDramaState, ShortDramaAspectRatio } from '@aigc/types'
 
 // ============================================================================
@@ -48,6 +49,128 @@ export interface ShortDramaProjectDetail {
   updatedAt: string
 }
 
+export interface ShortDramaStreamProgress {
+  message: string
+  from?: number
+  to?: number
+  completedCount?: number
+  totalCount?: number
+}
+
+export interface ShortDramaStreamWarning {
+  message: string
+  completedCount?: number
+  totalCount?: number
+  remainingCount?: number
+}
+
+export interface ShortDramaStreamResult {
+  success: boolean
+  partial?: boolean
+  warning?: string
+  title?: string
+  summary?: string
+  outlines?: ShortDramaState['script']['outlines']
+  assets?: ShortDramaState['assets']['items']
+  credits?: number
+  completedCount?: number
+  totalCount?: number
+  remainingCount?: number
+  state: ShortDramaState
+}
+
+export interface ShortDramaStreamOptions {
+  onChunk?: (text: string) => void
+  onProgress?: (progress: ShortDramaStreamProgress) => void
+  onWarning?: (warning: ShortDramaStreamWarning) => void
+}
+
+const API_BASE = '/api/v1'
+
+async function consumeShortDramaSSE<T>(
+  res: Response,
+  options: ShortDramaStreamOptions = {}
+): Promise<T> {
+  if (!res.body) {
+    throw new Error('服务端未返回流式响应')
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let result: T | null = null
+  let currentEvent = ''
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd()
+      if (!line || line.startsWith(':')) continue
+
+      if (line.startsWith('event: ')) {
+        currentEvent = line.slice(7).trim()
+        continue
+      }
+
+      if (!line.startsWith('data: ')) continue
+
+      const data = line.slice(6).trim()
+      if (!data) continue
+
+      const json = JSON.parse(data) as unknown
+      if (currentEvent === 'chunk') {
+        const payload = json as { text?: string }
+        if (payload.text) options.onChunk?.(payload.text)
+      } else if (currentEvent === 'progress') {
+        options.onProgress?.(json as ShortDramaStreamProgress)
+      } else if (currentEvent === 'warning') {
+        options.onWarning?.(json as ShortDramaStreamWarning)
+      } else if (currentEvent === 'done') {
+        result = json as T
+      } else if (currentEvent === 'error') {
+        const payload = json as { message?: string }
+        throw new Error(payload.message ?? '操作失败')
+      }
+
+      currentEvent = ''
+    }
+  }
+
+  if (!result) {
+    throw new Error('未收到完成事件')
+  }
+
+  return result
+}
+
+async function postShortDramaSSE<T>(
+  path: string,
+  options: ShortDramaStreamOptions = {}
+): Promise<T> {
+  const token = useAuthStore.getState().accessToken
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    throw new Error(err.error?.message ?? '生成失败')
+  }
+
+  return consumeShortDramaSSE<T>(res, options)
+}
+
 // ============================================================================
 // API Functions
 // ============================================================================
@@ -71,7 +194,9 @@ export function createShortDramaProject(
 export function listRecentShortDramaProjects(
   workspaceId: string
 ): Promise<ShortDramaProjectListItem[]> {
-  return fetchWithAuth(`/short-drama/projects/recent?workspace_id=${workspaceId}`)
+  return fetchWithAuth<{ items: ShortDramaProjectListItem[] }>(
+    `/short-drama/projects/recent?workspace_id=${workspaceId}`
+  ).then(res => res.items)
 }
 
 export function listShortDramaProjects(
@@ -107,27 +232,33 @@ export function deleteShortDramaProject(projectId: string): Promise<void> {
 }
 
 export function generateShortDramaScriptSummary(
-  projectId: string
-): Promise<ShortDramaProjectDetail> {
-  return fetchWithAuth(`/short-drama/projects/${projectId}/script/summary`, {
-    method: 'POST',
-  })
+  projectId: string,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
+    `/short-drama/projects/${projectId}/script/summary`,
+    options
+  )
 }
 
 export function generateShortDramaEpisodeOutlines(
-  projectId: string
-): Promise<ShortDramaProjectDetail> {
-  return fetchWithAuth(`/short-drama/projects/${projectId}/script/episode-outlines`, {
-    method: 'POST',
-  })
+  projectId: string,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
+    `/short-drama/projects/${projectId}/script/episode-outlines`,
+    options
+  )
 }
 
 export function generateShortDramaAssetPrompts(
-  projectId: string
-): Promise<ShortDramaProjectDetail> {
-  return fetchWithAuth(`/short-drama/projects/${projectId}/assets/prompts`, {
-    method: 'POST',
-  })
+  projectId: string,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
+    `/short-drama/projects/${projectId}/assets/prompts`,
+    options
+  )
 }
 
 export function generateShortDramaAssets(

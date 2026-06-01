@@ -33,6 +33,9 @@ codegraph query "UserService"  # 测试符号搜索
 # 启动所有服务（并行）
 pnpm dev
 
+# 构建types
+pnpm --filter @aigc/types build # 单独构建types 包
+
 # 单独启动某个应用
 pnpm --filter @aigc/web dev       # 前端 :6006
 pnpm --filter @aigc/api dev       # API  :7001

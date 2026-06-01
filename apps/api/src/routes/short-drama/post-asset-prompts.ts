@@ -1,18 +1,64 @@
-﻿import type { FastifyPluginAsync } from 'fastify'
-import { randomUUID } from 'node:crypto'
+import type { FastifyPluginAsync } from 'fastify'
 import type { ShortDramaAssetKind } from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
-  callDoubaoForText,
+  callDoubaoForTextStream,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
   parseAndValidateJson,
+  buildShortDramaOutlineBatches,
+  applyShortDramaAssetPromptsBatchResult,
+  type ShortDramaAssetPromptInput,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 
-// 保守预估：每次文本生成预冻结 15 积分
+// 保守预估：每个素材描述批次预冻结 15 积分
 const ESTIMATED_CREDITS = 15
+const ASSET_PROMPT_BATCH_MAX_TOKENS = 5000
+
+function parseAssetPromptBatch(aiResponse: string): ShortDramaAssetPromptInput[] {
+  const parsed = parseAndValidateJson(aiResponse, ['characters', 'scenes'])
+
+  if (!Array.isArray(parsed.characters) || !Array.isArray(parsed.scenes)) {
+    throw new Error('AI 返回的角色或场景格式错误')
+  }
+
+  const assets: ShortDramaAssetPromptInput[] = []
+
+  for (const character of parsed.characters as Array<Record<string, unknown>>) {
+    if (typeof character.name === 'string' && typeof character.description === 'string') {
+      assets.push({
+        kind: 'character',
+        name: character.name,
+        description: character.description,
+      })
+    }
+  }
+
+  for (const scene of parsed.scenes as Array<Record<string, unknown>>) {
+    if (typeof scene.name === 'string' && typeof scene.description === 'string') {
+      assets.push({
+        kind: 'scene',
+        name: scene.name,
+        description: scene.description,
+      })
+    }
+  }
+
+  return assets
+}
+
+function formatExistingAssets(
+  assets: Array<{ kind: ShortDramaAssetKind; name: string }>,
+  kind: 'character' | 'scene'
+): string {
+  const names = assets
+    .filter((asset) => asset.kind === kind)
+    .map((asset) => asset.name)
+
+  return names.length > 0 ? names.map((name) => `- ${name}`).join('\n') : '无'
+}
 
 const route: FastifyPluginAsync = async (app) => {
   app.post<{
@@ -49,180 +95,139 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 检查是否已有素材
-    if (state.assets.items.length > 0) {
+    if (state.assets.processedOutlineCount >= state.script.outlines.length) {
       return reply.status(400).send({
-        error: { code: 'ALREADY_GENERATED', message: '素材提示词已生成' },
+        error: { code: 'ALREADY_GENERATED', message: '素材描述已生成' },
       })
     }
 
-    // 预冻结积分
-    let creditAccountId: string
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    reply.hijack()
+    reply.raw.write(': connected\n\n')
+
+    const sendEvent = (event: string, data: unknown): void => {
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+    }
+
+    const sendPing = (): void => {
+      reply.raw.write(': ping\n\n')
+    }
+
+    const totalOutlines = state.script.outlines.length
+    const startEpisode = state.assets.processedOutlineCount + 1
+    const batches = buildShortDramaOutlineBatches(startEpisode, totalOutlines)
+    let completedCount = state.assets.processedOutlineCount
+    let totalCredits = 0
+    let stoppedByBalance = false
+    let warningMessage: string | null = null
+
     try {
-      const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS)
-      creditAccountId = freezeResult.creditAccountId
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '积分冻结失败'
-      return reply.status(402).send({
-        error: { code: 'INSUFFICIENT_CREDITS', message },
-      })
-    }
+      for (const batch of batches) {
+        let creditAccountId: string
 
-    // 调用 AI 生成素材提示词（包含 materials）
-    const REDACTED = `你是专业短剧制作助手。请根据剧本摘要和分集梗概，提取所需的全局素材（角色、场景、道具、材质）。只输出 JSON 对象，包含 characters、scenes、props、materials 四个数组，每个元素包含 name 和 description 字段，不要输出 markdown。`
-
-    const outlinesText = state.script.outlines
-      .map((o) => `第${o.episodeNumber}集：${o.title}\n${o.summary}`)
-      .join('\n\n')
-
-    const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n分集梗概：\n${outlinesText}\n\n请提取全局素材，包含：\n- characters: 主要角色列表（name, description）\n- scenes: 主要场景列表（name, description）\n- props: 重要道具列表（name, description）\n- materials: 材质/纹理列表（name, description，如木质、金属、布料等）`
-
-    let aiResponse: string
-    try {
-      aiResponse = await callDoubaoForText(REDACTED, userPrompt)
-    } catch (error) {
-      // AI 调用失败，退还积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      app.log.error({ error, projectId }, 'AI 调用失败')
-      return reply.status(502).send({
-        error: { code: 'AI_ERROR', message: 'AI 生成失败，请稍后重试' },
-      })
-    }
-
-    // 解析 AI 返回的 JSON（要求包含 materials）
-    let parsed: Record<string, unknown>
-    try {
-      parsed = parseAndValidateJson(aiResponse, ['characters', 'scenes', 'props', 'materials'])
-    } catch (error) {
-      // JSON 解析失败，退还积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      app.log.error({ error, projectId }, 'AI 返回格式错误')
-      return reply.status(502).send({
-        error: { code: 'VALIDATION_ERROR', message: 'AI 返回格式错误，请重试' },
-      })
-    }
-
-    // 校验字段类型
-    if (
-      !Array.isArray(parsed.characters) ||
-      !Array.isArray(parsed.scenes) ||
-      !Array.isArray(parsed.props) ||
-      !Array.isArray(parsed.materials)
-    ) {
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      return reply.status(502).send({
-        error: { code: 'VALIDATION_ERROR', message: 'AI 返回的素材格式错误' },
-      })
-    }
-
-    // 处理素材并去重
-    const now = new Date().toISOString()
-    const assetMap = new Map<string, { kind: ShortDramaAssetKind; name: string; description: string }>()
-
-    // 处理角色
-    for (const char of parsed.characters as Array<Record<string, unknown>>) {
-      if (typeof char.name === 'string' && typeof char.description === 'string') {
-        const normalizedName = char.name.trim().toLowerCase()
-        if (!assetMap.has(normalizedName)) {
-          assetMap.set(normalizedName, {
-            kind: 'character',
-            name: char.name.trim(),
-            description: char.description.trim(),
+        try {
+          const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS)
+          creditAccountId = freezeResult.creditAccountId
+        } catch (error) {
+          stoppedByBalance = true
+          warningMessage = 'A豆余额不足，已停止生成后续素材描述。已保存已完成的角色和场景描述，请充值后点击「继续生成描述」生成剩余素材。'
+          sendEvent('warning', {
+            message: warningMessage,
+            completedCount,
+            totalCount: totalOutlines,
+            remainingCount: totalOutlines - completedCount,
           })
+          break
+        }
+
+        sendEvent('progress', {
+          message: `开始提取第 ${batch.from}-${batch.to} 集角色和场景描述`,
+          from: batch.from,
+          to: batch.to,
+          completedCount,
+          totalCount: totalOutlines,
+        })
+
+        const batchOutlines = state.script.outlines
+          .filter((outline) => outline.episodeNumber >= batch.from && outline.episodeNumber <= batch.to)
+          .map((outline) => `第${outline.episodeNumber}集：${outline.title}\n${outline.summary}`)
+          .join('\n\n')
+
+        const existingCharacters = formatExistingAssets(state.assets.items, 'character')
+        const existingScenes = formatExistingAssets(state.assets.items, 'scene')
+        const systemPrompt = '你是专业短剧制作助手。请根据剧本摘要和当前批次分集梗概，提取需要制作参考图的新增全局角色和场景。只输出 JSON 对象，包含 characters、scenes 两个数组，每个元素包含 name 和 description 字段，不要输出 markdown。不要输出道具、材质或音乐。'
+        const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n已有角色：\n${existingCharacters}\n\n已有场景：\n${existingScenes}\n\n当前批次分集梗概：\n${batchOutlines}\n\n请只提取第 ${batch.from}-${batch.to} 集中新增且需要制作参考图的角色和场景。已存在的角色或场景不要重复返回。返回 JSON：\n{\n  "characters": [{ "name": "角色名", "description": "角色外观、年龄、气质、服装等视觉描述" }],\n  "scenes": [{ "name": "场景名", "description": "场景空间、时代、光线、陈设等视觉描述" }]\n}`
+
+        try {
+          const aiResponse = await callDoubaoForTextStream(systemPrompt, userPrompt, ASSET_PROMPT_BATCH_MAX_TOKENS, {
+            onChunk: (text) => sendEvent('chunk', { text, from: batch.from, to: batch.to }),
+            onPing: sendPing,
+          })
+
+          const previousState = JSON.parse(JSON.stringify(state)) as typeof state
+          const assets = parseAssetPromptBatch(aiResponse)
+          const actualCredits = calculateTextGenerationCredits(aiResponse)
+          applyShortDramaAssetPromptsBatchResult(state, assets, batch.to)
+
+          try {
+            const settledCredits = (await saveShortDramaStateAndSettleCredits({
+              projectId,
+              state,
+              actualCredits,
+              estimatedCredits: ESTIMATED_CREDITS,
+              creditAccountId,
+              userId,
+              teamId,
+              status: state.assets.status === 'completed' ? 'assets_ready' : 'generating',
+            })).settledCredits
+
+            totalCredits += settledCredits
+          } catch (error) {
+            Object.assign(state, previousState)
+            throw error
+          }
+
+          completedCount = state.assets.processedOutlineCount
+          sendEvent('progress', {
+            message: `第 ${batch.from}-${batch.to} 集角色和场景描述提取完成`,
+            from: batch.from,
+            to: batch.to,
+            completedCount,
+            totalCount: totalOutlines,
+          })
+        } catch (error) {
+          await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, `第 ${batch.from}-${batch.to} 集素材描述生成失败`)
+          app.log.error({ error, projectId, batch }, '短剧素材描述批次生成失败')
+
+          sendEvent('error', {
+            code: 'AI_ERROR',
+            message: error instanceof Error ? error.message : 'AI 生成失败，请稍后重试',
+            completedCount,
+            totalCount: totalOutlines,
+          })
+          return
         }
       }
-    }
 
-    // 处理场景
-    for (const scene of parsed.scenes as Array<Record<string, unknown>>) {
-      if (typeof scene.name === 'string' && typeof scene.description === 'string') {
-        const normalizedName = scene.name.trim().toLowerCase()
-        if (!assetMap.has(normalizedName)) {
-          assetMap.set(normalizedName, {
-            kind: 'scene',
-            name: scene.name.trim(),
-            description: scene.description.trim(),
-          })
-        }
-      }
-    }
-
-    // 处理道具
-    for (const prop of parsed.props as Array<Record<string, unknown>>) {
-      if (typeof prop.name === 'string' && typeof prop.description === 'string') {
-        const normalizedName = prop.name.trim().toLowerCase()
-        if (!assetMap.has(normalizedName)) {
-          assetMap.set(normalizedName, {
-            kind: 'prop',
-            name: prop.name.trim(),
-            description: prop.description.trim(),
-          })
-        }
-      }
-    }
-
-    // 处理材质（映射为 prop，因为当前类型没有 material kind）
-    for (const material of parsed.materials as Array<Record<string, unknown>>) {
-      if (typeof material.name === 'string' && typeof material.description === 'string') {
-        const normalizedName = material.name.trim().toLowerCase()
-        if (!assetMap.has(normalizedName)) {
-          assetMap.set(normalizedName, {
-            kind: 'prop', // 映射为 prop
-            name: material.name.trim(),
-            description: material.description.trim(),
-          })
-        }
-      }
-    }
-
-    // 生成素材列表
-    state.assets.items = Array.from(assetMap.values()).map((asset) => ({
-      id: randomUUID(),
-      kind: asset.kind,
-      scope: 'global' as const,
-      name: asset.name,
-      description: asset.description,
-      imageUrl: null,
-      referenceImageUrl: null,
-      episodeNumber: null,
-      status: 'idle' as const,
-      createdAt: now,
-      updatedAt: now,
-    }))
-
-    state.assets.status = 'completed'
-    state.steps.completed = ['script', 'assets']
-    state.steps.active = 'episodes'
-
-    // 计算实际积分消耗
-    const actualCredits = calculateTextGenerationCredits(aiResponse)
-
-    // 原子化保存状态并结算积分
-    let settledCredits: number
-    try {
-      settledCredits = (await saveShortDramaStateAndSettleCredits({
-        projectId,
+      const partial = stoppedByBalance || state.assets.processedOutlineCount < totalOutlines
+      sendEvent('done', {
+        success: true,
+        partial,
+        warning: partial ? warningMessage ?? '素材描述已部分生成，请稍后继续生成' : undefined,
+        assets: state.assets.items,
+        credits: totalCredits,
+        completedCount,
+        totalCount: totalOutlines,
+        remainingCount: totalOutlines - completedCount,
         state,
-        actualCredits,
-        estimatedCredits: ESTIMATED_CREDITS,
-        creditAccountId,
-        userId,
-        teamId,
-        status: 'outline_ready',
-      })).settledCredits
-    } catch (error) {
-      // 状态保存/结算失败，安全退还全额积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '状态保存/结算失败')
-      app.log.error({ error, projectId }, '短剧文本生成状态保存/结算失败')
-      return reply.status(500).send({
-        error: { code: 'DATABASE_ERROR', message: '保存失败，积分已退还' },
       })
-    }
-
-    return {
-      assets: state.assets.items,
-      credits: settledCredits,
-      state,
+    } finally {
+      reply.raw.end()
     }
   })
 }

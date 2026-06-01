@@ -22,12 +22,21 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   const [generatingSummary, setGeneratingSummary] = useState(false)
   const [generatingOutlines, setGeneratingOutlines] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [summaryStreamText, setSummaryStreamText] = useState('')
+  const [outlineStreamText, setOutlineStreamText] = useState('')
+  const [outlineProgressMessage, setOutlineProgressMessage] = useState('')
+  const [streamWarningMessage, setStreamWarningMessage] = useState('')
   const isLocked = state.locks.script
 
   const handleGenerateSummary = async () => {
     setGeneratingSummary(true)
+    setSummaryStreamText('')
+    setStreamWarningMessage('')
     try {
-      await generateShortDramaScriptSummary(projectId)
+      await generateShortDramaScriptSummary(projectId, {
+        onChunk: (text) => setSummaryStreamText((prev) => `${prev}${text}`),
+        onProgress: (progress) => setSummaryStreamText((prev) => prev || progress.message),
+      })
       onStateChange()
       toast.success('摘要生成完成')
     } catch (err) {
@@ -39,10 +48,24 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
 
   const handleGenerateOutlines = async () => {
     setGeneratingOutlines(true)
+    setOutlineStreamText('')
+    setOutlineProgressMessage('')
+    setStreamWarningMessage('')
     try {
-      await generateShortDramaEpisodeOutlines(projectId)
+      const result = await generateShortDramaEpisodeOutlines(projectId, {
+        onChunk: (text) => setOutlineStreamText((prev) => `${prev}${text}`),
+        onProgress: (progress) => setOutlineProgressMessage(progress.message),
+        onWarning: (warning) => {
+          setStreamWarningMessage(warning.message)
+          toast.warning(warning.message)
+        },
+      })
       onStateChange()
-      toast.success('大纲生成完成')
+      if (result.partial) {
+        toast.warning(result.warning ?? '大纲已部分生成，请补充 A豆后继续生成')
+      } else {
+        toast.success('大纲生成完成')
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '生成失败')
     } finally {
@@ -84,12 +107,17 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
           {!isLocked && (
             <Button size="sm" variant="outline" onClick={handleGenerateSummary} disabled={generatingSummary}>
               {generatingSummary ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
-              {state.script.refinedPrompt ? '重新生成' : '生成摘要'}
+              {state.script.refinedPrompt ? '摘要已生成' : '生成摘要'}
             </Button>
           )}
         </div>
         {state.script.refinedPrompt && (
           <p className="text-sm bg-muted/50 p-3 rounded-lg">{state.script.refinedPrompt}</p>
+        )}
+        {generatingSummary && summaryStreamText && (
+          <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-slate-700 whitespace-pre-wrap">
+            {summaryStreamText}
+          </div>
         )}
       </div>
 
@@ -99,10 +127,33 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
           {!isLocked && state.script.refinedPrompt && (
             <Button size="sm" variant="outline" onClick={handleGenerateOutlines} disabled={generatingOutlines}>
               {generatingOutlines ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
-              {state.script.outlines.length > 0 ? '重新生成' : '生成大纲'}
+              {state.script.outlines.length > 0 && state.script.outlines.length < state.settings.episodeCount
+                ? '继续生成大纲'
+                : '生成大纲'}
             </Button>
           )}
         </div>
+        {streamWarningMessage && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="font-medium">生成已暂停</div>
+            <p className="mt-1">{streamWarningMessage}</p>
+            <p className="mt-1 text-xs">
+              已生成 {state.script.outlines.length} / {state.settings.episodeCount} 集，可补充 A豆后继续生成剩余集数。
+            </p>
+          </div>
+        )}
+
+        {generatingOutlines && outlineProgressMessage && (
+          <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-violet-800">
+            {outlineProgressMessage}
+          </div>
+        )}
+
+        {generatingOutlines && outlineStreamText && (
+          <div className="max-h-48 overflow-y-auto rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+            {outlineStreamText}
+          </div>
+        )}
         {state.script.outlines.length > 0 && (
           <div className="space-y-2 max-h-[400px] overflow-y-auto">
             {state.script.outlines.map(outline => (
@@ -115,7 +166,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
         )}
       </div>
 
-      {!isLocked && state.script.outlines.length > 0 && (
+      {!isLocked && state.script.outlines.length === state.settings.episodeCount && (
         <Button onClick={handleConfirm} disabled={confirming} className="w-full">
           {confirming ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
           确认剧本，进入素材

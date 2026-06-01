@@ -1,6 +1,7 @@
-﻿import { sql } from 'kysely'
+﻿import { randomUUID } from 'node:crypto'
+import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
-import type { ShortDramaState } from '@aigc/types'
+import type { ShortDramaAsset, ShortDramaEpisodeOutline, ShortDramaState } from '@aigc/types'
 import { extractShortDramaJsonObject, calculateShortDramaTextCredits } from './_shared.js'
 
 // ============================================================================
@@ -13,6 +14,24 @@ const DOUBAO_MODEL = process.env.DOUBAO_MODEL ?? 'doubao-seed-2.0-lite'
 
 // 文本生成计费：每千字 1 积分
 const TEXT_CREDITS_PER_THOUSAND_CHARS = 1
+const DOUBAO_TEXT_TIMEOUT_MS = 240_000
+export const SHORT_DRAMA_OUTLINE_BATCH_SIZE = 10
+
+export interface ShortDramaTextStreamCallbacks {
+  onChunk?: (text: string) => void
+  onPing?: () => void
+}
+
+export interface ShortDramaOutlineBatch {
+  from: number
+  to: number
+}
+
+export interface ShortDramaAssetPromptInput {
+  kind: 'character' | 'scene'
+  name: string
+  description: string
+}
 
 // ============================================================================
 // AI 调用封装
@@ -36,7 +55,7 @@ export async function callDoubaoForText(
   const chatEndpoint = `${DOUBAO_API_URL}/chat/completions`
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 120_000) // 2 分钟超时
+  const timer = setTimeout(() => controller.abort(), DOUBAO_TEXT_TIMEOUT_MS)
 
   let response: Response
   try {
@@ -76,6 +95,107 @@ export async function callDoubaoForText(
   }
 
   return data.choices[0].message.content
+}
+
+export function extractDoubaoStreamDeltaText(line: string): string {
+  if (!line.startsWith('data: ')) return ''
+
+  const data = line.slice(6).trim()
+  if (!data || data === '[DONE]') return ''
+
+  try {
+    const json = JSON.parse(data) as {
+      choices?: Array<{ delta?: { content?: string } }>
+    }
+    return json.choices?.[0]?.delta?.content ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export async function callDoubaoForTextStream(
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens: number,
+  callbacks: ShortDramaTextStreamCallbacks = {}
+): Promise<string> {
+  if (!DOUBAO_API_KEY) {
+    throw new Error('DOUBAO_API_KEY 未配置，无法调用 AI 生成')
+  }
+
+  const chatEndpoint = `${DOUBAO_API_URL}/chat/completions`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), DOUBAO_TEXT_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(chatEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        Authorization: `Bearer ${DOUBAO_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: DOUBAO_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        stream: true,
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`AI 调用失败 (HTTP ${response.status})`)
+    }
+
+    if (!response.body) {
+      throw new Error('AI 返回流为空')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let fullText = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        const text = extractDoubaoStreamDeltaText(line.trim())
+        if (!text) {
+          callbacks.onPing?.()
+          continue
+        }
+        fullText += text
+        callbacks.onChunk?.(text)
+      }
+    }
+
+    if (buffer.trim()) {
+      const text = extractDoubaoStreamDeltaText(buffer.trim())
+      if (text) {
+        fullText += text
+        callbacks.onChunk?.(text)
+      }
+    }
+
+    if (!fullText.trim()) {
+      throw new Error('AI 返回内容为空')
+    }
+
+    return fullText
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // ============================================================================
@@ -118,6 +238,139 @@ export async function saveShortDramaProjectState(
 export function calculateTextGenerationCredits(outputText: string): number {
   const charCount = outputText.length
   return calculateShortDramaTextCredits(charCount, TEXT_CREDITS_PER_THOUSAND_CHARS)
+}
+
+export function buildShortDramaOutlineBatches(
+  startEpisode: number,
+  totalEpisodeCount: number,
+  batchSize = SHORT_DRAMA_OUTLINE_BATCH_SIZE
+): ShortDramaOutlineBatch[] {
+  const batches: ShortDramaOutlineBatch[] = []
+  for (let from = startEpisode; from <= totalEpisodeCount; from += batchSize) {
+    batches.push({
+      from,
+      to: Math.min(from + batchSize - 1, totalEpisodeCount),
+    })
+  }
+  return batches
+}
+
+/**
+ * 将摘要生成结果写回短剧状态，确保前端刷新后可直接展示 AI 摘要。
+ * @param state - 当前短剧状态，会被原地更新后保存
+ * @param result - AI 解析出的剧名和摘要
+ */
+export function applyShortDramaScriptSummaryResult(
+  state: ShortDramaState,
+  result: { title: string; summary: string }
+): void {
+  state.script.refinedPrompt = result.summary
+  state.script.status = 'completed'
+}
+
+export function applyShortDramaEpisodeOutlinesBatchResult(
+  state: ShortDramaState,
+  outlines: ShortDramaEpisodeOutline[]
+): void {
+  const now = new Date().toISOString()
+  const outlineMap = new Map<number, ShortDramaEpisodeOutline>()
+
+  for (const outline of state.script.outlines) {
+    outlineMap.set(outline.episodeNumber, outline)
+  }
+  for (const outline of outlines) {
+    outlineMap.set(outline.episodeNumber, outline)
+  }
+
+  const mergedOutlines = Array.from(outlineMap.values()).sort(
+    (a, b) => a.episodeNumber - b.episodeNumber
+  )
+
+  state.script.outlines = mergedOutlines
+  state.script.status =
+    mergedOutlines.length >= state.settings.episodeCount ? 'completed' : 'generating'
+  state.episodes.items = mergedOutlines.map((outline) => {
+    const existing = state.episodes.items.find(
+      (episode) => episode.episodeNumber === outline.episodeNumber
+    )
+
+    return {
+      episodeNumber: outline.episodeNumber,
+      title: outline.title,
+      summary: outline.summary,
+      segments: existing?.segments ?? [],
+      status: existing?.status ?? 'idle',
+      videoUrl: existing?.videoUrl ?? null,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    }
+  })
+  state.episodes.status = 'idle'
+}
+
+/**
+ * 将分集大纲写回短剧状态，并初始化分集编辑数据。
+ * @param state - 当前短剧状态，会被原地更新后保存
+ * @param outlines - AI 解析出的分集大纲
+ */
+export function applyShortDramaEpisodeOutlinesResult(
+  state: ShortDramaState,
+  outlines: ShortDramaEpisodeOutline[]
+): void {
+  applyShortDramaEpisodeOutlinesBatchResult(state, outlines)
+}
+
+function normalizeShortDramaAssetName(name: string): string {
+  return name.trim().toLowerCase()
+}
+
+function getShortDramaAssetKey(asset: Pick<ShortDramaAsset, 'kind' | 'name'>): string {
+  return `${asset.kind}:${normalizeShortDramaAssetName(asset.name)}`
+}
+
+export function applyShortDramaAssetPromptsBatchResult(
+  state: ShortDramaState,
+  assets: ShortDramaAssetPromptInput[],
+  processedOutlineCount: number
+): void {
+  const now = new Date().toISOString()
+  const assetMap = new Map<string, ShortDramaAsset>()
+
+  for (const asset of state.assets.items) {
+    assetMap.set(getShortDramaAssetKey(asset), asset)
+  }
+
+  for (const asset of assets) {
+    const name = asset.name.trim()
+    const description = asset.description.trim()
+    if (!name || !description) continue
+
+    const key = `${asset.kind}:${normalizeShortDramaAssetName(name)}`
+    if (assetMap.has(key)) continue
+
+    assetMap.set(key, {
+      id: randomUUID(),
+      kind: asset.kind,
+      scope: 'global',
+      name,
+      description,
+      imageUrl: null,
+      referenceImageUrl: null,
+      episodeNumber: null,
+      status: 'idle',
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+
+  state.assets.items = Array.from(assetMap.values())
+  state.assets.processedOutlineCount = Math.max(
+    state.assets.processedOutlineCount,
+    processedOutlineCount
+  )
+  state.assets.status = state.assets.processedOutlineCount >= state.script.outlines.length
+    ? 'completed'
+    : 'generating'
 }
 
 // ============================================================================

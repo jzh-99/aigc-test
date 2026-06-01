@@ -121,6 +121,7 @@ export interface ShortDramaState {
   assets: {
     items: ShortDramaAsset[]
     status: ShortDramaGenerationStatus
+    processedOutlineCount: number
   }
   episodes: {
     items: ShortDramaEpisode[]
@@ -176,6 +177,17 @@ export function sortShortDramaSegments(segments: ShortDramaSegment[]): ShortDram
   return [...segments].sort((a, b) => a.order - b.order)
 }
 
+export function areShortDramaAssetsReady(state: ShortDramaState): boolean {
+  const requiredAssets = state.assets.items.filter(
+    asset => asset.kind === 'character' || asset.kind === 'scene'
+  )
+
+  return (
+    requiredAssets.length > 0 &&
+    requiredAssets.every(asset => asset.status === 'completed' && !!asset.imageUrl)
+  )
+}
+
 export function makeDefaultShortDramaState(params: {
   prompt: string
   style: string
@@ -196,6 +208,7 @@ export function makeDefaultShortDramaState(params: {
     assets: {
       items: [],
       status: 'idle',
+      processedOutlineCount: 0,
     },
     episodes: {
       items: [],
@@ -222,6 +235,13 @@ export function makeDefaultShortDramaState(params: {
 export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>): ShortDramaState {
   const aspectRatio = partial.settings?.aspectRatio
   const episodeCount = partial.settings?.episodeCount
+  const outlines = (partial.script?.outlines ?? []) as ShortDramaEpisodeOutline[]
+  const processedOutlineCount = partial.assets?.processedOutlineCount
+  const normalizedProcessedOutlineCount = typeof processedOutlineCount === 'number'
+    ? processedOutlineCount
+    : partial.assets?.status === 'completed'
+      ? outlines.length
+      : 0
 
   return {
     steps: {
@@ -231,12 +251,13 @@ export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>):
     script: {
       originalPrompt: partial.script?.originalPrompt ?? '',
       refinedPrompt: partial.script?.refinedPrompt ?? null,
-      outlines: (partial.script?.outlines ?? []) as ShortDramaEpisodeOutline[],
+      outlines,
       status: partial.script?.status ?? 'idle',
     },
     assets: {
       items: (partial.assets?.items ?? []) as ShortDramaAsset[],
       status: partial.assets?.status ?? 'idle',
+      processedOutlineCount: normalizedProcessedOutlineCount,
     },
     episodes: {
       items: (partial.episodes?.items ?? []) as ShortDramaEpisode[],
@@ -273,7 +294,7 @@ export function canEnterShortDramaStep(state: ShortDramaState, step: ShortDramaS
 
   if (step === 'episodes') {
     const scriptReady = state.steps.completed.includes('script') || state.locks.script
-    const assetsReady = state.steps.completed.includes('assets') || state.locks.assets
+    const assetsReady = areShortDramaAssetsReady(state)
     return scriptReady && assetsReady
   }
 

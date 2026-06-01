@@ -123,7 +123,7 @@ export function buildVolcengineTaskBody(
 
   const reqParams: Record<string, unknown> = {}
   if (params.aspect_ratio) reqParams.aspect_ratio = params.aspect_ratio
-  if (typeof params.duration === 'number' && params.duration > 0) reqParams.time_length = params.duration
+  if (typeof params.duration === 'number' && params.duration > 0) reqParams.duration = params.duration
   if (typeof params.generate_audio === 'boolean') reqParams.generate_audio = params.generate_audio
   if (typeof params.camera_fixed === 'boolean') reqParams.camera_fixed = params.camera_fixed
   if (typeof params.enable_upsample === 'boolean') reqParams.enable_upsample = params.enable_upsample

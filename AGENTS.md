@@ -146,6 +146,7 @@ packages/
 - **队列任务**：API 只负责投递任务，实际 AI 调用在 worker 中执行，调试生成问题需同时看 api 和 worker 日志。
 - **视频工作室**：有独立的状态追踪（`e3d3599`），生成任务有超时守卫（`timeout-guardian` job）。
 - **PM2 部署**：生产环境通过 `ecosystem.config.cjs` 管理三个进程（api、worker、web）。
+- **本地验证边界**：由于当前项目本地 dev server 在构建后可能出现缓存/模块解析问题，前端改动完成后只要 `pnpm --filter @aigc/web build` 通过即可结束反馈；不要继续执行浏览器刷新、重启 `localhost:6006` 或其他后续预览验证动作。
 
 ---
 

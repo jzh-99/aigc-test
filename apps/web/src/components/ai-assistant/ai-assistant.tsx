@@ -63,13 +63,16 @@ export function AiAssistant() {
   const [buttonDockedEdge, setButtonDockedEdge] = useState<'left' | 'right' | null>(null)
   const [isButtonDockedExpanded, setIsButtonDockedExpanded] = useState(false)
   const BUTTON_DOCK_THRESHOLD = 80
+  const BUTTON_DRAG_THRESHOLD = 8
   const BUTTON_PEEK = 20
   const BUTTON_SIZE = 56
 
   // Floating button draggable state
   const [buttonPosition, setButtonPosition] = useState({ x: 0, y: 0 })
   const [isButtonDragging, setIsButtonDragging] = useState(false)
-  const [buttonDragStart, setButtonDragStart] = useState({ x: 0, y: 0 })
+  const buttonPointerStartRef = useRef({ x: 0, y: 0 })
+  const buttonDragOriginRef = useRef({ x: 0, y: 0 })
+  const buttonDragStartedRef = useRef(false)
   const buttonDraggedRef = useRef(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -170,12 +173,24 @@ export function AiAssistant() {
           if (panelRef.current) panelRef.current.style.width = `${newWidth}px`
         }
       } else if (isButtonDragging) {
-        const newX = e.clientX - buttonDragStart.x
-        const newY = e.clientY - buttonDragStart.y
-        if (Math.abs(newX - buttonPosition.x) > 5 || Math.abs(newY - buttonPosition.y) > 5) {
+        const deltaX = e.clientX - buttonPointerStartRef.current.x
+        const deltaY = e.clientY - buttonPointerStartRef.current.y
+        const movedDistance = Math.hypot(deltaX, deltaY)
+        if (!buttonDragStartedRef.current && movedDistance < BUTTON_DRAG_THRESHOLD) return
+
+        if (!buttonDragStartedRef.current) {
+          buttonDragStartedRef.current = true
           buttonDraggedRef.current = true
+          if (buttonDockedEdge) {
+            setButtonDockedEdge(null)
+            setIsButtonDockedExpanded(false)
+          }
         }
-        setButtonPosition({ x: newX, y: newY })
+
+        setButtonPosition({
+          x: buttonDragOriginRef.current.x + deltaX,
+          y: buttonDragOriginRef.current.y + deltaY,
+        })
       }
     }
 
@@ -185,7 +200,7 @@ export function AiAssistant() {
       isResizingRef.current = false
 
       // 按钮拖拽结束，检测是否靠近屏幕边缘触发贴边
-      if (isButtonDragging && buttonRef.current) {
+      if (isButtonDragging && buttonDraggedRef.current && buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect()
         const vw = window.innerWidth
         if (rect.left < BUTTON_DOCK_THRESHOLD) {
@@ -197,6 +212,7 @@ export function AiAssistant() {
         }
       }
       setIsButtonDragging(false)
+      buttonDragStartedRef.current = false
     }
 
     document.addEventListener('mousemove', handleMouseMove)
@@ -205,7 +221,7 @@ export function AiAssistant() {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isButtonDragging, buttonDragStart, buttonPosition, applyPanelPosition])
+  }, [isButtonDragging, buttonDockedEdge, applyPanelPosition])
 
   const handleDragStart = (e: React.MouseEvent) => {
     if (!panelRef.current) return
@@ -233,16 +249,11 @@ export function AiAssistant() {
   const handleButtonDragStart = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!buttonRef.current) return
-    // 贴边状态下开始拖拽，先取消贴边
-    if (buttonDockedEdge) {
-      setButtonDockedEdge(null)
-      setIsButtonDockedExpanded(false)
-    }
+    if (e.button !== 0) return
     const rect = buttonRef.current.getBoundingClientRect()
-    setButtonDragStart({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    })
+    buttonPointerStartRef.current = { x: e.clientX, y: e.clientY }
+    buttonDragOriginRef.current = { x: rect.left, y: rect.top }
+    buttonDragStartedRef.current = false
     buttonDraggedRef.current = false
     setIsButtonDragging(true)
   }
@@ -546,7 +557,7 @@ export function AiAssistant() {
         onMouseEnter={() => { if (buttonDockedEdge) setIsButtonDockedExpanded(true) }}
         onMouseLeave={() => { if (buttonDockedEdge) setIsButtonDockedExpanded(false) }}
         className={cn(
-          'fixed z-50 flex h-14 w-14 items-center justify-center shadow-lg gradient-accent cursor-move',
+          'fixed z-50 flex h-14 w-14 items-center justify-center shadow-lg gradient-accent cursor-pointer active:cursor-grabbing',
           'transition-[transform,border-radius] duration-300 ease-in-out',
           !buttonDockedEdge && 'hover:scale-105 active:scale-95',
           open && 'rotate-90',

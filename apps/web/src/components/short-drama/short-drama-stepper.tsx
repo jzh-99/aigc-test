@@ -1,7 +1,7 @@
 'use client'
 
 import type { ShortDramaStepId, ShortDramaState } from '@aigc/types'
-import { canEnterShortDramaStep } from '@aigc/types'
+import { areShortDramaAssetsReady, canEnterShortDramaStep } from '@aigc/types'
 import { Check } from 'lucide-react'
 
 interface ShortDramaStepperProps {
@@ -22,7 +22,9 @@ export function ShortDramaStepper({ state, onStepClick }: ShortDramaStepperProps
   return (
     <div className="flex items-center gap-2">
       {STEPS.map((step, index) => {
-        const isCompleted = completedSteps.includes(step.id)
+        const isCompleted = step.id === 'assets'
+          ? areShortDramaAssetsReady(state)
+          : completedSteps.includes(step.id)
         const isActive = activeStep === step.id
         const canEnter = canEnterShortDramaStep(state, step.id)
 

@@ -1,11 +1,12 @@
-﻿import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
-  callDoubaoForText,
+  callDoubaoForTextStream,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
   parseAndValidateJson,
+  applyShortDramaScriptSummaryResult,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 
@@ -66,46 +67,43 @@ const route: FastifyPluginAsync = async (app) => {
 
     const userPrompt = `用户创意：${state.script.originalPrompt}\n\n请生成剧本摘要，包含 title（剧名）和 summary（剧情概要，200-500字）。`
 
-    let aiResponse: string
-    try {
-      aiResponse = await callDoubaoForText(REDACTED, userPrompt)
-    } catch (error) {
-      // AI 调用失败，退还积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      app.log.error({ error, projectId }, 'AI 调用失败')
-      return reply.status(502).send({
-        error: { code: 'AI_ERROR', message: 'AI 生成失败，请稍后重试' },
-      })
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    reply.hijack()
+    reply.raw.write(': connected\n\n')
+
+    const sendEvent = (event: string, data: unknown): void => {
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
     }
 
-    // 解析 AI 返回的 JSON
-    let parsed: Record<string, unknown>
-    try {
-      parsed = parseAndValidateJson(aiResponse, ['title', 'summary'])
-    } catch (error) {
-      // JSON 解析失败，退还积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      app.log.error({ error, projectId }, 'AI 返回格式错误')
-      return reply.status(502).send({
-        error: { code: 'VALIDATION_ERROR', message: 'AI 返回格式错误，请重试' },
-      })
+    const sendPing = (): void => {
+      reply.raw.write(': ping\n\n')
     }
 
-    // 校验字段类型
-    if (typeof parsed.title !== 'string' || typeof parsed.summary !== 'string') {
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, "失败")
-      return reply.status(502).send({
-        error: { code: 'VALIDATION_ERROR', message: 'AI 返回的 title 或 summary 格式错误' },
-      })
-    }
-
-    // 计算实际积分消耗
-    const actualCredits = calculateTextGenerationCredits(aiResponse)
-
-    // 原子化保存状态并结算积分
-    let settledCredits: number
     try {
-      settledCredits = (await saveShortDramaStateAndSettleCredits({
+      sendEvent('progress', { message: '正在生成剧本摘要' })
+
+      const aiResponse = await callDoubaoForTextStream(REDACTED, userPrompt, 4000, {
+        onChunk: (text) => sendEvent('chunk', { text }),
+        onPing: sendPing,
+      })
+
+      const parsed = parseAndValidateJson(aiResponse, ['title', 'summary'])
+      if (typeof parsed.title !== 'string' || typeof parsed.summary !== 'string') {
+        throw new Error('AI 返回的 title 或 summary 格式错误')
+      }
+
+      const actualCredits = calculateTextGenerationCredits(aiResponse)
+      applyShortDramaScriptSummaryResult(state, {
+        title: parsed.title,
+        summary: parsed.summary,
+      })
+
+      const settledCredits = (await saveShortDramaStateAndSettleCredits({
         projectId,
         state,
         actualCredits,
@@ -114,22 +112,25 @@ const route: FastifyPluginAsync = async (app) => {
         userId,
         teamId,
         status: 'summary_ready',
-        title: parsed.title as string,
+        title: parsed.title,
       })).settledCredits
-    } catch (error) {
-      // 状态保存/结算失败，安全退还全额积分
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '状态保存/结算失败')
-      app.log.error({ error, projectId }, '短剧文本生成状态保存/结算失败')
-      return reply.status(500).send({
-        error: { code: 'DATABASE_ERROR', message: '保存失败，积分已退还' },
-      })
-    }
 
-    return {
-      title: parsed.title,
-      summary: parsed.summary,
-      credits: settledCredits,
-      state,
+      sendEvent('done', {
+        success: true,
+        title: parsed.title,
+        summary: parsed.summary,
+        credits: settledCredits,
+        state,
+      })
+    } catch (error) {
+      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成失败')
+      app.log.error({ error, projectId }, '短剧摘要流式生成失败')
+      sendEvent('error', {
+        code: 'AI_ERROR',
+        message: error instanceof Error ? error.message : 'AI 生成失败，请稍后重试',
+      })
+    } finally {
+      reply.raw.end()
     }
   })
 }

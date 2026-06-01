@@ -148,20 +148,28 @@ function normalizeTextConfig(config: unknown, models?: ModelItem[]): TextInputCo
   }
 }
 
-function normalizeVideoConfig(config: unknown): VideoGenConfig {
+function normalizeVideoConfig(config: unknown, models?: ModelItem[]): VideoGenConfig {
   const raw = (config && typeof config === 'object' ? config : {}) as Partial<VideoGenConfig>
+  const dbModel = models?.find((m) => m.code === raw.model) ?? models?.[0]
+  const modelCode = dbModel?.code ?? raw.model ?? DEFAULT_VIDEO_CONFIG.model
+  const resolutions = extractSchemaEnums(dbModel?.params_schema, 'resolution').map((e) => e.value)
+  const resolution = raw.resolution && resolutions.includes(raw.resolution)
+    ? raw.resolution
+    : resolutions[0]
   const videoMode = raw.videoMode === 'keyframe' || raw.videoMode === 'multiref' ? raw.videoMode : DEFAULT_VIDEO_CONFIG.videoMode
   const duration = typeof raw.duration === 'number' ? raw.duration : DEFAULT_VIDEO_CONFIG.duration
   // 使用 parseCategoryReferences 确保数据格式正确
-  const parsed = parseCategoryReferences(raw.categoryReferences)
+  const parsed = parseCategoryReferences(dbModel?.category_references ?? raw.categoryReferences)
   const categoryReferences = Object.keys(parsed).length > 0 ? parsed : DEFAULT_VIDEO_CATEGORY_LIMITS
 
   return {
     ...DEFAULT_VIDEO_CONFIG,
     ...raw,
+    model: modelCode,
     videoMode,
     duration,
     categoryReferences,
+    ...(resolution ? { resolution } : {}),
   }
 }
 
@@ -210,7 +218,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     ? normalizeImageConfig(node.data.config, imageModelsReady ? imageModels : undefined)
     : DEFAULT_IMAGE_CONFIG
   const videoCfg = isVideoGen
-    ? normalizeVideoConfig(node.data.config)
+    ? normalizeVideoConfig(node.data.config, videoModelsReady ? videoModels : undefined)
     : DEFAULT_VIDEO_CONFIG
   const textCfg = isTextInput && isTextInputConfig(node.data.config)
     ? normalizeTextConfig(node.data.config, agentModelsReady ? agentModels : undefined)
@@ -447,14 +455,19 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
       ? targetCategory
       : (categories.multimodal ? 'multimodal' : categories.frames ? 'frames' : targetCategory)
     const newAspect = isSeedanceModel ? (videoAspect || 'adaptive') : ''
+    const nextResolutions = extractSchemaEnums(dbModel?.params_schema, 'resolution').map((e) => e.value)
+    const nextResolution = videoResolution && nextResolutions.includes(videoResolution)
+      ? videoResolution
+      : nextResolutions[0]
 
     updateCfg({
       model: val,
       videoMode: CATEGORY_TO_CANVAS_MODE[nextCategory],
       aspectRatio: newAspect,
       categoryReferences: categories,
+      ...(nextResolution ? { resolution: nextResolution } : {}),
     })
-  }, [updateCfg, videoAspect, videoMode, videoModels])
+  }, [updateCfg, videoAspect, videoMode, videoModels, videoResolution])
 
   const getCanvasVideoCounts = useCallback((_mode: VideoGenConfig['videoMode']): VideoReferenceCounts => {
     return orderedImageRefs.reduce<VideoReferenceCounts>((counts, ref) => {

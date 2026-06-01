@@ -38,3 +38,13 @@ test('全能参考模式允许不传任何参考资源', () => {
     { type: 'text', text: '纯文本生成一个广告片' },
   ])
 })
+
+test('Seedance 2.0 时长使用官方 duration 整数秒字段，避免落入默认 5 秒', () => {
+  const body = buildVolcengineTaskBody('seedance-2.0', '生成 15 秒广告片', {
+    duration: 15,
+  })
+
+  assert.deepEqual(body.parameters, {
+    duration: 15,
+  })
+})

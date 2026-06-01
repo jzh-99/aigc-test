@@ -40,6 +40,12 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
         const module = batch.module
         const batchStatus = batch.status
 
+        if (module === 'image' && (batchStatus === 'pending' || batchStatus === 'processing')) {
+          const changed = syncImageBatchProgress(state, batch)
+          if (changed) syncedCount++
+          continue
+        }
+
         if (batchStatus !== 'completed' && batchStatus !== 'failed') {
           continue
         }
@@ -73,6 +79,36 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
   )
 }
 
+function readAssetIdMap(batch: any): Array<{ versionIndex: number; assetId: string }> {
+  try {
+    const params = typeof batch.params === 'string' ? JSON.parse(batch.params) : batch.params
+    if (Array.isArray(params?.assetIdMap)) {
+      return params.assetIdMap
+    }
+  } catch { /* ignore parse errors */ }
+
+  return []
+}
+
+function syncImageBatchProgress(state: any, batch: any): boolean {
+  const assetIdMap = readAssetIdMap(batch)
+  const nextStatus = batch.status === 'processing' ? 'generating' : 'pending'
+  let changed = false
+
+  for (const mapping of assetIdMap) {
+    const targetAsset = state.assets.items.find((a: any) => a.id === mapping.assetId)
+    if (!targetAsset || targetAsset.status === 'completed' || targetAsset.status === 'failed') continue
+
+    if (targetAsset.status !== nextStatus) {
+      targetAsset.status = nextStatus
+      targetAsset.updatedAt = new Date().toISOString()
+      changed = true
+    }
+  }
+
+  return changed
+}
+
 async function syncImageBatch(
   db: ReturnType<typeof getDb>,
   state: any,
@@ -85,13 +121,7 @@ async function syncImageBatch(
     .execute()
 
   // 从 batch.params 中读取 assetIdMap 映射
-  let assetIdMap: Array<{ versionIndex: number; assetId: string }> = []
-  try {
-    const params = typeof batch.params === 'string' ? JSON.parse(batch.params) : batch.params
-    if (Array.isArray(params?.assetIdMap)) {
-      assetIdMap = params.assetIdMap
-    }
-  } catch { /* ignore parse errors */ }
+  const assetIdMap = readAssetIdMap(batch)
 
   for (const task of tasks) {
     // 通过 assetIdMap 精确匹配 assetId
