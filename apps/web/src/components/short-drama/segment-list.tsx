@@ -3,7 +3,12 @@
 import { Loader2, Plus, Trash2, ChevronLeft, ChevronRight, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SegmentPromptEditor } from './segment-prompt-editor'
-import type { ShortDramaSegment, ShortDramaAsset, ShortDramaMentionRef } from '@aigc/types'
+import {
+  calculateShortDramaSegmentDuration,
+  type ShortDramaSegment,
+  type ShortDramaAsset,
+  type ShortDramaMentionRef,
+} from '@aigc/types'
 
 interface SegmentListProps {
   segments: ShortDramaSegment[]
@@ -100,10 +105,21 @@ export function SegmentList({
         <SegmentPromptEditor
           segment={selectedSegment}
           assets={assets}
-          onPromptChange={prompt => onSegmentUpdate(selectedSafeIndex, { ...selectedSegment, prompt })}
+          onPromptChange={prompt =>
+            onSegmentUpdate(selectedSafeIndex, {
+              ...selectedSegment,
+              prompt,
+              durationSeconds: calculateShortDramaSegmentDuration(prompt, selectedSegment.durationSeconds),
+            })
+          }
           onMentionRefsChange={(refs: ShortDramaMentionRef[]) => onSegmentUpdate(selectedSafeIndex, { ...selectedSegment, mentionRefs: refs })}
           onPromptAndMentionRefsChange={(prompt: string, refs: ShortDramaMentionRef[]) =>
-            onSegmentUpdate(selectedSafeIndex, { ...selectedSegment, prompt, mentionRefs: refs })
+            onSegmentUpdate(selectedSafeIndex, {
+              ...selectedSegment,
+              prompt,
+              mentionRefs: refs,
+              durationSeconds: calculateShortDramaSegmentDuration(prompt, selectedSegment.durationSeconds),
+            })
           }
           disabled={disabled}
         />

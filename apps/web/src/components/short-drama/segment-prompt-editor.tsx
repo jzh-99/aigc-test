@@ -2,6 +2,11 @@
 
 import type { ShortDramaSegment, ShortDramaAsset, ShortDramaMentionRef } from '@aigc/types'
 import {
+  SHORT_DRAMA_SHOT_DURATION_SECONDS,
+  extractShortDramaShotDurations,
+  updateShortDramaShotDuration,
+} from '@aigc/types'
+import {
   StoryboardMentionEditor,
   type StoryboardMentionResource,
 } from '@/components/picture-book/storyboard-mention-editor'
@@ -47,6 +52,14 @@ export function SegmentPromptEditor({
     onMentionRefsChange(refs)
   }
 
+  const shotDurations = extractShortDramaShotDurations(segment.prompt)
+
+  const handleShotDurationChange = (shotNumber: number, durationSeconds: number) => {
+    const nextPrompt = updateShortDramaShotDuration(segment.prompt, shotNumber, durationSeconds)
+    if (nextPrompt === segment.prompt) return
+    handlePromptChange(nextPrompt)
+  }
+
   return (
     <div className="space-y-3">
       <StoryboardMentionEditor
@@ -57,6 +70,31 @@ export function SegmentPromptEditor({
         disabled={disabled}
       />
 
+      {shotDurations.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-background/40 p-2">
+          <span className="text-xs text-muted-foreground">分镜时长</span>
+          {shotDurations.map(shot => (
+            <label
+              key={shot.shotNumber}
+              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs"
+            >
+              <span>分镜{shot.shotNumber}</span>
+              <select
+                value={shot.durationSeconds}
+                onChange={event => handleShotDurationChange(shot.shotNumber, Number(event.target.value))}
+                disabled={disabled}
+                className="bg-transparent text-xs outline-none disabled:cursor-not-allowed"
+              >
+                {SHORT_DRAMA_SHOT_DURATION_SECONDS.map(seconds => (
+                  <option key={seconds} value={seconds}>
+                    {seconds}s
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
