@@ -16,6 +16,7 @@ import {
   isShortDramaAspectRatio,
   isShortDramaDurationSeconds,
   isShortDramaEpisodeCount,
+  isShortDramaShotDurationSeconds,
   makeDefaultShortDramaState,
   normalizeShortDramaState,
   sortShortDramaSegments,
@@ -42,6 +43,10 @@ assert.equal(isShortDramaDurationSeconds(4, [4, 5, 8]), true)
 assert.equal(isShortDramaDurationSeconds(6, [4, 5, 8]), false)
 
 assert.deepEqual(SHORT_DRAMA_SHOT_DURATION_SECONDS, [2, 3, 4, 5, 6, 7, 8, 9, 10])
+assert.equal(isShortDramaShotDurationSeconds(2), true)
+assert.equal(isShortDramaShotDurationSeconds(10), true)
+assert.equal(isShortDramaShotDurationSeconds(1), false)
+assert.equal(isShortDramaShotDurationSeconds(11), false)
 
 const structuredPrompt = [
   '本片段场景设定在：@旧教室，白天，自然光。',
