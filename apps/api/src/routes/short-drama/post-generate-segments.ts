@@ -1,6 +1,9 @@
 ﻿import type { FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
-import { extractShortDramaShotDurations } from '@aigc/types'
+import {
+  calculateShortDramaSegmentDuration,
+  extractShortDramaShotDurations,
+} from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
   callDoubaoForTextStream,
@@ -13,6 +16,7 @@ import { freezeCredits } from '../../services/credit.js'
 // 保守预估：每次文本生成预冻结 25 积分（片段脚本通常较长）
 const ESTIMATED_CREDITS = 25
 const SEGMENT_VIDEO_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
+const RAW_SHOT_DURATION_PATTERN = /分镜\s*\d+(?:\s*[·.\-:：]\s*|\s+)\d{1,2}\s*s\b/gi
 
 const route: FastifyPluginAsync = async (app) => {
   app.post<{
@@ -235,7 +239,8 @@ const route: FastifyPluginAsync = async (app) => {
       const title = seg.title.trim()
       const prompt = seg.prompt.trim()
       const shotDurations = extractShortDramaShotDurations(prompt)
-      const durationSeconds = shotDurations.reduce((sum, shot) => sum + shot.durationSeconds, 0)
+      const rawShotDurationCount = Array.from(prompt.matchAll(RAW_SHOT_DURATION_PATTERN)).length
+      const durationSeconds = calculateShortDramaSegmentDuration(prompt, 0)
 
       if (!title || !prompt) {
         await failStream(
@@ -253,6 +258,16 @@ const route: FastifyPluginAsync = async (app) => {
           `第 ${i + 1} 个片段缺少场景设定`,
           new Error(`segment ${i + 1} missing scene setting`),
           'AI 返回片段缺少场景设定',
+        )
+        return
+      }
+
+      if (rawShotDurationCount !== shotDurations.length) {
+        await failStream(
+          'VALIDATION_ERROR',
+          `第 ${i + 1} 个片段的分镜时长必须在 2-10 秒之间`,
+          new Error(`segment ${i + 1} invalid shot duration`),
+          'AI 返回片段分镜时长错误',
         )
         return
       }
