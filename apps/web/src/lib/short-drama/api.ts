@@ -301,7 +301,11 @@ export function generateShortDramaSegmentVideo(
 ): Promise<{ success: boolean; batchId: string; taskId: string }> {
   return fetchWithAuth(
     `/short-drama/projects/${projectId}/episodes/${episodeNumber}/segments/${segmentId}/generate-video`,
-    { method: 'POST' }
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }
   )
 }
 
