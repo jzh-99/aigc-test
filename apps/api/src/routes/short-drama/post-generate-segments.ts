@@ -1,6 +1,9 @@
 ﻿import type { FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
-import { SHORT_DRAMA_DEFAULT_DURATION_SECONDS } from '@aigc/types'
+import {
+  SHORT_DRAMA_DEFAULT_DURATION_SECONDS,
+  calculateShortDramaSegmentDuration,
+} from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
   callDoubaoForTextStream,
@@ -100,16 +103,19 @@ const route: FastifyPluginAsync = async (app) => {
       .map((a) => `- ${a.kind}：@${a.name}（${a.description}）`)
       .join('\n')
 
-    // 调用 AI 生成分镜（要求完整字段）
+    // 调用 AI 生成片段脚本（分镜写入 prompt 内）
     const REDACTED = [
-      '你是专业短剧分镜师。请根据剧本摘要、分集梗概和素材，为该集生成详细的分镜脚本。',
-      '只输出 JSON 数组，每个元素包含 title、prompt、mentionNames、durationSeconds、cameraNote、actionNote、dialogueOrSubtitle 字段，不要输出 markdown。',
-      'prompt 必须是可用于视频生成的画面描述；当镜头出现某个角色或场景时，必须在 prompt 中直接写对应的 @素材名，例如 @祁同伟、@汉东政法大学校园。',
-      'mentionNames 必须填写本镜头实际引用的素材名称，不带 @，且只能使用可用素材列表中的名称。',
+      '你是专业短剧分镜师。请根据剧本摘要、分集梗概和素材，为该集生成详细的片段脚本。',
+      '只输出 JSON 数组，每个元素包含 title、prompt、mentionNames、durationSeconds 字段，不要输出 markdown。',
+      '片段是视频生成的最小单位；分镜只写入片段 prompt 内，不要为分镜生成独立视频字段。',
+      '每个片段 prompt 必须包含：第一段“本片段场景设定在：...”，后续 2-5 个“分镜N · Xs：...”描述。',
+      '每个分镜时长 X 必须为 2-10 秒；durationSeconds 必须等于本片段所有分镜时长之和。',
+      '当镜头出现某个角色或场景时，必须在 prompt 中直接写对应的 @素材名，例如 @祁同伟、@汉东政法大学校园。',
+      'mentionNames 必须填写本片段实际引用的素材名称，不带 @，且只能使用可用素材列表中的名称。',
       '不要虚构素材名称；没有引用素材时 mentionNames 返回空数组。',
     ].join('\n')
 
-    const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n第${episodeNumber}集梗概：${episode.title}\n${episode.summary}\n\n可用素材：\n${assetsText}\n\n画面比例：${state.settings.aspectRatio}\n默认时长：${state.settings.durationSeconds}秒\n\n请生成该集的分镜脚本。剧情较复杂时可生成 12-18 个镜头，普通剧情生成 8-12 个镜头。每个镜头包含：\n- title: 镜头标题\n- prompt: 视频生成提示词，必须在出现素材时使用 @素材名，并详细描述画面内容、动作、氛围\n- mentionNames: 提及的素材名称列表，只能从可用素材中选择，名称不带 @\n- durationSeconds: 镜头时长（默认 ${state.settings.durationSeconds} 秒）\n- cameraNote: 镜头运镜说明（如推拉摇移、特写、全景等）\n- actionNote: 动作说明（角色动作、场景变化等）\n- dialogueOrSubtitle: 对白或字幕内容`
+    const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n第${episodeNumber}集梗概：${episode.title}\n${episode.summary}\n\n可用素材：\n${assetsText}\n\n画面比例：${state.settings.aspectRatio}\n默认时长：${state.settings.durationSeconds}秒\n\n请生成该集的片段脚本。每集可根据剧情生成多个片段，每个片段是一次视频生成单位。每个片段包含：\n- title: 片段标题\n- prompt: 完整片段文本，第一段写“本片段场景设定在：...”，后续写 2-5 个“分镜N · Xs：...”描述；出现素材时必须使用 @素材名\n- mentionNames: 提及的素材名称列表，只能从可用素材中选择，名称不带 @\n- durationSeconds: 片段总时长，必须等于 prompt 中所有分镜时长之和\n\n每个分镜时长必须在 2-10 秒之间。分镜不是视频生成单位，不要输出分镜 videoUrl、status 或单独任务字段。`
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -204,7 +210,7 @@ const route: FastifyPluginAsync = async (app) => {
         .map(asset => asset.name)
     }
 
-    // 校验每个分镜的完整字段（spec 要求）
+    // 校验每个片段的核心字段
     const now = new Date().toISOString()
     const parsedSegments = []
 
@@ -216,10 +222,7 @@ const route: FastifyPluginAsync = async (app) => {
         typeof seg.title !== 'string' ||
         typeof seg.prompt !== 'string' ||
         !Array.isArray(seg.mentionNames) ||
-        typeof seg.durationSeconds !== 'number' ||
-        typeof seg.cameraNote !== 'string' ||
-        typeof seg.actionNote !== 'string' ||
-        typeof seg.dialogueOrSubtitle !== 'string'
+        typeof seg.durationSeconds !== 'number'
       ) {
         await failStream(
           'VALIDATION_ERROR',
@@ -249,27 +252,20 @@ const route: FastifyPluginAsync = async (app) => {
         }
       }
 
-      // 当前类型不支持存储 cameraNote、actionNote、dialogueOrSubtitle
-      // 将它们合并到 prompt 中以保留信息
-      const enrichedPrompt = [
-        seg.prompt,
-        seg.cameraNote ? `[运镜] ${seg.cameraNote}` : '',
-        seg.actionNote ? `[动作] ${seg.actionNote}` : '',
-        seg.dialogueOrSubtitle ? `[字幕] ${seg.dialogueOrSubtitle}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n')
+      const prompt = seg.prompt.trim()
+      const fallbackDuration =
+        typeof seg.durationSeconds === 'number' && seg.durationSeconds > 0
+          ? seg.durationSeconds
+          : SHORT_DRAMA_DEFAULT_DURATION_SECONDS
+      const durationSeconds = calculateShortDramaSegmentDuration(prompt, fallbackDuration)
 
       parsedSegments.push({
         id: randomUUID(),
         order: i + 1,
         title: seg.title,
-        prompt: enrichedPrompt,
+        prompt,
         mentionRefs,
-        durationSeconds:
-          typeof seg.durationSeconds === 'number' && seg.durationSeconds > 0
-            ? seg.durationSeconds
-            : SHORT_DRAMA_DEFAULT_DURATION_SECONDS,
+        durationSeconds,
         videoUrl: null,
         status: 'idle' as const,
       })
