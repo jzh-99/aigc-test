@@ -1,7 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useShortDramaProject } from '@/hooks/short-drama/use-short-drama-project'
 import { ShortDramaStepper } from '@/components/short-drama/short-drama-stepper'
 import { StepScriptOutline } from '@/components/short-drama/step-script-outline'
@@ -55,7 +56,14 @@ export default function ShortDramaEditorPage() {
     : { ...state, steps: { ...state.steps, active: activeStep } }
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-background">
+    <div className="-mx-4 -mt-4 min-h-[calc(100vh-4.25rem)] bg-background md:-mx-6 md:-mt-6">
+      <div className="sticky top-[-1rem] z-20 flex h-16 items-center border-b bg-card/95 px-5 backdrop-blur md:top-[-1.5rem] md:px-8">
+        <Link href="/toby-studio/short-drama" className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" />
+          返回 AI短剧
+        </Link>
+      </div>
+
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         <div className="border-b border-border/70 pb-5">
           <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground">AI SHORT DRAMA</p>

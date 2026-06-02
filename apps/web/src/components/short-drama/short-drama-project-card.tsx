@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Film } from 'lucide-react'
+import { ArrowUpRight, Clock3, Film, Layers3 } from 'lucide-react'
 import type { ShortDramaProjectListItem } from '@/lib/short-drama/api'
 
 interface ShortDramaProjectCardProps {
@@ -19,13 +19,13 @@ function timeAgo(iso: string): string {
 }
 
 const STATUS_LABELS: Record<string, { text: string; className: string }> = {
-  draft: { text: '草稿', className: 'border-slate-200 bg-slate-50 text-slate-500' },
-  summary_ready: { text: '摘要就绪', className: 'border-sky-100 bg-sky-50 text-sky-600' },
-  outline_ready: { text: '大纲就绪', className: 'border-blue-100 bg-blue-50 text-blue-600' },
-  assets_ready: { text: '素材就绪', className: 'border-violet-100 bg-violet-50 text-violet-600' },
-  episodes_ready: { text: '分集就绪', className: 'border-emerald-100 bg-emerald-50 text-emerald-600' },
-  completed: { text: '已完成', className: 'border-green-100 bg-green-50 text-green-700' },
-  failed: { text: '失败', className: 'border-red-100 bg-red-50 text-red-600' },
+  draft: { text: '草稿', className: 'border-border bg-muted text-muted-foreground dark:bg-white/5' },
+  summary_ready: { text: '摘要就绪', className: 'border-sky-400/20 bg-sky-400/10 text-sky-700 dark:text-sky-200' },
+  outline_ready: { text: '大纲就绪', className: 'border-blue-400/20 bg-blue-400/10 text-blue-700 dark:text-blue-200' },
+  assets_ready: { text: '素材就绪', className: 'border-violet-400/20 bg-violet-400/10 text-violet-700 dark:text-violet-200' },
+  episodes_ready: { text: '分集就绪', className: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200' },
+  completed: { text: '已完成', className: 'border-green-400/20 bg-green-400/10 text-green-700 dark:text-green-200' },
+  failed: { text: '失败', className: 'border-destructive/25 bg-destructive/10 text-destructive' },
 }
 
 export function ShortDramaProjectCard({ project }: ShortDramaProjectCardProps) {
@@ -34,28 +34,44 @@ export function ShortDramaProjectCard({ project }: ShortDramaProjectCardProps) {
   return (
     <Link
       href={`/toby-studio/short-drama/${project.id}`}
-      className="group flex min-h-[112px] flex-col justify-between rounded-xl border border-violet-100/70 bg-white/90 p-4 shadow-[0_14px_34px_rgba(75,57,122,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-white hover:shadow-[0_18px_42px_rgba(75,57,122,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
+      className="group relative flex min-h-[148px] overflow-hidden rounded-lg border bg-card shadow-[0_18px_45px_rgba(34,26,63,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_22px_55px_rgba(34,26,63,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#0d0b1d] dark:shadow-[0_18px_45px_rgba(0,0,0,0.28)]"
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-500 transition-colors group-hover:bg-violet-100">
-          <Film className="h-4 w-4" />
+      <div className="w-1.5 shrink-0 bg-gradient-to-b from-[#6f7cff] via-[#a86af5] to-[#21c4d6]" />
+      <div className="flex min-w-0 flex-1 flex-col justify-between p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <Film className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">
+                {project.title || '未命名短剧'}
+              </h3>
+              <p className="mt-2 line-clamp-1 text-xs text-muted-foreground">
+                {project.style ?? project.aspectRatio ?? 'Toby Studio'}
+              </p>
+            </div>
+          </div>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-muted-foreground transition-colors group-hover:border-primary/50 group-hover:text-primary dark:border-[#302858]">
+            <ArrowUpRight className="h-4 w-4" />
+          </span>
         </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold leading-5 text-slate-800">
-            {project.title}
-          </h3>
-        </div>
-      </div>
 
-      <div className="mt-4 flex items-end justify-between gap-3 pl-11">
-        <div className="flex min-w-0 items-center gap-3 text-xs text-slate-400">
-          <span>{project.episodeCount} 集</span>
-          <span className="h-1 w-1 rounded-full bg-slate-200" />
-          <span>{timeAgo(project.updatedAt)}</span>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Layers3 className="h-3.5 w-3.5" />
+              {project.episodeCount} 集
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Clock3 className="h-3.5 w-3.5" />
+              {timeAgo(project.updatedAt)}
+            </span>
+          </div>
+          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${statusInfo.className}`}>
+            {statusInfo.text}
+          </span>
         </div>
-        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${statusInfo.className}`}>
-          {statusInfo.text}
-        </span>
       </div>
     </Link>
   )

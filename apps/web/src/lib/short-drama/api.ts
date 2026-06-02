@@ -36,6 +36,9 @@ export interface GenerateShortDramaSegmentVideoInput {
 export interface ShortDramaProjectListItem {
   id: string
   title: string
+  prompt?: string
+  style?: string
+  aspectRatio?: ShortDramaAspectRatio
   status: string
   coverUrl: string | null
   episodeCount: number
@@ -197,19 +200,23 @@ export function createShortDramaProject(
 }
 
 export function listRecentShortDramaProjects(
-  workspaceId: string
+  workspaceId: string,
+  limit = 10,
 ): Promise<ShortDramaProjectListItem[]> {
+  const params = new URLSearchParams({ workspace_id: workspaceId, limit: String(limit) })
   return fetchWithAuth<{ items: ShortDramaProjectListItem[] }>(
-    `/short-drama/projects/recent?workspace_id=${workspaceId}`
+    `/short-drama/projects/recent?${params}`
   ).then(res => res.items)
 }
 
 export function listShortDramaProjects(
   workspaceId: string,
-  cursor?: string
+  cursor?: string,
+  limit?: number,
 ): Promise<{ items: ShortDramaProjectListItem[]; nextCursor: string | null }> {
   const params = new URLSearchParams({ workspace_id: workspaceId })
   if (cursor) params.set('cursor', cursor)
+  if (limit) params.set('limit', String(limit))
   return fetchWithAuth(`/short-drama/projects?${params}`)
 }
 
