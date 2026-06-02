@@ -19,7 +19,7 @@ export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelPr
   const characterCount = allAssets.filter(asset => asset.kind === 'character').length
   const sceneCount = allAssets.filter(asset => asset.kind === 'scene').length
   const previewAsset = previewAssetId ? allAssets.find(asset => asset.id === previewAssetId) : null
-  const imageFrameClass = activeKind === 'character' ? 'aspect-[9/16] bg-slate-50' : 'aspect-video bg-muted'
+  const imageFrameClass = activeKind === 'character' ? 'aspect-[9/16]' : 'aspect-video'
   const imageFitClass = activeKind === 'character' ? 'object-contain' : 'object-cover'
 
   return (
@@ -58,9 +58,11 @@ export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelPr
               className="overflow-hidden rounded-xl border bg-background/60 text-left shadow-sm transition-colors hover:border-primary/30 disabled:cursor-default disabled:hover:border-border"
               aria-label={asset.imageUrl ? `放大查看${asset.name}` : asset.name}
             >
-              <div className={`group relative block w-full overflow-hidden text-left ${imageFrameClass}`}>
+              <div className={`group relative block w-full overflow-hidden bg-muted/40 text-left dark:bg-slate-900/70 ${imageFrameClass}`}>
                 <span className={`absolute left-1.5 top-1.5 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm ${
-                  asset.imageUrl ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-500'
+                  asset.imageUrl
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200'
+                    : 'bg-muted text-muted-foreground dark:bg-slate-800 dark:text-slate-300'
                 }`}>
                   {asset.imageUrl ? '已出图' : '未出图'}
                 </span>

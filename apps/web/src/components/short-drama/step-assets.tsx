@@ -339,7 +339,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
             return (
             <div key={asset.id} className="overflow-hidden rounded-xl border bg-card shadow-sm transition-colors hover:border-primary/30">
-              <div className={`${isCharacter ? 'aspect-[9/16] bg-slate-50' : 'aspect-video bg-muted'} flex items-center justify-center overflow-hidden`}>
+              <div className={`${isCharacter ? 'aspect-[9/16]' : 'aspect-video'} flex items-center justify-center overflow-hidden bg-muted/40 dark:bg-slate-900/70`}>
                 {shouldShowImage ? (
                   <button
                     type="button"

@@ -16,7 +16,7 @@ import {
 
 const DOUBAO_API_URL = process.env.DOUBAO_API_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
 const DOUBAO_API_KEY = process.env.DOUBAO_API_KEY ?? ''
-const DOUBAO_MODEL = process.env.DOUBAO_MODEL ?? 'doubao-seed-2.0-lite'
+const DOUBAO_MODEL = process.env.DOUBAO_MODEL ?? 'doubao-seed-2-0-lite-260428'
 
 // 文本生成计费：每千字 1 积分
 const TEXT_CREDITS_PER_THOUSAND_CHARS = 1

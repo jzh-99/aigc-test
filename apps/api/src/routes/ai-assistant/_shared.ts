@@ -31,7 +31,7 @@ export const AI_API_KEY =
 export const AI_MODEL =
   provider === 'nano_banana'
     ? (process.env.NANO_BANANA_MODEL ?? '')
-    : (process.env.DOUBAO_MODEL ?? 'doubao-seed-2.0-lite')
+    : (process.env.DOUBAO_MODEL ?? 'doubao-seed-2-0-lite-260428')
 
 // nano_banana 的 endpoint 带 /v1 前缀，doubao 不带
 export const chatEndpoint =

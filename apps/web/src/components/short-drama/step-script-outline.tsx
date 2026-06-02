@@ -114,9 +114,9 @@ function SummaryTextBlock({ title, children }: { title: string; children?: strin
   if (!children) return null
 
   return (
-    <section className="rounded-xl border border-slate-100 bg-white/70 p-4 shadow-sm">
-      <h4 className="text-xs font-medium text-slate-500">{title}</h4>
-      <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-800">
+    <section className="rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/45 dark:shadow-none">
+      <h4 className="text-xs font-medium text-muted-foreground">{title}</h4>
+      <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-foreground">
         {children}
       </div>
     </section>
@@ -137,16 +137,16 @@ function ScriptSummaryView({ value }: { value: string }) {
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-slate-100 bg-white/80 p-4 shadow-sm">
+    <div className="space-y-4 rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:shadow-none">
       <div className="grid gap-3 md:grid-cols-3">
         {[
           { label: '集数', value: sections.集数 },
           { label: '故事类型', value: sections.故事类型 },
           { label: '目标受众', value: sections.目标受众 },
         ].map(item => (
-          <div key={item.label} className="rounded-xl bg-slate-50 px-4 py-3">
-            <div className="text-xs font-medium text-slate-500">{item.label}</div>
-            <div className="mt-2 text-base font-semibold leading-6 text-slate-950">{item.value || '-'}</div>
+          <div key={item.label} className="rounded-xl bg-muted/45 px-4 py-3 dark:bg-slate-900/70">
+            <div className="text-xs font-medium text-muted-foreground">{item.label}</div>
+            <div className="mt-2 text-base font-semibold leading-6 text-foreground">{item.value || '-'}</div>
           </div>
         ))}
       </div>
@@ -155,13 +155,13 @@ function ScriptSummaryView({ value }: { value: string }) {
       <SummaryTextBlock title="一句话故事">{sections.一句话故事}</SummaryTextBlock>
 
       {characterBios.length > 0 ? (
-        <section className="rounded-xl border border-slate-100 bg-white/70 p-4 shadow-sm">
-          <h4 className="text-xs font-medium text-slate-500">人物小传</h4>
+        <section className="rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/45 dark:shadow-none">
+          <h4 className="text-xs font-medium text-muted-foreground">人物小传</h4>
           <div className="mt-3 space-y-3">
             {characterBios.map(bio => (
-              <div key={bio.name} className="rounded-xl bg-slate-50/80 p-3">
-                <div className="text-sm font-semibold text-slate-950">{bio.name}</div>
-                <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700">
+              <div key={bio.name} className="rounded-xl bg-muted/45 p-3 dark:bg-slate-900/70">
+                <div className="text-sm font-semibold text-foreground">{bio.name}</div>
+                <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
                   {bio.body}
                 </div>
               </div>
@@ -364,7 +364,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-medium">分集大纲 ({state.script.outlines.length} 集)</h3>
+          <h3 className="font-medium">分集剧本 ({state.script.outlines.length} 集)</h3>
           {!isLocked && state.script.refinedPrompt && (
             <Button size="sm" variant="outline" onClick={handleGenerateOutlines} disabled={isOutlinesGenerating}>
               {isOutlinesGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
