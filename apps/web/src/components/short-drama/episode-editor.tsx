@@ -16,10 +16,19 @@ interface EpisodeEditorProps {
   projectId: string
   episode: ShortDramaEpisode
   state: ShortDramaState
-  onStateChange: () => void
+  videoModel: string
+  videoResolution: '720p' | '1080p'
+  onStateChange: () => void | Promise<unknown>
 }
 
-export function EpisodeEditor({ projectId, episode, state, onStateChange }: EpisodeEditorProps) {
+export function EpisodeEditor({
+  projectId,
+  episode,
+  state,
+  videoModel,
+  videoResolution,
+  onStateChange,
+}: EpisodeEditorProps) {
   const [generatingSegmentId, setGeneratingSegmentId] = useState<string | null>(null)
   const [batchGeneratingVideos, setBatchGeneratingVideos] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -57,7 +66,7 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
       title: `分镜 ${episode.segments.length + 1}`,
       prompt: '',
       mentionRefs: [],
-      durationSeconds: 4,
+      durationSeconds: 10,
       videoUrl: null,
       status: 'idle',
     }
@@ -121,7 +130,10 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
   const handleGenerateVideo = useCallback(async (segmentId: string) => {
     setGeneratingSegmentId(segmentId)
     try {
-      await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segmentId)
+      await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segmentId, {
+        model: videoModel,
+        resolution: videoResolution,
+      })
       onStateChange()
       toast.success('视频生成已提交')
     } catch (err) {
@@ -129,7 +141,7 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
     } finally {
       setGeneratingSegmentId(null)
     }
-  }, [projectId, episode.episodeNumber, onStateChange])
+  }, [projectId, episode.episodeNumber, videoModel, videoResolution, onStateChange])
 
   const handleBatchGenerateVideos = useCallback(async () => {
     const targets = episode.segments.filter(segment =>
@@ -147,7 +159,10 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
     try {
       for (const segment of targets) {
         setGeneratingSegmentId(segment.id)
-        await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segment.id)
+        await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segment.id, {
+          model: videoModel,
+          resolution: videoResolution,
+        })
         onStateChange()
       }
       toast.success(`已提交 ${targets.length} 个分镜视频生成`)
@@ -157,13 +172,13 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
       setGeneratingSegmentId(null)
       setBatchGeneratingVideos(false)
     }
-  }, [projectId, episode.episodeNumber, episode.segments, onStateChange])
+  }, [projectId, episode.episodeNumber, episode.segments, videoModel, videoResolution, onStateChange])
 
   const handleExport = useCallback(async () => {
     setExporting(true)
     try {
       await exportShortDramaEpisode(projectId, episode.episodeNumber)
-      onStateChange()
+      await Promise.resolve(onStateChange())
       toast.success('导出已提交')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '导出失败')
@@ -182,6 +197,7 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
         <SegmentList
           segments={episode.segments}
           assets={state.assets.items}
+          aspectRatio={state.settings.aspectRatio}
           selectedIndex={selectedSegmentIndex}
           onSelectSegment={setSelectedSegmentIndex}
           onSegmentUpdate={handleSegmentUpdate}
@@ -201,6 +217,8 @@ export function EpisodeEditor({ projectId, episode, state, onStateChange }: Epis
           exporting={exporting}
           onBatchGenerateVideos={handleBatchGenerateVideos}
           batchGenerating={batchGeneratingVideos}
+          selectedSegmentIndex={selectedSegmentIndex}
+          onSelectSegment={setSelectedSegmentIndex}
         />
       </div>
     </div>

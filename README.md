@@ -296,7 +296,7 @@ Worker 合成逻辑：
 → 必要时转码统一参数
 → ffmpeg concat 合并
 → 输出 MP4
-→ 上传 S3/MinIO
+→ 上传火山 TOS
 → 创建 Toby Studio 短剧资产记录
 → 更新项目 state
 ```

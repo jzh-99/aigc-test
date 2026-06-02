@@ -15,7 +15,10 @@ import { freezeCredits } from '../../services/credit.js'
 
 // 保守预估：每次文本生成预冻结 25 积分（片段脚本通常较长）
 const ESTIMATED_CREDITS = 25
-const SEGMENT_VIDEO_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
+const EPISODE_TARGET_DURATION_SECONDS = 120
+const EPISODE_MIN_DURATION_SECONDS = 110
+const EPISODE_MAX_DURATION_SECONDS = 130
+const SEGMENT_VIDEO_ALLOWED_DURATIONS = [10, 11, 12]
 const RAW_SHOT_DURATION_PATTERN = /分镜\s*\d+(?:\s*[·.\-:：]\s*|\s+)\d+\s*s\b/gi
 
 const route: FastifyPluginAsync = async (app) => {
@@ -107,18 +110,22 @@ const route: FastifyPluginAsync = async (app) => {
 
     // 调用 AI 生成片段脚本（分镜写入 prompt 内）
     const REDACTED = [
-      '你是专业短剧分镜师。请根据剧本摘要、分集梗概和素材，为该集生成详细的片段脚本。',
+      '你是专业短剧分镜师。请根据剧本摘要、分集分场剧本和素材，为该集生成可直接提交视频模型的片段脚本。',
       '只输出 JSON 数组，每个元素包含 title、prompt、mentionNames、durationSeconds 字段，不要输出 markdown。',
-      '片段是视频生成的最小单位；分镜只写入片段 prompt 内，不要为分镜生成独立视频字段。',
+      '片段是视频生成的最小单位；必须基于分集剧本中的场次拆分，优先做到一场对应一个片段，长场可以拆成多个连续片段。',
+      '一集成片时长必须控制在 2 分钟左右：总时长目标 120 秒，可接受范围 110-130 秒。',
+      '每集必须生成 10-12 个片段；每个片段 10-12 秒，通过增加动作承接、表情反应、环境压迫、对白停顿和钩子镜头来扩充分段。',
+      '不要脱离分集剧本另写新剧情；片段顺序、场景、人物、动作、对白重点必须来自分集剧本。',
       '每个片段 prompt 必须包含：第一段“本片段场景设定在：...”，后续 2-5 个“分镜N · Xs：...”描述。',
+      '每个分镜要把分场剧本里的动作、对白、OS/VO 或字幕转写成可拍摄画面；不要只写概述。',
       '每个分镜时长 X 必须为 2-10 秒；durationSeconds 必须等于本片段所有分镜时长之和。',
-      '片段总时长必须为 4-12 秒，且必须能由 prompt 内所有分镜时长累加得到。',
+      '片段总时长必须为 10-12 秒，优先生成 10 秒以上的完整情绪推进，且必须能由 prompt 内所有分镜时长累加得到。',
       '当画面出现某个角色或场景时，必须在 prompt 中直接写对应的 @素材名，例如 @祁同伟、@汉东政法大学校园。',
       'mentionNames 必须填写本片段实际引用的素材名称，不带 @，且只能使用可用素材列表中的名称。',
       '不要虚构素材名称；没有引用素材时 mentionNames 返回空数组。',
     ].join('\n')
 
-    const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n第${episodeNumber}集梗概：${episode.title}\n${episode.summary}\n\n可用素材：\n${assetsText}\n\n画面比例：${state.settings.aspectRatio}\n默认时长：${state.settings.durationSeconds}秒\n\n请生成该集的片段脚本。每集可根据剧情生成多个片段，每个片段是一次视频生成单位。每个片段包含：\n- title: 片段标题\n- prompt: 完整片段文本，第一段写“本片段场景设定在：...”，后续写 2-5 个“分镜N · Xs：...”描述；出现素材时必须使用 @素材名\n- mentionNames: 提及的素材名称列表，只能从可用素材中选择，名称不带 @\n- durationSeconds: 片段总时长，必须等于 prompt 中所有分镜时长之和，且必须为 4-12 秒\n\n每个分镜时长必须在 2-10 秒之间。片段总时长必须为 4-12 秒。分镜不是视频生成单位，不要输出分镜 videoUrl、status 或单独任务字段。`
+    const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n第${episodeNumber}集标题：${episode.title}\n\n第${episodeNumber}集分场剧本：\n${episode.summary}\n\n可用素材：\n${assetsText}\n\n画面比例：${state.settings.aspectRatio}\n默认时长：${state.settings.durationSeconds}秒\n\n请严格根据“第${episodeNumber}集分场剧本”生成该集的剧集分段内容。每个片段是一次视频生成单位，尽量按“### 场${episodeNumber}-1、### 场${episodeNumber}-2...”拆分；如果某一场动作/对白很多，可以拆成多个连续片段，但不得跳过原剧本中的关键动作、对白、OS/VO、字幕和情绪转折。\n\n总时长要求：\n- 本集目标总时长约 ${EPISODE_TARGET_DURATION_SECONDS} 秒，最终所有片段 durationSeconds 累加必须在 ${EPISODE_MIN_DURATION_SECONDS}-${EPISODE_MAX_DURATION_SECONDS} 秒之间。\n- 必须生成 10-12 个片段，每个片段 10-12 秒。\n- 如果原分场较少，要把同一场拆成“进入/发现/对峙/反应/推进/钩子”等连续片段，不要减少片段数量。\n\n每个片段包含：\n- title: 片段标题，建议体现对应场号和关键动作，例如“场${episodeNumber}-1：宿舍惊醒”\n- prompt: 完整片段文本，第一段写“本片段场景设定在：...”，后续写 2-5 个“分镜N · Xs：...”描述；出现素材时必须使用 @素材名\n- mentionNames: 提及的素材名称列表，只能从可用素材中选择，名称不带 @\n- durationSeconds: 片段总时长，必须等于 prompt 中所有分镜时长之和，且必须为 10-12 秒\n\n每个分镜时长必须在 2-10 秒之间。片段总时长必须为 10-12 秒，生成内容需要在 10 秒钟往上，避免 4-9 秒的短片段。分镜不是视频生成单位，不要输出分镜 videoUrl、status 或单独任务字段。`
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -157,9 +164,18 @@ const route: FastifyPluginAsync = async (app) => {
 
     let aiResponse: string
     try {
-      aiResponse = await callDoubaoForTextStream(REDACTED, userPrompt, 8000, {
+      aiResponse = await callDoubaoForTextStream(REDACTED, userPrompt, 12000, {
         onChunk: (text) => sendEvent('chunk', { text, episodeNumber }),
         onPing: sendPing,
+        audit: {
+          userId,
+          teamId,
+          workspaceId: project.workspace_id,
+          module: 'short_drama',
+          provider: 'doubao',
+          operation: 'episodes.segments',
+          endpoint: '/chat/completions',
+        },
       })
     } catch (error) {
       await failStream('AI_ERROR', 'AI 生成失败，请稍后重试', error, '片段脚本生成失败')
@@ -285,7 +301,7 @@ const route: FastifyPluginAsync = async (app) => {
       if (!SEGMENT_VIDEO_ALLOWED_DURATIONS.includes(durationSeconds)) {
         await failStream(
           'VALIDATION_ERROR',
-          `第 ${i + 1} 个片段的总时长必须为 4-12 秒`,
+          `第 ${i + 1} 个片段的总时长必须为 10-12 秒`,
           new Error(`segment ${i + 1} invalid duration`),
           'AI 返回片段总时长错误',
         )
@@ -321,6 +337,25 @@ const route: FastifyPluginAsync = async (app) => {
         videoUrl: null,
         status: 'idle' as const,
       })
+    }
+
+    const episodeDurationSeconds = parsedSegments.reduce(
+      (total, segment) => total + segment.durationSeconds,
+      0,
+    )
+    if (
+      parsedSegments.length < 10 ||
+      parsedSegments.length > 12 ||
+      episodeDurationSeconds < EPISODE_MIN_DURATION_SECONDS ||
+      episodeDurationSeconds > EPISODE_MAX_DURATION_SECONDS
+    ) {
+      await failStream(
+        'VALIDATION_ERROR',
+        `本集需要生成 10-12 个片段，总时长控制在 ${EPISODE_MIN_DURATION_SECONDS}-${EPISODE_MAX_DURATION_SECONDS} 秒`,
+        new Error(`invalid episode duration: ${parsedSegments.length} segments, ${episodeDurationSeconds}s`),
+        'AI 返回本集时长不符合要求',
+      )
+      return
     }
 
     // 更新 episode 的 segments

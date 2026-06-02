@@ -12,6 +12,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+      - prompts.env  # AI system prompts 单独管理
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-aigc}:${POSTGRES_PASSWORD}@${INFRA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-aigc_dev}
       REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}${INFRA_HOST}:${REDIS_PORT:-6379}

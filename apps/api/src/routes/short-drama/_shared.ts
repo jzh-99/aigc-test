@@ -1,5 +1,5 @@
 import { getDb } from '@aigc/db'
-import type { ShortDramaState } from '@aigc/types'
+import type { ShortDramaBatchExport, ShortDramaState } from '@aigc/types'
 import { normalizeShortDramaState } from '@aigc/types'
 
 // ============================================================================
@@ -137,6 +137,43 @@ export function makeShortDramaSourceMetadata(input: {
     source_episode_id: input.episodeId ?? null,
     source_segment_id: input.segmentId ?? null,
   }
+}
+
+// ============================================================================
+// Export State
+// ============================================================================
+
+function resolveBatchStatus(batch: ShortDramaBatchExport): ShortDramaBatchExport['status'] {
+  if (batch.exports.length === 0) return 'failed'
+  if (batch.exports.some(item => item.status === 'pending')) return 'pending'
+  if (batch.exports.some(item => item.status === 'exporting')) return 'exporting'
+  if (batch.exports.every(item => item.status === 'completed')) return 'completed'
+  if (batch.exports.every(item => item.status === 'completed' || item.status === 'failed')) return 'failed'
+  return batch.status
+}
+
+/**
+ * 当某集片段视频发生变化或重新提交导出时，移除该集旧导出结果，避免旧 URL 继续可下载。
+ * 多集批量导出中只剔除当前集，保留其它集的导出状态。
+ */
+export function invalidateShortDramaEpisodeExports(state: ShortDramaState, episodeNumber: number): void {
+  const now = new Date().toISOString()
+  state.exports.batches = state.exports.batches
+    .map(batch => {
+      if (!batch.episodeNumbers.includes(episodeNumber)) return batch
+
+      const nextExports = batch.exports.filter(item => item.episodeNumber !== episodeNumber)
+      const nextEpisodeNumbers = batch.episodeNumbers.filter(num => num !== episodeNumber)
+
+      return {
+        ...batch,
+        episodeNumbers: nextEpisodeNumbers,
+        exports: nextExports,
+        status: resolveBatchStatus({ ...batch, episodeNumbers: nextEpisodeNumbers, exports: nextExports }),
+        updatedAt: now,
+      }
+    })
+    .filter(batch => batch.episodeNumbers.length > 0 && batch.exports.length > 0)
 }
 
 // ============================================================================

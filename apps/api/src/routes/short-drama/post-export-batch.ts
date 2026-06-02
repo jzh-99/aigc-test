@@ -4,7 +4,11 @@ import { getDb } from '@aigc/db'
 import type { ShortDramaExportEpisodeJobData, ShortDramaEpisodeExport } from '@aigc/types'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getShortDramaExportQueue } from '../../lib/queue.js'
-import { assertShortDramaProjectAccess, SHORT_DRAMA_EXPORT_COST_KEY } from './_shared.js'
+import {
+  assertShortDramaProjectAccess,
+  invalidateShortDramaEpisodeExports,
+  SHORT_DRAMA_EXPORT_COST_KEY,
+} from './_shared.js'
 
 const DEFAULT_EXPORT_CREDITS = 10
 
@@ -96,6 +100,10 @@ export default async function postExportBatch(app: FastifyInstance): Promise<voi
 
       const batchExportId = randomUUID()
       const exportEpisodeNumbers = exportableEpisodes.map(ep => ep!.episodeNumber)
+
+      for (const episodeNumber of exportEpisodeNumbers) {
+        invalidateShortDramaEpisodeExports(state, episodeNumber)
+      }
 
       // 创建 batch export 记录
       const episodeExports: ShortDramaEpisodeExport[] = exportEpisodeNumbers.map(num => ({

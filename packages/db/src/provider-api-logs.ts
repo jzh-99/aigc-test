@@ -1,6 +1,6 @@
 import { getDb } from './client.js'
 
-const SECRET_KEY_PATTERN = /authorization|api[_-]?key|secret|(?<!max_)token|signature|password|credential/i
+const SECRET_KEY_PATTERN = /authorization|api[_-]?key|secret|(?<!max_)(?<!total_)(?<!prompt_)(?<!completion_)token(?!s\b)|signature|password|credential/i
 const LARGE_STRING_PATTERN = /base64|image|audio|video|file|buffer|blob|binary/i
 const DEFAULT_STRING_LIMIT = 120
 const DEFAULT_PAYLOAD_LIMIT = 32_000

@@ -3,7 +3,7 @@ name: aigc-web
 # ============================================================
 # Web 服务器：Next.js 前端
 # INTERNAL_API_URL 指向 API 服务器（服务端渲染/代理用）
-# NEXT_PUBLIC_STORAGE_HOST 是浏览器直接访问 MinIO 的地址
+# NEXT_PUBLIC_STORAGE_HOST 是浏览器直接访问火山 TOS 的域名
 # ============================================================
 
 services:
@@ -14,16 +14,16 @@ services:
     environment:
       # Next.js 服务端代理目标（服务器间通信）
       INTERNAL_API_URL: http://${API_HOST}:${API_PORT:-7001}
-      # 浏览器直接访问 MinIO 的公网地址
-      NEXT_PUBLIC_STORAGE_HOST: ${INFRA_HOST}
-      NEXT_PUBLIC_STORAGE_PORT: ${MINIO_API_PORT:-9000}
+      # 浏览器直接访问火山 TOS 的公网域名
+      NEXT_PUBLIC_STORAGE_HOST: ${NEXT_PUBLIC_STORAGE_HOST}
+      NEXT_PUBLIC_STORAGE_PORT: ${NEXT_PUBLIC_STORAGE_PORT:-443}
       NODE_ENV: production
       PORT: "6006"
       HOSTNAME: "0.0.0.0"
     ports:
       - "${WEB_PORT:-6006}:6006"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:6006/ || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:6006/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3

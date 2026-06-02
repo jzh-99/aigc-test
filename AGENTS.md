@@ -3,7 +3,7 @@
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## 工作流程（非常重要）
-首先需要 加载全局的规则 ~/.claude.md
+首先需要 加载全局的规则 ~/.claude/CLAUDE.md
 
 ## 项目概述
 
@@ -28,7 +28,8 @@ pnpm --filter @aigc/web dev       # 前端 :6006
 pnpm --filter @aigc/api dev       # API  :7001
 pnpm --filter @aigc/worker dev    # Worker
 
-# 启动本地基础设施（PostgreSQL / Redis / MinIO）
+# 启动本地基础设施（PostgreSQL + Redis）
+# 对象存储使用火山 TOS，需在 .env 中配置 TOS_* 环境变量
 docker-compose up -d
 
 docker-compose up -d --build --force-recreate
@@ -128,7 +129,7 @@ packages/
 | 后端框架 | Fastify 4 |
 | ORM/查询 | Kysely（类型安全，无 ORM 魔法） |
 | 队列 | BullMQ + Redis |
-| 对象存储 | MinIO（本地）/ AWS S3 兼容接口 |
+| 对象存储 | 火山引擎 TOS |
 | 图片处理 | Sharp |
 | 视频处理 | fluent-ffmpeg |
 | AI 提供商 | 火山引擎（图片/视频/数字人）、Gemini、Nano Banana |
@@ -161,7 +162,7 @@ packages/
 
 | 服务器 | 内容 | 关键端口 |
 |--------|------|----------|
-| 基础设施服务器 | PostgreSQL + Redis + MinIO | 5432 / 6379 / 9000 |
+| 基础设施服务器 | PostgreSQL + Redis | 5432 / 6379 |
 | API 服务器 | `aigc-api` 容器 | 7001 |
 | Web 服务器 | `aigc-web` 容器 | 6006 |
 | Worker 服务器 | `aigc-worker` 容器（BullMQ 消费者，无 HTTP 端口） | — |
@@ -193,7 +194,7 @@ bash deploy/build-images.sh worker
 ```bash
 # ---- 基础设施服务器（只用官方镜像，无需 docker load）----
 cp .env.example .env
-vi .env                              # 填写数据库密码、MinIO 密钥
+vi .env                              # 填写数据库密码、Redis 密码
 docker compose up -d
 
 # ---- api / worker / web 服务器（以 api 为例）----

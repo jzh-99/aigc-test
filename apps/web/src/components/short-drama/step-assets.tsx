@@ -323,7 +323,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
       {filteredAssets.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
-          暂无角色或场景素材，点击「生成描述」开始
+          暂无角色或场景素材
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -335,10 +335,11 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
               asset.status === 'generating'
             const generationLabel = getAssetGenerationLabel(asset)
             const shouldShowImage = Boolean(asset.imageUrl) && !isAssetGenerating
+            const isCharacter = asset.kind === 'character'
 
             return (
             <div key={asset.id} className="overflow-hidden rounded-xl border bg-card shadow-sm transition-colors hover:border-primary/30">
-              <div className="aspect-square bg-muted flex items-center justify-center overflow-hidden">
+              <div className={`${isCharacter ? 'aspect-[9/16] bg-slate-50' : 'aspect-video bg-muted'} flex items-center justify-center overflow-hidden`}>
                 {shouldShowImage ? (
                   <button
                     type="button"
@@ -349,7 +350,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                     <img
                       src={`${asset.imageUrl}?t=${new Date(asset.updatedAt).getTime()}`}
                       alt={asset.name}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      className={`h-full w-full transition-transform duration-300 group-hover:scale-105 ${isCharacter ? 'object-contain' : 'object-cover'}`}
                     />
                     <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
                       <span className="flex h-10 w-10 scale-90 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition-all group-hover:scale-100 group-hover:opacity-100">

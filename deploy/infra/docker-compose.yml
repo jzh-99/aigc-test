@@ -1,7 +1,8 @@
 name: aigc-infra
 
 # ============================================================
-# 基础设施服务器：PostgreSQL + Redis + MinIO
+# 基础设施服务器：PostgreSQL + Redis
+# 对象存储使用火山引擎 TOS（需在 API/Worker .env 中配置）
 # 部署后其他服务通过本机 IP 访问
 # ============================================================
 
@@ -39,46 +40,6 @@ services:
       timeout: 3s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    container_name: aigc-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?必须设置 STORAGE_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?必须设置 STORAGE_SECRET_KEY}
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  # 首次启动自动创建 bucket
-  minio-init:
-    image: minio/mc:latest
-    container_name: aigc-minio-init
-    restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-        mc alias set local http://minio:9000 $${STORAGE_ACCESS_KEY} $${STORAGE_SECRET_KEY} &&
-        mc mb --ignore-existing local/$${STORAGE_BUCKET:-aigc-assets} &&
-        mc anonymous set download local/$${STORAGE_BUCKET:-aigc-assets} &&
-        echo 'bucket 初始化完成'
-      "
-    environment:
-      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY}
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY}
-      STORAGE_BUCKET: ${STORAGE_BUCKET:-aigc-assets}
-
 volumes:
   postgres_data:
   redis_data:
-  minio_data:

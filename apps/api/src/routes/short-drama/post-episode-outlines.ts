@@ -3,6 +3,7 @@ import type { ShortDramaEpisodeOutline } from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
   callDoubaoForTextStream,
+  saveShortDramaProjectState,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
@@ -11,9 +12,9 @@ import {
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 
-// 保守预估：每次文本生成预冻结 20 积分（分集梗概通常比摘要长）
-const ESTIMATED_CREDITS = 20
-const OUTLINE_BATCH_MAX_TOKENS = 8000
+// 保守预估：分集分场剧本需要支撑约 2 分钟成片
+const ESTIMATED_CREDITS = 50
+const OUTLINE_BATCH_MAX_TOKENS = 16000
 
 function parseEpisodeOutlineBatch(
   aiResponse: string,
@@ -104,6 +105,11 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     const episodeCount = state.settings.episodeCount
+    const startEpisode = state.script.outlines.length + 1
+    const batches = buildShortDramaOutlineBatches(startEpisode, episodeCount)
+
+    state.script.status = 'generating'
+    await saveShortDramaProjectState(projectId, state, 0)
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -122,8 +128,6 @@ const route: FastifyPluginAsync = async (app) => {
       reply.raw.write(': ping\n\n')
     }
 
-    const startEpisode = state.script.outlines.length + 1
-    const batches = buildShortDramaOutlineBatches(startEpisode, episodeCount)
     let completedCount = state.script.outlines.length
     let totalCredits = 0
     let stoppedByBalance = false
@@ -156,13 +160,31 @@ const route: FastifyPluginAsync = async (app) => {
           totalCount: episodeCount,
         })
 
-        const systemPrompt = `你是专业短剧编剧。请根据剧本摘要生成第 ${batch.from}-${batch.to} 集的分集梗概。只输出 JSON 数组，每个元素包含 episodeNumber、title、logline、synopsis、characters、scenes、hook 字段，不要输出 markdown。`
-        const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n请只生成第 ${batch.from}-${batch.to} 集，每集包含：\n- episodeNumber: 集数（${batch.from}-${batch.to}）\n- title: 集标题\n- logline: 一句话梗概（20-30字）\n- synopsis: 详细剧情梗概（100-200字）\n- characters: 该集出现的主要角色列表（字符串数组）\n- scenes: 该集主要场景列表（字符串数组）\n- hook: 悬念或钩子（吸引观众继续观看的要素，50字以内）`
+        const systemPrompt = [
+          '你是专业短剧编剧，擅长把系列设定拆成可拍摄的分场剧本。',
+          `请根据剧本摘要生成第 ${batch.from}-${batch.to} 集的分集剧本。`,
+          '只输出 JSON 数组，每个元素包含 episodeNumber、title、logline、synopsis、characters、scenes、hook 字段，不要输出 markdown、代码块或额外解释。',
+          'synopsis 不再写普通梗概，必须写成分场剧本正文，使用“### 场X-Y”作为场次标题。',
+          '每场必须包含：时段、内/外、地点、出场人物、动作描写、对白，可按需要加入【字幕】、【闪回】、【闪回结束】、角色（vo）、角色（os）。',
+          '动作描写使用“△ ”开头；对白使用“角色名（语气/状态）：对白”。',
+          '每集剧情长度必须能支撑约 2 分钟成片：建议 8-10 场，或 6-8 个信息量较足的长场；每集至少包含 10-12 个可拆成视频片段的动作/对白节点。',
+          '不要只写梗概式摘要；需要具体到镜头动作、人物反应、对白推进、场景转换和结尾钩子。',
+        ].join('\n')
+        const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n请只生成第 ${batch.from}-${batch.to} 集，每集包含：\n- episodeNumber: 集数（${batch.from}-${batch.to}）\n- title: 集标题\n- logline: 一句话梗概（20-30字）\n- synopsis: 分场剧本正文，必须类似下面格式：\n### 场1-1\n日 内 旧教室\n出场人物：林微\n【字幕：2024年，南方县城老中学，即将拆除】\n△ 阳光透过布满灰尘的窗户，墙上一个刺眼的红色“拆”字随风晃动。\n角色名（语气）：对白内容。\n角色名（os）：内心独白。\n\n### 场1-2\n夜 外 校园走廊\n出场人物：角色A、角色B\n△ 动作与画面调度。\n角色A（压低声音）：对白内容。\n- characters: 该集出现的主要角色列表（字符串数组）\n- scenes: 该集主要场景列表（字符串数组）\n- hook: 悬念或钩子（吸引观众继续观看的要素，50字以内）\n\n长度与节奏要求：\n- 每集 synopsis 必须能支撑约 2 分钟成片，不要生成只能拍几十秒的短概要。\n- 每集生成 8-10 个场次；如果剧情集中在少数地点，也要按“进入、发现、对峙、反击、转折、追击、结尾钩子”等节奏拆成多个场次。\n- 每集至少写出 10-12 个清晰的动作/对白节点，方便后续拆成 10-12 个视频片段。\n- 每个场次至少包含 2-4 条“△”动作描写或对白/OS/VO，不要只有一两句概述。\n- 场号按“场${batch.from}-1、场${batch.from}-2...”书写；每场第一行写“日/夜 内/外 地点”，第二行写“出场人物：...”。\n- 多用画面动作和人物对白推进剧情，少写概述性总结。\n- 每集要形成一个小冲突和结尾钩子。`
 
         try {
           const aiResponse = await callDoubaoForTextStream(systemPrompt, userPrompt, OUTLINE_BATCH_MAX_TOKENS, {
             onChunk: (text) => sendEvent('chunk', { text, from: batch.from, to: batch.to }),
             onPing: sendPing,
+            audit: {
+              userId,
+              teamId,
+              workspaceId: project.workspace_id,
+              module: 'short_drama',
+              provider: 'doubao',
+              operation: 'script.episode_outlines',
+              endpoint: '/chat/completions',
+            },
           })
 
           const previousState = JSON.parse(JSON.stringify(state)) as typeof state
@@ -179,7 +201,7 @@ const route: FastifyPluginAsync = async (app) => {
               creditAccountId,
               userId,
               teamId,
-              status: state.script.status === 'completed' ? 'outline_ready' : 'generating',
+              status: state.script.outlines.length >= episodeCount ? 'outline_ready' : 'generating',
             })).settledCredits
 
             totalCredits += settledCredits
@@ -199,6 +221,10 @@ const route: FastifyPluginAsync = async (app) => {
         } catch (error) {
           await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, `第 ${batch.from}-${batch.to} 集大纲生成失败`)
           app.log.error({ error, projectId, batch }, '短剧分集大纲批次生成失败')
+          state.script.status = 'failed'
+          await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
+            app.log.error({ error: saveError, projectId }, '短剧分集大纲失败状态保存失败')
+          })
 
           sendEvent('error', {
             code: 'AI_ERROR',
@@ -212,6 +238,11 @@ const route: FastifyPluginAsync = async (app) => {
 
       const partial = stoppedByBalance || state.script.outlines.length < episodeCount
       if (partial && warningMessage) {
+        state.script.status = 'failed'
+        await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
+          app.log.error({ error: saveError, projectId }, '短剧分集大纲暂停状态保存失败')
+        })
+
         sendEvent('done', {
           success: true,
           partial: true,

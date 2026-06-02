@@ -38,7 +38,15 @@ export type VolcengineContentItem = TextContent | ImageContent | VideoContent | 
 export interface VolcengineTaskBody {
   model: string
   content: VolcengineContentItem[]
-  parameters?: Record<string, unknown>
+  // 视频参数直接放在根级别
+  ratio?: string
+  duration?: number
+  generate_audio?: boolean
+  camera_fixed?: boolean
+  enable_upsample?: boolean
+  watermark?: boolean
+  resolution?: string
+  [key: string]: unknown
 }
 
 // 与 api/lib/storage.ts 保持一致：用 JWT_SECRET 派生代理加密 key
@@ -121,15 +129,14 @@ export function buildVolcengineTaskBody(
     content: [{ type: 'text', text: prompt }],
   }
 
-  const reqParams: Record<string, unknown> = {}
-  if (params.aspect_ratio) reqParams.aspect_ratio = params.aspect_ratio
-  if (typeof params.duration === 'number' && params.duration > 0) reqParams.duration = params.duration
-  if (typeof params.generate_audio === 'boolean') reqParams.generate_audio = params.generate_audio
-  if (typeof params.camera_fixed === 'boolean') reqParams.camera_fixed = params.camera_fixed
-  if (typeof params.enable_upsample === 'boolean') reqParams.enable_upsample = params.enable_upsample
-  if (typeof params.watermark === 'boolean') reqParams.watermark = params.watermark
-  if (params.resolution) reqParams.resolution = params.resolution
-  if (Object.keys(reqParams).length > 0) body.parameters = reqParams
+  // 参数直接放在根级别，不使用 parameters 包装
+  if (typeof params.aspect_ratio === 'string') body.ratio = params.aspect_ratio
+  if (typeof params.duration === 'number' && params.duration > 0) body.duration = params.duration
+  if (typeof params.generate_audio === 'boolean') body.generate_audio = params.generate_audio
+  if (typeof params.camera_fixed === 'boolean') body.camera_fixed = params.camera_fixed
+  if (typeof params.enable_upsample === 'boolean') body.enable_upsample = params.enable_upsample
+  if (typeof params.watermark === 'boolean') body.watermark = params.watermark
+  if (typeof params.resolution === 'string') body.resolution = params.resolution
 
   // 首尾帧：显式标注角色，避免与多模态参考图语义混淆。
   const images = params.images as string[] | undefined

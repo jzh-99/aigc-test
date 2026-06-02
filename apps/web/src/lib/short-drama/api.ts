@@ -28,6 +28,11 @@ export interface GenerateShortDramaAssetsInput {
   episodeId?: string
 }
 
+export interface GenerateShortDramaSegmentVideoInput {
+  model: string
+  resolution: '720p' | '1080p'
+}
+
 export interface ShortDramaProjectListItem {
   id: string
   title: string
@@ -297,14 +302,15 @@ export function generateShortDramaEpisodeSegments(
 export function generateShortDramaSegmentVideo(
   projectId: string,
   episodeNumber: number,
-  segmentId: string
+  segmentId: string,
+  input: GenerateShortDramaSegmentVideoInput
 ): Promise<{ success: boolean; batchId: string; taskId: string }> {
   return fetchWithAuth(
     `/short-drama/projects/${projectId}/episodes/${episodeNumber}/segments/${segmentId}/generate-video`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify(input),
     }
   )
 }

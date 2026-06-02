@@ -1,26 +1,21 @@
 import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
-import { sql } from 'kysely'
-import { SHORT_DRAMA_VIDEO_MODEL } from '@aigc/types'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
+import { SHORT_DRAMA_VIDEO_MODEL, parseCategoryReferences } from '@aigc/types'
+import { freezeCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { encryptProxyUrl } from '../../lib/storage.js'
+import { getVideoQueue } from '../../lib/queue.js'
 import {
   assertShortDramaProjectAccess,
+  invalidateShortDramaEpisodeExports,
   makeShortDramaSourceMetadata,
   validateShortDramaDuration,
 } from './_shared.js'
 
 interface GenerateSegmentVideoBody {
   model?: string
-}
-
-const VOLCENGINE_MODEL_ID: Record<string, string> = {
-  'seedance-1.5-pro': 'doubao-seedance-1-5-pro-251215',
-  'seedance-2.0': 'doubao-seedance-2-0-260128',
-  'seedance-2.0-fast': 'doubao-seedance-2-0-fast-260128',
-  'seedance-1.0-lite': 'doubao-seedance-1-0-lite-250428',
+  resolution?: string
 }
 
 const SEEDANCE_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -28,8 +23,6 @@ const SEEDANCE_2_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 export default async function postGenerateSegmentVideo(app: FastifyInstance): Promise<void> {
   const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
-  const volcengineApiUrl = 'https://ark.cn-beijing.volces.com/api/v3'
-  const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
 
   function toPublicUrl(url: string): string {
     if (url.startsWith('http://')) {
@@ -61,6 +54,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
           type: 'object',
           properties: {
             model: { type: 'string', maxLength: 100 },
+            resolution: { type: 'string', enum: ['720p', '1080p'] },
           },
           additionalProperties: false,
         },
@@ -106,6 +100,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
       }
 
       const modelCode = request.body.model ?? SHORT_DRAMA_VIDEO_MODEL
+      const resolution = request.body.resolution ?? '720p'
       const isSeedance = modelCode.startsWith('seedance-')
       const isSeedance2 = modelCode === 'seedance-2.0' || modelCode === 'seedance-2.0-fast'
       const durationSeconds = segment.durationSeconds
@@ -142,6 +137,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
           'provider_models.id as modelId',
           'provider_models.credit_cost',
           'provider_models.params_pricing',
+          'provider_models.category_references',
           'providers.code as providerCode',
         ])
         .where('provider_models.code', '=', modelCode)
@@ -156,8 +152,14 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         })
       }
 
-      const { unitPrice, resolvedModel } = resolveUnitPrice(modelRecord.params_pricing, null, modelRecord.credit_cost)
-      const actualModel = resolvedModel ?? modelCode
+      if (!parseCategoryReferences(modelRecord.category_references).multimodal) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'MODEL_NOT_SUPPORTED', message: `视频模型 "${modelCode}" 不支持全能参考生成` },
+        })
+      }
+
+      const { unitPrice } = resolveUnitPrice(modelRecord.params_pricing, resolution, modelRecord.credit_cost)
       const totalCost = isSeedance ? durationSeconds * unitPrice : unitPrice
 
       // 冻结积分
@@ -183,11 +185,13 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
       const videoParams: Record<string, unknown> = {
         aspect_ratio: aspectRatio,
         duration: durationSeconds,
+        resolution,
         generate_audio: true,
         source: 'short_drama',
+        reference_images: imageReferences,
       }
 
-      // 创建 batch + task
+      // 创建 batch + task (status=pending)
       let batchId: string
       let taskId: string
       try {
@@ -206,7 +210,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
               prompt: segment.prompt,
               params: JSON.stringify(videoParams),
               quantity: 1,
-              status: 'processing',
+              status: 'pending',
               estimated_credits: totalCost,
               short_drama_project_id: project.id,
               short_drama_episode_id: String(episodeNumber),
@@ -222,8 +226,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
               user_id: userId,
               version_index: 0,
               estimated_credits: totalCost,
-              status: 'processing',
-              processing_started_at: new Date(),
+              status: 'pending',
             })
             .returning('id')
             .executeTakeFirstOrThrow()
@@ -233,115 +236,32 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         batchId = result.batchId
         taskId = result.taskId
       } catch (err) {
-        app.log.error({ err }, 'Failed to create segment video batch, refunding')
-        try {
-          await refundCredits(teamId, creditAccountId, userId, totalCost)
-        } catch (refundErr) {
-          app.log.error({ refundErr }, 'CRITICAL: Failed to refund after batch creation failure')
-        }
+        app.log.error({ err }, 'Failed to create segment video batch')
         return reply.status(500).send({
           success: false,
-          error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回' },
+          error: { code: 'INTERNAL_ERROR', message: '任务创建失败' },
         })
       }
 
-      // 调用火山引擎视频生成 API
-      let externalTaskId: string | null = null
-      let lastError = ''
-
-      const volcengineBody: Record<string, unknown> = {
-        model: VOLCENGINE_MODEL_ID[actualModel] ?? actualModel,
-        content: [{ type: 'text', text: segment.prompt }],
-        parameters: {
-          duration: durationSeconds,
-          generate_audio: true,
-          watermark: false,
-        },
-      }
-      if (aspectRatio) (volcengineBody.parameters as any).aspect_ratio = aspectRatio
-      if (imageReferences.length > 0) {
-        for (const img of imageReferences) {
-          ;(volcengineBody.content as any[]).push({
-            type: 'image_url',
-            image_url: { url: img },
-            role: 'reference_image',
-          })
-        }
-      }
-
+      // 入队到 video-queue，由 worker 处理
       try {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 30_000)
-        let res: Response
-        try {
-          res = await fetch(`${volcengineApiUrl}/contents/generations/tasks`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${volcengineApiKey}` },
-            body: JSON.stringify(volcengineBody),
-            signal: controller.signal,
-          })
-        } finally {
-          clearTimeout(timer)
-        }
-
-        if (!res.ok) {
-          const errText = await res.text()
-          throw new Error(`Volcengine API ${res.status}: ${errText}`)
-        }
-
-        const json = (await res.json()) as { id: string }
-        if (!json.id) throw new Error('Volcengine API did not return task id')
-        externalTaskId = json.id
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err)
-        app.log.error({ taskId, batchId, err: lastError }, 'Volcengine video API failed')
-      }
-
-      // API 调用失败 → 标记失败并退款
-      if (!externalTaskId) {
-        await db.transaction().execute(async (trx: any) => {
-          await trx.updateTable('tasks')
-            .set({ status: 'failed', error_message: lastError.slice(0, 1000), completed_at: new Date() })
-            .where('id', '=', taskId).execute()
-
-          await trx.updateTable('task_batches')
-            .set({ status: 'failed', failed_count: sql`failed_count + 1` })
-            .where('id', '=', batchId).execute()
-
-          await trx.updateTable('credit_accounts')
-            .set({ frozen_credits: sql`frozen_credits - ${totalCost}` })
-            .where('id', '=', creditAccountId).execute()
-
-          await trx.updateTable('team_members')
-            .set({ credit_used: sql`GREATEST(credit_used - ${totalCost}, 0)` })
-            .where('team_id', '=', teamId).where('user_id', '=', userId).execute()
-
-          await trx.insertInto('credits_ledger').values({
-            credit_account_id: creditAccountId,
-            user_id: userId,
-            amount: totalCost,
-            type: 'refund',
-            task_id: taskId,
-            batch_id: batchId,
-            description: `Short drama video failed: ${lastError.slice(0, 200)}`,
-          }).execute()
+        await getVideoQueue().add('video-submit', {
+          taskId,
+          batchId,
+          userId,
+          teamId,
+          creditAccountId,
+          provider: modelRecord.providerCode,
+          model: modelCode,
+          prompt: segment.prompt,
+          params: videoParams,
+          estimatedCredits: totalCost,
         })
 
-        return reply.status(502).send({
-          success: false,
-          error: { code: 'VIDEO_API_ERROR', message: `视频生成服务暂时不可用：${lastError.slice(0, 300)}` },
-        })
-      }
-
-      // 回写 external_task_id 并更新 segment 状态
-      try {
-        await db.updateTable('tasks')
-          .set({ external_task_id: externalTaskId })
-          .where('id', '=', taskId)
-          .execute()
-
+        // 更新 segment 状态为 generating，并让该集旧导出失效
+        segment.videoUrl = null
         segment.status = 'generating'
-
+        invalidateShortDramaEpisodeExports(state, episodeNumber)
         await db
           .updateTable('short_drama_projects')
           .set({
@@ -350,15 +270,20 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
           })
           .where('id', '=', project.id)
           .execute()
+
+        app.log.info({ taskId, batchId }, 'Short drama video task enqueued')
       } catch (err) {
-        app.log.error({ err, taskId, batchId }, 'Failed to save external_task_id or state after video API success')
+        app.log.error({ err, taskId, batchId }, 'Failed to enqueue video task')
+        return reply.status(500).send({
+          success: false,
+          error: { code: 'QUEUE_ERROR', message: '任务入队失败' },
+        })
       }
 
       return reply.status(201).send({
         success: true,
         batchId,
         taskId,
-        externalTaskId,
         estimatedCredits: totalCost,
       })
     }

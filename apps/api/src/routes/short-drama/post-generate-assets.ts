@@ -22,15 +22,15 @@ function buildAssetImagePrompt(asset: { kind: string; name: string; description:
   if (asset.kind === 'character') {
     return [
       basePrompt,
-      '人物形象要求：正面半身或胸像，单人出镜，白色纯净背景，光线均匀，五官清晰。',
-      '禁止：多人合影、剧情场景、文字标注、边框、图表、装饰物、手持道具、额外物品、复杂背景。',
+      '人物形象要求：9:16竖版全身正面定妆照，完整展示头顶到鞋底，人物居中站立，从头到脚完整入镜，保留身体比例和完整服装细节，单人出镜，白色纯净背景，光线均匀，五官清晰。',
+      '禁止：半身照、胸像、头部特写、裁切头部或脚部、多人合影、剧情场景、文字标注、边框、图表、装饰物、手持道具、额外物品、复杂背景。',
     ].join('\n')
   }
 
   if (asset.kind === 'scene') {
     return [
       basePrompt,
-      '场景形象要求：只展示环境空间和地点氛围，不出现任何人物、人体、脸部、背影或人群。',
+      '场景形象要求：16:9横版场景设定图，只展示环境空间和地点氛围，不出现任何人物、人体、脸部、背影或人群。',
       '禁止：角色入镜、人物肖像、手部特写、文字标注、关系图、剧情分镜拼图。',
     ].join('\n')
   }
@@ -183,6 +183,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
 
         // 更新 state 中 asset 状态
         const batchId = batchResult.batch.id
+        state.assets.status = 'generating'
         for (const asset of targetAssets) {
           const stateAsset = state.assets.items.find(a => a.id === asset.id)
           if (stateAsset) {
@@ -203,22 +204,31 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
           .execute()
 
         // 入队 BullMQ（最后执行，前面步骤失败会退款）
-        const jobPayloads = batchResult.tasks.map((task: any, i: number) => ({
-          name: 'generate',
-          data: {
-            taskId: task.id,
-            batchId: batchResult.batch.id,
-            userId,
-            teamId,
-            creditAccountId,
-            provider: providerModel.providerCode,
-            model: modelCode,
-            prompt: targetPrompts[i],
-            params: { aspect_ratio: state.settings.aspectRatio },
-            estimatedCredits: unitPrice,
-          },
-          opts: { priority: 10 },
-        }))
+        const jobPayloads = batchResult.tasks.map((task: any, i: number) => {
+          const asset = targetAssets[i]
+          const aspectRatio = asset.kind === 'character'
+            ? '9:16'
+            : asset.kind === 'scene'
+              ? '16:9'
+              : state.settings.aspectRatio
+
+          return {
+            name: 'generate',
+            data: {
+              taskId: task.id,
+              batchId: batchResult.batch.id,
+              userId,
+              teamId,
+              creditAccountId,
+              provider: providerModel.providerCode,
+              model: modelCode,
+              prompt: targetPrompts[i],
+              params: { aspect_ratio: aspectRatio },
+              estimatedCredits: unitPrice,
+            },
+            opts: { priority: 10 },
+          }
+        })
         await getImageQueue().addBulk(jobPayloads)
 
         return reply.status(201).send({

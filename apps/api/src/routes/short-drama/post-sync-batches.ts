@@ -57,8 +57,8 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
 
         try {
           if (module === 'video') {
-            await syncVideoBatch(db, state, batch)
-            syncedCount++
+            const changed = await syncVideoBatch(db, state, batch)
+            if (changed) syncedCount++
           }
         } catch (err) {
           app.log.warn({ err, batchId: batch.id }, 'Failed to sync batch, skipping')
@@ -158,6 +158,25 @@ async function syncImageBatch(
     }
   }
 
+  const requiredAssets = state.assets.items.filter((asset: any) => asset.kind === 'character' || asset.kind === 'scene')
+  const hasPendingAsset = requiredAssets.some((asset: any) => asset.status === 'pending' || asset.status === 'generating')
+  const hasFailedAsset = requiredAssets.some((asset: any) => asset.status === 'failed')
+  const allAssetsReady = requiredAssets.length > 0 && requiredAssets.every(
+    (asset: any) => asset.status === 'completed' && !!asset.imageUrl
+  )
+  const nextAssetsStatus = allAssetsReady
+    ? 'completed'
+    : hasPendingAsset
+      ? 'generating'
+      : hasFailedAsset
+        ? 'failed'
+        : 'idle'
+
+  if (state.assets.status !== nextAssetsStatus) {
+    state.assets.status = nextAssetsStatus
+    changed = true
+  }
+
   return changed
 }
 
@@ -165,23 +184,23 @@ async function syncVideoBatch(
   db: ReturnType<typeof getDb>,
   state: any,
   batch: any
-): Promise<void> {
+): Promise<boolean> {
   const episodeId = batch.short_drama_episode_id
   const segmentId = batch.short_drama_segment_id
 
-  if (!episodeId || !segmentId) return
+  if (!episodeId || !segmentId) return false
 
   const episodeNumber = parseInt(episodeId, 10)
   const episode = state.episodes.items.find(
     (ep: any) => ep.episodeNumber === episodeNumber
   )
-  if (!episode) return
+  if (!episode) return false
 
   const segment = episode.segments.find((s: any) => s.id === segmentId)
-  if (!segment) return
+  if (!segment) return false
 
   // 已完成/失败的 segment 不重复覆盖
-  if (segment.status === 'completed' || segment.status === 'failed') return
+  if (segment.status === 'completed' || segment.status === 'failed') return false
 
   const tasks = await db
     .selectFrom('tasks')
@@ -190,7 +209,9 @@ async function syncVideoBatch(
     .execute()
 
   const task = tasks[0]
-  if (!task) return
+  if (!task) return false
+
+  let changed = false
 
   if (task.status === 'completed') {
     // 查找视频产出
@@ -203,18 +224,24 @@ async function syncVideoBatch(
     if (assetRecord) {
       segment.videoUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
       segment.status = 'completed'
+      changed = true
     }
   } else if (task.status === 'failed') {
     segment.status = 'failed'
+    changed = true
   }
 
   // 检查 episode 所有 segment 是否都完成
-  const allDone = episode.segments.every(
-    (s: any) => s.status === 'completed' || s.status === 'failed'
-  )
-  if (allDone) {
-    const allCompleted = episode.segments.every((s: any) => s.status === 'completed')
-    episode.status = allCompleted ? 'completed' : 'failed'
-    episode.updatedAt = new Date().toISOString()
+  if (changed) {
+    const allDone = episode.segments.every(
+      (s: any) => s.status === 'completed' || s.status === 'failed'
+    )
+    if (allDone) {
+      const allCompleted = episode.segments.every((s: any) => s.status === 'completed')
+      episode.status = allCompleted ? 'completed' : 'failed'
+      episode.updatedAt = new Date().toISOString()
+    }
   }
+
+  return changed
 }

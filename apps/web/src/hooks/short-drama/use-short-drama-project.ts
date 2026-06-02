@@ -10,9 +10,14 @@ import {
   type ShortDramaProjectDetail,
 } from '@/lib/short-drama/api'
 
-const POLL_INTERVAL = 10_000
+const POLL_INTERVAL = 3_000
 
 function hasPendingWork(state: ShortDramaState): boolean {
+  const hasPendingText = (
+    state.script.status === 'generating' ||
+    state.assets.status === 'generating' ||
+    state.episodes.status === 'generating'
+  )
   const hasPendingAssets = state.assets.items.some(
     a => a.status === 'pending' || a.status === 'generating'
   )
@@ -22,7 +27,7 @@ function hasPendingWork(state: ShortDramaState): boolean {
   const hasPendingExports = state.exports.batches.some(
     b => b.status === 'pending' || b.status === 'exporting'
   )
-  return hasPendingAssets || hasPendingSegments || hasPendingExports
+  return hasPendingText || hasPendingAssets || hasPendingSegments || hasPendingExports
 }
 
 export function useShortDramaProject(projectId: string | null) {
@@ -35,7 +40,7 @@ export function useShortDramaProject(projectId: string | null) {
   const state = data?.state ?? null
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // 自动轮询：当有 pending/generating 状态时每 10s sync
+  // 自动轮询：当有 pending/generating 状态时每 3s sync
   useEffect(() => {
     if (!projectId || !state) return
 
@@ -43,10 +48,8 @@ export function useShortDramaProject(projectId: string | null) {
       if (!pollRef.current) {
         pollRef.current = setInterval(async () => {
           try {
-            const result = await syncShortDramaBatches(projectId)
-            if (result.synced > 0) {
-              mutate()
-            }
+            await syncShortDramaBatches(projectId)
+            mutate()
           } catch {
             // 静默忽略 sync 错误
           }

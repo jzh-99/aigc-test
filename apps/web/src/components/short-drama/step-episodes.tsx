@@ -88,11 +88,11 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          共 {episodes.length} 集 · 分镜已生成 {episodes.length - pendingSegmentEpisodes.length} · 可导出 {exportableCount}
+          共 {episodes.length} 集 · 已生成 {episodes.length - pendingSegmentEpisodes.length} · 可导出 {exportableCount}
           {isGeneratingSegments && (
             <span className="ml-2 inline-flex items-center gap-1 text-primary">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              正在生成第 {generatingEpisodeNumber} 集分镜（{generatedCount}/{generateTotalCount}）
+              正在生成第 {generatingEpisodeNumber} 集（{generatedCount}/{generateTotalCount}）
             </span>
           )}
         </div>
@@ -105,7 +105,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
               disabled={isGeneratingSegments}
             >
               {isGeneratingSegments ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Film className="w-3.5 h-3.5 mr-1" />}
-              生成剩余分镜 ({pendingSegmentEpisodes.length})
+              生成剩余剧情 ({pendingSegmentEpisodes.length})
             </Button>
           )}
           {exportableCount > 0 && (
@@ -139,7 +139,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
                         第 {episode.episodeNumber} 集：{episode.title}
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        {isCurrentGenerating ? '分镜脚本生成中...' : `${segmentCount} 个分镜 · ${completedSegments} 已完成`}
+                        {isCurrentGenerating ? '分镜脚本生成中...' : `${segmentCount} 个片段 · ${completedSegments} 已完成`}
                       </div>
                     </div>
                   </div>

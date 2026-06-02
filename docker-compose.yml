@@ -1,8 +1,9 @@
 name: aigc-platform
 
 # ============================================================
-# 本地开发用：仅启动基础设施（PostgreSQL + Redis + MinIO）
+# 本地开发用：仅启动基础设施（PostgreSQL + Redis）
 # 应用服务在本机直接 pnpm dev 运行
+# 对象存储使用火山引擎 TOS（需在 .env 中配置 TOS_* 环境变量）
 # 生产部署请使用 deploy/ 目录下的各服务独立配置
 # ============================================================
 
@@ -35,24 +36,6 @@ services:
       timeout: 3s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
 volumes:
   postgres_data:
   redis_data:
-  minio_data:

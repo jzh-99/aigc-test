@@ -5,8 +5,8 @@ import { ImageIcon, Map as MapIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PROMPT_MAX_LENGTH = 1200
-const CHARACTER_TOKEN_CLASS = 'border-primary/30 bg-primary/15 text-primary'
-const BACKGROUND_TOKEN_CLASS = 'border-emerald-400/40 bg-emerald-400/15 text-emerald-200'
+const CHARACTER_TOKEN_CLASS = 'border-primary/35 bg-primary/10 text-primary'
+const BACKGROUND_TOKEN_CLASS = 'border-emerald-200 bg-emerald-50 text-emerald-700'
 
 export interface StoryboardMentionResource {
   id: string
@@ -44,8 +44,9 @@ function parseSegments(value: string, resources: StoryboardMentionResource[]): S
   if (!value) return []
   if (resources.length === 0) return [{ type: 'text', text: value }]
 
-  const resourceByMention = new Map(resources.map((resource) => [`@${resource.name}`, resource]))
-  const pattern = new RegExp(`@(${resources.map((resource) => escapeRegExp(resource.name)).join('|')})(?=\\s|$|[，。,.、；;！!？?])`, 'g')
+  const sortedResources = [...resources].sort((a, b) => b.name.length - a.name.length)
+  const resourceByMention = new Map(sortedResources.map((resource) => [`@${resource.name}`, resource]))
+  const pattern = new RegExp(`@(${sortedResources.map((resource) => escapeRegExp(resource.name)).join('|')})`, 'g')
   const segments: Segment[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null

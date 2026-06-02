@@ -7,12 +7,12 @@ import { normalizeShortDramaState } from '@aigc/types'
 import { getRedis } from '../lib/redis.js'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { createReadStream } from 'node:fs'
 import { validateShortDramaExportSegments, buildConcatManifest } from './short-drama-export-utils.js'
+import { getBucket, getPublicUrl, getStorageRuntimeInfo, getTos } from '../lib/storage.js'
 
 export { validateShortDramaExportSegments, buildConcatManifest } from './short-drama-export-utils.js'
 
@@ -20,10 +20,6 @@ const execFileAsync = promisify(execFile)
 const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
-const S3_ENDPOINT = process.env.S3_ENDPOINT ?? ''
-const S3_BUCKET = process.env.S3_BUCKET ?? 'aigc'
-const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY ?? ''
-const S3_SECRET_KEY = process.env.S3_SECRET_KEY ?? ''
 const INTERNAL_STORAGE_BASE = process.env.INTERNAL_STORAGE_BASE ?? 'http://localhost:9000'
 
 // ============================================================================
@@ -48,30 +44,15 @@ async function downloadFile(url: string, destPath: string): Promise<void> {
 }
 
 async function uploadToStorage(filePath: string, storageKey: string): Promise<string> {
-  const endpoint = S3_ENDPOINT || INTERNAL_STORAGE_BASE
-  const uploadUrl = `${endpoint}/${S3_BUCKET}/${storageKey}`
-
-  const fileStream = createReadStream(filePath)
-  const chunks: Buffer[] = []
-  for await (const chunk of fileStream) {
-    chunks.push(chunk as Buffer)
-  }
-  const body = Buffer.concat(chunks)
-
-  const response = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'video/mp4',
-      'Content-Length': String(body.length),
-    },
+  const body = await readFile(filePath)
+  await getTos().putObject({
+    bucket: getBucket(),
+    key: storageKey,
     body,
+    contentType: 'video/mp4',
   })
 
-  if (!response.ok) {
-    throw new Error(`上传失败: ${response.status}`)
-  }
-
-  return `/${S3_BUCKET}/${storageKey}`
+  return `${getPublicUrl()}/${storageKey}`
 }
 
 // ============================================================================
@@ -248,7 +229,7 @@ export const shortDramaExportWorker = new Worker<ShortDramaExportEpisodeJobData>
       logger.info({ projectId, episodeNumber, exportId, outputUrl }, 'Episode export completed')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      logger.error({ err, projectId, episodeNumber, exportId }, 'Episode export failed')
+      logger.error({ err, projectId, episodeNumber, exportId, storage: getStorageRuntimeInfo() }, 'Episode export failed')
 
       // 标记导出失败
       try {

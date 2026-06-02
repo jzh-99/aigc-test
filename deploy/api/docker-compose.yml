@@ -12,6 +12,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+      - prompts.env  # AI system prompts 单独管理
     environment:
       # 覆盖为基础设施服务器的真实地址
       DATABASE_URL: postgresql://${POSTGRES_USER:-aigc}:${POSTGRES_PASSWORD}@${INFRA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-aigc_dev}

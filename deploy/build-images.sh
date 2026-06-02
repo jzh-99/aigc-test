@@ -54,12 +54,15 @@ build_web() {
   storage_host_val="$(read_env_value "$web_env" "NEXT_PUBLIC_STORAGE_HOST")"
   storage_port_val="$(read_env_value "$web_env" "NEXT_PUBLIC_STORAGE_PORT")"
 
+  # 生产环境必须显式指定存储地址，不再回退到 INFRA_HOST（生产用 TOS，不用 MinIO）
+  if [ -z "$storage_host_val" ]; then
+    echo "错误：deploy/web/.env 中必须设置 NEXT_PUBLIC_STORAGE_HOST（火山 TOS 公网域名）"
+    exit 1
+  fi
+
   api_host_val="${api_host_val:-localhost}"
   api_port_val="${api_port_val:-7001}"
-  storage_host_val="${storage_host_val:-$(read_env_value "$web_env" "INFRA_HOST")}"
-  storage_port_val="${storage_port_val:-$(read_env_value "$web_env" "MINIO_API_PORT")}"
-  storage_host_val="${storage_host_val:-localhost}"
-  storage_port_val="${storage_port_val:-9000}"
+  storage_port_val="${storage_port_val:-443}"  # TOS 默认用 HTTPS
 
   echo "====== web 构建参数：INTERNAL_API_URL=http://${api_host_val}:${api_port_val} ======"
   echo "====== web 构建参数：NEXT_PUBLIC_STORAGE_HOST=${storage_host_val}, NEXT_PUBLIC_STORAGE_PORT=${storage_port_val} ======"

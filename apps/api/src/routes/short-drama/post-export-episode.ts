@@ -4,7 +4,11 @@ import { getDb } from '@aigc/db'
 import type { ShortDramaExportEpisodeJobData } from '@aigc/types'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getShortDramaExportQueue } from '../../lib/queue.js'
-import { assertShortDramaProjectAccess, SHORT_DRAMA_EXPORT_COST_KEY } from './_shared.js'
+import {
+  assertShortDramaProjectAccess,
+  invalidateShortDramaEpisodeExports,
+  SHORT_DRAMA_EXPORT_COST_KEY,
+} from './_shared.js'
 
 const DEFAULT_EXPORT_CREDITS = 10
 
@@ -100,7 +104,10 @@ export default async function postExportEpisode(app: FastifyInstance): Promise<v
 
       const exportId = randomUUID()
 
-      // 在 state.exports.batches 中创建导出记录
+      // 替换该集旧的单集导出结果，避免重新导出时继续显示旧 failed/completed 状态
+      invalidateShortDramaEpisodeExports(state, episodeNumber)
+
+      // 在 state.exports.batches 中创建新的导出记录
       state.exports.batches.push({
         id: exportId,
         episodeNumbers: [episodeNumber],

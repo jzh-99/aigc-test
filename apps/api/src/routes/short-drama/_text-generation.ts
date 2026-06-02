@@ -3,6 +3,12 @@ import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
 import type { ShortDramaAsset, ShortDramaEpisodeOutline, ShortDramaState } from '@aigc/types'
 import { extractShortDramaJsonObject, calculateShortDramaTextCredits } from './_shared.js'
+import {
+  recordLlmProviderCall,
+  summarizeLlmStreamChunk,
+  type LlmProviderAuditContext,
+  type LlmStreamSummary,
+} from '../../lib/provider-api-audit.js'
 
 // ============================================================================
 // AI 调用配置
@@ -20,6 +26,7 @@ export const SHORT_DRAMA_OUTLINE_BATCH_SIZE = 10
 export interface ShortDramaTextStreamCallbacks {
   onChunk?: (text: string) => void
   onPing?: () => void
+  audit?: LlmProviderAuditContext
 }
 
 export interface ShortDramaOutlineBatch {
@@ -126,6 +133,45 @@ export async function callDoubaoForTextStream(
   const chatEndpoint = `${DOUBAO_API_URL}/chat/completions`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), DOUBAO_TEXT_TIMEOUT_MS)
+  const startedAt = Date.now()
+  const requestPayload = {
+    model: DOUBAO_MODEL,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    stream: true,
+    max_tokens: maxTokens,
+    temperature: 0.7,
+  }
+  const streamSummary: LlmStreamSummary = {
+    stream: true,
+    chunk_count: 0,
+    response_bytes: 0,
+    text_preview: '',
+    finished: false,
+  }
+  let responseStatus: number | null = null
+  let auditRecorded = false
+
+  const recordAudit = async (input: {
+    status: 'success' | 'failed'
+    responsePayload?: unknown
+    errorMessage?: string | null
+  }): Promise<void> => {
+    if (!callbacks.audit || auditRecorded) return
+    auditRecorded = true
+    await recordLlmProviderCall({
+      ...callbacks.audit,
+      model: callbacks.audit.model ?? DOUBAO_MODEL,
+      requestPayload,
+      responseStatus,
+      responsePayload: input.responsePayload,
+      durationMs: Date.now() - startedAt,
+      status: input.status,
+      errorMessage: input.errorMessage ?? null,
+    })
+  }
 
   try {
     const response = await fetch(chatEndpoint, {
@@ -135,20 +181,18 @@ export async function callDoubaoForTextStream(
         Accept: 'text/event-stream',
         Authorization: `Bearer ${DOUBAO_API_KEY}`,
       },
-      body: JSON.stringify({
-        model: DOUBAO_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        stream: true,
-        max_tokens: maxTokens,
-        temperature: 0.7,
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     })
+    responseStatus = response.status
 
     if (!response.ok) {
+      const errorPayload = await response.text().catch(() => '')
+      await recordAudit({
+        status: 'failed',
+        responsePayload: errorPayload ? { body: errorPayload } : null,
+        errorMessage: `AI 调用失败 (HTTP ${response.status})`,
+      })
       throw new Error(`AI 调用失败 (HTTP ${response.status})`)
     }
 
@@ -176,6 +220,7 @@ export async function callDoubaoForTextStream(
           continue
         }
         fullText += text
+        summarizeLlmStreamChunk(streamSummary, text)
         callbacks.onChunk?.(text)
       }
     }
@@ -184,6 +229,7 @@ export async function callDoubaoForTextStream(
       const text = extractDoubaoStreamDeltaText(buffer.trim())
       if (text) {
         fullText += text
+        summarizeLlmStreamChunk(streamSummary, text)
         callbacks.onChunk?.(text)
       }
     }
@@ -192,7 +238,21 @@ export async function callDoubaoForTextStream(
       throw new Error('AI 返回内容为空')
     }
 
+    streamSummary.finished = true
+    await recordAudit({
+      status: 'success',
+      responsePayload: streamSummary,
+      errorMessage: null,
+    })
     return fullText
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await recordAudit({
+      status: 'failed',
+      responsePayload: streamSummary.chunk_count > 0 ? streamSummary : null,
+      errorMessage: message,
+    })
+    throw error
   } finally {
     clearTimeout(timer)
   }

@@ -7,11 +7,12 @@ import {
   calculateTextGenerationCredits,
   parseAndValidateJson,
   applyShortDramaScriptSummaryResult,
+  saveShortDramaProjectState,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 
-// 保守预估：每次文本生成预冻结 10 积分
-const ESTIMATED_CREDITS = 10
+// 保守预估：结构化剧集设定内容较长，预冻结 25 积分
+const ESTIMATED_CREDITS = 25
 
 const route: FastifyPluginAsync = async (app) => {
   app.post<{
@@ -61,11 +62,21 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 调用 AI 生成剧本摘要
-    const REDACTED =
-      '你是专业短剧编剧。请根据用户创意生成适合连续短剧制作的中文剧本摘要。只输出 JSON 对象，字段为 title 和 summary，不要输出 markdown。'
+    state.script.status = 'generating'
+    await saveShortDramaProjectState(projectId, state, 0)
 
-    const userPrompt = `用户创意：${state.script.originalPrompt}\n\n请生成剧本摘要，包含 title（剧名）和 summary（剧情概要，200-500字）。`
+    // 调用 AI 生成结构化剧集设定
+    const REDACTED = [
+      '你是专业男频短剧编剧和系列剧开发策划。',
+      '请根据用户创意生成适合连续短剧制作的中文结构化剧集设定。',
+      '只输出 JSON 对象，字段为 title 和 summary，不要输出 markdown、代码块或额外解释。',
+      'summary 必须是可直接展示给用户的纯文本，使用清晰的中文小标题和换行分段。',
+      'summary 必须包含：集数、故事类型、目标受众、核心梗、一句话故事、人物小传、故事梗概。',
+      '人物小传需要覆盖主要角色，每个角色包含：角色类型、视觉形象、核心标签、身份背景、成长经历、性格特点、角色关系、成长弧线。',
+      '内容要具体、可执行，避免空泛评价；角色关系可以使用“起点 -> [事件] -> 变化”的链路表达。',
+    ].join('\n')
+
+    const userPrompt = `用户创意：${state.script.originalPrompt}\n\n项目设置：\n- 集数：${state.settings.episodeCount}\n- 视觉风格：${state.settings.style}\n- 画面比例：${state.settings.aspectRatio}\n\n请生成剧本摘要，返回 JSON：\n{\n  "title": "短剧名",\n  "summary": "集数\\n${state.settings.episodeCount}\\n故事类型\\n现实权谋+重生改命+校园青春\\n目标受众\\n男频 / 大众\\n核心梗\\n...\\n一句话故事\\n...\\n人物小传\\n角色名\\n角色类型：...\\n视觉形象：...\\n核心标签：...\\n身份背景：...\\n成长经历：...\\n性格特点：...\\n角色关系：...\\n成长弧线：...\\n故事梗概\\n..."\n}\n\n要求：\n- summary 按上述结构输出，不要只写 200-500 字短概要。\n- 人物小传至少包含主角和 3-5 个关键配角。\n- 故事梗概要说明世界背景、主线冲突、关系变化、阶段性胜利和后续钩子。\n- 不要照抄示例中的具体人物，除非用户创意本身已经明确提到。`
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -87,9 +98,18 @@ const route: FastifyPluginAsync = async (app) => {
     try {
       sendEvent('progress', { message: '正在生成剧本摘要' })
 
-      const aiResponse = await callDoubaoForTextStream(REDACTED, userPrompt, 4000, {
+      const aiResponse = await callDoubaoForTextStream(REDACTED, userPrompt, 8000, {
         onChunk: (text) => sendEvent('chunk', { text }),
         onPing: sendPing,
+        audit: {
+          userId,
+          teamId,
+          workspaceId: project.workspace_id,
+          module: 'short_drama',
+          provider: 'doubao',
+          operation: 'script.summary',
+          endpoint: '/chat/completions',
+        },
       })
 
       const parsed = parseAndValidateJson(aiResponse, ['title', 'summary'])
@@ -124,6 +144,10 @@ const route: FastifyPluginAsync = async (app) => {
       })
     } catch (error) {
       await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成失败')
+      state.script.status = 'failed'
+      await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
+        app.log.error({ saveError, projectId }, '短剧摘要失败状态保存失败')
+      })
       app.log.error({ error, projectId }, '短剧摘要流式生成失败')
       sendEvent('error', {
         code: 'AI_ERROR',

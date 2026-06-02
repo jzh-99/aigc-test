@@ -163,17 +163,28 @@ const route: FastifyPluginAsync = async (app) => {
         const systemPrompt = [
           '你是专业短剧美术设定师，负责为图片生成模型提取角色定妆照和场景概念图提示词。',
           '只输出 JSON 对象，包含 characters、scenes 两个数组，每个元素包含 name 和 description 字段，不要输出 markdown。',
-          '角色 description 必须是可直接生成正面人物定妆照的外观描述：年龄段、性别、脸型五官、发型、气质、服装风格、时代感。禁止写履历、剧情、关系、命运、职业经历、前世今生、组织调查、情节动作。',
-          '角色 description 必须默认单人、正面、白色纯净背景、不带装饰物和道具。',
+          '角色形象必须优先基于剧本摘要中“人物小传”的视觉形象、核心标签、身份背景生成；如果人物小传中已有同名角色，不要只根据当前分集剧情临时改写外貌。',
+          '分集内容只用于补充该阶段的年龄、服装时代感和出场状态，不得覆盖人物小传中稳定的人物气质和核心视觉特征。',
+          '角色 description 必须是可直接生成全身正面人物定妆照的外观描述：年龄段、性别、脸型五官、发型、气质、完整服装、身体比例、时代感。禁止写履历、剧情、关系、命运、职业经历、前世今生、组织调查、情节动作。',
+          '角色 description 必须默认单人、全身、正面、从头到脚完整入镜、白色纯净背景、不带装饰物和道具。',
           '场景 description 必须是可直接生成空镜场景图的空间描述：地点类型、建筑/室内结构、陈设、光线、年代氛围、色彩。禁止出现人物、人脸、背影、人群、剧情动作、关系图、文字标注。',
           '不要输出道具清单、材质清单或音乐。',
         ].join('\n')
-        const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n已有角色：\n${existingCharacters}\n\n已有场景：\n${existingScenes}\n\n当前批次分集梗概：\n${batchOutlines}\n\n请只提取第 ${batch.from}-${batch.to} 集中新增且需要制作参考图的角色和场景。已存在的角色或场景不要重复返回。\n\n输出要求：\n- characters[].description 只写视觉外观，不写人物经历、剧情关系或命运设定。\n- scenes[].description 只写无人空镜场景，不出现任何人物。\n- 每条 description 控制在 45-80 个汉字，适合直接作为图片生成提示词。\n\n返回 JSON：\n{\n  "characters": [{ "name": "角色名", "description": "约20岁男性，清瘦端正脸型，短黑发，眼神沉稳克制，白衬衫或简洁校服风，单人正面定妆照，白色纯净背景，无道具" }],\n  "scenes": [{ "name": "场景名", "description": "90年代政法大学教学楼外景，灰白教学楼与林荫道路，日间自然光，安静校园氛围，无人物" }]\n}`
+        const userPrompt = `剧本摘要（包含人物小传时必须优先参考）：\n${state.script.refinedPrompt}\n\n已有角色：\n${existingCharacters}\n\n已有场景：\n${existingScenes}\n\n当前批次分集剧本：\n${batchOutlines}\n\n请只提取第 ${batch.from}-${batch.to} 集中新增且需要制作参考图的角色和场景。已存在的角色或场景不要重复返回。\n\n角色生成原则：\n- 如果角色在“人物小传”中出现，characters[].description 必须基于该角色小传的“视觉形象、核心标签、身份背景、性格特点”提炼。\n- 分集剧本只补充当前年龄阶段、服装年代、校园/职场状态，不要把剧情动作、情绪事件、人物关系写进生图提示词。\n- 角色描述要形成稳定可复用的角色定妆照，而不是某一场戏的截图。\n\n输出要求：\n- characters[].description 只写视觉外观，必须包含“全身正面定妆照”或等价表述，不写人物经历、剧情关系或命运设定。\n- scenes[].description 只写无人空镜场景，不出现任何人物。\n- 每条 description 控制在 45-90 个汉字，适合直接作为图片生成提示词。\n\n返回 JSON：\n{\n  "characters": [{ "name": "角色名", "description": "约20岁男性，身形挺拔锋利，端正脸型，短黑发，眼神清醒克制，简洁校服或白衬衫，带寒门精英气质，全身正面定妆照，从头到脚完整入镜，白色纯净背景，无道具" }],\n  "scenes": [{ "name": "场景名", "description": "90年代政法大学教学楼外景，灰白教学楼与林荫道路，日间自然光，安静校园氛围，无人物" }]\n}`
 
         try {
           const aiResponse = await callDoubaoForTextStream(systemPrompt, userPrompt, ASSET_PROMPT_BATCH_MAX_TOKENS, {
             onChunk: (text) => sendEvent('chunk', { text, from: batch.from, to: batch.to }),
             onPing: sendPing,
+            audit: {
+              userId,
+              teamId,
+              workspaceId: project.workspace_id,
+              module: 'short_drama',
+              provider: 'doubao',
+              operation: 'assets.prompts',
+              endpoint: '/chat/completions',
+            },
           })
 
           const previousState = JSON.parse(JSON.stringify(state)) as typeof state

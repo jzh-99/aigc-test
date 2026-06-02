@@ -6,7 +6,7 @@
 
 **Architecture:** Short drama owns its project state, episode state, segment state, and export state in `short_drama_projects.state`, while media generation reuses existing `task_batches`, `tasks`, `assets`, credits, provider audit, and storage infrastructure. API routes orchestrate project CRUD, text generation, asset/image/video generation, sync, upload, and export submission; worker owns ffmpeg episode concatenation and export result persistence. Frontend follows the existing Toby Studio / AI 绘本 wizard pattern with a three-step locked flow and a dedicated episode editor.
 
-**Tech Stack:** pnpm 10, Turborepo, TypeScript, Kysely, PostgreSQL, Fastify 4, BullMQ, Redis, Next.js 14 App Router, SWR, Tailwind CSS, Radix UI, lucide-react, Qwen `qwen3.6-plus`, existing image/video generation providers, S3/MinIO-compatible storage, fluent-ffmpeg/ffmpeg.
+**Tech Stack:** pnpm 10, Turborepo, TypeScript, Kysely, PostgreSQL, Fastify 4, BullMQ, Redis, Next.js 14 App Router, SWR, Tailwind CSS, Radix UI, lucide-react, Qwen `qwen3.6-plus`, existing image/video generation providers, 火山引擎 TOS, fluent-ffmpeg/ffmpeg.
 
 ---
 
