@@ -250,17 +250,10 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
 
     // Per-model resolution validation
     if (isSeedance && resolution) {
-      const isReferenceImageScene = reference_images && reference_images.length > 0
       if (model === 'seedance-2.0-fast' && resolution === '1080p') {
         return reply.status(400).send({
           success: false,
           error: { code: 'INVALID_PARAMS', message: 'seedance-2.0-fast 不支持 1080p 分辨率' },
-        })
-      }
-      if (isReferenceImageScene && resolution === '1080p') {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'INVALID_PARAMS', message: '参考图生视频场景不支持 1080p 分辨率' },
         })
       }
     }
@@ -541,9 +534,8 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
 
       if (resolution) volcengineBody.resolution = resolution
 
-      // camera_fixed not supported in reference image scenes or seedance 2.0 series
-      const isReferenceImageScene = reference_images && reference_images.length > 0
-      if (camera_fixed !== undefined && !isReferenceImageScene && !isSeedance2) volcengineBody.camera_fixed = camera_fixed
+      // camera_fixed only supported on non-seedance-2.0 models
+      if (camera_fixed !== undefined && !isSeedance2) volcengineBody.camera_fixed = camera_fixed
 
       // 首尾帧图片（frames Tab）：images 字段，role=first_frame/last_frame
       if (images && images.length > 0) {
