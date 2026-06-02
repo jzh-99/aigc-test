@@ -12,7 +12,7 @@ export const IMAGE_MODEL_CREDITS: Record<
   'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'nano-banana-2' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0',
   number
 > = {
-  'gemini':            1,
+  'gemini':            2,
   'gpt-image-2':       1,
   'nano-banana-2':     2,
   'nano-banana-pro':   3,

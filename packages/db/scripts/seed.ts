@@ -395,9 +395,9 @@ async function main() {
 
   // 10b. Additional provider models — upsert by code
   const additionalModels = [
-    { code: 'gemini-3.1-flash-image-preview',    name: '全能图片2 1K',  credit_cost: 1 },
-    { code: 'gemini-3.1-flash-image-preview-2k', name: '全能图片2 2K',  credit_cost: 1 },
-    { code: 'gemini-3.1-flash-image-preview-4k', name: '全能图片2 4K',  credit_cost: 1 },
+    { code: 'gemini-3.1-flash-image-preview',    name: '全能图片2 1K',  credit_cost: 2 },
+    { code: 'gemini-3.1-flash-image-preview-2k', name: '全能图片2 2K',  credit_cost: 2 },
+    { code: 'gemini-3.1-flash-image-preview-4k', name: '全能图片2 4K',  credit_cost: 2 },
     { code: 'gpt-image-2',                       name: '超能图片2',     credit_cost: 1 },
     { code: 'nano-banana-2',                     name: '全能图片Pro 1K', credit_cost: 2 },
     { code: 'nano-banana-2-4k',                  name: '全能图片Pro 4K', credit_cost: 2 },
