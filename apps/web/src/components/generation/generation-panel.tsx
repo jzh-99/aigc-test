@@ -172,9 +172,9 @@ const VIDEO_ASPECT_RATIOS_SEEDANCE = [
 ]
 
 const VIDEO_RESOLUTIONS = [
-  { value: '480p' as const, label: '480p', desc: '流畅 · 5积分/秒' },
-  { value: '720p' as const, label: '720p', desc: '标准 · 10积分/秒' },
-  { value: '1080p' as const, label: '1080p', desc: '高清 · 25积分/秒' },
+  { value: '480p' as const, label: '480p', desc: '流畅' },
+  { value: '720p' as const, label: '720p', desc: '标准' },
+  { value: '1080p' as const, label: '1080p', desc: '高清' },
 ]
 
 const SEEDANCE_DURATION_OPTIONS = [
