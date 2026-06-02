@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { generatePictureBookScript, listRecentPictureBookProjects } from '@/lib/picture-book/api'
 import { PICTURE_BOOK_ASPECT_RATIOS, PICTURE_BOOK_PAGE_COUNTS, PICTURE_BOOK_STYLES, type PictureBookAspectRatio, type PictureBookPageCount, type PictureBookStyle } from '@/lib/picture-book/types'
 import { PictureBookProjectCard } from './picture-book-project-card'
+import { StudioReturnBar } from '@/components/toby-studio/studio-return-bar'
 
 export function PictureBookHome() {
   const router = useRouter()
@@ -59,6 +60,7 @@ export function PictureBookHome() {
 
   return (
     <div className="-mx-4 -mt-4 min-h-[calc(100vh-4.25rem)] bg-background md:-mx-6 md:-mt-6">
+      <StudioReturnBar />
       <section className="mx-auto flex max-w-6xl flex-col items-center px-4 pb-10 pt-12 md:px-6 md:pt-16">
         <div className="mb-6 inline-flex h-11 w-11 items-center justify-center rounded-lg border bg-card shadow-sm">
           <BookOpenText className="h-5 w-5 text-primary" />

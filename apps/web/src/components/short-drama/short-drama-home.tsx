@@ -13,6 +13,7 @@ import { SHORT_DRAMA_ASPECT_RATIOS, SHORT_DRAMA_EPISODE_COUNTS, SHORT_DRAMA_MAX_
 import type { ShortDramaAspectRatio } from '@aigc/types'
 import { ShortDramaStyleDialog } from './short-drama-style-dialog'
 import { ShortDramaProjectCard } from './short-drama-project-card'
+import { StudioReturnBar } from '@/components/toby-studio/studio-return-bar'
 import {
   createShortDramaProject,
   listRecentShortDramaProjects,
@@ -96,97 +97,100 @@ export function ShortDramaHome() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">AI 短剧</h1>
-        <p className="text-muted-foreground mt-1">输入创意，AI 帮你生成完整短剧</p>
-      </div>
+    <div className="-mx-4 -mt-4 min-h-[calc(100vh-4.25rem)] bg-background md:-mx-6 md:-mt-6">
+      <StudioReturnBar />
+      <div className="max-w-4xl mx-auto p-6 space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold">AI 短剧</h1>
+          <p className="text-muted-foreground mt-1">输入创意，AI 帮你生成完整短剧</p>
+        </div>
 
-      <div className="space-y-4 p-6 rounded-xl border bg-card">
-        <Textarea
-          placeholder="描述你的短剧创意，例如：一个普通外卖员意外获得超能力，在都市中行侠仗义的故事..."
-          value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-          className="min-h-[120px] resize-none"
-          maxLength={2000}
-        />
+        <div className="space-y-4 p-6 rounded-xl border bg-card">
+          <Textarea
+            placeholder="描述你的短剧创意，例如：一个普通外卖员意外获得超能力，在都市中行侠仗义的故事..."
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
+            className="min-h-[120px] resize-none"
+            maxLength={2000}
+          />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">视觉风格</label>
-            <ShortDramaStyleDialog value={style} onChange={setStyle}>
-              <button
-                type="button"
-                className="group flex h-11 w-full items-center justify-between rounded-full border border-transparent bg-[#f6f4f8] px-4 text-left text-sm font-semibold text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_28px_rgba(70,56,98,0.08)] transition-all hover:bg-white hover:shadow-[0_16px_34px_rgba(70,56,98,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
-              >
-                <span className="truncate">{style || '选择风格'}</span>
-                <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-hover:-rotate-180" />
-              </button>
-            </ShortDramaStyleDialog>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">视觉风格</label>
+              <ShortDramaStyleDialog value={style} onChange={setStyle}>
+                <button
+                  type="button"
+                  className="group flex h-11 w-full items-center justify-between rounded-full border border-transparent bg-[#f6f4f8] px-4 text-left text-sm font-semibold text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_28px_rgba(70,56,98,0.08)] transition-all hover:bg-white hover:shadow-[0_16px_34px_rgba(70,56,98,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
+                >
+                  <span className="truncate">{style || '选择风格'}</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-hover:-rotate-180" />
+                </button>
+              </ShortDramaStyleDialog>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">画面比例</label>
+              <DramaPillSelect
+                value={aspectRatio}
+                options={SHORT_DRAMA_ASPECT_RATIOS.map(r => ({ value: r, label: r }))}
+                onChange={value => setAspectRatio(value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">集数</label>
+              <EpisodeCountSelect
+                value={episodeCount}
+                inputValue={episodeInput}
+                valid={isEpisodeCountValid}
+                onPresetChange={handleEpisodePresetChange}
+                onInputChange={handleEpisodeInputChange}
+                onInputBlur={handleEpisodeInputBlur}
+              />
+              {episodeInput && !isEpisodeCountValid && (
+                <p className="text-xs text-red-500">
+                  请输入 1-{SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT} 的整数
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">画面比例</label>
-            <DramaPillSelect
-              value={aspectRatio}
-              options={SHORT_DRAMA_ASPECT_RATIOS.map(r => ({ value: r, label: r }))}
-              onChange={value => setAspectRatio(value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">集数</label>
-            <EpisodeCountSelect
-              value={episodeCount}
-              inputValue={episodeInput}
-              valid={isEpisodeCountValid}
-              onPresetChange={handleEpisodePresetChange}
-              onInputChange={handleEpisodeInputChange}
-              onInputBlur={handleEpisodeInputBlur}
-            />
-            {episodeInput && !isEpisodeCountValid && (
-              <p className="text-xs text-red-500">
-                请输入 1-{SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT} 的整数
-              </p>
-            )}
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-xs text-muted-foreground">
+              创建项目后将消耗少量积分用于 AI 文本生成
+            </p>
+            <Button
+              onClick={handleSubmit}
+              disabled={!prompt.trim() || submitting || !workspaceId || !isEpisodeCountValid}
+            >
+              {submitting ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" />创建中...</>
+              ) : (
+                <><Sparkles className="w-4 h-4 mr-2" />开始创作</>
+              )}
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-2">
-          <p className="text-xs text-muted-foreground">
-            创建项目后将消耗少量积分用于 AI 文本生成
-          </p>
-          <Button
-            onClick={handleSubmit}
-            disabled={!prompt.trim() || submitting || !workspaceId || !isEpisodeCountValid}
-          >
-            {submitting ? (
-              <><Loader2 className="w-4 h-4 animate-spin mr-2" />创建中...</>
-            ) : (
-              <><Sparkles className="w-4 h-4 mr-2" />开始创作</>
-            )}
-          </Button>
+        <div>
+          <h2 className="text-lg font-semibold mb-4">最近项目</h2>
+          {loadingProjects ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              加载中...
+            </div>
+          ) : !recentProjects || recentProjects.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              还没有短剧项目，开始你的第一个创作吧
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recentProjects.map(project => (
+                <ShortDramaProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+          )}
         </div>
-      </div>
-
-      <div>
-        <h2 className="text-lg font-semibold mb-4">最近项目</h2>
-        {loadingProjects ? (
-          <div className="flex items-center justify-center py-12 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin mr-2" />
-            加载中...
-          </div>
-        ) : !recentProjects || recentProjects.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            还没有短剧项目，开始你的第一个创作吧
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {recentProjects.map(project => (
-              <ShortDramaProjectCard key={project.id} project={project} />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
