@@ -122,7 +122,7 @@ async function linkStoryboardBatch(
 ) {
   const estimatedCredits = Number(batch.estimated_credits ?? 0)
   await getDb().transaction().execute(async (trx) => {
-    await trx.updateTable('task_batches').set({ picture_book_project_id: projectId }).where('id', '=', batch.id).execute()
+    await trx.updateTable('task_batches').set({ picture_book_project_id: projectId, source: 'studio' }).where('id', '=', batch.id).execute()
     await trx
       .insertInto('picture_book_project_assets')
       .values({

@@ -138,7 +138,7 @@ async function recoverMissingAssetLinks(projectId: string, access: any): Promise
     await db.transaction().execute(async (trx) => {
       await trx
         .updateTable('task_batches')
-        .set({ picture_book_project_id: projectId })
+        .set({ picture_book_project_id: projectId, source: 'studio' })
         .where('id', '=', batch.id)
         .execute()
 

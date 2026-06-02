@@ -142,6 +142,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
               workspace_id: project.workspace_id,
               credit_account_id: creditAccountId,
               idempotency_key: randomUUID(),
+              source: 'studio',
               module: 'image',
               provider: providerModel.providerCode,
               model: modelCode,

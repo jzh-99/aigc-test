@@ -57,7 +57,7 @@ async function recordImageBatch(input: {
   await getDb().transaction().execute(async (trx) => {
     await trx
       .updateTable('task_batches')
-      .set({ picture_book_project_id: input.projectId })
+      .set({ picture_book_project_id: input.projectId, source: 'studio' })
       .where('id', '=', input.batch.id)
       .execute()
 

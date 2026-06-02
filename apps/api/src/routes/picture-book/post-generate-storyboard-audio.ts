@@ -144,7 +144,7 @@ async function recordAudioAsset(input: {
   const actualCredits = Number(input.batch.actual_credits ?? estimatedCredits)
   const kind = input.target.language === 'zh' ? 'page_audio_zh' : 'page_audio_en'
   await getDb().transaction().execute(async (trx) => {
-    await trx.updateTable('task_batches').set({ picture_book_project_id: input.projectId }).where('id', '=', input.batch.id).execute()
+    await trx.updateTable('task_batches').set({ picture_book_project_id: input.projectId, source: 'studio' }).where('id', '=', input.batch.id).execute()
     await trx
       .insertInto('picture_book_project_assets')
       .values({

@@ -72,6 +72,15 @@ const route: FastifyPluginAsync = async (app) => {
         }
       }
 
+      if (source === 'generation') {
+        query = query
+          .where('canvas_id', 'is', null)
+          .where('canvas_node_id', 'is', null)
+          .where('video_studio_project_id', 'is', null)
+          .where('picture_book_project_id', 'is', null)
+          .where('short_drama_project_id', 'is', null)
+      }
+
       if (decodedCursor) {
         query = query.where((eb: any) =>
           eb.or([

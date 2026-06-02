@@ -199,8 +199,11 @@ async function syncVideoBatch(
   const segment = episode.segments.find((s: any) => s.id === segmentId)
   if (!segment) return false
 
-  // 已完成/失败的 segment 不重复覆盖
-  if (segment.status === 'completed' || segment.status === 'failed') return false
+  // 只有当前片段绑定的最新视频任务可以回写；避免导出轮询时历史 video batch 覆盖片段视频。
+  if (segment.videoBatchId && segment.videoBatchId !== batch.id) return false
+
+  // 旧数据没有 videoBatchId 时，只允许补齐缺失视频；已经完成且有 URL 的片段不再被历史 batch 重写。
+  if (!segment.videoBatchId && segment.status === 'completed' && segment.videoUrl) return false
 
   const tasks = await db
     .selectFrom('tasks')
@@ -222,13 +225,23 @@ async function syncVideoBatch(
       .executeTakeFirst()
 
     if (assetRecord) {
-      segment.videoUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
-      segment.status = 'completed'
-      changed = true
+      const newVideoUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
+      // 只有当数据真的变化时才标记为 changed，避免无效更新
+      if (segment.videoUrl !== newVideoUrl || segment.status !== 'completed') {
+        segment.videoUrl = newVideoUrl
+        segment.status = 'completed'
+        segment.videoBatchId = batch.id
+        segment.videoTaskId = task.id
+        changed = true
+      }
     }
   } else if (task.status === 'failed') {
-    segment.status = 'failed'
-    changed = true
+    if (segment.status !== 'failed') {
+      segment.status = 'failed'
+      segment.videoBatchId = batch.id
+      segment.videoTaskId = task.id
+      changed = true
+    }
   }
 
   // 检查 episode 所有 segment 是否都完成

@@ -10,6 +10,7 @@ import {
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { getVideoQueue } from '../../lib/queue.js'
+import { resolveBatchSource } from '../../lib/batch-source.js'
 
 // 视频生成允许的 params 键白名单
 const ALLOWED_PARAM_KEYS = new Set([
@@ -226,7 +227,12 @@ const route: FastifyPluginAsync = async (app) => {
             workspace_id: workspaceId,
             credit_account_id: creditAccountId,
             idempotency_key: `${userId}-${Date.now()}`,
-            source: 'generation',
+            source: resolveBatchSource({
+              module: 'video',
+              canvasId,
+              canvasNodeId,
+              videoStudioProjectId: video_studio_project_id,
+            }),
             module: 'video',
             provider: providerModel.providerCode,
             model,

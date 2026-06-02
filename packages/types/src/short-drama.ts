@@ -85,6 +85,8 @@ export interface ShortDramaSegment {
   durationSeconds: number
   videoUrl: string | null
   status: ShortDramaGenerationStatus
+  videoBatchId?: string | null
+  videoTaskId?: string | null
 }
 
 export interface ShortDramaEpisode {

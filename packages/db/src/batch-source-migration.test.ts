@@ -95,3 +95,22 @@ describe('051_batch_source migration', () => {
     assert.ok(/DROP.*COLUMN.*source/i.test(content));
   });
 });
+
+describe('054_backfill_batch_source_for_projects migration', () => {
+  const migrationPath = join(__dirname, '../migrations/054_backfill_batch_source_for_projects.ts');
+
+  test('should backfill studio source for all project associations', async () => {
+    const content = await readFile(migrationPath, 'utf-8');
+    assert.ok(content.includes("source = 'studio'"));
+    assert.ok(content.includes('short_drama_project_id IS NOT NULL'));
+    assert.ok(content.includes('picture_book_project_id IS NOT NULL'));
+    assert.ok(content.includes('video_studio_project_id IS NOT NULL'));
+  });
+
+  test('should backfill canvas source for canvas associations', async () => {
+    const content = await readFile(migrationPath, 'utf-8');
+    assert.ok(content.includes("source = 'canvas'"));
+    assert.ok(content.includes('canvas_id IS NOT NULL'));
+    assert.ok(content.includes('canvas_node_id IS NOT NULL'));
+  });
+});

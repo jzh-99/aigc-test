@@ -173,6 +173,34 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
     }
   }
 
+  const handleNameBlur = async (assetId: string, value: string) => {
+    const nextName = value.trim()
+    if (!nextName) {
+      toast.error('名称不能为空')
+      return
+    }
+
+    const targetAsset = assets.find(asset => asset.id === assetId)
+    if (!targetAsset || targetAsset.name === nextName) return
+
+    try {
+      await saveShortDramaProject(projectId, {
+        state: {
+          ...state,
+          assets: {
+            ...state.assets,
+            items: assets.map(asset =>
+              asset.id === assetId ? { ...asset, name: nextName } : asset
+            ),
+          },
+        },
+      })
+      onStateChange()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '保存名称失败')
+    }
+  }
+
   const handleBatchGenerate = async () => {
     // 过滤出需要生成的素材：没有图片 且 状态不是 pending/generating
     const pendingAssets = requiredAssets.filter(a =>
@@ -365,7 +393,13 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                 )}
               </div>
               <div className="space-y-2 p-3">
-                <div className="text-xs font-semibold text-foreground line-clamp-1">{asset.name}</div>
+                <input
+                  defaultValue={asset.name}
+                  onBlur={e => handleNameBlur(asset.id, e.target.value)}
+                  disabled={isLocked}
+                  className="h-7 w-full rounded-md border border-transparent bg-transparent px-1 text-xs font-semibold text-foreground outline-none transition-colors hover:border-border focus:border-primary/40 focus:bg-background disabled:cursor-not-allowed disabled:opacity-70"
+                  aria-label={`${asset.name}名称`}
+                />
                 <textarea
                   defaultValue={asset.description}
                   onBlur={e => handleDescriptionBlur(asset.id, e.target.value)}

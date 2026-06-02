@@ -7,6 +7,7 @@ import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getImageQueue } from '../../lib/queue.js'
 import { decryptProxyUrl } from '../../lib/storage.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
+import { resolveBatchSource } from '../../lib/batch-source.js'
 import rateLimit from '@fastify/rate-limit'
 
 // 每个用户最多同时处于 pending/processing 状态的批次数
@@ -485,7 +486,12 @@ const route: FastifyPluginAsync = async (app) => {
             workspace_id: workspaceId,
             credit_account_id: creditAccountId,
             idempotency_key,
-            source: 'generation',
+            source: resolveBatchSource({
+              module: 'image',
+              canvasId: canvas_id,
+              canvasNodeId: canvas_node_id,
+              videoStudioProjectId: video_studio_project_id,
+            }),
             module: 'image',
             provider: providerModel.providerCode,
             model,

@@ -74,8 +74,11 @@ const route: FastifyPluginAsync = async (app) => {
           'b.model',
         ])
         .where('b.workspace_id', '=', workspace_id)
+        .where('b.source', '=', 'generation')
         .where('b.canvas_id', 'is', null)
         .where('b.video_studio_project_id', 'is', null)
+        .where('b.picture_book_project_id', 'is', null)
+        .where('b.short_drama_project_id', 'is', null)
         .where('a.is_deleted', '=', false)
         .where((eb: any) => eb.or([
           eb('a.transfer_status', '=', 'completed'),

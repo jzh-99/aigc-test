@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import { SHORT_DRAMA_VIDEO_MODEL, parseCategoryReferences } from '@aigc/types'
+import type { ShortDramaAsset, ShortDramaAspectRatio, ShortDramaSegment } from '@aigc/types'
 import { freezeCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { encryptProxyUrl } from '../../lib/storage.js'
@@ -18,8 +19,132 @@ interface GenerateSegmentVideoBody {
   resolution?: string
 }
 
+type ShortDramaSegmentVideoState = ShortDramaSegment & {
+  videoBatchId?: string | null
+  videoTaskId?: string | null
+}
+
 const SEEDANCE_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
 const SEEDANCE_2_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+const NEGATIVE_VIDEO_PROMPT = '画面模糊、人物畸形、光影杂乱、卡通画风、画质糊边、多余杂物、画面卡顿、镜头跳切突兀、人物身份混乱、参考形象不一致'
+
+interface PromptReferenceAsset {
+  asset: ShortDramaAsset
+  imageUrl: string
+  figureIndex: number
+}
+
+interface ParsedShot {
+  shotNumber: number
+  durationSeconds: number
+  text: string
+}
+
+function parseSegmentShots(prompt: string): ParsedShot[] {
+  const pattern = /分镜\s*(\d+)\s*[·.\-:：]\s*(\d+)\s*s\s*[：:]\s*/gi
+  const matches = [...prompt.matchAll(pattern)]
+  return matches.map((match, index) => {
+    const start = (match.index ?? 0) + match[0].length
+    const end = index + 1 < matches.length ? matches[index + 1].index ?? prompt.length : prompt.length
+    return {
+      shotNumber: Number(match[1]),
+      durationSeconds: Number(match[2]),
+      text: prompt.slice(start, end).trim(),
+    }
+  }).filter(shot => (
+    Number.isInteger(shot.shotNumber) &&
+    Number.isInteger(shot.durationSeconds) &&
+    shot.durationSeconds > 0 &&
+    shot.text.length > 0
+  ))
+}
+
+function extractSceneSetting(prompt: string): string {
+  const marker = '本片段场景设定在：'
+  const markerIndex = prompt.indexOf(marker)
+  if (markerIndex < 0) return ''
+
+  const rest = prompt.slice(markerIndex + marker.length)
+  const shotIndex = rest.search(/分镜\s*\d+/)
+  return (shotIndex >= 0 ? rest.slice(0, shotIndex) : rest).trim()
+}
+
+function buildPromptReferences(
+  segment: ShortDramaSegment,
+  assets: ShortDramaAsset[],
+  toPublicUrl: (url: string) => string,
+): PromptReferenceAsset[] {
+  const names = new Set<string>()
+  for (const ref of segment.mentionRefs) {
+    names.add(ref.assetName)
+  }
+
+  const mentionedAssets = assets.filter(asset => names.has(asset.name) && asset.imageUrl)
+  const sceneAssets = mentionedAssets.filter(asset => asset.kind === 'scene')
+  const otherAssets = mentionedAssets.filter(asset => asset.kind !== 'scene')
+  return [...sceneAssets, ...otherAssets].map((asset, index) => ({
+    asset,
+    imageUrl: toPublicUrl(asset.imageUrl!),
+    figureIndex: index + 1,
+  }))
+}
+
+function attachReferenceLabels(text: string, references: PromptReferenceAsset[]): string {
+  let output = text
+  const sortedReferences = [...references].sort((a, b) => b.asset.name.length - a.asset.name.length)
+  for (const reference of sortedReferences) {
+    const escapedName = reference.asset.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = new RegExp(`@${escapedName}(?!（参考<图\\d+>）)`, 'g')
+    output = output.replace(pattern, `@${reference.asset.name}（参考<图${reference.figureIndex}>）`)
+  }
+  return output
+}
+
+function buildFinalVideoPrompt(input: {
+  segment: ShortDramaSegment
+  references: PromptReferenceAsset[]
+  aspectRatio: ShortDramaAspectRatio
+}): string {
+  const { segment, references, aspectRatio } = input
+  const shots = parseSegmentShots(segment.prompt)
+  const sceneSetting = extractSceneSetting(segment.prompt)
+  const shotCountText = shots.length > 0 ? `${shots.length} 段镜头依次连贯播放` : '多段镜头依次连贯播放'
+  const settingText = sceneSetting || segment.title
+  const totalDuration = segment.durationSeconds
+
+  const basePrompt = [
+    `写实现代都市短片，${attachReferenceLabels(settingText, references)}`,
+    '真人影视剧画质，4K 高清，电影运镜，画面流畅自然',
+    '细腻人物面部微表情，真实肢体动作，环境光影统一，镜头衔接自然',
+    `画面比例 ${aspectRatio}，${shotCountText}，总时长 ${totalDuration}s`,
+  ].join('，')
+
+  const timelineLines: string[] = []
+  if (shots.length > 0) {
+    let cursor = 0
+    for (const shot of shots) {
+      const start = cursor
+      const end = cursor + shot.durationSeconds
+      cursor = end
+      timelineLines.push(
+        `${shot.shotNumber}.【${start}-${end} 秒｜分镜 ${shot.shotNumber}】${attachReferenceLabels(shot.text, references)}`
+      )
+    }
+  } else {
+    timelineLines.push(`1.【0-${totalDuration} 秒｜完整片段】${attachReferenceLabels(segment.prompt, references)}`)
+  }
+
+  return [
+    '整体基础提示（全局通用）',
+    basePrompt,
+    '',
+    `分段时序提示（按镜头时间拆分，对应 ${timelineLines.length} 个分镜）`,
+    ...timelineLines,
+    '',
+    '负面提示词（规避劣质画面）',
+    NEGATIVE_VIDEO_PROMPT,
+  ].join('\n')
+}
 
 export default async function postGenerateSegmentVideo(app: FastifyInstance): Promise<void> {
   const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
@@ -119,14 +244,14 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         }
       }
 
-      // 解析 mentionRefs → 图片 URL
-      const imageReferences: string[] = []
-      for (const ref of segment.mentionRefs) {
-        const asset = state.assets.items.find(a => a.id === ref.assetId)
-        if (asset?.imageUrl) {
-          imageReferences.push(toPublicUrl(asset.imageUrl))
-        }
-      }
+      // 解析 mentionRefs → 图片 URL，并按 <图N> 注入最终视频提示词
+      const promptReferences = buildPromptReferences(segment, state.assets.items, toPublicUrl)
+      const imageReferences = promptReferences.map(reference => reference.imageUrl)
+      const finalVideoPrompt = buildFinalVideoPrompt({
+        segment,
+        references: promptReferences,
+        aspectRatio: state.settings.aspectRatio,
+      })
 
       // 查找视频模型
       const db = getDb()
@@ -204,10 +329,11 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
               workspace_id: project.workspace_id,
               credit_account_id: creditAccountId,
               idempotency_key: randomUUID(),
+              source: 'studio',
               module: 'video',
               provider: modelRecord.providerCode,
               model: modelCode,
-              prompt: segment.prompt,
+              prompt: finalVideoPrompt,
               params: JSON.stringify(videoParams),
               quantity: 1,
               status: 'pending',
@@ -253,7 +379,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
           creditAccountId,
           provider: modelRecord.providerCode,
           model: modelCode,
-          prompt: segment.prompt,
+          prompt: finalVideoPrompt,
           params: videoParams,
           estimatedCredits: totalCost,
         })
@@ -261,6 +387,8 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         // 更新 segment 状态为 generating，并让该集旧导出失效
         segment.videoUrl = null
         segment.status = 'generating'
+        ;(segment as ShortDramaSegmentVideoState).videoBatchId = batchId
+        ;(segment as ShortDramaSegmentVideoState).videoTaskId = taskId
         invalidateShortDramaEpisodeExports(state, episodeNumber)
         await db
           .updateTable('short_drama_projects')

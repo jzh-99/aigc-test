@@ -35,8 +35,11 @@ const route: FastifyPluginAsync = async (app) => {
         ])
         .where('is_deleted', '=', false)
         .where('is_hidden', '=', false)
+        .where('source', '=', 'generation')
         .where('canvas_id', 'is', null)
+        .where('canvas_node_id', 'is', null)
         .where('video_studio_project_id', 'is', null)
+        .where('picture_book_project_id', 'is', null)
         .where('short_drama_project_id', 'is', null)
         .where('module', 'not in', ['music', 'music_voice_clone'])
 
