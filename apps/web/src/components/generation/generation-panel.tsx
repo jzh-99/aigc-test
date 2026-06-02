@@ -139,19 +139,19 @@ const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
 const VIDEO_MODEL_OPTIONS = {
   multimodal: [
-    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '高级有声视频生成，支持多模态', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], isSeedance: true },
-    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '快速有声视频生成，支持多模态', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], isSeedance: true },
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '高级有声视频生成，支持多模态', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], creditsLabel: '5~25 积分/秒', isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '快速有声视频生成，支持多模态', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], creditsLabel: '4~8 积分/秒', isSeedance: true },
   ],
   frames: [
-    { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: VIDEO_FLAT_CREDITS['veo3.1-fast'], isSeedance: false },
-    { value: 'seedance-1.5-pro', label: 'Seedance 1.5 Pro', desc: '有声视频生成，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-1.5-pro'], isSeedance: true },
-    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], isSeedance: true },
-    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], isSeedance: true },
+    { value: 'veo3.1-fast', label: '全能视频3.1 Fast', desc: '快速高质量视频生成', credits: VIDEO_FLAT_CREDITS['veo3.1-fast'], creditsLabel: `${VIDEO_FLAT_CREDITS['veo3.1-fast']} 积分/次`, isSeedance: false },
+    { value: 'seedance-1.5-pro', label: 'Seedance 1.5 Pro', desc: '有声视频生成，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-1.5-pro'], creditsLabel: '5 积分/秒', isSeedance: true },
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], creditsLabel: '5~25 积分/秒', isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持首尾帧', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], creditsLabel: '4~8 积分/秒', isSeedance: true },
   ],
   components: [
-    { value: 'veo3.1-components', label: '全能视频3.1', desc: '基于参考图片生成视频', credits: VIDEO_FLAT_CREDITS['veo3.1-components'], isSeedance: false },
-    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持参考图', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], isSeedance: true },
-    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持参考图', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], isSeedance: true },
+    { value: 'veo3.1-components', label: '全能视频3.1', desc: '基于参考图片生成视频', credits: VIDEO_FLAT_CREDITS['veo3.1-components'], creditsLabel: `${VIDEO_FLAT_CREDITS['veo3.1-components']} 积分/次`, isSeedance: false },
+    { value: 'seedance-2.0', label: 'Seedance 2.0', desc: '新一代有声视频，支持参考图', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0'], creditsLabel: '5~25 积分/秒', isSeedance: true },
+    { value: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast', desc: '新一代快速视频，支持参考图', credits: VIDEO_PER_SECOND_CREDITS['seedance-2.0-fast'], creditsLabel: '4~8 积分/秒', isSeedance: true },
   ],
 }
 
@@ -2525,7 +2525,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
                               <div className="text-xs text-muted-foreground leading-snug">{m.desc}</div>
                               <div className="flex items-center gap-1 text-xs font-medium text-primary mt-0.5">
                                 <Coins className="h-3 w-3" />
-                                {m.isSeedance ? `${m.credits} 积分/秒` : `${m.credits} 积分/次`}
+                                {m.creditsLabel}
                               </div>
                             </div>
                           </div>
