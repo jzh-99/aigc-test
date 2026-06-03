@@ -43,6 +43,9 @@ export function SegmentList({
   const selectedSegment = segments[selectedIndex] ?? segments[0]
   const selectedSafeIndex = selectedSegment ? Math.max(0, segments.findIndex(segment => segment.id === selectedSegment.id)) : 0
   const previewFrameClass = aspectRatio === '16:9' ? 'h-[70px]' : 'h-[142px]'
+  const isVideoGenerating = (segment: ShortDramaSegment) =>
+    segment.status === 'pending' || segment.status === 'generating' || generatingSegmentId === segment.id
+  const isVideoFailed = (segment: ShortDramaSegment) => segment.status === 'failed' && !segment.videoUrl
 
   if (!selectedSegment) {
     return (
@@ -123,17 +126,19 @@ export function SegmentList({
 
         <div className="mt-4 flex items-center justify-between">
           <div className="text-xs text-muted-foreground">
-            {selectedSegment.status === 'pending' || selectedSegment.status === 'generating' ? (
-              <span className="inline-flex items-center gap-1 text-amber-600">
+            {isVideoGenerating(selectedSegment) ? (
+              <span className="inline-flex items-center gap-1 text-primary">
                 <Loader2 className="w-3 h-3 animate-spin" />生成中
               </span>
+            ) : isVideoFailed(selectedSegment) ? (
+              <span className="text-destructive">视频生成失败，请重试</span>
             ) : selectedSegment.videoUrl ? (
               '视频已生成'
             ) : (
               `视频时长预计 ${selectedSegment.durationSeconds}s`
             )}
           </div>
-          {selectedSegment.status !== 'pending' && selectedSegment.status !== 'generating' && !disabled && (
+          {!isVideoGenerating(selectedSegment) && !disabled && (
             <Button
               size="sm"
               variant={selectedSegment.videoUrl ? "outline" : "default"}
@@ -164,6 +169,7 @@ export function SegmentList({
         <div className="flex gap-3 overflow-x-auto pb-1">
           {segments.map((segment, index) => {
             const active = index === selectedSafeIndex
+            const generating = isVideoGenerating(segment)
             return (
               <button
                 key={segment.id}
@@ -182,6 +188,15 @@ export function SegmentList({
                       playsInline
                       preload="metadata"
                     />
+                  ) : generating ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-1 bg-primary/10 text-[11px] text-primary">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      生成中
+                    </div>
+                  ) : isVideoFailed(segment) ? (
+                    <div className="flex h-full items-center justify-center bg-destructive/10 text-[11px] text-destructive">
+                      生成失败
+                    </div>
                   ) : (
                     <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">
                       暂未生成

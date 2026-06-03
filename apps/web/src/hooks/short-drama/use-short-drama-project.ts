@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import useSWR from 'swr'
+import { toast } from 'sonner'
 import type { ShortDramaState } from '@aigc/types'
 import {
   getShortDramaProject,
@@ -30,6 +31,25 @@ function hasPendingWork(state: ShortDramaState): boolean {
   return hasPendingText || hasPendingAssets || hasPendingSegments || hasPendingExports
 }
 
+function notifyFailedSegmentTransitions(previous: ShortDramaState, next: ShortDramaState, notifiedKeys: Set<string>) {
+  for (const nextEpisode of next.episodes.items) {
+    const previousEpisode = previous.episodes.items.find(ep => ep.episodeNumber === nextEpisode.episodeNumber)
+    if (!previousEpisode) continue
+
+    for (const nextSegment of nextEpisode.segments) {
+      if (nextSegment.status !== 'failed') continue
+      const previousSegment = previousEpisode.segments.find(segment => segment.id === nextSegment.id)
+      if (!previousSegment || (previousSegment.status !== 'pending' && previousSegment.status !== 'generating')) continue
+
+      const key = `${nextEpisode.episodeNumber}:${nextSegment.id}:${nextSegment.videoTaskId ?? nextSegment.videoBatchId ?? ''}`
+      if (notifiedKeys.has(key)) continue
+
+      notifiedKeys.add(key)
+      toast.error(`第 ${nextEpisode.episodeNumber} 集「${nextSegment.title}」视频生成失败，请稍后重试`)
+    }
+  }
+}
+
 export function useShortDramaProject(projectId: string | null) {
   const { data, error, isLoading, mutate } = useSWR<ShortDramaProjectDetail>(
     projectId ? `/short-drama/projects/${projectId}` : null,
@@ -39,6 +59,7 @@ export function useShortDramaProject(projectId: string | null) {
 
   const state = data?.state ?? null
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const notifiedFailedSegmentKeysRef = useRef(new Set<string>())
 
   // 自动轮询：当有 pending/generating 状态时每 3s sync
   useEffect(() => {
@@ -49,6 +70,9 @@ export function useShortDramaProject(projectId: string | null) {
         pollRef.current = setInterval(async () => {
           try {
             const result = await syncShortDramaBatches(projectId)
+            if (state) {
+              notifyFailedSegmentTransitions(state, result.state, notifiedFailedSegmentKeysRef.current)
+            }
             mutate(current => current ? { ...current, state: result.state } : current, false)
           } catch {
             // 静默忽略 sync 错误

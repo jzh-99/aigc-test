@@ -34,6 +34,32 @@ export function EpisodeEditor({
   const [exporting, setExporting] = useState(false)
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(0)
 
+  const buildStateWithSegmentStatuses = useCallback((segmentIds: string[], status: ShortDramaSegment['status']) => {
+    const segmentIdSet = new Set(segmentIds)
+    const now = new Date().toISOString()
+    const nextEpisodes = state.episodes.items.map(ep => {
+      if (ep.episodeNumber !== episode.episodeNumber) return ep
+      return {
+        ...ep,
+        status: status === 'generating' || status === 'pending' ? 'generating' as const : ep.status,
+        updatedAt: now,
+        segments: ep.segments.map(segment =>
+          segmentIdSet.has(segment.id)
+            ? { ...segment, videoUrl: null, status }
+            : segment
+        ),
+      }
+    })
+    return {
+      ...state,
+      episodes: {
+        ...state.episodes,
+        status: status === 'generating' || status === 'pending' ? 'generating' as const : state.episodes.status,
+        items: nextEpisodes,
+      },
+    }
+  }, [episode.episodeNumber, state])
+
   useEffect(() => {
     if (selectedSegmentIndex >= episode.segments.length) {
       setSelectedSegmentIndex(Math.max(0, episode.segments.length - 1))
@@ -129,6 +155,7 @@ export function EpisodeEditor({
 
   const handleGenerateVideo = useCallback(async (segmentId: string) => {
     setGeneratingSegmentId(segmentId)
+    await Promise.resolve(onStateChange(buildStateWithSegmentStatuses([segmentId], 'generating')))
     try {
       const result = await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segmentId, {
         model: videoModel,
@@ -137,11 +164,12 @@ export function EpisodeEditor({
       await Promise.resolve(onStateChange(result.state))
       toast.success('视频生成已提交')
     } catch (err) {
+      await Promise.resolve(onStateChange(buildStateWithSegmentStatuses([segmentId], 'failed')))
       toast.error(err instanceof Error ? err.message : '生成失败')
     } finally {
       setGeneratingSegmentId(null)
     }
-  }, [projectId, episode.episodeNumber, videoModel, videoResolution, onStateChange])
+  }, [projectId, episode.episodeNumber, videoModel, videoResolution, buildStateWithSegmentStatuses, onStateChange])
 
   const handleBatchGenerateVideos = useCallback(async () => {
     const targets = episode.segments.filter(segment =>
@@ -156,23 +184,38 @@ export function EpisodeEditor({
     }
 
     setBatchGeneratingVideos(true)
+    await Promise.resolve(onStateChange(buildStateWithSegmentStatuses(targets.map(segment => segment.id), 'pending')))
+    let submittedCount = 0
+    const failedSegmentIds: string[] = []
     try {
       for (const segment of targets) {
         setGeneratingSegmentId(segment.id)
-        const result = await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segment.id, {
-          model: videoModel,
-          resolution: videoResolution,
-        })
-        await Promise.resolve(onStateChange(result.state))
+        try {
+          const result = await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segment.id, {
+            model: videoModel,
+            resolution: videoResolution,
+          })
+          submittedCount += 1
+          await Promise.resolve(onStateChange(result.state))
+        } catch {
+          failedSegmentIds.push(segment.id)
+        }
       }
-      toast.success(`已提交 ${targets.length} 个分镜视频生成`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '批量生成失败')
+
+      if (failedSegmentIds.length > 0) {
+        await Promise.resolve(onStateChange(buildStateWithSegmentStatuses(failedSegmentIds, 'failed')))
+      }
+      if (submittedCount > 0) {
+        toast.success(`已提交 ${submittedCount} 个分镜视频生成`)
+      }
+      if (failedSegmentIds.length > 0) {
+        toast.error(`${failedSegmentIds.length} 个分镜视频提交失败，请稍后重试`)
+      }
     } finally {
       setGeneratingSegmentId(null)
       setBatchGeneratingVideos(false)
     }
-  }, [projectId, episode.episodeNumber, episode.segments, videoModel, videoResolution, onStateChange])
+  }, [projectId, episode.episodeNumber, episode.segments, videoModel, videoResolution, buildStateWithSegmentStatuses, onStateChange])
 
   const handleExport = useCallback(async () => {
     setExporting(true)

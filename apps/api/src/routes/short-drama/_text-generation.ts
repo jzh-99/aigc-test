@@ -187,7 +187,7 @@ export async function callQwenForTextStream(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
-        Authorization: `Bearer ${DOUBAO_API_KEY}`,
+        Authorization: `Bearer ${QWEN_API_KEY}`,
       },
       body: JSON.stringify(requestPayload),
       signal: controller.signal,

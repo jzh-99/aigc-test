@@ -27,6 +27,7 @@ const logger = buildLogger()
 const pollErrorCounts = new Map<string, number>()
 let pollTick = 0
 const POLL_CONCURRENCY = 10
+const VIDEO_POLL_REQUEST_TIMEOUT_MS = 30_000
 
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
@@ -37,6 +38,13 @@ const VEO_STATUS_MAP: Record<string, VideoPollStatus> = {
   NOT_START: 'NOT_START',
   IN_PROGRESS: 'IN_PROGRESS',
 }
+
+function isAbortOrTimeoutMessage(message?: string | null): boolean {
+  if (!message) return false
+  const normalized = message.toLowerCase()
+  return normalized.includes('aborted') || normalized.includes('abort') || normalized.includes('timeout')
+}
+
 interface VideoTaskRow {
   taskId: string
   batchId: string
@@ -55,7 +63,7 @@ interface VideoTaskRow {
 
 async function checkVeoTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10_000)
+  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
   const endpoint = `/v2/videos/generations/${externalTaskId}`
   const startedAt = Date.now()
   try {
@@ -93,7 +101,7 @@ async function checkVeoTask(externalTaskId: string): Promise<VideoPollResult> {
 
 async function checkVolcengineTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10_000)
+  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
   const endpoint = `/contents/generations/tasks/${externalTaskId}`
   const startedAt = Date.now()
   try {
@@ -385,7 +393,7 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
     } else if (result.status === 'POLL_ERROR') {
       const count = (pollErrorCounts.get(task.taskId) ?? 0) + 1
       pollErrorCounts.set(task.taskId, count)
-      logger.warn({
+      const pollErrorLogPayload = {
         taskId: task.taskId,
         batchId: task.batchId,
         provider: task.provider,
@@ -395,11 +403,26 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
         httpStatus: result.httpStatus,
         retryable: result.retryable,
         errorMessage: result.errorMessage,
-      }, 'Video task poll error')
-      if (count >= MAX_CONSECUTIVE_VIDEO_POLL_ERRORS) {
+        durationMs: result.durationMs,
+      }
+      const isNoisyRetryableTimeout = result.retryable !== false && isAbortOrTimeoutMessage(result.errorMessage)
+      const shouldWarn = !isNoisyRetryableTimeout
+      if (shouldWarn) {
+        logger.warn(pollErrorLogPayload, 'Video task poll error')
+      } else {
+        logger.debug(pollErrorLogPayload, 'Video task poll retryable timeout')
+      }
+      if (count >= MAX_CONSECUTIVE_VIDEO_POLL_ERRORS && result.retryable === false) {
         logger.warn({ taskId: task.taskId, count }, 'Video task exceeded max poll errors, failing task')
         pollErrorCounts.delete(task.taskId)
         await handleVideoFailure(task, '生成过程中出现异常，请重新发起请求')
+      } else if (count === MAX_CONSECUTIVE_VIDEO_POLL_ERRORS || count % MAX_CONSECUTIVE_VIDEO_POLL_ERRORS === 0) {
+        logger.warn({
+          taskId: task.taskId,
+          batchId: task.batchId,
+          count,
+          errorMessage: result.errorMessage,
+        }, 'Video task poll errors reached threshold but remain retryable')
       }
     } else {
       // NOT_START, IN_PROGRESS: still in progress, reset error count

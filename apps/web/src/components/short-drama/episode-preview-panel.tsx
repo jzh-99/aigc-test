@@ -34,8 +34,14 @@ export function EpisodePreviewPanel({
   onSelectSegment,
 }: EpisodePreviewPanelProps) {
   const segments = episode.segments
+  const isVideoGenerating = (segment: ShortDramaEpisode['segments'][number]) =>
+    segment.status === 'pending' || segment.status === 'generating'
+  const isVideoFailed = (segment: ShortDramaEpisode['segments'][number]) => segment.status === 'failed' && !segment.videoUrl
   const completedSegments = segments.filter(s => !!s.videoUrl)
-  const pendingVideoCount = segments.filter(s => !s.videoUrl && s.status !== 'pending' && s.status !== 'generating').length
+  const pendingVideoCount = segments.filter(s => !s.videoUrl && !isVideoGenerating(s) && !isVideoFailed(s)).length
+  const generatingVideoCount = segments.filter(s => !s.videoUrl && isVideoGenerating(s)).length
+  const failedVideoCount = segments.filter(s => isVideoFailed(s)).length
+  const generatableVideoCount = pendingVideoCount + failedVideoCount
   const missingCount = segments.length - completedSegments.length
   const previewFrameClass = state.settings.aspectRatio === '16:9' ? 'aspect-video' : 'aspect-[9/16]'
   const completedCount = completedSegments.length
@@ -114,6 +120,16 @@ export function EpisodePreviewPanel({
                 controls
                 preload="metadata"
               />
+            ) : selectedSegment && isVideoGenerating(selectedSegment) ? (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-primary/10 px-4 text-center text-xs text-primary dark:bg-primary/15">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>视频生成中</span>
+              </div>
+            ) : selectedSegment && isVideoFailed(selectedSegment) ? (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-destructive/10 px-4 text-center text-xs text-destructive">
+                <Film className="h-5 w-5" />
+                <span>视频生成失败</span>
+              </div>
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center text-xs text-muted-foreground">
                 <Film className="h-5 w-5" />
@@ -146,13 +162,25 @@ export function EpisodePreviewPanel({
       </div>
 
       <div className="space-y-2 border-t pt-3">
-        {missingCount > 0 && (
-          <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            还有 {missingCount} 个片段未生成视频
+        {generatingVideoCount > 0 && (
+          <div className="rounded-lg bg-primary/10 px-3 py-2 text-xs text-primary dark:bg-primary/15">
+            {generatingVideoCount} 个片段视频生成中
           </div>
         )}
 
         {pendingVideoCount > 0 && (
+          <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            还有 {pendingVideoCount} 个片段未生成视频
+          </div>
+        )}
+
+        {failedVideoCount > 0 && (
+          <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {failedVideoCount} 个片段视频生成失败，可重新生成
+          </div>
+        )}
+
+        {generatableVideoCount > 0 && (
           <Button
             size="sm"
             variant="outline"
@@ -161,7 +189,7 @@ export function EpisodePreviewPanel({
             className="w-full"
           >
             {batchGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-            批量生成视频 ({pendingVideoCount})
+            批量生成视频 ({generatableVideoCount})
           </Button>
         )}
       </div>
