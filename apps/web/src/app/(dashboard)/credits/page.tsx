@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,31 +18,23 @@ export default function CreditsPage() {
   const user = useAuthStore((s) => s.user)
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
   const activeTeam = useAuthStore((s) => s.activeTeam())
-  const router = useRouter()
 
   const isOwner = activeTeam?.role === 'owner'
   const isOwnerOrAdmin = isOwner || activeTeam?.role === 'admin' || user?.role === 'admin'
   const allowMemberTopup = activeTeam?.allow_member_topup ?? false
-  const canAccess = !activeTeam || isOwnerOrAdmin || allowMemberTopup
 
   const [page, setPage] = useState(1)
   const [topupOpen, setTopupOpen] = useState(false)
 
   const { data: balanceData } = useSWR<CreditBalance>(
-    canAccess ? (activeTeamId ? `/payment/balance?team_id=${activeTeamId}` : '/payment/balance') : null
+    activeTeamId ? `/payment/balance?team_id=${activeTeamId}` : '/payment/balance'
   )
 
   const { data: ledgerData, isLoading: ledgerLoading } = useSWR<LedgerResponse>(
-    canAccess ? `/payment/ledger?account=personal&page=${page}&limit=20` : null
+    `/payment/ledger?account=personal&page=${page}&limit=20`
   )
 
   const totalPages = Math.ceil((ledgerData?.total ?? 0) / 20)
-
-  // editor without topup permission cannot access this page
-  if (!canAccess) {
-    router.replace('/dashboard')
-    return null
-  }
 
   const canTopup = allowMemberTopup || isOwnerOrAdmin
 
@@ -75,7 +66,7 @@ export default function CreditsPage() {
       {/* Personal balance */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">个人积分</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">个人A豆</CardTitle>
         </CardHeader>
         <CardContent className="flex items-end justify-between">
           <div className="flex items-center gap-2">
@@ -83,7 +74,7 @@ export default function CreditsPage() {
             <span className="text-2xl font-bold">{(balanceData?.personal_balance ?? 0).toLocaleString()}</span>
           </div>
           {canTopup && (
-            <Button size="sm" onClick={() => setTopupOpen(true)}>充值个人积分</Button>
+            <Button size="sm" onClick={() => setTopupOpen(true)}>充值个人A豆</Button>
           )}
         </CardContent>
       </Card>
