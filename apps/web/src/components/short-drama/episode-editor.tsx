@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import type { ShortDramaState, ShortDramaEpisode, ShortDramaSegment } from '@aigc/types'
 import { SegmentList } from './segment-list'
@@ -33,6 +33,17 @@ export function EpisodeEditor({
   const [batchGeneratingVideos, setBatchGeneratingVideos] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(0)
+
+  // 收集当前集所有分镜中引用的素材 ID，用于"本集"过滤
+  const episodeMentionedAssetIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const segment of episode.segments) {
+      for (const ref of segment.mentionRefs) {
+        ids.add(ref.assetId)
+      }
+    }
+    return ids
+  }, [episode.segments])
 
   const buildStateWithSegmentStatuses = useCallback((segmentIds: string[], status: ShortDramaSegment['status']) => {
     const segmentIdSet = new Set(segmentIds)
@@ -233,7 +244,13 @@ export function EpisodeEditor({
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 lg:col-span-3">
-        <AssetLibraryPanel assets={state.assets.items} episodeNumber={episode.episodeNumber} />
+        <AssetLibraryPanel
+          assets={state.assets.items}
+          episodeNumber={episode.episodeNumber}
+          projectId={projectId}
+          episodeMentionedAssetIds={episodeMentionedAssetIds}
+          onStateChange={() => onStateChange()}
+        />
       </div>
 
       <div className="col-span-12 lg:col-span-6">

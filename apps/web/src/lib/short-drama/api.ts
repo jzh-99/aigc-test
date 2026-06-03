@@ -295,6 +295,21 @@ export function uploadShortDramaAsset(
   })
 }
 
+/**
+ * 上传本地图片文件到短剧素材存储，返回 storageKey
+ */
+export function uploadShortDramaImage(
+  projectId: string,
+  file: File,
+): Promise<{ url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return fetchWithAuth(`/short-drama/projects/${projectId}/assets/upload-image`, {
+    method: 'POST',
+    body: formData,
+  })
+}
+
 export function generateShortDramaEpisodeSegments(
   projectId: string,
   episodeNumber: number,
