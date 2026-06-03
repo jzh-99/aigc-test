@@ -14,7 +14,7 @@ export const SHORT_DRAMA_DEFAULT_DURATION_SECONDS = 4
 
 export const SHORT_DRAMA_SHOT_DURATION_SECONDS = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const
 
-export const SHORT_DRAMA_TEXT_MODEL = 'qwen3.6-plus'
+export const SHORT_DRAMA_TEXT_MODEL = 'qwen3.7-max'
 
 export const SHORT_DRAMA_IMAGE_MODEL = 'seedream-5.0-lite'
 
