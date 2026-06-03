@@ -109,6 +109,7 @@ export default async function postUploadAsset(app: FastifyInstance): Promise<voi
           kind: kind ?? 'character',
           scope,
           name: name ?? '未命名素材',
+          aliases: [],
           description: description ?? '',
           imageUrl: finalImageUrl,
           referenceImageUrl: null,

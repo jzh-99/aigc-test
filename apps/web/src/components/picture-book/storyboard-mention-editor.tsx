@@ -12,6 +12,7 @@ export interface StoryboardMentionResource {
   id: string
   kind: 'character' | 'background'
   name: string
+  aliases?: string[]
   imageUrl?: string | null
 }
 
@@ -40,13 +41,26 @@ function getResourceColor(resource: StoryboardMentionResource): string {
   return resource.kind === 'character' ? CHARACTER_TOKEN_CLASS : BACKGROUND_TOKEN_CLASS
 }
 
+function getResourceMentionAliases(resource: StoryboardMentionResource): string[] {
+  return Array.from(new Set([
+    resource.name,
+    resource.name.replace(/（[^）]+）/g, '').trim(),
+    resource.name.replace(/\([^)]*\)/g, '').trim(),
+    ...(resource.aliases ?? []),
+    ...(resource.aliases ?? []).map(alias => alias.replace(/（[^）]+）/g, '').replace(/\([^)]*\)/g, '').trim()),
+  ].filter(Boolean)))
+}
+
 function parseSegments(value: string, resources: StoryboardMentionResource[]): Segment[] {
   if (!value) return []
   if (resources.length === 0) return [{ type: 'text', text: value }]
 
   const sortedResources = [...resources].sort((a, b) => b.name.length - a.name.length)
-  const resourceByMention = new Map(sortedResources.map((resource) => [`@${resource.name}`, resource]))
-  const pattern = new RegExp(`@(${sortedResources.map((resource) => escapeRegExp(resource.name)).join('|')})`, 'g')
+  const mentionPairs = sortedResources.flatMap(resource =>
+    getResourceMentionAliases(resource).map(alias => ({ alias, resource }))
+  ).sort((a, b) => b.alias.length - a.alias.length)
+  const resourceByMention = new Map(mentionPairs.map(({ alias, resource }) => [`@${alias}`, resource]))
+  const pattern = new RegExp(`@(${mentionPairs.map(({ alias }) => escapeRegExp(alias)).join('|')})`, 'g')
   const segments: Segment[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null

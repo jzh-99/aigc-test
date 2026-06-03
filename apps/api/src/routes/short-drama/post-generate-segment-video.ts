@@ -1,7 +1,12 @@
 import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
-import { SHORT_DRAMA_VIDEO_MODEL, parseCategoryReferences } from '@aigc/types'
+import {
+  SHORT_DRAMA_VIDEO_MODEL,
+  findShortDramaMentionedAssets,
+  getShortDramaAssetMentionAliases,
+  parseCategoryReferences,
+} from '@aigc/types'
 import type { ShortDramaAsset, ShortDramaAspectRatio, ShortDramaSegment } from '@aigc/types'
 import { freezeCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
@@ -26,7 +31,7 @@ type ShortDramaSegmentVideoState = ShortDramaSegment & {
 
 const SEEDANCE_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
 const SEEDANCE_2_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-const NEGATIVE_VIDEO_PROMPT = '画面模糊、人物畸形、光影杂乱、卡通画风、画质糊边、多余杂物、画面卡顿、镜头跳切突兀、人物身份混乱、参考形象不一致'
+const NEGATIVE_VIDEO_PROMPT = '画面模糊、人物畸形、光影杂乱、卡通画风、画质糊边、多余杂物、画面卡顿、镜头跳切突兀、人物身份混乱、参考形象不一致、手持道具朝向跳变、关键道具接触点无因果变化'
 
 interface PromptReferenceAsset {
   asset: ShortDramaAsset
@@ -74,12 +79,20 @@ function buildPromptReferences(
   assets: ShortDramaAsset[],
   toPublicUrl: (url: string) => string,
 ): PromptReferenceAsset[] {
-  const names = new Set<string>()
+  const referencedAssetIds = new Set<string>()
   for (const ref of segment.mentionRefs) {
-    names.add(ref.assetName)
+    referencedAssetIds.add(ref.assetId)
   }
 
-  const mentionedAssets = assets.filter(asset => names.has(asset.name) && asset.imageUrl)
+  for (const asset of assets) {
+    if (!asset.imageUrl || referencedAssetIds.has(asset.id)) continue
+
+    if (findShortDramaMentionedAssets(segment.prompt, [asset]).length > 0) {
+      referencedAssetIds.add(asset.id)
+    }
+  }
+
+  const mentionedAssets = assets.filter(asset => referencedAssetIds.has(asset.id) && asset.imageUrl)
   const sceneAssets = mentionedAssets.filter(asset => asset.kind === 'scene')
   const otherAssets = mentionedAssets.filter(asset => asset.kind !== 'scene')
   return [...sceneAssets, ...otherAssets].map((asset, index) => ({
@@ -91,21 +104,32 @@ function buildPromptReferences(
 
 function attachReferenceLabels(text: string, references: PromptReferenceAsset[]): string {
   let output = text
-  const sortedReferences = [...references].sort((a, b) => b.asset.name.length - a.asset.name.length)
+  const sortedReferences = [...references].sort((a, b) => {
+    const maxAliasLength = (asset: ShortDramaAsset) => Math.max(
+      ...getShortDramaAssetMentionAliases(asset).map(alias => alias.length),
+    )
+    return maxAliasLength(b.asset) - maxAliasLength(a.asset)
+  })
   for (const reference of sortedReferences) {
-    const escapedName = reference.asset.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const pattern = new RegExp(`@${escapedName}(?!（参考<图\\d+>）)`, 'g')
+    const aliases = getShortDramaAssetMentionAliases(reference.asset)
+    const escapedNames = aliases.map(alias => alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    const pattern = new RegExp(`@(${escapedNames.join('|')})(?!（参考<图\\d+>）)`, 'gu')
     output = output.replace(pattern, `@${reference.asset.name}（参考<图${reference.figureIndex}>）`)
   }
   return output
 }
 
-function buildFinalVideoPrompt(input: {
+export function buildShortDramaFinalVideoPrompt(input: {
   segment: ShortDramaSegment
+  assets: ShortDramaAsset[]
+  toPublicUrl?: (url: string) => string
   references: PromptReferenceAsset[]
   aspectRatio: ShortDramaAspectRatio
 }): string {
-  const { segment, references, aspectRatio } = input
+  const { segment, aspectRatio } = input
+  const references = input.references.length > 0
+    ? input.references
+    : buildPromptReferences(segment, input.assets, input.toPublicUrl ?? ((url) => url))
   const shots = parseSegmentShots(segment.prompt)
   const sceneSetting = extractSceneSetting(segment.prompt)
   const shotCountText = shots.length > 0 ? `${shots.length} 段镜头依次连贯播放` : '多段镜头依次连贯播放'
@@ -116,6 +140,7 @@ function buildFinalVideoPrompt(input: {
     `写实现代都市短片，${attachReferenceLabels(settingText, references)}`,
     '真人影视剧画质，4K 高清，电影运镜，画面流畅自然',
     '细腻人物面部微表情，真实肢体动作，环境光影统一，镜头衔接自然',
+    '严格继承上一镜末尾的人物站位、身体朝向、视线方向、手持道具、道具朝向和接触点；除非镜头文字明确写出移动、转向、放下或移开的动作过程，否则不得改变',
     `画面比例 ${aspectRatio}，${shotCountText}，总时长 ${totalDuration}s`,
   ].join('，')
 
@@ -139,6 +164,7 @@ function buildFinalVideoPrompt(input: {
     basePrompt,
     '',
     `分段时序提示（按镜头时间拆分，对应 ${timelineLines.length} 个分镜）`,
+    '每个分镜都从上一分镜的动作落点继续，重点保持手部动作、手持物、道具朝向、接触身体/桌面的位置和环境状态一致。',
     ...timelineLines,
     '',
     '负面提示词（规避劣质画面）',
@@ -247,8 +273,9 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
       // 解析 mentionRefs → 图片 URL，并按 <图N> 注入最终视频提示词
       const promptReferences = buildPromptReferences(segment, state.assets.items, toPublicUrl)
       const imageReferences = promptReferences.map(reference => reference.imageUrl)
-      const finalVideoPrompt = buildFinalVideoPrompt({
+      const finalVideoPrompt = buildShortDramaFinalVideoPrompt({
         segment,
+        assets: state.assets.items,
         references: promptReferences,
         aspectRatio: state.settings.aspectRatio,
       })
@@ -413,6 +440,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         batchId,
         taskId,
         estimatedCredits: totalCost,
+        state,
       })
     }
   )

@@ -19,7 +19,6 @@ export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelPr
   const characterCount = allAssets.filter(asset => asset.kind === 'character').length
   const sceneCount = allAssets.filter(asset => asset.kind === 'scene').length
   const previewAsset = previewAssetId ? allAssets.find(asset => asset.id === previewAssetId) : null
-  const imageFrameClass = activeKind === 'character' ? 'aspect-[9/16]' : 'aspect-video'
   const imageFitClass = activeKind === 'character' ? 'object-contain' : 'object-cover'
 
   return (
@@ -48,17 +47,23 @@ export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelPr
       {allAssets.length === 0 ? (
         <p className="text-xs text-muted-foreground">暂无素材</p>
       ) : (
-        <div className="grid max-h-[calc(100vh-18rem)] grid-cols-2 gap-2 overflow-y-auto pr-1">
+        <div className={`grid max-h-[calc(100vh-18rem)] gap-2 overflow-y-auto pr-1 ${
+          activeKind === 'scene' ? 'grid-cols-1' : 'grid-cols-2'
+        }`}>
           {filteredAssets.map(asset => (
             <button
               key={asset.id}
               type="button"
               onClick={() => asset.imageUrl && setPreviewAssetId(asset.id)}
               disabled={!asset.imageUrl}
-              className="overflow-hidden rounded-xl border bg-background/60 text-left shadow-sm transition-colors hover:border-primary/30 disabled:cursor-default disabled:hover:border-border"
+              className={`flex h-full flex-col overflow-hidden rounded-xl border bg-background/60 text-left shadow-sm transition-colors hover:border-primary/30 disabled:cursor-default disabled:hover:border-border ${
+                activeKind === 'scene' ? 'min-h-[164px]' : 'min-h-[196px]'
+              }`}
               aria-label={asset.imageUrl ? `放大查看${asset.name}` : asset.name}
             >
-              <div className={`group relative block w-full overflow-hidden bg-muted/40 text-left dark:bg-slate-900/70 ${imageFrameClass}`}>
+              <div className={`group relative block w-full shrink-0 overflow-hidden bg-muted/40 text-left dark:bg-slate-900/70 ${
+                activeKind === 'scene' ? 'aspect-video h-auto' : 'h-36'
+              }`}>
                 <span className={`absolute left-1.5 top-1.5 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm ${
                   asset.imageUrl
                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200'
@@ -77,8 +82,8 @@ export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelPr
                   </span>
                 )}
               </div>
-              <div className="space-y-1.5 p-2">
-                <div className="text-xs font-semibold leading-4 text-foreground">{asset.name}</div>
+              <div className="flex h-12 shrink-0 items-start p-2">
+                <div className="line-clamp-2 text-xs font-semibold leading-4 text-foreground">{asset.name}</div>
               </div>
             </button>
           ))}

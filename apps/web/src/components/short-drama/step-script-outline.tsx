@@ -17,9 +17,23 @@ interface StepScriptOutlineProps {
   onStateChange: () => void
 }
 
-const SUMMARY_HEADINGS = ['集数', '故事类型', '目标受众', '核心梗', '一句话故事', '人物小传', '故事梗概'] as const
+const SUMMARY_HEADINGS = [
+  '集数',
+  '故事类型',
+  '目标受众',
+  '核心梗',
+  '一句话故事',
+  '人物小传',
+  '故事梗概',
+  '导演阐述',
+  '影像风格',
+  '妆造方向',
+  '核心场景与布景',
+  '灯光气质',
+] as const
 
 type SummaryHeading = (typeof SUMMARY_HEADINGS)[number]
+type SummaryDraft = Record<SummaryHeading, string>
 
 function useTypewriterText(targetText: string, active: boolean, speedMs = 12): string {
   const [displayText, setDisplayText] = useState('')
@@ -84,6 +98,29 @@ function parseScriptSummary(value: string): Partial<Record<SummaryHeading, strin
   return Object.fromEntries(
     Object.entries(sections).map(([key, sectionLines]) => [key, sectionLines.join('\n')])
   ) as Partial<Record<SummaryHeading, string>>
+}
+
+function createSummaryDraft(value: string, episodeCount: number): SummaryDraft {
+  const sections = parseScriptSummary(value)
+  const hasStructuredContent = SUMMARY_HEADINGS.some(heading => sections[heading])
+
+  return SUMMARY_HEADINGS.reduce((draft, heading) => {
+    draft[heading] = heading === '集数'
+      ? (sections[heading] || String(episodeCount))
+      : (!hasStructuredContent && heading === '故事梗概' ? value.trim() : sections[heading] || '')
+    return draft
+  }, {} as SummaryDraft)
+}
+
+function buildScriptSummary(draft: SummaryDraft): string {
+  return SUMMARY_HEADINGS
+    .map((heading) => {
+      const value = draft[heading].trim()
+      if (!value && heading !== '集数') return ''
+      return `${heading}\n${value}`
+    })
+    .filter(Boolean)
+    .join('\n')
 }
 
 function parseCharacterBios(value: string): Array<{ name: string; body: string }> {
@@ -173,7 +210,47 @@ function ScriptSummaryView({ value }: { value: string }) {
       )}
 
       <SummaryTextBlock title="故事梗概">{sections.故事梗概}</SummaryTextBlock>
+      <SummaryTextBlock title="导演阐述">{sections.导演阐述}</SummaryTextBlock>
+      <SummaryTextBlock title="影像风格">{sections.影像风格}</SummaryTextBlock>
+      <SummaryTextBlock title="妆造方向">{sections.妆造方向}</SummaryTextBlock>
+      <SummaryTextBlock title="核心场景与布景">{sections.核心场景与布景}</SummaryTextBlock>
+      <SummaryTextBlock title="灯光气质">{sections.灯光气质}</SummaryTextBlock>
     </div>
+  )
+}
+
+function SummaryField({
+  label,
+  value,
+  onChange,
+  multiline = false,
+  readOnly = false,
+}: {
+  label: SummaryHeading
+  value: string
+  onChange: (value: string) => void
+  multiline?: boolean
+  readOnly?: boolean
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          readOnly={readOnly}
+          className="min-h-[112px] w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 read-only:bg-muted/40"
+        />
+      ) : (
+        <input
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          readOnly={readOnly}
+          className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 read-only:bg-muted/40"
+        />
+      )}
+    </label>
   )
 }
 
@@ -186,7 +263,9 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   const [outlineProgressMessage, setOutlineProgressMessage] = useState('')
   const [streamWarningMessage, setStreamWarningMessage] = useState('')
   const [editingSummary, setEditingSummary] = useState(false)
-  const [summaryDraft, setSummaryDraft] = useState(state.script.refinedPrompt ?? '')
+  const [summaryDraft, setSummaryDraft] = useState<SummaryDraft>(() =>
+    createSummaryDraft(state.script.refinedPrompt ?? '', state.settings.episodeCount)
+  )
   const [savingSummary, setSavingSummary] = useState(false)
   const typedSummaryStreamText = useTypewriterText(summaryStreamText, generatingSummary)
   const typedOutlineStreamText = useTypewriterText(outlineStreamText, generatingOutlines)
@@ -246,12 +325,12 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   }
 
   const handleEditSummary = () => {
-    setSummaryDraft(state.script.refinedPrompt ?? '')
+    setSummaryDraft(createSummaryDraft(state.script.refinedPrompt ?? '', state.settings.episodeCount))
     setEditingSummary(true)
   }
 
   const handleSaveSummary = async () => {
-    const nextSummary = summaryDraft.trim()
+    const nextSummary = buildScriptSummary(summaryDraft)
     if (!nextSummary) {
       toast.error('摘要不能为空')
       return
@@ -325,12 +404,80 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
         </div>
         {editingSummary ? (
           <div className="space-y-3 rounded-2xl border bg-white/80 p-4 shadow-sm">
-            <textarea
-              value={summaryDraft}
-              onChange={event => setSummaryDraft(event.target.value)}
-              className="min-h-[360px] w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
-              placeholder="按结构编辑剧本摘要..."
+            <div className="grid gap-3 md:grid-cols-3">
+              <SummaryField
+                label="集数"
+                value={summaryDraft.集数}
+                onChange={value => setSummaryDraft(current => ({ ...current, 集数: value }))}
+                readOnly
+              />
+              <SummaryField
+                label="故事类型"
+                value={summaryDraft.故事类型}
+                onChange={value => setSummaryDraft(current => ({ ...current, 故事类型: value }))}
+              />
+              <SummaryField
+                label="目标受众"
+                value={summaryDraft.目标受众}
+                onChange={value => setSummaryDraft(current => ({ ...current, 目标受众: value }))}
+              />
+            </div>
+            <SummaryField
+              label="核心梗"
+              value={summaryDraft.核心梗}
+              onChange={value => setSummaryDraft(current => ({ ...current, 核心梗: value }))}
+              multiline
             />
+            <SummaryField
+              label="一句话故事"
+              value={summaryDraft.一句话故事}
+              onChange={value => setSummaryDraft(current => ({ ...current, 一句话故事: value }))}
+              multiline
+            />
+            <SummaryField
+              label="人物小传"
+              value={summaryDraft.人物小传}
+              onChange={value => setSummaryDraft(current => ({ ...current, 人物小传: value }))}
+              multiline
+            />
+            <SummaryField
+              label="故事梗概"
+              value={summaryDraft.故事梗概}
+              onChange={value => setSummaryDraft(current => ({ ...current, 故事梗概: value }))}
+              multiline
+            />
+            <div className="space-y-3">
+              <SummaryField
+                label="导演阐述"
+                value={summaryDraft.导演阐述}
+                onChange={value => setSummaryDraft(current => ({ ...current, 导演阐述: value }))}
+                multiline
+              />
+              <SummaryField
+                label="影像风格"
+                value={summaryDraft.影像风格}
+                onChange={value => setSummaryDraft(current => ({ ...current, 影像风格: value }))}
+                multiline
+              />
+              <SummaryField
+                label="妆造方向"
+                value={summaryDraft.妆造方向}
+                onChange={value => setSummaryDraft(current => ({ ...current, 妆造方向: value }))}
+                multiline
+              />
+              <SummaryField
+                label="核心场景与布景"
+                value={summaryDraft.核心场景与布景}
+                onChange={value => setSummaryDraft(current => ({ ...current, 核心场景与布景: value }))}
+                multiline
+              />
+              <SummaryField
+                label="灯光气质"
+                value={summaryDraft.灯光气质}
+                onChange={value => setSummaryDraft(current => ({ ...current, 灯光气质: value }))}
+                multiline
+              />
+            </div>
             <div className="flex justify-end gap-2">
               <Button
                 size="sm"
@@ -369,10 +516,10 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
             <Button size="sm" variant="outline" onClick={handleGenerateOutlines} disabled={isOutlinesGenerating}>
               {isOutlinesGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
               {isOutlinesGenerating
-                ? '大纲生成中'
+                ? '剧本生成中'
                 : state.script.outlines.length > 0 && state.script.outlines.length < state.settings.episodeCount
-                ? '继续生成大纲'
-                : '生成大纲'}
+                ? '继续生成剧本'
+                : '生成分集剧本'}
             </Button>
           )}
         </div>

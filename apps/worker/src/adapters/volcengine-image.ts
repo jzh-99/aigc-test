@@ -1,5 +1,4 @@
 import type { ImageGenerationAdapter, AdapterGenerateResult } from './base.js'
-import sharp from 'sharp'
 
 const VOLCENGINE_API_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
@@ -18,6 +17,17 @@ const VOLCENGINE_FORMAT_MIME: Record<string, string> = {
   bmp: 'image/bmp',
   tiff: 'image/tiff',
   gif: 'image/gif',
+}
+
+type Sharp = typeof import('sharp')
+let sharpLoader: Promise<Sharp> | null = null
+
+function loadSharp(): Promise<Sharp> {
+  sharpLoader ??= import('sharp').then((mod) => {
+    const sharpModule = mod as unknown as { default?: Sharp } & Sharp
+    return sharpModule.default ?? sharpModule
+  })
+  return sharpLoader
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +108,7 @@ async function fetchImageBuffer(urlOrDataUri: string, index: number): Promise<{ 
   let mimeType = ct.split(';')[0].trim()
 
   if (!mimeType || mimeType === 'application/octet-stream' || mimeType === 'binary/octet-stream') {
+    const sharp = await loadSharp()
     const format = (await sharp(buffer).metadata()).format
     mimeType = format ? (VOLCENGINE_FORMAT_MIME[format] ?? `image/${format}`) : 'image/jpeg'
   }
@@ -120,6 +131,7 @@ async function prepareVolcengineImage(urlOrDataUri: string, index: number): Prom
   }
 
   // Check pixel count and size — resize/recompress if needed
+  const sharp = await loadSharp()
   const meta = await sharp(buffer).metadata()
   const w = meta.width ?? 0
   const h = meta.height ?? 0

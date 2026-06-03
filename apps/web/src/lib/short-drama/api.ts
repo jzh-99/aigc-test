@@ -311,7 +311,7 @@ export function generateShortDramaSegmentVideo(
   episodeNumber: number,
   segmentId: string,
   input: GenerateShortDramaSegmentVideoInput
-): Promise<{ success: boolean; batchId: string; taskId: string }> {
+): Promise<{ success: boolean; batchId: string; taskId: string; state: ShortDramaState }> {
   return fetchWithAuth(
     `/short-drama/projects/${projectId}/episodes/${episodeNumber}/segments/${segmentId}/generate-video`,
     {

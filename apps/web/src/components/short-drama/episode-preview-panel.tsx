@@ -121,7 +121,7 @@ export function EpisodePreviewPanel({
               </div>
             )}
           </div>
-          <div className="space-y-1 px-3 py-2">
+          <div className="flex h-14 items-start px-3 py-2">
             <div className="line-clamp-2 text-xs font-medium leading-5 text-foreground">
               {selectedSegment?.title ?? '暂无片段'}
             </div>

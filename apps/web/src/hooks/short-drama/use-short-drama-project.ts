@@ -48,8 +48,8 @@ export function useShortDramaProject(projectId: string | null) {
       if (!pollRef.current) {
         pollRef.current = setInterval(async () => {
           try {
-            await syncShortDramaBatches(projectId)
-            mutate()
+            const result = await syncShortDramaBatches(projectId)
+            mutate(current => current ? { ...current, state: result.state } : current, false)
           } catch {
             // 静默忽略 sync 错误
           }
@@ -93,9 +93,7 @@ export function useShortDramaProject(projectId: string | null) {
   const syncBatches = useCallback(async () => {
     if (!projectId) return null
     const result = await syncShortDramaBatches(projectId)
-    if (result.synced > 0) {
-      mutate()
-    }
+    mutate(current => current ? { ...current, state: result.state } : current, false)
     return result
   }, [projectId, mutate])
 

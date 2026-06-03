@@ -57,6 +57,7 @@ export interface ShortDramaAsset {
   kind: ShortDramaAssetKind
   scope: ShortDramaAssetScope
   name: string
+  aliases?: string[]
   description: string
   imageUrl: string | null
   referenceImageUrl: string | null
@@ -95,6 +96,7 @@ export interface ShortDramaEpisode {
   summary: string
   segments: ShortDramaSegment[]
   status: ShortDramaEpisodeStatus
+  errorMessage?: string | null
   videoUrl: string | null
   createdAt: string
   updatedAt: string
@@ -177,12 +179,96 @@ export function isShortDramaDurationSeconds(value: number, allowed: number[]): b
 // ============================================================================
 
 const SHORT_DRAMA_SHOT_DURATION_PATTERN = /分镜\s*(\d+)(?:\s*[·.\-:：]\s*|\s+)(10|[2-9])\s*s\b/gi
+const SHORT_DRAMA_MENTION_BOUNDARY_PATTERN = '(?=$|[\\s\\n\\r\\t，,。.;；:：、（(）)】\\]》>])'
 
 type DeepPartial<T> = T extends object
   ? {
       [P in keyof T]?: DeepPartial<T[P]>
     }
   : T
+
+function escapeShortDramaRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function splitShortDramaAliasText(value: string): string[] {
+  return value
+    .split(/[,\n，、;；/|]+/)
+    .map(part => part.trim())
+    .filter(Boolean)
+}
+
+export function normalizeShortDramaMentionAlias(value: string): string {
+  return value
+    .replace(/^@+/, '')
+    .replace(/（参考<图\d+>）/g, '')
+    .replace(/[\s\n\r\t]/g, '')
+    .replace(/[，,。.;；:：、"'“”‘’[\]【】<>《》]/g, '')
+    .toLowerCase()
+}
+
+export function stripShortDramaAssetStageSuffix(value: string): string {
+  return value
+    .replace(/（[^）]+）/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .trim()
+}
+
+export function getShortDramaAssetMentionAliases(
+  asset: Pick<ShortDramaAsset, 'name' | 'aliases'>
+): string[] {
+  const rawAliases = [
+    asset.name,
+    stripShortDramaAssetStageSuffix(asset.name),
+    ...(asset.aliases ?? []),
+    ...(asset.aliases ?? []).map(alias => stripShortDramaAssetStageSuffix(alias)),
+  ].flatMap(splitShortDramaAliasText)
+
+  const seen = new Set<string>()
+  const aliases: string[] = []
+  for (const alias of rawAliases) {
+    const key = normalizeShortDramaMentionAlias(alias)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    aliases.push(alias)
+  }
+
+  return aliases.sort((a, b) => b.length - a.length)
+}
+
+export function isShortDramaAssetMentioned(
+  prompt: string,
+  asset: Pick<ShortDramaAsset, 'name' | 'aliases'>
+): boolean {
+  return getShortDramaAssetMentionAliases(asset).some((alias) => {
+    const pattern = new RegExp(`@${escapeShortDramaRegExp(alias)}${SHORT_DRAMA_MENTION_BOUNDARY_PATTERN}`, 'u')
+    return pattern.test(prompt)
+  })
+}
+
+export function resolveShortDramaAssetByMention<T extends Pick<ShortDramaAsset, 'name' | 'aliases'>>(
+  mentionName: string,
+  assets: T[]
+): T | null {
+  const normalizedMention = normalizeShortDramaMentionAlias(mentionName)
+  if (!normalizedMention) return null
+
+  for (const asset of assets) {
+    const matched = getShortDramaAssetMentionAliases(asset).some(
+      alias => normalizeShortDramaMentionAlias(alias) === normalizedMention
+    )
+    if (matched) return asset
+  }
+
+  return null
+}
+
+export function findShortDramaMentionedAssets<T extends Pick<ShortDramaAsset, 'id' | 'name' | 'aliases'>>(
+  prompt: string,
+  assets: T[]
+): T[] {
+  return assets.filter(asset => isShortDramaAssetMentioned(prompt, asset))
+}
 
 export function isShortDramaShotDurationSeconds(value: number): boolean {
   return (SHORT_DRAMA_SHOT_DURATION_SECONDS as readonly number[]).includes(value)

@@ -137,7 +137,13 @@ export default function EpisodeEditorPage() {
         state={state}
         videoModel={videoModel}
         videoResolution={videoResolution}
-        onStateChange={() => mutate()}
+        onStateChange={(nextState) => {
+          if (nextState) {
+            mutate(current => current ? { ...current, state: nextState } : current, false)
+            return
+          }
+          return mutate()
+        }}
       />
       </div>
     </div>

@@ -3,10 +3,14 @@ import { randomUUID } from 'node:crypto'
 import {
   calculateShortDramaSegmentDuration,
   extractShortDramaShotDurations,
+  findShortDramaMentionedAssets,
+  getShortDramaAssetMentionAliases,
+  resolveShortDramaAssetByMention,
 } from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
   callDoubaoForTextStream,
+  saveShortDramaProjectState,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
@@ -105,29 +109,85 @@ const route: FastifyPluginAsync = async (app) => {
     const allAssets = [...globalAssets, ...episodeAssets]
 
     const assetsText = allAssets
-      .map((a) => `- ${a.kind}：@${a.name}（${a.description}）`)
+      .map((a) => {
+        const aliases = getShortDramaAssetMentionAliases(a)
+          .filter(alias => alias !== a.name)
+        const aliasText = aliases.length > 0 ? `；可用别名：${aliases.join('、')}` : ''
+        return `- ${a.kind}：@${a.name}${aliasText}（${a.description}）`
+      })
       .join('\n')
 
     // 调用 AI 生成片段脚本（分镜写入 prompt 内）
     const REDACTED = [
-      '你是专业短剧分镜师。请根据剧本摘要、分集分场剧本和素材，为该集生成可直接提交视频模型的片段脚本。',
+      '你是专业短剧分镜师、导演和摄影指导。请根据剧本摘要、分集分场剧本和素材，为该集生成可直接提交视频模型的片段脚本。',
       '只输出 JSON 数组，每个元素包含 title、prompt、mentionNames、durationSeconds 字段，不要输出 markdown。',
       '片段是视频生成的最小单位；必须基于分集剧本中的场次拆分，优先做到一场对应一个片段，长场可以拆成多个连续片段。',
       '一集成片时长必须控制在 2 分钟左右：总时长目标 120 秒，可接受范围 110-130 秒。',
       '每集必须生成 10-12 个片段；每个片段 10-12 秒，通过增加动作承接、表情反应、环境压迫、对白停顿和钩子镜头来扩充分段。',
       '不要脱离分集剧本另写新剧情；片段顺序、场景、人物、动作、对白重点必须来自分集剧本。',
+      '必须延续项目选择的视觉风格，并把该风格落实到摄影、灯光、布景、妆造、色彩和表演质感中。',
       '每个片段 prompt 必须包含：第一段“本片段场景设定在：...”，后续 2-5 个“分镜N · Xs：...”描述。',
-      '每个片段优先写 3 个分镜，按“近景/中景/特写/平视/跟拍/推镜”等镜头语言组织，形成连续动作，不要堆砌抽象概括。',
+      '每个片段优先写 3 个分镜，按“近景/中景/特写/平视/跟拍/推镜/手持/低角度/过肩镜头”等镜头语言组织，形成连续动作，不要堆砌抽象概括。',
       '每个分镜要把分场剧本里的动作、对白、OS/VO 或字幕转写成可拍摄画面；不要只写概述。',
       '每个分镜必须写清楚景别、主体动作、面部微表情、场景背景和情绪变化；如有对白，改写成“人物正在说话/低声说话/声音压抑”等画面描述。',
+      '每个分镜必须补足专业视听信息：摄影构图或机位、灯光方向与冷暖、布景/道具细节、妆造状态、演员表演节奏，必要时写清声音或字幕。',
+      '每个分镜必须加入动作指导视角：写清演员动作起点、动作过程、动作落点和身体重心变化，保证同一片段内人物位置、手部动作、视线方向、道具状态前后连续。',
+      '相邻分镜之间必须有动作承接，例如“上一镜她刚抬手握住门把，本镜继续拧动门把并侧身进门”，避免演员突然换位置、突然换姿势或情绪断档。',
+      '每个片段必须加入场记连续性视角：镜头切换或切回同一人物/同一空间时，人物站位、朝向、手持物、道具摆放、门窗开合、衣物褶皱、妆发伤痕和环境状态必须保持一致。',
+      '关键道具必须做连续性锁定：写清道具由哪只手持握、朝向哪里、贴住/离开哪里、动作结束时停在什么位置；如果上一镜没有明确放下、转向、移开，下一镜必须保持同一手持状态、同一朝向和同一接触点。',
+      '涉及枪械、刀具、文件、手机等强叙事道具时，禁止无因果跳变。若上一镜是枪口抵住自己下颌/太阳穴/胸口，下一镜只能延续枪口仍抵住同一部位或明确写出“他先缓慢移开枪口/转腕改变方向”的动作过程，不能突然变成对空、对他人或对无目标开枪。',
+      '如同一场景被拆成多个片段，后一个片段开头必须承接前一个片段结尾的人物位置、姿势、道具状态和情绪状态，不要让人或物凭空移动、消失或复原。',
+      '妆造和布景必须延续剧本摘要与分集剧本设定，不要凭空改变角色服装、发型、身份质感或场景时代背景。',
+      '灯光和摄影要服务剧情情绪，例如压迫感用低角度和强反差，暧昧/回忆用柔光和慢推，反转用特写和突然留白。',
       '每个分镜时长 X 必须为 2-10 秒；durationSeconds 必须等于本片段所有分镜时长之和。',
       '片段总时长必须为 10-12 秒，优先生成 10 秒以上的完整情绪推进，且必须能由 prompt 内所有分镜时长累加得到。',
-      '当画面出现某个角色或场景时，必须在 prompt 中直接写对应的 @素材名，例如 @祁同伟、@汉东政法大学校园。',
-      'mentionNames 必须填写本片段实际引用的素材名称，不带 @，且只能使用可用素材列表中的名称。',
+      '当画面出现某个角色或场景时，必须在 prompt 中直接写对应的 @素材名或可用别名，例如 @祁同伟、@祁同学、@汉东政法大学校园。',
+      'mentionNames 必须填写本片段实际引用的素材名称或可用别名，不带 @，且只能使用可用素材列表中的名称或别名。',
       '不要虚构素材名称；没有引用素材时 mentionNames 返回空数组。',
     ].join('\n')
 
-    const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n第${episodeNumber}集标题：${episode.title}\n\n第${episodeNumber}集分场剧本：\n${episode.summary}\n\n可用素材：\n${assetsText}\n\n画面比例：${state.settings.aspectRatio}\n默认时长：${state.settings.durationSeconds}秒\n\n请严格根据“第${episodeNumber}集分场剧本”生成该集的剧集分段内容。每个片段是一次视频生成单位，尽量按“### 场${episodeNumber}-1、### 场${episodeNumber}-2...”拆分；如果某一场动作/对白很多，可以拆成多个连续片段，但不得跳过原剧本中的关键动作、对白、OS/VO、字幕和情绪转折。\n\n总时长要求：\n- 本集目标总时长约 ${EPISODE_TARGET_DURATION_SECONDS} 秒，最终所有片段 durationSeconds 累加必须在 ${EPISODE_MIN_DURATION_SECONDS}-${EPISODE_MAX_DURATION_SECONDS} 秒之间。\n- 必须生成 10-12 个片段，每个片段 10-12 秒。\n- 如果原分场较少，要把同一场拆成“进入/发现/对峙/反应/推进/钩子”等连续片段，不要减少片段数量。\n\n每个片段包含：\n- title: 片段标题，建议体现对应场号和关键动作，例如“场${episodeNumber}-1：宿舍惊醒”\n- prompt: 完整片段文本，第一段写“本片段场景设定在：...”，后续优先写 3 个“分镜N · Xs：...”描述；出现素材时必须使用 @素材名。每个分镜都要包含景别、人物动作、面部微表情、场景背景和情绪，不要只写事件概要\n- mentionNames: 提及的素材名称列表，只能从可用素材中选择，名称不带 @\n- durationSeconds: 片段总时长，必须等于 prompt 中所有分镜时长之和，且必须为 10-12 秒\n\n每个分镜时长必须在 2-10 秒之间。片段总时长必须为 10-12 秒，生成内容需要在 10 秒钟往上，避免 4-9 秒的短片段。分镜不是视频生成单位，不要输出分镜 videoUrl、status 或单独任务字段。`
+    const userPrompt = [
+      `剧本摘要：${state.script.refinedPrompt}`,
+      '',
+      `第${episodeNumber}集标题：${episode.title}`,
+      '',
+      `第${episodeNumber}集分场剧本：`,
+      episode.summary,
+      '',
+      '可用素材：',
+      assetsText,
+      '',
+      `画面比例：${state.settings.aspectRatio}`,
+      `视觉风格：${state.settings.style}`,
+      `默认时长：${state.settings.durationSeconds}秒`,
+      '',
+      `请严格根据“第${episodeNumber}集分场剧本”生成该集的剧集分段内容。每个片段是一次视频生成单位，尽量按“### 场${episodeNumber}-1、### 场${episodeNumber}-2...”拆分；如果某一场动作/对白很多，可以拆成多个连续片段，但不得跳过原剧本中的关键动作、对白、OS/VO、字幕和情绪转折。`,
+      '',
+      '总时长要求：',
+      `- 本集目标总时长约 ${EPISODE_TARGET_DURATION_SECONDS} 秒，最终所有片段 durationSeconds 累加必须在 ${EPISODE_MIN_DURATION_SECONDS}-${EPISODE_MAX_DURATION_SECONDS} 秒之间。`,
+      '- 必须生成 10-12 个片段，每个片段 10-12 秒。',
+      '- 如果原分场较少，要把同一场拆成“进入/发现/对峙/反应/推进/钩子”等连续片段，不要减少片段数量。',
+      '',
+      '每个片段包含：',
+      `- title: 片段标题，建议体现对应场号和关键动作，例如“场${episodeNumber}-1：宿舍惊醒”`,
+      '- prompt: 完整片段文本，第一段写“本片段场景设定在：...”，后续优先写 3 个“分镜N · Xs：...”描述；出现素材时必须使用 @素材名。每个分镜都要包含景别、人物动作、面部微表情、场景背景和情绪，不要只写事件概要',
+      '- mentionNames: 提及的素材名称或可用别名列表，只能从可用素材中选择，名称不带 @',
+      '- durationSeconds: 片段总时长，必须等于 prompt 中所有分镜时长之和，且必须为 10-12 秒',
+      '',
+      '专业执行要求：',
+      `- 所有片段必须统一遵循项目视觉风格“${state.settings.style}”，并把该风格具体写进摄影、灯光、色彩、布景、妆造和表演气质中，不要只在开头提一次。`,
+      '- 每个分镜都要写出导演调度、摄影机位/运动、灯光冷暖与方向、布景或关键道具、服装妆发状态、演员表演节奏中的至少 4 类信息。',
+      '- 每个分镜都要加入动作指导：说明演员从哪里来、正在做什么、动作如何完成、动作结束时停在哪里；同一片段内人物站位、视线、手部动作、道具拿放和情绪强度必须连续。',
+      '- 相邻分镜必须写出动作衔接词，例如“延续上一镜”“接着”“顺势”“停顿后”“转身时”，让视频模型能理解演员动作不是独立截图。',
+      '- 每个片段都要加入场记连续性检查：镜头切换或切回时，人物站位、身体朝向、手持道具、桌椅/门窗/手机等物件位置、服装妆发、伤痕污渍和环境状态必须和上一镜一致。',
+      '- 关键道具要写“状态锁定”：哪只手拿、道具朝向、接触身体或桌面的具体位置、镜头结束时停在哪里；下一分镜必须继承这些状态，除非先写出清晰的移动/转向/放下动作。',
+      '- 枪械、刀具等强叙事道具尤其不能跳变：例如上一镜“枪口抵住自己下颌”，下一镜不能突然写成“对空气开枪”；必须写“枪口仍贴着下颌，手指压向扳机”或先写“他缓慢移开枪口并转向某处”的完整动作因果。',
+      '- 如果同一场被拆成多个片段，后一片段第一镜必须承接前一片段最后一镜的人物位置、姿势、道具拿放和情绪状态，避免切回时人或物凭空变化。',
+      '- 摄影描述要具体到景别、角度、运动或构图重点，例如“低角度近景压迫”“过肩镜头制造偷窥感”“慢推到眼神特写”。',
+      '- 灯光、布景、妆造必须与剧情情绪和角色身份一致，不要写成无关的视觉堆砌。',
+      '',
+      '每个分镜时长必须在 2-10 秒之间。片段总时长必须为 10-12 秒，生成内容需要在 10 秒钟往上，避免 4-9 秒的短片段。分镜不是视频生成单位，不要输出分镜 videoUrl、status 或单独任务字段。',
+    ].join('\n')
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -153,6 +213,15 @@ const route: FastifyPluginAsync = async (app) => {
       refundContext: string,
     ): Promise<void> => {
       await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, refundContext)
+      const now = new Date().toISOString()
+      const failedEpisode = episode as typeof episode & { errorMessage?: string | null }
+      episode.status = 'failed'
+      failedEpisode.errorMessage = message
+      episode.updatedAt = now
+      state.episodes.status = 'failed'
+      await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
+        app.log.error({ error: saveError, projectId, episodeNumber }, '短剧片段脚本失败状态保存失败')
+      })
       app.log.error({ error, projectId, episodeNumber }, message)
       sendEvent('error', { code, message })
       reply.raw.end()
@@ -217,18 +286,6 @@ const route: FastifyPluginAsync = async (app) => {
     if (!Array.isArray(segments) || segments.length === 0) {
       await failStream('VALIDATION_ERROR', 'AI 返回的片段数量为空', new Error('empty segments'), 'AI 返回片段为空')
       return
-    }
-
-    // 构建素材名称到 ID 的映射
-    const assetNameToId = new Map<string, string>()
-    for (const asset of allAssets) {
-      assetNameToId.set(asset.name.toLowerCase(), asset.id)
-    }
-
-    const extractMentionNamesFromPrompt = (prompt: string): string[] => {
-      return allAssets
-        .filter(asset => prompt.includes(`@${asset.name}`))
-        .map(asset => asset.name)
     }
 
     // 校验每个片段的核心字段
@@ -314,18 +371,24 @@ const route: FastifyPluginAsync = async (app) => {
       const mentionRefs = []
       const mentionNames = Array.from(new Set([
         ...seg.mentionNames,
-        ...extractMentionNamesFromPrompt(prompt),
       ]))
 
       const mentionedAssetIds = new Set<string>()
       for (const name of mentionNames) {
         if (typeof name === 'string') {
           const normalizedName = name.replace(/^@/, '')
-          const assetId = assetNameToId.get(normalizedName.toLowerCase())
-          if (assetId && !mentionedAssetIds.has(assetId)) {
-            mentionRefs.push({ assetId, assetName: normalizedName })
-            mentionedAssetIds.add(assetId)
+          const matchedAsset = resolveShortDramaAssetByMention(normalizedName, allAssets)
+          if (matchedAsset && !mentionedAssetIds.has(matchedAsset.id)) {
+            mentionRefs.push({ assetId: matchedAsset.id, assetName: matchedAsset.name })
+            mentionedAssetIds.add(matchedAsset.id)
           }
+        }
+      }
+
+      for (const asset of findShortDramaMentionedAssets(prompt, allAssets)) {
+        if (!mentionedAssetIds.has(asset.id)) {
+          mentionRefs.push({ assetId: asset.id, assetName: asset.name })
+          mentionedAssetIds.add(asset.id)
         }
       }
 
@@ -361,10 +424,16 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     // 更新 episode 的 segments
+    const completedEpisode = episode as typeof episode & { errorMessage?: string | null }
     episode.segments = parsedSegments
     episode.status = 'idle'
+    completedEpisode.errorMessage = null
     episode.updatedAt = now
-    state.episodes.status = state.episodes.items.some(ep => ep.segments.length === 0) ? 'generating' : 'completed'
+    state.episodes.status = state.episodes.items.some(ep => ep.status === 'failed')
+      ? 'failed'
+      : state.episodes.items.some(ep => ep.segments.length === 0)
+        ? 'generating'
+        : 'completed'
 
     // 计算实际积分消耗
     const actualCredits = calculateTextGenerationCredits(aiResponse)

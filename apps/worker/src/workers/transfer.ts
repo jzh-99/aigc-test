@@ -2,6 +2,11 @@ import { Worker } from 'bullmq'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import type { TransferJobData } from '@aigc/types'
+import type { Agent } from 'node:http'
+import { get as httpGet } from 'node:http'
+import { get as httpsGet } from 'node:https'
+import { URL } from 'node:url'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 import { getBullMQConnection } from '../lib/redis.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
 import { getTos, getBucket, getPublicUrl, getStorageRuntimeInfo } from '../lib/storage.js'
@@ -18,28 +23,134 @@ setDefaultResultOrder('ipv4first')
 
 const execFileAsync = promisify(execFile)
 const logger = buildLogger()
+const DOWNLOAD_TIMEOUT_MS = 60_000
+const DOWNLOAD_RETRY_DELAYS_MS = [0, 2_000, 5_000]
+let downloadHttpsProxyAgent: Agent | null = null
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function getDownloadProxyUrl(): string | null {
+  return process.env.https_proxy ?? process.env.HTTPS_PROXY ?? process.env.http_proxy ?? process.env.HTTP_PROXY ?? null
+}
+
+function shouldBypassProxy(hostname: string): boolean {
+  const noProxy = process.env.no_proxy ?? process.env.NO_PROXY
+  if (!noProxy) return false
+
+  const normalizedHost = hostname.toLowerCase()
+  return noProxy
+    .split(',')
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean)
+    .some(rule => {
+      if (rule === '*') return true
+      if (rule.startsWith('.')) return normalizedHost.endsWith(rule)
+      return normalizedHost === rule || normalizedHost.endsWith(`.${rule}`)
+    })
+}
+
+function getProxyProtocol(proxyUrl: string | null): string | null {
+  if (!proxyUrl) return null
+  try {
+    return new URL(proxyUrl).protocol
+  } catch {
+    return null
+  }
+}
+
+function getDownloadAgent(parsedUrl: URL): Agent | undefined {
+  if (parsedUrl.protocol !== 'https:' || shouldBypassProxy(parsedUrl.hostname)) return undefined
+
+  const proxyUrl = getDownloadProxyUrl()
+  if (!proxyUrl) return undefined
+
+  downloadHttpsProxyAgent ??= new HttpsProxyAgent(proxyUrl) as unknown as Agent
+  return downloadHttpsProxyAgent
+}
+
+function requestToBuffer(url: string, redirectCount = 0): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url)
+    const request = (parsedUrl.protocol === 'http:' ? httpGet : httpsGet)(
+      parsedUrl,
+      {
+        timeout: DOWNLOAD_TIMEOUT_MS,
+        headers: {
+          'User-Agent': 'aigc-worker-transfer/1.0',
+          'Accept': 'image/*,video/*,*/*',
+        },
+        agent: getDownloadAgent(parsedUrl),
+      },
+      (res) => {
+        const statusCode = res.statusCode ?? 0
+        const location = res.headers.location
+
+        if (statusCode >= 300 && statusCode < 400 && location) {
+          res.resume()
+          if (redirectCount >= 3) {
+            reject(new Error(`下载重定向过多: ${statusCode}`))
+            return
+          }
+
+          try {
+            const redirectUrl = new URL(location, parsedUrl).toString()
+            validateExternalUrl(redirectUrl)
+            requestToBuffer(redirectUrl, redirectCount + 1).then(resolve, reject)
+          } catch (error) {
+            reject(error)
+          }
+          return
+        }
+
+        if (statusCode < 200 || statusCode >= 300) {
+          res.resume()
+          reject(new Error(`下载失败: ${statusCode} ${res.statusMessage ?? ''} url=${url}`))
+          return
+        }
+
+        const chunks: Buffer[] = []
+        res.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+        res.on('end', () => resolve(Buffer.concat(chunks)))
+      },
+    )
+
+    request.on('timeout', () => {
+      request.destroy(new Error(`下载超时: ${DOWNLOAD_TIMEOUT_MS}ms url=${url}`))
+    })
+    request.on('error', reject)
+  })
+}
 
 /**
  * 下载远程 URL 为 Buffer（AI 提供商 CDN 地址）
  */
 async function downloadToBuffer(url: string): Promise<Buffer> {
-  let res: Response
-  try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 30_000) // 30s 超时
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < DOWNLOAD_RETRY_DELAYS_MS.length; attempt++) {
+    const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt]
+    if (delayMs > 0) await sleep(delayMs)
+
     try {
-      res = await fetch(url, { signal: controller.signal })
-    } finally {
-      clearTimeout(timer)
+      return await requestToBuffer(url)
+    } catch (error) {
+      lastError = error
+      logger.warn({
+        url,
+        attempt: attempt + 1,
+        maxAttempts: DOWNLOAD_RETRY_DELAYS_MS.length,
+        downloadProxyProtocol: getProxyProtocol(getDownloadProxyUrl()),
+        err: error instanceof Error ? error.message : String(error),
+      }, '下载远程文件失败，准备重试')
     }
-  } catch (err) {
-    const cause = err instanceof Error && (err as NodeJS.ErrnoException).cause
-      ? ` cause=${String((err as NodeJS.ErrnoException).cause)}`
-      : ''
-    throw new Error(`下载网络错误: ${err instanceof Error ? err.message : String(err)}${cause} url=${url}`)
   }
-  if (!res.ok) throw new Error(`下载失败: ${res.status} ${res.statusText} url=${url}`)
-  return Buffer.from(await res.arrayBuffer())
+
+  const cause = lastError instanceof Error && (lastError as NodeJS.ErrnoException).cause
+    ? ` cause=${String((lastError as NodeJS.ErrnoException).cause)}`
+    : ''
+  throw new Error(`下载网络错误: ${lastError instanceof Error ? lastError.message : String(lastError)}${cause} url=${url}`)
 }
 
 /**
@@ -138,14 +249,27 @@ export const transferWorker = new Worker<TransferJobData>(
       const cause = err instanceof Error && (err as NodeJS.ErrnoException).cause
         ? String((err as NodeJS.ErrnoException).cause)
         : undefined
-      logger.error({ jobId: job.id, taskId, assetId, originalUrl, err: msg, cause, storage: getStorageRuntimeInfo() }, 'Transfer 失败')
+      logger.error({
+        jobId: job.id,
+        taskId,
+        assetId,
+        originalUrl,
+        err: msg,
+        cause,
+        storage: getStorageRuntimeInfo(),
+        downloadProxyProtocol: getProxyProtocol(getDownloadProxyUrl()),
+      }, 'Transfer 失败')
 
-      const db = getDb()
-      await db
-        .updateTable('assets')
-        .set({ transfer_status: 'failed' })
-        .where('id', '=', assetId)
-        .execute()
+      const attempts = job.opts.attempts ?? 1
+      const isFinalAttempt = job.attemptsMade + 1 >= attempts
+      if (isFinalAttempt) {
+        const db = getDb()
+        await db
+          .updateTable('assets')
+          .set({ transfer_status: 'failed' })
+          .where('id', '=', assetId)
+          .execute()
+      }
 
       throw err
     }

@@ -1,14 +1,17 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, Pencil, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { useShortDramaProject } from '@/hooks/short-drama/use-short-drama-project'
 import { ShortDramaStepper } from '@/components/short-drama/short-drama-stepper'
 import { StepScriptOutline } from '@/components/short-drama/step-script-outline'
 import { StepAssets } from '@/components/short-drama/step-assets'
 import { StepEpisodes } from '@/components/short-drama/step-episodes'
 import { saveShortDramaProject } from '@/lib/short-drama/api'
+import { Button } from '@/components/ui/button'
 import { canEnterShortDramaStep, type ShortDramaStepId } from '@aigc/types'
 
 export default function ShortDramaEditorPage() {
@@ -16,6 +19,13 @@ export default function ShortDramaEditorPage() {
   const projectId = params.id as string
 
   const { project, state, isLoading, error, mutate } = useShortDramaProject(projectId)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [savingTitle, setSavingTitle] = useState(false)
+
+  useEffect(() => {
+    setTitleDraft(project?.title ?? '')
+  }, [project?.title])
 
   if (isLoading) {
     return (
@@ -46,6 +56,30 @@ export default function ShortDramaEditorPage() {
     mutate()
   }
 
+  const handleSaveTitle = async () => {
+    const nextTitle = titleDraft.trim()
+    if (!nextTitle) {
+      toast.error('剧名不能为空')
+      return
+    }
+    if (nextTitle === project.title) {
+      setEditingTitle(false)
+      return
+    }
+
+    setSavingTitle(true)
+    try {
+      await saveShortDramaProject(projectId, { title: nextTitle })
+      setEditingTitle(false)
+      mutate()
+      toast.success('剧名已保存')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '保存失败')
+    } finally {
+      setSavingTitle(false)
+    }
+  }
+
   const activeStep = canEnterShortDramaStep(state, state.steps.active)
     ? state.steps.active
     : canEnterShortDramaStep(state, 'assets')
@@ -67,7 +101,47 @@ export default function ShortDramaEditorPage() {
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         <div className="border-b border-border/70 pb-5">
           <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground">AI SHORT DRAMA</p>
-          <h1 className="mt-2 text-xl font-bold text-foreground">{project.title}</h1>
+          <div className="mt-2 flex items-center gap-2">
+            {editingTitle ? (
+              <>
+                <input
+                  value={titleDraft}
+                  onChange={event => setTitleDraft(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') handleSaveTitle()
+                    if (event.key === 'Escape') {
+                      setTitleDraft(project.title)
+                      setEditingTitle(false)
+                    }
+                  }}
+                  className="h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-xl font-bold text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                  autoFocus
+                />
+                <Button size="icon" onClick={handleSaveTitle} disabled={savingTitle} aria-label="保存剧名">
+                  {savingTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => {
+                    setTitleDraft(project.title)
+                    setEditingTitle(false)
+                  }}
+                  disabled={savingTitle}
+                  aria-label="取消编辑剧名"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <h1 className="min-w-0 flex-1 truncate text-xl font-bold text-foreground">{project.title}</h1>
+                <Button size="icon" variant="ghost" onClick={() => setEditingTitle(true)} aria-label="编辑剧名">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
         </div>
 
         <ShortDramaStepper state={displayState} onStepClick={handleStepClick} />

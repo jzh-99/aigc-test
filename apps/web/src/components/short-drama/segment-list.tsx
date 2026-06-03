@@ -42,7 +42,7 @@ export function SegmentList({
 }: SegmentListProps) {
   const selectedSegment = segments[selectedIndex] ?? segments[0]
   const selectedSafeIndex = selectedSegment ? Math.max(0, segments.findIndex(segment => segment.id === selectedSegment.id)) : 0
-  const previewFrameClass = aspectRatio === '16:9' ? 'aspect-video' : 'aspect-[9/16]'
+  const previewFrameClass = aspectRatio === '16:9' ? 'h-[70px]' : 'h-[142px]'
 
   if (!selectedSegment) {
     return (
@@ -188,8 +188,10 @@ export function SegmentList({
                     </div>
                   )}
                 </div>
-                <div className="mt-1 truncate text-[11px] text-muted-foreground">
-                  片段 {String(index + 1).padStart(2, '0')} · {segment.durationSeconds}s
+                <div className="mt-1 flex h-8 items-start text-[11px] leading-4 text-muted-foreground">
+                  <span className="line-clamp-2">
+                    片段 {String(index + 1).padStart(2, '0')} · {segment.durationSeconds}s
+                  </span>
                 </div>
               </button>
             )

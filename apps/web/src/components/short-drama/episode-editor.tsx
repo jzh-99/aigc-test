@@ -18,7 +18,7 @@ interface EpisodeEditorProps {
   state: ShortDramaState
   videoModel: string
   videoResolution: '720p' | '1080p'
-  onStateChange: () => void | Promise<unknown>
+  onStateChange: (state?: ShortDramaState) => void | Promise<unknown>
 }
 
 export function EpisodeEditor({
@@ -130,11 +130,11 @@ export function EpisodeEditor({
   const handleGenerateVideo = useCallback(async (segmentId: string) => {
     setGeneratingSegmentId(segmentId)
     try {
-      await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segmentId, {
+      const result = await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segmentId, {
         model: videoModel,
         resolution: videoResolution,
       })
-      onStateChange()
+      await Promise.resolve(onStateChange(result.state))
       toast.success('视频生成已提交')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '生成失败')
@@ -159,11 +159,11 @@ export function EpisodeEditor({
     try {
       for (const segment of targets) {
         setGeneratingSegmentId(segment.id)
-        await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segment.id, {
+        const result = await generateShortDramaSegmentVideo(projectId, episode.episodeNumber, segment.id, {
           model: videoModel,
           resolution: videoResolution,
         })
-        onStateChange()
+        await Promise.resolve(onStateChange(result.state))
       }
       toast.success(`已提交 ${targets.length} 个分镜视频生成`)
     } catch (err) {

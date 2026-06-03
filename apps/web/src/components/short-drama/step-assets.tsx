@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Sparkles, Check, Upload, ZoomIn } from 'lucide-react'
+import { ImageIcon, Loader2, Sparkles, Check, Upload, ZoomIn } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
-import type { ShortDramaState, ShortDramaAssetKind } from '@aigc/types'
+import type { ShortDramaState, ShortDramaAsset, ShortDramaAssetKind } from '@aigc/types'
 import { areShortDramaAssetsReady } from '@aigc/types'
 import {
   generateShortDramaAssetPrompts,
@@ -23,6 +23,64 @@ const ASSET_TABS: { id: ShortDramaAssetKind; label: string }[] = [
   { id: 'character', label: '角色' },
   { id: 'scene', label: '场景' },
 ]
+
+function AssetImagePreview({
+  asset,
+  src,
+  fitClass,
+  onPreview,
+}: {
+  asset: ShortDramaAsset
+  src: string
+  fitClass: string
+  onPreview: () => void
+}) {
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error'>('loading')
+
+  useEffect(() => {
+    setLoadState('loading')
+  }, [src])
+
+  return (
+    <button
+      type="button"
+      onClick={onPreview}
+      disabled={loadState !== 'loaded'}
+      className="group relative h-full w-full overflow-hidden text-left disabled:cursor-default"
+      aria-label={loadState === 'loaded' ? `放大查看${asset.name}` : `${asset.name}图片加载中`}
+    >
+      {loadState !== 'loaded' && (
+        <span className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-muted/55 text-xs text-muted-foreground dark:bg-slate-900/75">
+          {loadState === 'loading' ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin text-primary/70" />
+              图片加载中
+            </>
+          ) : (
+            <>
+              <ImageIcon className="h-5 w-5 text-muted-foreground/70" />
+              图片暂不可用
+            </>
+          )}
+        </span>
+      )}
+      <img
+        src={src}
+        alt={asset.name}
+        onLoad={() => setLoadState('loaded')}
+        onError={() => setLoadState('error')}
+        className={`h-full w-full transition-transform duration-300 group-hover:scale-105 ${fitClass} ${loadState === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+      />
+      {loadState === 'loaded' && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
+          <span className="flex h-10 w-10 scale-90 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition-all group-hover:scale-100 group-hover:opacity-100">
+            <ZoomIn className="h-5 w-5" />
+          </span>
+        </span>
+      )}
+    </button>
+  )
+}
 
 export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps) {
   const [activeTab, setActiveTab] = useState<ShortDramaAssetKind>('character')
@@ -201,6 +259,37 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
     }
   }
 
+  const handleAliasesBlur = async (assetId: string, value: string) => {
+    const nextAliases = Array.from(new Set(
+      value
+        .split(/[,\n，、;；/|]+/)
+        .map(alias => alias.trim())
+        .filter(Boolean)
+    ))
+    const targetAsset = assets.find(asset => asset.id === assetId)
+    if (!targetAsset) return
+
+    const currentAliases = targetAsset.aliases ?? []
+    if (currentAliases.join('\n') === nextAliases.join('\n')) return
+
+    try {
+      await saveShortDramaProject(projectId, {
+        state: {
+          ...state,
+          assets: {
+            ...state.assets,
+            items: assets.map(asset =>
+              asset.id === assetId ? { ...asset, aliases: nextAliases } : asset
+            ),
+          },
+        },
+      })
+      onStateChange()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '保存别名失败')
+    }
+  }
+
   const handleBatchGenerate = async () => {
     // 过滤出需要生成的素材：没有图片 且 状态不是 pending/generating
     const pendingAssets = requiredAssets.filter(a =>
@@ -364,28 +453,18 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
             const generationLabel = getAssetGenerationLabel(asset)
             const shouldShowImage = Boolean(asset.imageUrl) && !isAssetGenerating
             const isCharacter = asset.kind === 'character'
+            const imageSrc = asset.imageUrl ? `${asset.imageUrl}?t=${new Date(asset.updatedAt).getTime()}` : ''
 
             return (
             <div key={asset.id} className="overflow-hidden rounded-xl border bg-card shadow-sm transition-colors hover:border-primary/30">
               <div className={`${isCharacter ? 'aspect-[9/16]' : 'aspect-video'} flex items-center justify-center overflow-hidden bg-muted/40 dark:bg-slate-900/70`}>
                 {shouldShowImage ? (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewAssetId(asset.id)}
-                    className="group relative h-full w-full overflow-hidden text-left"
-                    aria-label={`放大查看${asset.name}`}
-                  >
-                    <img
-                      src={`${asset.imageUrl}?t=${new Date(asset.updatedAt).getTime()}`}
-                      alt={asset.name}
-                      className={`h-full w-full transition-transform duration-300 group-hover:scale-105 ${isCharacter ? 'object-contain' : 'object-cover'}`}
-                    />
-                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
-                      <span className="flex h-10 w-10 scale-90 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition-all group-hover:scale-100 group-hover:opacity-100">
-                        <ZoomIn className="h-5 w-5" />
-                      </span>
-                    </span>
-                  </button>
+                  <AssetImagePreview
+                    asset={asset}
+                    src={imageSrc}
+                    fitClass={isCharacter ? 'object-contain' : 'object-cover'}
+                    onPreview={() => setPreviewAssetId(asset.id)}
+                  />
                 ) : (
                   <span className="rounded-full bg-background/80 px-3 py-1 text-xs text-muted-foreground shadow-sm">
                     {generationLabel}
@@ -407,6 +486,16 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                   className="min-h-[56px] w-full resize-none rounded-lg border border-transparent bg-muted/40 px-2 py-1.5 text-xs leading-relaxed text-muted-foreground outline-none transition-colors hover:border-border focus:border-primary/40 focus:bg-background disabled:cursor-not-allowed disabled:opacity-70"
                   aria-label={`${asset.name}描述`}
                 />
+                {asset.kind === 'character' && (
+                  <input
+                    defaultValue={(asset.aliases ?? []).join('、')}
+                    onBlur={e => handleAliasesBlur(asset.id, e.target.value)}
+                    disabled={isLocked}
+                    placeholder="别名：祁同伟、祁厅长、老祁"
+                    className="h-7 w-full rounded-md border border-transparent bg-muted/30 px-2 text-xs text-muted-foreground outline-none transition-colors hover:border-border focus:border-primary/40 focus:bg-background disabled:cursor-not-allowed disabled:opacity-70"
+                    aria-label={`${asset.name}别名`}
+                  />
+                )}
                 {!isLocked && (
                   <Button
                     type="button"

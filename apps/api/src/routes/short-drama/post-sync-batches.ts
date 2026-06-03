@@ -41,7 +41,6 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
 
       for (const batch of batches) {
         const module = batch.module
-        const batchStatus = batch.status
 
         if (module === 'image') {
           try {
@@ -52,8 +51,6 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
           }
           continue
         }
-
-        if (batchStatus !== 'completed' && batchStatus !== 'partial_complete' && batchStatus !== 'failed') continue
 
         try {
           if (module === 'video') {
@@ -124,22 +121,11 @@ async function syncImageBatch(
 
       if (assetRecord) {
         const imageUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
-        // 始终更新状态和时间戳，确保前端能通过 updatedAt 变化刷新图片缓存
-        // 由于 batch 按创建时间升序处理，最新的 batch 会最后执行
         if (targetAsset.status !== 'completed' || targetAsset.imageUrl !== imageUrl) {
           targetAsset.imageUrl = imageUrl
           targetAsset.status = 'completed'
           targetAsset.updatedAt = new Date().toISOString()
           changed = true
-        } else if (targetAsset.status === 'completed') {
-          // 即使 URL 相同，也更新时间戳，让前端能通过 ?t= 参数刷新缓存
-          const currentUpdatedAt = new Date(targetAsset.updatedAt).getTime()
-          const newUpdatedAt = new Date().toISOString()
-          // 只有当时间戳真的不同时才更新（避免同一次 sync 中重复更新）
-          if (new Date(newUpdatedAt).getTime() > currentUpdatedAt) {
-            targetAsset.updatedAt = newUpdatedAt
-            changed = true
-          }
         }
       }
     } else if (task.status === 'failed') {
@@ -216,7 +202,20 @@ async function syncVideoBatch(
 
   let changed = false
 
-  if (task.status === 'completed') {
+  if (task.status === 'pending' || task.status === 'processing') {
+    const nextStatus = task.status === 'processing' ? 'generating' : 'pending'
+    if (
+      segment.status !== 'completed' &&
+      segment.status !== 'failed' &&
+      (segment.status !== nextStatus || segment.videoBatchId !== batch.id || segment.videoTaskId !== task.id)
+    ) {
+      segment.status = nextStatus
+      segment.videoBatchId = batch.id
+      segment.videoTaskId = task.id
+      episode.updatedAt = new Date().toISOString()
+      changed = true
+    }
+  } else if (task.status === 'completed') {
     // 查找视频产出
     const assetRecord = await db
       .selectFrom('assets')
@@ -232,6 +231,7 @@ async function syncVideoBatch(
         segment.status = 'completed'
         segment.videoBatchId = batch.id
         segment.videoTaskId = task.id
+        episode.updatedAt = new Date().toISOString()
         changed = true
       }
     }
@@ -240,20 +240,40 @@ async function syncVideoBatch(
       segment.status = 'failed'
       segment.videoBatchId = batch.id
       segment.videoTaskId = task.id
+      episode.updatedAt = new Date().toISOString()
       changed = true
     }
   }
 
-  // 检查 episode 所有 segment 是否都完成
   if (changed) {
+    const hasGenerating = episode.segments.some(
+      (s: any) => s.status === 'pending' || s.status === 'generating'
+    )
     const allDone = episode.segments.every(
       (s: any) => s.status === 'completed' || s.status === 'failed'
     )
-    if (allDone) {
+    if (hasGenerating) {
+      episode.status = 'generating'
+    } else if (allDone) {
       const allCompleted = episode.segments.every((s: any) => s.status === 'completed')
       episode.status = allCompleted ? 'completed' : 'failed'
-      episode.updatedAt = new Date().toISOString()
+    } else {
+      episode.status = 'idle'
     }
+
+    const allEpisodesCompleted = state.episodes.items.length > 0 &&
+      state.episodes.items.every((ep: any) => ep.status === 'completed')
+    const hasEpisodeGenerating = state.episodes.items.some(
+      (ep: any) => ep.status === 'generating' || ep.segments.some((s: any) => s.status === 'pending' || s.status === 'generating')
+    )
+    const hasEpisodeFailed = state.episodes.items.some((ep: any) => ep.status === 'failed')
+    state.episodes.status = allEpisodesCompleted
+      ? 'completed'
+      : hasEpisodeGenerating
+        ? 'generating'
+        : hasEpisodeFailed
+          ? 'failed'
+          : state.episodes.status
   }
 
   return changed

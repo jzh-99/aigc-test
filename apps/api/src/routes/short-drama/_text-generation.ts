@@ -1,7 +1,13 @@
 ﻿import { randomUUID } from 'node:crypto'
 import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
-import type { ShortDramaAsset, ShortDramaEpisodeOutline, ShortDramaState } from '@aigc/types'
+import {
+  normalizeShortDramaMentionAlias,
+  stripShortDramaAssetStageSuffix,
+  type ShortDramaAsset,
+  type ShortDramaEpisodeOutline,
+  type ShortDramaState,
+} from '@aigc/types'
 import { extractShortDramaJsonObject, calculateShortDramaTextCredits } from './_shared.js'
 import {
   recordLlmProviderCall,
@@ -20,8 +26,8 @@ const DOUBAO_MODEL = process.env.DOUBAO_MODEL ?? 'doubao-seed-2-0-lite-260428'
 
 // 文本生成计费：每千字 1 积分
 const TEXT_CREDITS_PER_THOUSAND_CHARS = 1
-const DOUBAO_TEXT_TIMEOUT_MS = 240_000
-export const SHORT_DRAMA_OUTLINE_BATCH_SIZE = 10
+const DOUBAO_TEXT_TIMEOUT_MS = 360_000 // 增加到 6 分钟，避免生成超时
+export const SHORT_DRAMA_OUTLINE_BATCH_SIZE = 5 // 减少批次大小到 5 集，降低单次生成压力
 
 export interface ShortDramaTextStreamCallbacks {
   onChunk?: (text: string) => void
@@ -37,6 +43,7 @@ export interface ShortDramaOutlineBatch {
 export interface ShortDramaAssetPromptInput {
   kind: 'character' | 'scene'
   name: string
+  aliases?: string[]
   description: string
 }
 
@@ -388,6 +395,26 @@ function getShortDramaAssetKey(asset: Pick<ShortDramaAsset, 'kind' | 'name'>): s
   return `${asset.kind}:${normalizeShortDramaAssetName(asset.name)}`
 }
 
+function normalizeShortDramaAssetAliases(name: string, aliases: string[] | undefined): string[] {
+  const rawAliases = [
+    stripShortDramaAssetStageSuffix(name),
+    ...(aliases ?? []),
+    ...(aliases ?? []).map(alias => stripShortDramaAssetStageSuffix(alias)),
+  ]
+
+  const seen = new Set<string>([normalizeShortDramaMentionAlias(name)])
+  const normalizedAliases: string[] = []
+  for (const alias of rawAliases) {
+    const trimmed = alias.trim()
+    const key = normalizeShortDramaMentionAlias(trimmed)
+    if (!trimmed || !key || seen.has(key)) continue
+    seen.add(key)
+    normalizedAliases.push(trimmed)
+  }
+
+  return normalizedAliases
+}
+
 export function applyShortDramaAssetPromptsBatchResult(
   state: ShortDramaState,
   assets: ShortDramaAssetPromptInput[],
@@ -406,13 +433,27 @@ export function applyShortDramaAssetPromptsBatchResult(
     if (!name || !description) continue
 
     const key = `${asset.kind}:${normalizeShortDramaAssetName(name)}`
-    if (assetMap.has(key)) continue
+    const aliases = asset.kind === 'character'
+      ? normalizeShortDramaAssetAliases(name, asset.aliases)
+      : []
+    const existingAsset = assetMap.get(key)
+    if (existingAsset) {
+      if (asset.kind === 'character') {
+        existingAsset.aliases = normalizeShortDramaAssetAliases(existingAsset.name, [
+          ...(existingAsset.aliases ?? []),
+          ...aliases,
+        ])
+        existingAsset.updatedAt = now
+      }
+      continue
+    }
 
     assetMap.set(key, {
       id: randomUUID(),
       kind: asset.kind,
       scope: 'global',
       name,
+      aliases,
       description,
       imageUrl: null,
       referenceImageUrl: null,

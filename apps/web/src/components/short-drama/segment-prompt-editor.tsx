@@ -5,6 +5,8 @@ import type { ShortDramaSegment, ShortDramaAsset, ShortDramaMentionRef } from '@
 import {
   SHORT_DRAMA_SHOT_DURATION_SECONDS,
   extractShortDramaShotDurations,
+  findShortDramaMentionedAssets,
+  getShortDramaAssetMentionAliases,
   updateShortDramaShotDuration,
 } from '@aigc/types'
 import {
@@ -40,13 +42,22 @@ export function SegmentPromptEditor({
     id: asset.id,
     kind: asset.kind === 'character' ? 'character' : 'background',
     name: asset.name,
+    aliases: getShortDramaAssetMentionAliases(asset).filter(alias => alias !== asset.name),
     imageUrl: asset.imageUrl,
   }))
 
   const extractMentionRefs = (prompt: string): ShortDramaMentionRef[] => {
-    return availableAssets
-      .filter(asset => prompt.includes(`@${asset.name}`))
-      .map(asset => ({ assetId: asset.id, assetName: asset.name }))
+    const mentionedAssetIds = new Set<string>()
+    const refs: ShortDramaMentionRef[] = []
+
+    for (const asset of findShortDramaMentionedAssets(prompt, availableAssets)) {
+      if (!mentionedAssetIds.has(asset.id)) {
+        refs.push({ assetId: asset.id, assetName: asset.name })
+        mentionedAssetIds.add(asset.id)
+      }
+    }
+
+    return refs
   }
 
   const handlePromptChange = (prompt: string) => {
