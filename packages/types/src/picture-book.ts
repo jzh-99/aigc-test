@@ -16,7 +16,7 @@ export const PICTURE_BOOK_STYLES = [
 export const PICTURE_BOOK_PAGE_COUNTS = [10, 15, 20] as const
 export const PICTURE_BOOK_ASPECT_RATIOS = ['16:9', '9:16', '1:1'] as const
 
-export const PICTURE_BOOK_TEXT_MODEL = 'qwen3.6-plus'
+export const PICTURE_BOOK_TEXT_MODEL = 'qwen3.7-max'
 export const PICTURE_BOOK_IMAGE_MODEL = 'seedream-5.0-lite'
 export const PICTURE_BOOK_TTS_MODEL = 'speech-2.8-hd'
 

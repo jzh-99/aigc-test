@@ -9,7 +9,7 @@ import {
 } from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
-  callDoubaoForTextStream,
+  callQwenForTextStream,
   saveShortDramaProjectState,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
@@ -239,7 +239,7 @@ const route: FastifyPluginAsync = async (app) => {
 
     let aiResponse: string
     try {
-      aiResponse = await callDoubaoForTextStream(REDACTED, userPrompt, 12000, {
+      aiResponse = await callQwenForTextStream(REDACTED, userPrompt, 12000, {
         onChunk: (text) => sendEvent('chunk', { text, episodeNumber }),
         onPing: sendPing,
         audit: {
@@ -247,7 +247,7 @@ const route: FastifyPluginAsync = async (app) => {
           teamId,
           workspaceId: project.workspace_id,
           module: 'short_drama',
-          provider: 'doubao',
+          provider: 'qwen',
           operation: 'episodes.segments',
           endpoint: '/chat/completions',
         },

@@ -25,7 +25,7 @@ assert.equal(isPictureBookAspectRatio('4:3'), false)
 assert.equal(isPictureBookStyle('吉卜力风'), true)
 assert.equal(isPictureBookStyle('赛博朋克'), false)
 assert.equal(PICTURE_BOOK_STYLES.includes('梦幻光影厚涂风'), true)
-assert.equal(PICTURE_BOOK_TEXT_MODEL, 'qwen3.6-plus')
+assert.equal(PICTURE_BOOK_TEXT_MODEL, 'qwen3.7-max')
 assert.equal(PICTURE_BOOK_IMAGE_MODEL, 'seedream-5.0-lite')
 assert.equal(PICTURE_BOOK_TTS_MODEL, 'speech-2.8-hd')
 

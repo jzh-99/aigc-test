@@ -20,13 +20,14 @@ import {
 // AI 调用配置
 // ============================================================================
 
-const DOUBAO_API_URL = process.env.DOUBAO_API_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
-const DOUBAO_API_KEY = process.env.DOUBAO_API_KEY ?? ''
-const DOUBAO_MODEL = process.env.DOUBAO_MODEL ?? 'doubao-seed-2-0-lite-260428'
+// 使用 Qwen API
+const QWEN_API_URL = process.env.QWEN_API_URL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+const QWEN_API_KEY = process.env.QWEN_API_KEY ?? ''
+const QWEN_MODEL = process.env.QWEN_MODEL ?? 'qwen3.7-max'
 
-// 文本生成计费：每千字 1 积分
+// 文本生成计费：每千字 1 A豆
 const TEXT_CREDITS_PER_THOUSAND_CHARS = 1
-const DOUBAO_TEXT_TIMEOUT_MS = 360_000 // 增加到 6 分钟，避免生成超时
+const TEXT_TIMEOUT_MS = 360_000 // 增加到 6 分钟，避免生成超时
 export const SHORT_DRAMA_OUTLINE_BATCH_SIZE = 5 // 减少批次大小到 5 集，降低单次生成压力
 
 export interface ShortDramaTextStreamCallbacks {
@@ -52,24 +53,24 @@ export interface ShortDramaAssetPromptInput {
 // ============================================================================
 
 /**
- * 调用豆包 API 生成文本（OpenAI 兼容接口）
- * @param [systemPrompt] - [systemPrompt]
+ * 调用 Qwen API 生成文本（OpenAI 兼容接口）
+ * @param [systemPrompt] - 系统提示词
  * @param userPrompt - 用户提示词
  * @returns AI 返回的文本内容
  * @throws 如果 API 调用失败或返回错误
  */
-export async function callDoubaoForText(
+export async function callQwenForText(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  if (!DOUBAO_API_KEY) {
-    throw new Error('DOUBAO_API_KEY 未配置，无法调用 AI 生成')
+  if (!QWEN_API_KEY) {
+    throw new Error('QWEN_API_KEY 未配置，无法调用 AI 生成')
   }
 
-  const chatEndpoint = `${DOUBAO_API_URL}/chat/completions`
+  const chatEndpoint = `${QWEN_API_URL}/chat/completions`
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), DOUBAO_TEXT_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), TEXT_TIMEOUT_MS)
 
   let response: Response
   try {
@@ -78,10 +79,10 @@ export async function callDoubaoForText(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        Authorization: `Bearer ${DOUBAO_API_KEY}`,
+        Authorization: `Bearer ${QWEN_API_KEY}`,
       },
       body: JSON.stringify({
-        model: DOUBAO_MODEL,
+        model: QWEN_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -111,7 +112,7 @@ export async function callDoubaoForText(
   return data.choices[0].message.content
 }
 
-export function extractDoubaoStreamDeltaText(line: string): string {
+export function extractQwenStreamDeltaText(line: string): string {
   if (!line.startsWith('data: ')) return ''
 
   const data = line.slice(6).trim()
@@ -127,22 +128,22 @@ export function extractDoubaoStreamDeltaText(line: string): string {
   }
 }
 
-export async function callDoubaoForTextStream(
+export async function callQwenForTextStream(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,
   callbacks: ShortDramaTextStreamCallbacks = {}
 ): Promise<string> {
-  if (!DOUBAO_API_KEY) {
-    throw new Error('DOUBAO_API_KEY 未配置，无法调用 AI 生成')
+  if (!QWEN_API_KEY) {
+    throw new Error('QWEN_API_KEY 未配置，无法调用 AI 生成')
   }
 
-  const chatEndpoint = `${DOUBAO_API_URL}/chat/completions`
+  const chatEndpoint = `${QWEN_API_URL}/chat/completions`
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), DOUBAO_TEXT_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), TEXT_TIMEOUT_MS)
   const startedAt = Date.now()
   const requestPayload = {
-    model: DOUBAO_MODEL,
+    model: QWEN_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -170,7 +171,7 @@ export async function callDoubaoForTextStream(
     auditRecorded = true
     await recordLlmProviderCall({
       ...callbacks.audit,
-      model: callbacks.audit.model ?? DOUBAO_MODEL,
+      model: callbacks.audit.model ?? QWEN_MODEL,
       requestPayload,
       responseStatus,
       responsePayload: input.responsePayload,
@@ -221,7 +222,7 @@ export async function callDoubaoForTextStream(
       buffer = lines.pop() ?? ''
 
       for (const line of lines) {
-        const text = extractDoubaoStreamDeltaText(line.trim())
+        const text = extractQwenStreamDeltaText(line.trim())
         if (!text) {
           callbacks.onPing?.()
           continue
@@ -233,7 +234,7 @@ export async function callDoubaoForTextStream(
     }
 
     if (buffer.trim()) {
-      const text = extractDoubaoStreamDeltaText(buffer.trim())
+      const text = extractQwenStreamDeltaText(buffer.trim())
       if (text) {
         fullText += text
         summarizeLlmStreamChunk(streamSummary, text)

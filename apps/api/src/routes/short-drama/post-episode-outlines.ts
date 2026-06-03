@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import type { ShortDramaEpisodeOutline } from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
-  callDoubaoForTextStream,
+  callQwenForTextStream,
   saveShortDramaProjectState,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
@@ -177,7 +177,7 @@ const route: FastifyPluginAsync = async (app) => {
         const userPrompt = `剧本摘要：${state.script.refinedPrompt}\n\n项目视觉风格：${state.settings.style}\n画面比例：${state.settings.aspectRatio}\n\n请只生成第 ${batch.from}-${batch.to} 集，每集包含：\n- episodeNumber: 集数（${batch.from}-${batch.to}）\n- title: 集标题\n- logline: 一句话梗概（20-30字）\n- synopsis: 分场剧本正文，必须类似下面格式：\n### 场1-1\n日 内 旧教室\n【戏剧功能：开场钩子，建立拆迁压力和主角困境】\n出场人物：林微\n【场记锚点：场开始时林微站在教室门口，旧课桌堆在画面右侧；场结束时她走到第一排课桌旁，手按在刻字桌面上】\n【字幕：2024年，南方县城老中学，即将拆除】\n△ 阳光透过布满灰尘的窗户，墙上一个刺眼的红色”拆”字随风晃动。\n角色名（语气）：对白内容。\n角色名（os）：内心独白。\n\n### 场1-2\n夜 外 校园走廊\n【戏剧功能：冲突升级】\n出场人物：角色A、角色B\n【场记锚点：角色A靠近走廊左侧窗台，角色B挡在楼梯口，手机始终握在角色A右手】\n△ 动作与画面调度。\n角色A（压低声音）：对白内容。\n- characters: 该集出现的主要角色列表（字符串数组）\n- scenes: 该集主要场景列表（字符串数组）\n- hook: 悬念或钩子（吸引观众继续观看的要素，50字以内）\n\n长度与节奏要求：\n- 每集 synopsis 必须能支撑约 2 分钟成片，不要生成只能拍几十秒的短概要。\n- 每集整体分成 3-5 个场景，避免 8 个以上碎场；每个场景要有清晰戏剧功能，例如”开场钩子、冲突升级、信息反转、主动选择、结尾钩子”。\n- 每集至少写出 12-16 个清晰的动作/对白节点，方便后续按场内节拍拆成 10-12 个视频片段。\n- 每个场景至少包含 3-6 条”△”动作描写或对白/OS/VO，不要只有一两句概述。\n- 场号按”场${batch.from}-1、场${batch.from}-2...”书写；每场第一行写”日/夜 内/外 地点”，第二行写”【戏剧功能：...】”，第三行写”出场人物：...”，第四行写”【场记锚点：...】”。\n- 多用画面动作和人物对白推进剧情，少写概述性总结。\n- 动作描写要能被摄影和演员执行：写清人物从哪里来、看向哪里、哪只手拿着什么、动作结束停在哪里。\n- 视觉风格“${state.settings.style}”必须体现在场景选择、表演克制程度、镜头节奏、色彩和灯光上，不要只写剧情。\n- 每集要形成一个小冲突和结尾钩子。`
 
         try {
-          const aiResponse = await callDoubaoForTextStream(systemPrompt, userPrompt, OUTLINE_BATCH_MAX_TOKENS, {
+          const aiResponse = await callQwenForTextStream(systemPrompt, userPrompt, OUTLINE_BATCH_MAX_TOKENS, {
             onChunk: (text) => sendEvent('chunk', { text, from: batch.from, to: batch.to }),
             onPing: sendPing,
             audit: {
@@ -185,7 +185,7 @@ const route: FastifyPluginAsync = async (app) => {
               teamId,
               workspaceId: project.workspace_id,
               module: 'short_drama',
-              provider: 'doubao',
+              provider: 'qwen',
               operation: 'script.episode_outlines',
               endpoint: '/chat/completions',
             },

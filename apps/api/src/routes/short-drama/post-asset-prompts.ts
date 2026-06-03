@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import type { ShortDramaAssetKind } from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
-  callDoubaoForTextStream,
+  callQwenForTextStream,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
@@ -230,7 +230,7 @@ const route: FastifyPluginAsync = async (app) => {
         const userPrompt = `剧本摘要（包含人物小传时必须优先参考）：\n${state.script.refinedPrompt}\n\n已有角色：\n${existingCharacters}\n\n已有场景：\n${existingScenes}\n\n当前批次分集剧本：\n${batchOutlines}\n\n项目视觉风格：${state.settings.style}\n项目画面比例：${state.settings.aspectRatio}\n\n请只提取第 ${batch.from}-${batch.to} 集中新增且需要制作参考图的角色和场景。已存在的角色或场景不要重复返回。\n\n## 角色生成原则：\n- 如果角色在”人物小传”中出现，characters[].description 必须基于该角色小传的”视觉形象、核心标签、身份背景、性格特点”提炼。\n- 分集剧本只补充当前年龄阶段、服装年代、校园/职场状态，不要把剧情动作、情绪事件、人物关系写进生图提示词。\n- 角色描述要形成稳定可复用的角色定妆照，而不是某一场戏的截图。\n- 每个角色都要包含可被后续视频识别的固定视觉锚点：脸型五官、肤色、发型轮廓、体型气质、主服装色系。\n- 同一人物不同阶段可以拆成不同素材，但 aliases 要能深度匹配短名和身份称呼，description 要说明阶段差异，不得改掉同一人的核心识别点。\n\n## 场景生成原则：\n- 场景描述要服务后续分镜和视频，写清空间结构、陈设、关键道具位置、年代质感、光线来源和色彩基调。\n- 场景素材必须是无人空镜，不要把剧情事件、人物关系或动作写进去。\n- 必须把项目视觉风格“${state.settings.style}”落实到画风、光影、色彩和空间质感中，不要只写风格名。\n\n## 输出要求：\n- characters[].aliases 必须列出 2-5 个常用称呼、简称、阶段省略名或身份称呼，不要包含 @，不要和 name 完全重复；例如 name 为“祁同伟（大学阶段）”时 aliases 可包含“祁同伟”“祁同伟大学时期”“祁同学”。\n- characters[].description 必须按【选角导演→造型师→摄影指导→负面约束】顺序组织：先写人物基础特征（年龄/性别/族裔/体型/脸部识别点/气质），再写造型（发型/服装/色系/年代感/妆容），最后写拍摄要求（全身正面定妆照/白色背景/无道具）和禁止项。\n- scenes[].description 必须按【美术指导→摄影指导→灯光→负面约束】顺序组织：先写场景类型和陈设（空间/结构/布置/年代/色调/关键道具位置），再写光线氛围（光线/天气/构图/画面比例），明确标注”无人空镜”。\n- 每条 description 控制在 80-140 个汉字，信息密度高，适合直接作为图片生成提示词。\n\n## 返回 JSON 示例：\n{\n  “characters”: [\n    {\n      “name”: “林北辰（大学时期）”,\n      “aliases”: [“林北辰”, “北辰”, “林同学”],\n      “description”: “约23岁东亚汉族男性，纤瘦挺拔身形，棱角分明脸型，高鼻梁薄唇，短黑寸头，眼神清醒克制，书卷气中带寒门锋利感。90年代简洁校服白衬衫配深色长裤，素色系。全身正面定妆照，平视镜头，从头到脚完整入镜，白色摄影棚背景，均匀柔光，无道具无配饰，禁止剧情动作。”\n    }\n  ],\n  “scenes”: [\n    {\n      “name”: “政法大学教学楼”,\n      “description”: “90年代政法大学教学楼外景，灰白四层砖混建筑，方正对称结构，楼前林荫道路和宣传栏固定在画面左侧，复古棕褐色调。日间自然光，晴天正午，16:9 横向全景构图，写实正剧质感，无人空镜，禁止人物和文字标注。”\n    }\n  ]\n}`
 
         try {
-          const aiResponse = await callDoubaoForTextStream(systemPrompt, userPrompt, ASSET_PROMPT_BATCH_MAX_TOKENS, {
+          const aiResponse = await callQwenForTextStream(systemPrompt, userPrompt, ASSET_PROMPT_BATCH_MAX_TOKENS, {
             onChunk: (text) => sendEvent('chunk', { text, from: batch.from, to: batch.to }),
             onPing: sendPing,
             audit: {
@@ -238,7 +238,7 @@ const route: FastifyPluginAsync = async (app) => {
               teamId,
               workspaceId: project.workspace_id,
               module: 'short_drama',
-              provider: 'doubao',
+              provider: 'qwen',
               operation: 'assets.prompts',
               endpoint: '/chat/completions',
             },

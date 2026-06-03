@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
-  callDoubaoForTextStream,
+  callQwenForTextStream,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
@@ -104,7 +104,7 @@ const route: FastifyPluginAsync = async (app) => {
     try {
       sendEvent('progress', { message: '正在生成剧本摘要' })
 
-      const aiResponse = await callDoubaoForTextStream(REDACTED, userPrompt, 8000, {
+      const aiResponse = await callQwenForTextStream(REDACTED, userPrompt, 8000, {
         onChunk: (text) => sendEvent('chunk', { text }),
         onPing: sendPing,
         audit: {
@@ -112,7 +112,7 @@ const route: FastifyPluginAsync = async (app) => {
           teamId,
           workspaceId: project.workspace_id,
           module: 'short_drama',
-          provider: 'doubao',
+          provider: 'qwen',
           operation: 'script.summary',
           endpoint: '/chat/completions',
         },
