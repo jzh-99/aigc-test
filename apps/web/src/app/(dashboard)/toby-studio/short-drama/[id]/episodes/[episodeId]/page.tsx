@@ -24,7 +24,9 @@ export default function EpisodeEditorPage() {
   const episodeNumber = parseInt(params.episodeId as string, 10)
   const workspaceId = useAuthStore(state => state.activeWorkspaceId)
 
-  const { project, state, isLoading, error, mutate } = useShortDramaProject(projectId)
+  const { project, state, isLoading, error, mutate } = useShortDramaProject(projectId, {
+    pollScope: { type: 'episode', episodeNumber },
+  })
   const { models: videoModels } = useModels('video', workspaceId)
   const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL)
   const [videoResolution, setVideoResolution] = useState<VideoResolution>(DEFAULT_VIDEO_RESOLUTION)

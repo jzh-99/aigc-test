@@ -33,6 +33,10 @@ function chineseOnlyText(value: string | undefined): string {
     .join('\n')
 }
 
+function isPendingGenerationStatus(status: string | null | undefined): boolean {
+  return status === 'pending' || status === 'processing'
+}
+
 function FloatingStepAction({
   icon,
   description,
@@ -92,8 +96,8 @@ export default function PictureBookEditorPage() {
   useEffect(() => {
     if (!state || !projectId) return
     const allItems = state.assets.characters.concat(state.assets.backgrounds)
-    const hasPendingAssets = allItems.some(item => item.status === 'pending' || item.status === 'processing') || generatingAssetIds.length > 0
-    const hasPendingStoryboard = state.storyboard.some(page => !page.imageUrl || !page.voice.zh || !page.voice.en)
+    const hasPendingAssets = allItems.some(item => isPendingGenerationStatus(item.status)) || generatingAssetIds.length > 0
+    const hasPendingStoryboard = state.storyboard.some(page => isPendingGenerationStatus(page.status))
       || generatingStoryboardImageIds.length > 0
       || generatingStoryboardAudioIds.length > 0
     if (!hasPendingAssets && !hasPendingStoryboard) return
@@ -120,7 +124,7 @@ export default function PictureBookEditorPage() {
   useEffect(() => {
     if (!state || generatingStoryboardImageIds.length === 0) return
     const doneIds = state.storyboard
-      .filter(page => page.imageUrl && page.status !== 'pending' && page.status !== 'processing')
+      .filter(page => Boolean(page.imageUrl) || page.status === 'completed' || page.status === 'failed')
       .map(page => `page_${page.page}`)
     const doneSet = new Set(doneIds)
     const nextIds = generatingStoryboardImageIds.filter(id => !doneSet.has(id))

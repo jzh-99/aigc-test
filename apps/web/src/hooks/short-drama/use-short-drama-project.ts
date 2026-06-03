@@ -13,13 +13,39 @@ import {
 
 const POLL_INTERVAL = 3_000
 
-function hasPendingWork(state: ShortDramaState): boolean {
+type ShortDramaPollScope =
+  | { type: 'project' }
+  | { type: 'episode'; episodeNumber: number }
+
+function isPendingStatus(status: string | null | undefined): boolean {
+  return status === 'pending' || status === 'generating' || status === 'exporting'
+}
+
+function hasPendingEpisodeWork(state: ShortDramaState, episodeNumber: number): boolean {
+  const episode = state.episodes.items.find(ep => ep.episodeNumber === episodeNumber)
+  const hasPendingSegments = episode?.segments.some(segment => isPendingStatus(segment.status)) ?? false
+  const hasPendingExports = state.exports.batches.some(batch =>
+    batch.episodeNumbers.includes(episodeNumber)
+    && (
+      isPendingStatus(batch.status)
+      || batch.exports.some(item => item.episodeNumber === episodeNumber && isPendingStatus(item.status))
+    )
+  )
+
+  return hasPendingSegments || hasPendingExports
+}
+
+function hasPendingWork(state: ShortDramaState, scope: ShortDramaPollScope): boolean {
+  if (scope.type === 'episode') {
+    return hasPendingEpisodeWork(state, scope.episodeNumber)
+  }
+
   if (state.steps.active === 'script') {
     return state.script.status === 'generating'
   }
 
   const hasPendingAssets = state.assets.items.some(
-    a => a.status === 'pending' || a.status === 'generating'
+    a => isPendingStatus(a.status)
   )
   if (state.steps.active === 'assets') {
     if (state.locks.assets) return false
@@ -27,13 +53,13 @@ function hasPendingWork(state: ShortDramaState): boolean {
   }
 
   const hasPendingSegments = state.episodes.items.some(ep =>
-    ep.segments.some(s => s.status === 'pending' || s.status === 'generating')
+    ep.segments.some(s => isPendingStatus(s.status))
   )
   const hasPendingExports = state.exports.batches.some(
-    b => b.status === 'pending' || b.status === 'exporting'
+    b => isPendingStatus(b.status) || b.exports.some(item => isPendingStatus(item.status))
   )
   if (state.steps.active === 'episodes') {
-    return state.episodes.status === 'generating' || hasPendingSegments || hasPendingExports
+    return hasPendingSegments || hasPendingExports
   }
 
   return false
@@ -58,7 +84,10 @@ function notifyFailedSegmentTransitions(previous: ShortDramaState, next: ShortDr
   }
 }
 
-export function useShortDramaProject(projectId: string | null) {
+export function useShortDramaProject(
+  projectId: string | null,
+  options: { pollScope?: ShortDramaPollScope } = {}
+) {
   const { data, error, isLoading, mutate } = useSWR<ShortDramaProjectDetail>(
     projectId ? `/short-drama/projects/${projectId}` : null,
     projectId ? () => getShortDramaProject(projectId) : null,
@@ -66,14 +95,19 @@ export function useShortDramaProject(projectId: string | null) {
   )
 
   const state = data?.state ?? null
+  const pollScopeType = options.pollScope?.type ?? 'project'
+  const pollEpisodeNumber = options.pollScope?.type === 'episode' ? options.pollScope.episodeNumber : null
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const notifiedFailedSegmentKeysRef = useRef(new Set<string>())
 
   // 自动轮询：当有 pending/generating 状态时每 3s sync
   useEffect(() => {
     if (!projectId || !state) return
+    const pollScope: ShortDramaPollScope = pollScopeType === 'episode' && pollEpisodeNumber
+      ? { type: 'episode', episodeNumber: pollEpisodeNumber }
+      : { type: 'project' }
 
-    if (hasPendingWork(state)) {
+    if (hasPendingWork(state, pollScope)) {
       if (!pollRef.current) {
         pollRef.current = setInterval(async () => {
           try {
@@ -100,7 +134,7 @@ export function useShortDramaProject(projectId: string | null) {
         pollRef.current = null
       }
     }
-  }, [projectId, state, mutate])
+  }, [projectId, state, mutate, pollScopeType, pollEpisodeNumber])
 
   const updateState = useCallback(
     async (partialState: Partial<ShortDramaState>) => {
