@@ -348,6 +348,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
         state: {
           ...state,
           locks: { ...state.locks, assets: true },
+          assets: { ...state.assets, status: 'completed' },
           steps: { active: 'episodes', completed: [...state.steps.completed, 'assets'] },
         },
       })

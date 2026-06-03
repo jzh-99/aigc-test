@@ -14,21 +14,29 @@ import {
 const POLL_INTERVAL = 3_000
 
 function hasPendingWork(state: ShortDramaState): boolean {
-  const hasPendingText = (
-    state.script.status === 'generating' ||
-    state.assets.status === 'generating' ||
-    state.episodes.status === 'generating'
-  )
+  if (state.steps.active === 'script') {
+    return state.script.status === 'generating'
+  }
+
   const hasPendingAssets = state.assets.items.some(
     a => a.status === 'pending' || a.status === 'generating'
   )
+  if (state.steps.active === 'assets') {
+    if (state.locks.assets) return false
+    return state.assets.status === 'generating' || hasPendingAssets
+  }
+
   const hasPendingSegments = state.episodes.items.some(ep =>
     ep.segments.some(s => s.status === 'pending' || s.status === 'generating')
   )
   const hasPendingExports = state.exports.batches.some(
     b => b.status === 'pending' || b.status === 'exporting'
   )
-  return hasPendingText || hasPendingAssets || hasPendingSegments || hasPendingExports
+  if (state.steps.active === 'episodes') {
+    return state.episodes.status === 'generating' || hasPendingSegments || hasPendingExports
+  }
+
+  return false
 }
 
 function notifyFailedSegmentTransitions(previous: ShortDramaState, next: ShortDramaState, notifiedKeys: Set<string>) {
