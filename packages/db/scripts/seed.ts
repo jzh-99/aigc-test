@@ -377,6 +377,21 @@ async function main() {
         usage: ['canvas_text_gen', 'storyboard_split'],
       },
     },
+    {
+      code: 'qwen3.7-max',
+      name: 'qwen3.7-max',
+      description: '画布文本节点 AI 生成、分镜拆分等文本类任务使用的 Qwen 模型',
+      credit_cost: 1,
+      params_pricing: [{ resolution: 'default', model: 'qwen3.7-max', unit_price: 1 }],
+      category_references: TEXT_TO_TEXT_CATEGORY_REFERENCES,
+      params_schema: {
+        endpoint: 'chat/completions',
+        stream: [true, false],
+        enable_thinking: [false, true],
+        max_tokens: [2000, 4000, 16000],
+        usage: ['canvas_text_gen', 'storyboard_split'],
+      },
+    },
   ]
 
   for (const m of qwenAgentModels) {
@@ -1505,7 +1520,36 @@ async function main() {
     .execute()
   console.log(`  provider_models seeded (${shortDramaExportModel.code})`)
 
-  // 13. Prompt filter rule (keyword example) — skip if pattern exists
+  // 13. System cost configs — upsert
+  const systemCostConfigs = [
+    {
+      key: 'music_voice_clone',
+      label: '音色克隆',
+      description: '每次创建音乐音色克隆消耗的A豆',
+      credit_cost: 5,
+    },
+    {
+      key: 'video_segment_merge',
+      label: '分段视频合成',
+      description: '每次合成分段视频消耗的A豆',
+      credit_cost: 3,
+    },
+  ]
+
+  for (const config of systemCostConfigs) {
+    await db
+      .insertInto('system_cost_configs')
+      .values(config)
+      .onConflict((oc: any) => oc.column('key').doUpdateSet({
+        label: config.label,
+        description: config.description,
+        credit_cost: config.credit_cost,
+      }))
+      .execute()
+  }
+  console.log(`  system_cost_configs seeded (${systemCostConfigs.length} items)`)
+
+  // 14. Prompt filter rule (keyword example) — skip if pattern exists
   const existingRule = await db
     .selectFrom('prompt_filter_rules')
     .selectAll()

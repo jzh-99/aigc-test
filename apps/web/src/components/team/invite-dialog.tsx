@@ -173,7 +173,7 @@ export function InviteDialog({
               </div>
 
               <div className="space-y-2">
-                <Label>积分上限</Label>
+                <Label>A豆上限</Label>
                 <Input
                   type="number"
                   min="0"

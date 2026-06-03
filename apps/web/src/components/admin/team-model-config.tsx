@@ -165,9 +165,9 @@ function ModelRow({ model, onToggle, onRestore }: ModelRowProps): React.ReactEle
         <span className="ml-1.5 text-xs text-muted-foreground">{model.code}</span>
       </div>
 
-      {/* 积分消耗 */}
+      {/* A豆消耗 */}
       <span className="text-xs text-muted-foreground shrink-0">
-        {model.credit_cost} 积分
+        {model.credit_cost} A豆
       </span>
 
       {/* 已覆盖 Badge + 恢复默认按钮 */}

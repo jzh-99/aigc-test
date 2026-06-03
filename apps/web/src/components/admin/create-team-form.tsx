@@ -107,7 +107,7 @@ export function CreateTeamForm({ onCreated }: CreateTeamFormProps) {
             </p>
           </div>
           <div className="space-y-2">
-            <Label>初始积分</Label>
+            <Label>初始A豆</Label>
             <Input type="number" value={initialCredits} onChange={(e) => setInitialCredits(e.target.value)} placeholder="1000" />
           </div>
           <div className="space-y-2">

@@ -48,7 +48,7 @@ export function TopupDialog({ teamId, teamName, currentBalance, open, onOpenChan
         amount: finalAmount,
         description: description || undefined,
       })
-      toast.success(mode === 'add' ? `已充值 ${num} 积分` : `已扣减 ${num} 积分`)
+      toast.success(mode === 'add' ? `已充值 ${num} A豆` : `已扣减 ${num} A豆`)
       onSuccess()
       onOpenChange(false)
       setAmount('')
@@ -71,7 +71,7 @@ export function TopupDialog({ teamId, teamName, currentBalance, open, onOpenChan
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>调整积分{teamName ? ` — ${teamName}` : ''}</DialogTitle>
+          <DialogTitle>调整A豆{teamName ? ` — ${teamName}` : ''}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           {currentBalance !== undefined && (

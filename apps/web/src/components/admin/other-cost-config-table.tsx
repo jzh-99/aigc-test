@@ -36,7 +36,7 @@ export function OtherCostConfigTable(): React.ReactElement {
                 <th className="px-2 py-2 text-left font-medium">费用项</th>
                 <th className="px-2 py-2 text-left font-medium">说明</th>
                 <th className="px-2 py-2 text-left font-medium">Key</th>
-                <th className="px-2 py-2 text-right font-medium">积分费用</th>
+                <th className="px-2 py-2 text-right font-medium">A豆费用</th>
                 <th className="px-2 py-2 text-right font-medium">操作</th>
               </tr>
             </thead>
@@ -72,7 +72,7 @@ function CostConfigRow({ item, onSaved }: CostConfigRowProps): React.ReactElemen
   async function handleSave() {
     if (saving) return
     if (isInvalid) {
-      toast.error('积分费用必须是非负整数')
+      toast.error('A豆费用必须是非负整数')
       return
     }
 

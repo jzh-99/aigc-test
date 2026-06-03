@@ -217,7 +217,7 @@ export function TeamTable() {
                 </Select>
                 <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setTopupTeam({ id: team.id, name: team.name, balance: team.balance }) }}>
                   <Coins className="h-3.5 w-3.5 mr-1" />
-                  调整积分
+                  调整A豆
                 </Button>
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <span className="text-xs text-muted-foreground">成员充值</span>
@@ -356,11 +356,11 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
     try {
       const quota = quotaValue.trim() === '' ? null : Number(quotaValue)
       if (quotaValue.trim() !== '' && (isNaN(quota!) || quota! < 0)) {
-        toast.error('请输入有效的积分上限（正整数或留空表示无限）')
+        toast.error('请输入有效的A豆上限（正整数或留空表示无限）')
         return
       }
       await apiPatch(`/admin/teams/${teamId}/members/${editingMember.id}`, { credit_quota: quota })
-      toast.success('积分上限已更新')
+      toast.success('A豆上限已更新')
       setEditingMember(null)
       setTimeout(() => mutate(), 300)
     } catch (err) {
@@ -392,8 +392,8 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
             <th className="text-left py-2 px-2 font-medium">用户名</th>
             <th className="text-left py-2 px-2 font-medium">账户</th>
             <th className="text-left py-2 px-2 font-medium">角色</th>
-            <th className="text-right py-2 px-2 font-medium">已用积分</th>
-            <th className="text-right py-2 px-2 font-medium">积分上限</th>
+            <th className="text-right py-2 px-2 font-medium">已用A豆</th>
+            <th className="text-right py-2 px-2 font-medium">A豆上限</th>
             <th className="text-left py-2 px-2 font-medium">加入时间</th>
             <th className="text-right py-2 px-2 font-medium">操作</th>
           </tr>
@@ -417,12 +417,12 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
               </td>
               <td className="py-2 px-2 text-right">
                 <div className="flex items-center justify-end gap-0.5">
-                  {/* 修改积分上限 */}
+                  {/* 修改A豆上限 */}
                   <Button
                     size="icon"
                     variant="ghost"
                     className="h-6 w-6"
-                    title="修改积分上限"
+                    title="修改A豆上限"
                     onClick={() => openEdit(m)}
                   >
                     <Edit2 className="h-3 w-3" />
@@ -432,7 +432,7 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
                     size="icon"
                     variant="ghost"
                     className="h-6 w-6"
-                    title="刷新用量（重置已用积分为0）"
+                    title="刷新用量（重置已用A豆为0）"
                     disabled={resettingId === m.id}
                     onClick={() => handleResetUsage(m)}
                   >
@@ -458,11 +458,11 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
         </tbody>
       </table>
 
-      {/* 修改积分上限 Dialog */}
+      {/* 修改A豆上限 Dialog */}
       <Dialog open={!!editingMember} onOpenChange={(open) => !open && setEditingMember(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>修改积分上限</DialogTitle>
+            <DialogTitle>修改A豆上限</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
@@ -470,7 +470,7 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
               （当前已用：{(editingMember?.credit_used ?? 0).toLocaleString()}）
             </p>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">积分上限（留空表示无限制）</label>
+              <label className="text-xs text-muted-foreground mb-1 block">A豆上限（留空表示无限制）</label>
               <Input
                 type="number"
                 min={0}
@@ -571,7 +571,7 @@ function WorkspaceBatches({ workspaceId }: { workspaceId: string }) {
                 </span>
               </div>
             </div>
-            <span className="text-muted-foreground shrink-0">{b.actual_credits || b.estimated_credits} 积分</span>
+            <span className="text-muted-foreground shrink-0">{b.actual_credits || b.estimated_credits} A豆</span>
           </div>
         )
       })}

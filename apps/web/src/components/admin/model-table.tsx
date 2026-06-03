@@ -15,6 +15,7 @@ import type { AigcModule, ModelItem } from '@aigc/types'
 const MODULE_TABS: { key: AigcModule; label: string }[] = [
   { key: 'image', label: '图片模型' },
   { key: 'video', label: '视频模型' },
+  { key: 'agent', label: '文本模型' },
   // { key: 'avatar', label: '数字人' },
   // { key: 'action_imitation', label: '动作模仿' },
 ]

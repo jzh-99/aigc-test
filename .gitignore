@@ -17,6 +17,7 @@ dist/
 .claude/worktrees/
 
 .Codex
+.codex_tmp
 
 .codegraph
 

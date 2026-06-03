@@ -59,13 +59,13 @@ export function TeamCreditsSettings({ teamId }: { teamId: string }) {
         <CardContent className="space-y-4">
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">可用积分</p>
+              <p className="text-xs text-muted-foreground">可用A豆</p>
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5 text-accent-orange" />
                 <span className="text-2xl font-bold">{available.toLocaleString()}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>总积分 {balance.toLocaleString()}</span>
+                <span>总A豆 {balance.toLocaleString()}</span>
                 <span>冻结 {frozen.toLocaleString()}</span>
               </div>
             </div>
@@ -78,7 +78,7 @@ export function TeamCreditsSettings({ teamId }: { teamId: string }) {
             <div className="space-y-0.5">
               <Label htmlFor="member-topup-switch">成员充值权限</Label>
               <p className="text-xs text-muted-foreground">
-                开启后，editor 成员可充值个人积分账户（独立于A豆池）
+                开启后，editor 成员可充值个人A豆账户（独立于A豆池）
               </p>
             </div>
             <Switch

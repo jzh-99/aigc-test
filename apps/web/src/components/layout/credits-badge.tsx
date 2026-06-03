@@ -95,7 +95,7 @@ export function CreditsBadge({ collapsed }: CreditsBadgeProps) {
         >
           <Coins className="h-4 w-4 text-blue-400 shrink-0" />
           <div className="flex flex-col flex-1 min-w-0">
-            <span className="text-xs text-muted-foreground">个人积分</span>
+            <span className="text-xs text-muted-foreground">个人A豆</span>
             <span className="text-sm font-medium">{personalBalance.toLocaleString()}</span>
           </div>
         </button>

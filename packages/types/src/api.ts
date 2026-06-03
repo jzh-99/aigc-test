@@ -365,7 +365,7 @@ export interface ModelItem {
   provider_code: string
 }
 
-export type SystemCostConfigKey = 'music_voice_clone'
+export type SystemCostConfigKey = 'music_voice_clone' | 'video_segment_merge'
 
 export interface SystemCostConfigItem {
   key: SystemCostConfigKey

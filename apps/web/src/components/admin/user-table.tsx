@@ -99,7 +99,7 @@ export function UserTable() {
                   <th className="text-left py-3 px-4 font-medium">所属团队</th>
                   <th className="text-right py-3 px-4 font-medium">本期已用</th>
                   <th className="text-right py-3 px-4 font-medium">累计已用</th>
-                  <th className="text-right py-3 px-4 font-medium">积分配额</th>
+                  <th className="text-right py-3 px-4 font-medium">A豆配额</th>
                   <th className="text-left py-3 px-4 font-medium">注册时间</th>
                   <th className="text-left py-3 px-4 font-medium">操作</th>
                 </tr>

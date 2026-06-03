@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 
-const ALLOWED_COST_CONFIG_KEYS = new Set(['music_voice_clone'])
+const ALLOWED_COST_CONFIG_KEYS = new Set(['music_voice_clone', 'video_segment_merge'])
 
 // PATCH /admin/cost-configs/:key — 更新大模型之外的费用配置
 const route: FastifyPluginAsync = async (app) => {
@@ -18,7 +18,7 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: { code: 'NOT_FOUND', message: '费用配置不存在' } })
     }
     if (typeof creditCost !== 'number' || !Number.isInteger(creditCost) || creditCost < 0) {
-      return reply.status(400).send({ error: { code: 'BAD_REQUEST', message: '积分费用必须是非负整数' } })
+      return reply.status(400).send({ error: { code: 'BAD_REQUEST', message: 'A豆费用必须是非负整数' } })
     }
 
     const updated = await db
