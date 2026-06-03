@@ -10,16 +10,20 @@ export interface ImageModelOption {
   label: string
   icon: ElementType
   resolutions: Resolution[]
+  aspectRatios: readonly string[]
   supportsWatermark: boolean
 }
 
+const DEFAULT_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
+const EXTENDED_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'] as const
+
 export const IMAGE_MODEL_OPTIONS: ImageModelOption[] = [
-  { value: 'gemini', label: '全能图片2', icon: Zap, resolutions: ['1k', '2k', '4k'], supportsWatermark: false },
-  { value: 'gpt-image-2', label: '超能图片2', icon: Zap, resolutions: ['2k'], supportsWatermark: false },
-  { value: 'nano-banana-pro', label: '全能图片Pro', icon: Target, resolutions: ['1k', '2k', '4k'], supportsWatermark: false },
-  { value: 'seedream-5.0-lite', label: 'Seedream 5.0', icon: Sparkles, resolutions: ['2k', '3k'], supportsWatermark: true },
-  { value: 'seedream-4.5', label: 'Seedream 4.5', icon: Sparkles, resolutions: ['2k', '4k'], supportsWatermark: true },
-  { value: 'seedream-4.0', label: 'Seedream 4.0', icon: Sparkles, resolutions: ['1k', '2k', '4k'], supportsWatermark: true },
+  { value: 'gemini', label: '全能图片2', icon: Zap, resolutions: ['1k', '2k', '4k'], aspectRatios: EXTENDED_ASPECT_RATIOS, supportsWatermark: false },
+  { value: 'gpt-image-2', label: '超能图片2', icon: Zap, resolutions: ['2k'], aspectRatios: DEFAULT_ASPECT_RATIOS, supportsWatermark: false },
+  { value: 'nano-banana-pro', label: '全能图片Pro', icon: Target, resolutions: ['1k', '2k', '4k'], aspectRatios: EXTENDED_ASPECT_RATIOS, supportsWatermark: false },
+  { value: 'seedream-5.0-lite', label: 'Seedream 5.0', icon: Sparkles, resolutions: ['2k', '3k'], aspectRatios: DEFAULT_ASPECT_RATIOS, supportsWatermark: true },
+  { value: 'seedream-4.5', label: 'Seedream 4.5', icon: Sparkles, resolutions: ['2k', '4k'], aspectRatios: DEFAULT_ASPECT_RATIOS, supportsWatermark: true },
+  { value: 'seedream-4.0', label: 'Seedream 4.0', icon: Sparkles, resolutions: ['1k', '2k', '4k'], aspectRatios: DEFAULT_ASPECT_RATIOS, supportsWatermark: true },
 ]
 
 export const MODEL_CODE_MAP: Record<ModelType, Partial<Record<Resolution, string>>> = {

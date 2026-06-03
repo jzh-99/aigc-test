@@ -2,7 +2,6 @@ import { Loader2, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { IMAGE_MODEL_CREDITS } from '@/lib/credits'
 import {
-  ASPECT_RATIOS_IMAGE,
   IMAGE_MODEL_OPTIONS,
   type ModelType,
   type Resolution,
@@ -133,7 +132,7 @@ export function ImageGenPanel({
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">宽高比</label>
           <div className="flex flex-wrap gap-1">
-            {ASPECT_RATIOS_IMAGE.map((r) => (
+            {currentModel.aspectRatios.map((r) => (
               <button
                 key={r}
                 onClick={() => onUpdateCfg({ aspectRatio: r })}

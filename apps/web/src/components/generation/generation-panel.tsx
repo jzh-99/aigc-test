@@ -55,6 +55,9 @@ function isValidAudioFile(file: File): boolean {
 
 type ModelResolution = '1k' | '2k' | '3k' | '4k'
 
+const DEFAULT_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
+const EXTENDED_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'] as const
+
 const MODEL_OPTIONS: Array<{
   value: 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0'
   label: string
@@ -62,6 +65,7 @@ const MODEL_OPTIONS: Array<{
   desc: string
   credits: number
   resolutions: ModelResolution[]
+  aspectRatios: readonly string[]
   supportsWatermark: boolean
 }> = [
   {
@@ -71,6 +75,7 @@ const MODEL_OPTIONS: Array<{
     desc: '快速生成，适合日常使用',
     credits: IMAGE_MODEL_CREDITS['gemini'],
     resolutions: ['1k', '2k', '4k'],
+    aspectRatios: EXTENDED_ASPECT_RATIOS,
     supportsWatermark: false,
   },
   {
@@ -80,6 +85,7 @@ const MODEL_OPTIONS: Array<{
     desc: '文字渲染准确，UI截图逼真，照片级真实感',
     credits: IMAGE_MODEL_CREDITS['gpt-image-2'],
     resolutions: ['2k'],
+    aspectRatios: DEFAULT_ASPECT_RATIOS,
     supportsWatermark: false,
   },
   {
@@ -89,6 +95,7 @@ const MODEL_OPTIONS: Array<{
     desc: '高质量输出，细节丰富',
     credits: IMAGE_MODEL_CREDITS['nano-banana-pro'],
     resolutions: ['1k', '2k', '4k'],
+    aspectRatios: EXTENDED_ASPECT_RATIOS,
     supportsWatermark: false,
   },
   {
@@ -98,6 +105,7 @@ const MODEL_OPTIONS: Array<{
     desc: '最新火山引擎模型，联网搜索增强',
     credits: IMAGE_MODEL_CREDITS['seedream-5.0-lite'],
     resolutions: ['2k', '3k'],
+    aspectRatios: DEFAULT_ASPECT_RATIOS,
     supportsWatermark: true,
   },
   {
@@ -107,6 +115,7 @@ const MODEL_OPTIONS: Array<{
     desc: '高分辨率图像生成',
     credits: IMAGE_MODEL_CREDITS['seedream-4.5'],
     resolutions: ['2k', '4k'],
+    aspectRatios: DEFAULT_ASPECT_RATIOS,
     supportsWatermark: true,
   },
   {
@@ -116,6 +125,7 @@ const MODEL_OPTIONS: Array<{
     desc: '多分辨率图像生成',
     credits: IMAGE_MODEL_CREDITS['seedream-4.0'],
     resolutions: ['1k', '2k', '4k'],
+    aspectRatios: DEFAULT_ASPECT_RATIOS,
     supportsWatermark: true,
   },
 ]
@@ -126,14 +136,6 @@ const ALL_RESOLUTION_OPTIONS: Array<{ value: ModelResolution; label: string }> =
   { value: '3k', label: '3K' },
   { value: '4k', label: '4K' },
 ]
-
-const ASPECT_RATIOS = [
-  { value: '1:1', label: '1:1' },
-  { value: '4:3', label: '4:3' },
-  { value: '3:4', label: '3:4' },
-  { value: '16:9', label: '16:9' },
-  { value: '9:16', label: '9:16' },
-] as const
 
 const QUANTITY_OPTIONS = [1, 2, 3, 4] as const
 
@@ -398,6 +400,9 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
     const model = MODEL_OPTIONS.find(m => m.value === modelType)
     if (model && !model.resolutions.includes(resolution as ModelResolution)) {
       setResolution(model.resolutions[0])
+    }
+    if (model && !model.aspectRatios.includes(aspectRatio)) {
+      setAspectRatio(model.aspectRatios[0])
     }
   }, [modelType]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1215,6 +1220,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   const availableResolutions = ALL_RESOLUTION_OPTIONS.filter(r =>
     currentModel?.resolutions.includes(r.value) ?? true
   )
+  const availableAspectRatios = currentModel?.aspectRatios ?? DEFAULT_ASPECT_RATIOS
 
   return (
     <div className="flex flex-col gap-3 h-full">
@@ -2379,27 +2385,24 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
               {/* 画面比例 */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">比例</Label>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {ASPECT_RATIOS.map((ar) => (
-                    <button
-                      key={ar.value}
-                      onClick={() => setAspectRatio(ar.value)}
-                      disabled={disabled}
-                      className={cn(
-                        'flex flex-col items-center gap-1 py-1.5 px-1 rounded-lg border-2 transition-all',
-                        aspectRatio === ar.value
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border hover:border-primary/50',
-                        disabled && 'opacity-50 cursor-not-allowed'
-                      )}
-                    >
-                      <div className="flex items-end justify-center h-3.5">
-                        <AspectRatioIcon ratio={ar.value} active={aspectRatio === ar.value} />
-                      </div>
-                      <span className="text-xs font-medium">{ar.label}</span>
-                    </button>
-                  ))}
-                </div>
+                <Select value={aspectRatio} onValueChange={setAspectRatio} disabled={disabled}>
+                  <SelectTrigger className="h-9">
+                    <div className="flex items-center gap-2">
+                      <AspectRatioIcon ratio={aspectRatio} />
+                      <span>{aspectRatio}</span>
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableAspectRatios.map((ar) => (
+                      <SelectItem key={ar} value={ar}>
+                        <div className="flex items-center gap-2">
+                          <AspectRatioIcon ratio={ar} />
+                          <span>{ar}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
@@ -2814,19 +2817,15 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   )
 }
 
-function AspectRatioIcon({ ratio, active }: { ratio: string; active: boolean }) {
+function AspectRatioIcon({ ratio }: { ratio: string }) {
   const [w, h] = ratio.split(':').map(Number)
   const maxSize = 14
   const scale = maxSize / Math.max(w, h)
   const width = Math.round(w * scale)
   const height = Math.round(h * scale)
-
   return (
     <div
-      className={cn(
-        'rounded border-2',
-        active ? 'border-primary bg-primary/20' : 'border-current opacity-40'
-      )}
+      className="rounded-sm border-2 border-current shrink-0"
       style={{ width, height }}
     />
   )
