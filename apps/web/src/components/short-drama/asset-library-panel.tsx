@@ -12,12 +12,13 @@ interface AssetLibraryPanelProps {
 export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelProps) {
   const globalAssets = assets.filter(a => a.scope === 'global')
   const episodeAssets = assets.filter(a => a.scope === 'episode' && a.episodeNumber === episodeNumber)
-  const allAssets = [...globalAssets, ...episodeAssets].filter(asset => asset.kind === 'character' || asset.kind === 'scene')
-  const [activeKind, setActiveKind] = useState<'character' | 'scene'>('character')
+  const allAssets = [...globalAssets, ...episodeAssets].filter(asset => asset.kind === 'character' || asset.kind === 'scene' || asset.kind === 'requisite')
+  const [activeKind, setActiveKind] = useState<'character' | 'scene' | 'requisite'>('character')
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null)
   const filteredAssets = allAssets.filter(asset => asset.kind === activeKind)
   const characterCount = allAssets.filter(asset => asset.kind === 'character').length
   const sceneCount = allAssets.filter(asset => asset.kind === 'scene').length
+  const requisiteCount = allAssets.filter(asset => asset.kind === 'requisite').length
   const previewAsset = previewAssetId ? allAssets.find(asset => asset.id === previewAssetId) : null
   const imageFitClass = activeKind === 'character' ? 'object-contain' : 'object-cover'
 
@@ -27,10 +28,11 @@ export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelPr
         <h3 className="text-sm font-semibold">素材库</h3>
         <span className="text-[11px] text-muted-foreground">本集</span>
       </div>
-      <div className="mb-4 grid grid-cols-2 gap-2">
+      <div className="mb-4 grid grid-cols-3 gap-2">
         {[
           { id: 'character' as const, label: '角色', count: characterCount },
           { id: 'scene' as const, label: '场景', count: sceneCount },
+          { id: 'requisite' as const, label: '道具', count: requisiteCount },
         ].map(tab => (
           <button
             key={tab.id}
@@ -48,7 +50,7 @@ export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelPr
         <p className="text-xs text-muted-foreground">暂无素材</p>
       ) : (
         <div className={`grid max-h-[calc(100vh-18rem)] gap-2 overflow-y-auto pr-1 ${
-          activeKind === 'scene' ? 'grid-cols-1' : 'grid-cols-2'
+          activeKind === 'character' ? 'grid-cols-2' : 'grid-cols-1'
         }`}>
           {filteredAssets.map(asset => (
             <button
@@ -57,12 +59,12 @@ export function AssetLibraryPanel({ assets, episodeNumber }: AssetLibraryPanelPr
               onClick={() => asset.imageUrl && setPreviewAssetId(asset.id)}
               disabled={!asset.imageUrl}
               className={`flex h-full flex-col overflow-hidden rounded-xl border bg-background/60 text-left shadow-sm transition-colors hover:border-primary/30 disabled:cursor-default disabled:hover:border-border ${
-                activeKind === 'scene' ? 'min-h-[164px]' : 'min-h-[196px]'
+                activeKind === 'character' ? 'min-h-[196px]' : 'min-h-[164px]'
               }`}
               aria-label={asset.imageUrl ? `放大查看${asset.name}` : asset.name}
             >
               <div className={`group relative block w-full shrink-0 overflow-hidden bg-muted/40 text-left dark:bg-slate-900/70 ${
-                activeKind === 'scene' ? 'aspect-video h-auto' : 'h-36'
+                activeKind === 'character' ? 'h-36' : 'aspect-video h-auto'
               }`}>
                 <span className={`absolute left-1.5 top-1.5 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm ${
                   asset.imageUrl

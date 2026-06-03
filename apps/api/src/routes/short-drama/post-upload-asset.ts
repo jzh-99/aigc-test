@@ -11,7 +11,7 @@ interface UploadAssetBody {
   scope: 'global' | 'episode'
   episodeNumber?: number
   name?: string
-  kind?: 'character' | 'scene' | 'prop' | 'bgm'
+  kind?: 'character' | 'scene' | 'requisite' | 'bgm'
   description?: string
 }
 
@@ -52,7 +52,7 @@ export default async function postUploadAsset(app: FastifyInstance): Promise<voi
             scope: { type: 'string', enum: ['global', 'episode'] },
             episodeNumber: { type: 'integer', minimum: 1 },
             name: { type: 'string', maxLength: 200 },
-            kind: { type: 'string', enum: ['character', 'scene', 'prop', 'bgm'] },
+            kind: { type: 'string', enum: ['character', 'scene', 'requisite', 'bgm'] },
             description: { type: 'string', maxLength: 2000 },
           },
           additionalProperties: false,

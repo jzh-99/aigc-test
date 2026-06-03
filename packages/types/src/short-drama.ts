@@ -34,7 +34,7 @@ export type ShortDramaProjectStatus = 'draft' | 'generating' | 'completed' | 'fa
 
 export type ShortDramaGenerationStatus = 'idle' | 'pending' | 'generating' | 'completed' | 'failed'
 
-export type ShortDramaAssetKind = 'character' | 'scene' | 'prop' | 'bgm'
+export type ShortDramaAssetKind = 'character' | 'scene' | 'requisite' | 'bgm'
 
 export type ShortDramaAssetScope = 'global' | 'episode'
 
@@ -330,7 +330,7 @@ export function sortShortDramaSegments(segments: ShortDramaSegment[]): ShortDram
 
 export function areShortDramaAssetsReady(state: ShortDramaState): boolean {
   const requiredAssets = state.assets.items.filter(
-    asset => asset.kind === 'character' || asset.kind === 'scene'
+    asset => asset.kind === 'character' || asset.kind === 'scene' || asset.kind === 'requisite'
   )
 
   return (

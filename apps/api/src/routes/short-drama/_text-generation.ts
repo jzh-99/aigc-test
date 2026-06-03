@@ -42,7 +42,7 @@ export interface ShortDramaOutlineBatch {
 }
 
 export interface ShortDramaAssetPromptInput {
-  kind: 'character' | 'scene'
+  kind: 'character' | 'scene' | 'requisite'
   name: string
   aliases?: string[]
   description: string

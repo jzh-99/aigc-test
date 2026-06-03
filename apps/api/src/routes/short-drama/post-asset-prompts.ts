@@ -18,10 +18,10 @@ const ESTIMATED_CREDITS = 15
 const ASSET_PROMPT_BATCH_MAX_TOKENS = 5000
 
 function parseAssetPromptBatch(aiResponse: string): ShortDramaAssetPromptInput[] {
-  const parsed = parseAndValidateJson(aiResponse, ['characters', 'scenes'])
+  const parsed = parseAndValidateJson(aiResponse, ['characters', 'scenes', 'requisites'])
 
-  if (!Array.isArray(parsed.characters) || !Array.isArray(parsed.scenes)) {
-    throw new Error('AI 返回的角色或场景格式错误')
+  if (!Array.isArray(parsed.characters) || !Array.isArray(parsed.scenes) || !Array.isArray(parsed.requisites)) {
+    throw new Error('AI 返回的角色、场景或道具格式错误')
   }
 
   const assets: ShortDramaAssetPromptInput[] = []
@@ -53,12 +53,22 @@ function parseAssetPromptBatch(aiResponse: string): ShortDramaAssetPromptInput[]
     }
   }
 
+  for (const requisite of parsed.requisites as Array<Record<string, unknown>>) {
+    if (typeof requisite.name === 'string' && typeof requisite.description === 'string') {
+      assets.push({
+        kind: 'requisite',
+        name: requisite.name,
+        description: requisite.description,
+      })
+    }
+  }
+
   return assets
 }
 
 function formatExistingAssets(
   assets: Array<{ kind: ShortDramaAssetKind; name: string; aliases?: string[] }>,
-  kind: 'character' | 'scene'
+  kind: 'character' | 'scene' | 'requisite'
 ): string {
   const names = assets
     .filter((asset) => asset.kind === kind)
@@ -145,7 +155,7 @@ const route: FastifyPluginAsync = async (app) => {
           creditAccountId = freezeResult.creditAccountId
         } catch (error) {
           stoppedByBalance = true
-          warningMessage = 'A豆余额不足，已停止生成后续素材描述。已保存已完成的角色和场景描述，请充值后点击「继续生成描述」生成剩余素材。'
+          warningMessage = 'A豆余额不足，已停止生成后续素材描述。已保存已完成的角色、场景和道具描述，请充值后点击「继续生成描述」生成剩余素材。'
           sendEvent('warning', {
             message: warningMessage,
             completedCount,
@@ -156,7 +166,7 @@ const route: FastifyPluginAsync = async (app) => {
         }
 
         sendEvent('progress', {
-          message: `开始提取第 ${batch.from}-${batch.to} 集角色和场景描述`,
+          message: `开始提取第 ${batch.from}-${batch.to} 集角色、场景和道具描述`,
           from: batch.from,
           to: batch.to,
           completedCount,
@@ -170,14 +180,15 @@ const route: FastifyPluginAsync = async (app) => {
 
         const existingCharacters = formatExistingAssets(state.assets.items, 'character')
         const existingScenes = formatExistingAssets(state.assets.items, 'scene')
+        const existingRequisites = formatExistingAssets(state.assets.items, 'requisite')
         const systemPrompt = [
-          '你是短剧视觉制作专家，整合选角导演、造型师、摄影指导、美术指导的专业视角，为图片生成模型提取角色定妆照和场景概念图提示词。',
-          '只输出 JSON 对象，包含 characters、scenes 两个数组；characters 元素包含 name、aliases、description 字段，scenes 元素包含 name、description 字段，不要输出 markdown。',
+          '你是短剧视觉制作专家，整合选角导演、造型师、摄影指导、美术指导、道具师的专业视角，为图片生成模型提取角色定妆照、场景概念图和道具设定图提示词。',
+          '只输出 JSON 对象，包含 characters、scenes、requisites 三个数组；characters 元素包含 name、aliases、description 字段，scenes 和 requisites 元素包含 name、description 字段，不要输出 markdown。',
           '',
           '## 角色定妆照提取规范（选角导演 + 造型师 + 摄影指导视角）',
           '角色形象必须优先基于剧本摘要中”人物小传”的视觉形象、核心标签、身份背景生成；如果人物小传中已有同名角色，不要只根据当前分集剧情临时改写外貌。',
           '分集内容只用于补充该阶段的年龄、服装时代感和出场状态，不得覆盖人物小传中稳定的人物气质和核心视觉特征。',
-          '角色定妆照遵循“基础信息 + 面部细节 + 发型 + 穿搭 + 光影角度 + 风格画质 + 约束条件”的结构，必须写成稳定可复用素材，不写某一场戏的瞬间动作。',
+          '角色定妆照遵循”基础信息 + 面部细节 + 发型 + 穿搭 + 光影角度 + 风格画质 + 约束条件”的结构，必须写成稳定可复用素材，不写某一场戏的瞬间动作。',
           '',
           '### 选角导演视角（casting director）：',
           '- 明确年龄段（如：约25岁、30岁出头、40-45岁、花甲之年）',
@@ -205,10 +216,10 @@ const route: FastifyPluginAsync = async (app) => {
           '### 严格禁止项（道具师不参与角色定妆照）：',
           '禁止写履历、剧情、关系、命运、职业经历、前世今生、组织调查、情节动作。',
           '禁止出现手持道具（手机、包、书本、武器等），禁止佩戴装饰物（眼镜、帽子、首饰等，除非是角色核心标识）。',
-          '禁止写“正在哭、正在打斗、正在奔跑、拿着枪”等剧情动作；禁止夸张妆容、杂乱背景、比例失调、脸型漂移。',
+          '禁止写”正在哭、正在打斗、正在奔跑、拿着枪”等剧情动作；禁止夸张妆容、杂乱背景、比例失调、脸型漂移。',
           '',
           '## 场景概念图提取规范（美术指导 + 摄影指导视角）',
-          '场景概念图遵循“场景类型 + 环境元素 + 光影色调 + 画风 + 用途 + 无人物干扰”的结构，贴合题材，避免冗余元素影响主体。',
+          '场景概念图遵循”场景类型 + 环境元素 + 光影色调 + 画风 + 用途 + 无人物干扰”的结构，贴合题材，避免冗余元素影响主体。',
           '',
           '### 美术指导视角（production designer）：',
           '- 场景类型（如：教学楼外景、咖啡厅内景、街道夜景、办公室）',
@@ -226,8 +237,33 @@ const route: FastifyPluginAsync = async (app) => {
           '',
           '### 严格禁止项：',
           '场景 description 必须是无人空镜，禁止出现人物、人脸、背影、人群、剧情动作、关系图、文字标注、道具特写。',
+          '',
+          '## 道具设定图提取规范（道具师 + 摄影指导视角）',
+          '道具设定图遵循”道具类型 + 外观材质 + 尺寸比例 + 年代质感 + 画风 + 无人物干扰”的结构，只提取对剧情有强叙事作用的关键道具。',
+          '',
+          '### 道具师视角（props master）：',
+          '- 道具类型（如：武器、信件、手机、钥匙、证件、车辆、标志性饰品）',
+          '- 外观细节（如：颜色、形状、纹理、磨损程度、新旧状态）',
+          '- 材质质感（如：金属光泽、木质纹理、皮革质感、玻璃透明）',
+          '- 尺寸比例（如：手掌大小、A4尺寸、一人高、桌面摆放）',
+          '- 年代特征（如：90年代老式电话、2010年代翻盖手机、当代智能手机）',
+          '- 特殊标识（如：刻字、徽章、品牌标志、血迹、指纹）',
+          '',
+          '### 摄影指导视角（cinematographer）：',
+          '- 构图：16:9 横版道具设定图，道具居中或三分构图',
+          '- 背景：简洁纯色背景或与道具氛围匹配的环境虚化',
+          '- 光线：突出材质质感的光线，如侧光强调纹理、柔光展现细节',
+          '- 拍摄角度：45度俯拍或平视，展示道具全貌和关键细节',
+          '',
+          '### 提取原则：',
+          '- 只提取对剧情推进有强叙事作用的关键道具，例如凶器、信件、遗物、标志性车辆、核心证据',
+          '- 不提取日常背景物品（桌椅、门窗、普通家具），这些属于场景范畴',
+          '- 如果剧本中没有明确的关键道具，requisites 返回空数组即可',
+          '',
+          '### 严格禁止项：',
+          '道具 description 禁止出现人物、手部、脸部、背影或人群；禁止剧情动作描述；禁止文字标注。',
         ].join('\n')
-        const userPrompt = `剧本摘要（包含人物小传时必须优先参考）：\n${state.script.refinedPrompt}\n\n已有角色：\n${existingCharacters}\n\n已有场景：\n${existingScenes}\n\n当前批次分集剧本：\n${batchOutlines}\n\n项目视觉风格：${state.settings.style}\n项目画面比例：${state.settings.aspectRatio}\n\n请只提取第 ${batch.from}-${batch.to} 集中新增且需要制作参考图的角色和场景。已存在的角色或场景不要重复返回。\n\n## 角色生成原则：\n- 如果角色在”人物小传”中出现，characters[].description 必须基于该角色小传的”视觉形象、核心标签、身份背景、性格特点”提炼。\n- 分集剧本只补充当前年龄阶段、服装年代、校园/职场状态，不要把剧情动作、情绪事件、人物关系写进生图提示词。\n- 角色描述要形成稳定可复用的角色定妆照，而不是某一场戏的截图。\n- 每个角色都要包含可被后续视频识别的固定视觉锚点：脸型五官、肤色、发型轮廓、体型气质、主服装色系。\n- 同一人物不同阶段可以拆成不同素材，但 aliases 要能深度匹配短名和身份称呼，description 要说明阶段差异，不得改掉同一人的核心识别点。\n\n## 场景生成原则：\n- 场景描述要服务后续分镜和视频，写清空间结构、陈设、关键道具位置、年代质感、光线来源和色彩基调。\n- 场景素材必须是无人空镜，不要把剧情事件、人物关系或动作写进去。\n- 必须把项目视觉风格“${state.settings.style}”落实到画风、光影、色彩和空间质感中，不要只写风格名。\n\n## 输出要求：\n- characters[].aliases 必须列出 2-5 个常用称呼、简称、阶段省略名或身份称呼，不要包含 @，不要和 name 完全重复；例如 name 为“祁同伟（大学阶段）”时 aliases 可包含“祁同伟”“祁同伟大学时期”“祁同学”。\n- characters[].description 必须按【选角导演→造型师→摄影指导→负面约束】顺序组织：先写人物基础特征（年龄/性别/族裔/体型/脸部识别点/气质），再写造型（发型/服装/色系/年代感/妆容），最后写拍摄要求（全身正面定妆照/白色背景/无道具）和禁止项。\n- scenes[].description 必须按【美术指导→摄影指导→灯光→负面约束】顺序组织：先写场景类型和陈设（空间/结构/布置/年代/色调/关键道具位置），再写光线氛围（光线/天气/构图/画面比例），明确标注”无人空镜”。\n- 每条 description 控制在 80-140 个汉字，信息密度高，适合直接作为图片生成提示词。\n\n## 返回 JSON 示例：\n{\n  “characters”: [\n    {\n      “name”: “林北辰（大学时期）”,\n      “aliases”: [“林北辰”, “北辰”, “林同学”],\n      “description”: “约23岁东亚汉族男性，纤瘦挺拔身形，棱角分明脸型，高鼻梁薄唇，短黑寸头，眼神清醒克制，书卷气中带寒门锋利感。90年代简洁校服白衬衫配深色长裤，素色系。全身正面定妆照，平视镜头，从头到脚完整入镜，白色摄影棚背景，均匀柔光，无道具无配饰，禁止剧情动作。”\n    }\n  ],\n  “scenes”: [\n    {\n      “name”: “政法大学教学楼”,\n      “description”: “90年代政法大学教学楼外景，灰白四层砖混建筑，方正对称结构，楼前林荫道路和宣传栏固定在画面左侧，复古棕褐色调。日间自然光，晴天正午，16:9 横向全景构图，写实正剧质感，无人空镜，禁止人物和文字标注。”\n    }\n  ]\n}`
+        const userPrompt = `剧本摘要（包含人物小传时必须优先参考）：\n${state.script.refinedPrompt}\n\n已有角色：\n${existingCharacters}\n\n已有场景：\n${existingScenes}\n\n已有道具：\n${existingRequisites}\n\n当前批次分集剧本：\n${batchOutlines}\n\n项目视觉风格：${state.settings.style}\n项目画面比例：${state.settings.aspectRatio}\n\n请只提取第 ${batch.from}-${batch.to} 集中新增且需要制作参考图的角色、场景和道具。已存在的角色、场景或道具不要重复返回。\n\n## 角色生成原则：\n- 如果角色在”人物小传”中出现，characters[].description 必须基于该角色小传的”视觉形象、核心标签、身份背景、性格特点”提炼。\n- 分集剧本只补充当前年龄阶段、服装年代、校园/职场状态，不要把剧情动作、情绪事件、人物关系写进生图提示词。\n- 角色描述要形成稳定可复用的角色定妆照，而不是某一场戏的截图。\n- 每个角色都要包含可被后续视频识别的固定视觉锚点：脸型五官、肤色、发型轮廓、体型气质、主服装色系。\n- 同一人物不同阶段可以拆成不同素材，但 aliases 要能深度匹配短名和身份称呼，description 要说明阶段差异，不得改掉同一人的核心识别点。\n\n## 场景生成原则：\n- 场景描述要服务后续分镜和视频，写清空间结构、陈设、关键道具位置、年代质感、光线来源和色彩基调。\n- 场景素材必须是无人空镜，不要把剧情事件、人物关系或动作写进去。\n- 必须把项目视觉风格”${state.settings.style}”落实到画风、光影、色彩和空间质感中，不要只写风格名。\n\n## 道具生成原则：\n- 只提取对剧情有强叙事作用的关键道具（如凶器、信件、遗物、标志性车辆、核心证据），不提取日常背景物品。\n- 道具描述要写清外观材质、尺寸比例、年代质感和特殊标识，适合直接作为图片生成提示词。\n- 道具设定图必须是无人空镜，禁止出现人物、手部或人群。\n- 必须把项目视觉风格”${state.settings.style}”落实到材质、光泽和质感描述中。\n- 如果当前分集没有需要单独制作参考图的关键道具，requisites 返回空数组即可。\n\n## 输出要求：\n- characters[].aliases 必须列出 2-5 个常用称呼、简称、阶段省略名或身份称呼，不要包含 @，不要和 name 完全重复；例如 name 为”祁同伟（大学阶段）”时 aliases 可包含”祁同伟””祁同伟大学时期””祁同学”。\n- characters[].description 必须按【选角导演→造型师→摄影指导→负面约束】顺序组织：先写人物基础特征（年龄/性别/族裔/体型/脸部识别点/气质），再写造型（发型/服装/色系/年代感/妆容），最后写拍摄要求（全身正面定妆照/白色背景/无道具）和禁止项。\n- scenes[].description 必须按【美术指导→摄影指导→灯光→负面约束】顺序组织：先写场景类型和陈设（空间/结构/布置/年代/色调/关键道具位置），再写光线氛围（光线/天气/构图/画面比例），明确标注”无人空镜”。\n- requisites[].description 必须按【道具师→摄影指导→负面约束】顺序组织：先写道具体类型和外观（材质/颜色/形状/尺寸/年代/特殊标识），再写拍摄要求（16:9横版/居中构图/纯色背景），明确标注”无人空镜”。\n- 每条 description 控制在 80-140 个汉字，信息密度高，适合直接作为图片生成提示词。\n\n## 返回 JSON 示例：\n{\n  “characters”: [\n    {\n      “name”: “林北辰（大学时期）”,\n      “aliases”: [“林北辰”, “北辰”, “林同学”],\n      “description”: “约23岁东亚汉族男性，纤瘦挺拔身形，棱角分明脸型，高鼻梁薄唇，短黑寸头，眼神清醒克制，书卷气中带寒门锋利感。90年代简洁校服白衬衫配深色长裤，素色系。全身正面定妆照，平视镜头，从头到脚完整入镜，白色摄影棚背景，均匀柔光，无道具无配饰，禁止剧情动作。”\n    }\n  ],\n  “scenes”: [\n    {\n      “name”: “政法大学教学楼”,\n      “description”: “90年代政法大学教学楼外景，灰白四层砖混建筑，方正对称结构，楼前林荫道路和宣传栏固定在画面左侧，复古棕褐色调。日间自然光，晴天正午，16:9 横向全景构图，写实正剧质感，无人空镜，禁止人物和文字标注。”\n    }\n  ],\n  “requisites”: [\n    {\n      “name”: “录取通知书”,\n      “description”: “90年代大学录取通知书，牛皮纸信封，红色校徽印章，毛笔字体校名，纸张微黄带年代感褶皱。16:9 横版道具设定图，道具居中，纯色暖白背景，侧光突出纸张纹理，写实正剧质感，无人空镜，禁止人物和手部。”\n    }\n  ]\n}`
 
         try {
           const aiResponse = await callQwenForTextStream(systemPrompt, userPrompt, ASSET_PROMPT_BATCH_MAX_TOKENS, {
@@ -269,7 +305,7 @@ const route: FastifyPluginAsync = async (app) => {
 
           completedCount = state.assets.processedOutlineCount
           sendEvent('progress', {
-            message: `第 ${batch.from}-${batch.to} 集角色和场景描述提取完成`,
+            message: `第 ${batch.from}-${batch.to} 集角色、场景和道具描述提取完成`,
             from: batch.from,
             to: batch.to,
             completedCount,

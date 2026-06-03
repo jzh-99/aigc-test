@@ -35,6 +35,14 @@ function buildAssetImagePrompt(asset: { kind: string; name: string; description:
     ].join('\n')
   }
 
+  if (asset.kind === 'requisite') {
+    return [
+      basePrompt,
+      '道具形象要求：16:9横版道具设定图，只展示道具外观、材质和细节，不出现任何人物、手部、脸部或人群。',
+      '禁止：角色入镜、手部特写、文字标注、关系图。',
+    ].join('\n')
+  }
+
   return basePrompt
 }
 
@@ -209,7 +217,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
           const asset = targetAssets[i]
           const aspectRatio = asset.kind === 'character'
             ? '9:16'
-            : asset.kind === 'scene'
+            : asset.kind === 'scene' || asset.kind === 'requisite'
               ? '16:9'
               : state.settings.aspectRatio
 

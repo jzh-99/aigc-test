@@ -94,8 +94,9 @@ function buildPromptReferences(
 
   const mentionedAssets = assets.filter(asset => referencedAssetIds.has(asset.id) && asset.imageUrl)
   const sceneAssets = mentionedAssets.filter(asset => asset.kind === 'scene')
-  const otherAssets = mentionedAssets.filter(asset => asset.kind !== 'scene')
-  return [...sceneAssets, ...otherAssets].map((asset, index) => ({
+  const requisiteAssets = mentionedAssets.filter(asset => asset.kind === 'requisite')
+  const otherAssets = mentionedAssets.filter(asset => asset.kind !== 'scene' && asset.kind !== 'requisite')
+  return [...sceneAssets, ...requisiteAssets, ...otherAssets].map((asset, index) => ({
     asset,
     imageUrl: toPublicUrl(asset.imageUrl!),
     figureIndex: index + 1,
@@ -139,7 +140,7 @@ export function buildShortDramaFinalVideoPrompt(input: {
   const styleAnchor = visualStyle?.trim() || '真人影视剧写实风格'
 
   const referenceLines = references.length > 0
-    ? references.map(reference => `图${reference.figureIndex}：${reference.asset.kind === 'scene' ? '场景参考' : '角色参考'}，@${reference.asset.name}，${reference.asset.description}`).join('\n')
+    ? references.map(reference => `图${reference.figureIndex}：${reference.asset.kind === 'scene' ? '场景参考' : reference.asset.kind === 'requisite' ? '道具参考' : '角色参考'}，@${reference.asset.name}，${reference.asset.description}`).join('\n')
     : '无参考图时，严格依据片段文本保持人物、场景和风格一致。'
 
   const timelineLines: string[] = []

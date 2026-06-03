@@ -40,7 +40,7 @@ export function SegmentPromptEditor({
   const availableAssets = assets.filter(a => a.imageUrl)
   const mentionResources: StoryboardMentionResource[] = availableAssets.map(asset => ({
     id: asset.id,
-    kind: asset.kind === 'character' ? 'character' : 'background',
+    kind: asset.kind === 'character' ? 'character' : asset.kind === 'requisite' ? 'requisite' : 'background',
     name: asset.name,
     aliases: getShortDramaAssetMentionAliases(asset).filter(alias => alias !== asset.name),
     imageUrl: asset.imageUrl,

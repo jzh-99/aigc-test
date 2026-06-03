@@ -22,6 +22,7 @@ interface StepAssetsProps {
 const ASSET_TABS: { id: ShortDramaAssetKind; label: string }[] = [
   { id: 'character', label: '角色' },
   { id: 'scene', label: '场景' },
+  { id: 'requisite', label: '道具' },
 ]
 
 function AssetImagePreview({
@@ -98,7 +99,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
   const assets = state.assets.items
   const assetsReady = areShortDramaAssetsReady(state)
-  const requiredAssets = assets.filter(asset => asset.kind === 'character' || asset.kind === 'scene')
+  const requiredAssets = assets.filter(asset => asset.kind === 'character' || asset.kind === 'scene' || asset.kind === 'requisite')
   const completedRequiredAssets = requiredAssets.filter(asset => asset.status === 'completed' && !!asset.imageUrl).length
   const getKindProgress = (kind: ShortDramaAssetKind) => {
     const kindAssets = assets.filter(asset => asset.kind === kind)
@@ -339,7 +340,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
   const handleConfirm = async () => {
     if (!assetsReady) {
-      toast.warning('角色和场景图全部生成结束后，才能进入分集')
+      toast.warning('角色、场景和道具图全部生成结束后，才能进入分集')
       return
     }
     setConfirming(true)
@@ -366,7 +367,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       <div className="rounded-xl border bg-card p-4 shadow-sm">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-950">角色与场景素材</p>
+            <p className="text-sm font-semibold text-slate-950">角色、场景与道具素材</p>
             <p className="mt-1 text-xs text-muted-foreground">
               已完成 {completedRequiredAssets} / {requiredAssets.length}，全部出图后才能进入分集制作
             </p>
@@ -422,7 +423,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
           <div className="font-medium">生成已暂停</div>
           <p className="mt-1">{assetPromptWarningMessage}</p>
           <p className="mt-1 text-xs">
-            已提取 {processedOutlineCount} / {totalOutlineCount} 集，可补充 A豆后继续生成剩余集数的角色和场景。
+            已提取 {processedOutlineCount} / {totalOutlineCount} 集，可补充 A豆后继续生成剩余集数的角色、场景和道具。
           </p>
         </div>
       )}
@@ -441,7 +442,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
       {filteredAssets.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
-          暂无角色或场景素材
+          暂无角色、场景或道具素材
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -511,7 +512,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                     ) : (
                       <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                     )}
-                    {isAssetGenerating ? generationLabel : asset.kind === 'scene' ? '生成场景' : '生成形象'}
+                    {isAssetGenerating ? generationLabel : asset.kind === 'scene' ? '生成场景' : asset.kind === 'requisite' ? '生成道具' : '生成形象'}
                   </Button>
                 )}
               </div>
@@ -523,7 +524,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       {!isLocked && assets.length > 0 && (
         <Button onClick={handleConfirm} disabled={confirming || !assetsReady} className="w-full">
           {confirming ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-          {assetsReady ? '确认素材，进入分集' : '等待角色和场景全部生成'}
+          {assetsReady ? '确认素材，进入分集' : '等待角色、场景和道具全部生成'}
         </Button>
       )}
 
@@ -535,7 +536,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
       {isLocked && !assetsReady && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-center text-sm text-amber-800">
-          素材已确认过，但仍有角色或场景图未完成，请等待全部生成结束后再进入分集
+          素材已确认过，但仍有角色、场景或道具图未完成，请等待全部生成结束后再进入分集
         </div>
       )}
 

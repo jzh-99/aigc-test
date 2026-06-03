@@ -1,16 +1,17 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ImageIcon, Map as MapIcon } from 'lucide-react'
+import { ImageIcon, Map as MapIcon, Package as PackageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PROMPT_MAX_LENGTH = 1200
 const CHARACTER_TOKEN_CLASS = 'border-primary/35 bg-primary/10 text-primary'
-const BACKGROUND_TOKEN_CLASS = 'border-emerald-200 bg-emerald-50 text-emerald-700'
+const BACKGROUND_TOKEN_CLASS = 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300'
+const REQUISITE_TOKEN_CLASS = 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300'
 
 export interface StoryboardMentionResource {
   id: string
-  kind: 'character' | 'background'
+  kind: 'character' | 'background' | 'requisite'
   name: string
   aliases?: string[]
   imageUrl?: string | null
@@ -38,7 +39,9 @@ function escapeRegExp(value: string): string {
 }
 
 function getResourceColor(resource: StoryboardMentionResource): string {
-  return resource.kind === 'character' ? CHARACTER_TOKEN_CLASS : BACKGROUND_TOKEN_CLASS
+  if (resource.kind === 'character') return CHARACTER_TOKEN_CLASS
+  if (resource.kind === 'requisite') return REQUISITE_TOKEN_CLASS
+  return BACKGROUND_TOKEN_CLASS
 }
 
 function getResourceMentionAliases(resource: StoryboardMentionResource): string[] {
@@ -180,7 +183,7 @@ function ResourcePickerGroup({
     <div className="py-1">
       <div className="px-2 pb-1 text-[11px] font-medium text-muted-foreground">{label}</div>
       {resources.map((resource) => {
-        const Icon = resource.kind === 'character' ? ImageIcon : MapIcon
+        const Icon = resource.kind === 'character' ? ImageIcon : resource.kind === 'requisite' ? PackageIcon : MapIcon
         return (
           <button
             key={resource.id}
@@ -297,6 +300,7 @@ export function StoryboardMentionEditor({
 
   const characterResources = resources.filter(resource => resource.kind === 'character')
   const backgroundResources = resources.filter(resource => resource.kind === 'background')
+  const requisiteResources = resources.filter(resource => resource.kind === 'requisite')
   const showPicker = mentionStartIndex != null
   const isEmpty = value.length === 0
 
@@ -340,18 +344,19 @@ export function StoryboardMentionEditor({
       ) : null}
 
       <div className="mt-1 flex justify-between gap-2 text-[11px] text-muted-foreground">
-        <span>输入 @ 引用角色/背景图片作为生图参考</span>
+        <span>输入 @ 引用角色/背景/道具图片作为生图参考</span>
         <span>{Array.from(value).length}/{PROMPT_MAX_LENGTH}</span>
       </div>
 
       {showPicker && !disabled ? (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border bg-popover p-1 shadow-xl">
           {resources.length === 0 ? (
-            <div className="px-2 py-2 text-xs text-muted-foreground">暂无可引用角色或背景</div>
+            <div className="px-2 py-2 text-xs text-muted-foreground">暂无可引用角色、背景或道具</div>
           ) : (
             <>
               <ResourcePickerGroup label="角色" resources={characterResources} onSelect={handleSelectResource} />
               <ResourcePickerGroup label="背景" resources={backgroundResources} onSelect={handleSelectResource} />
+              <ResourcePickerGroup label="道具" resources={requisiteResources} onSelect={handleSelectResource} />
             </>
           )}
         </div>
