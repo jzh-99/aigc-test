@@ -798,8 +798,12 @@ async function main() {
     { label: '6秒', value: 6 },
     { label: '7秒', value: 7 },
     { label: '8秒', value: 8 },
+    { label: '9秒', value: 9 },
     { label: '10秒', value: 10 },
+    { label: '11秒', value: 11 },
     { label: '12秒', value: 12 },
+    { label: '13秒', value: 13 },
+    { label: '14秒', value: 14 },
     { label: '15秒', value: 15 },
   ]
   const volcVideoVoiceArr = [
