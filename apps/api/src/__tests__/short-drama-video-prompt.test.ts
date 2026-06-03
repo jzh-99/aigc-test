@@ -38,10 +38,18 @@ const finalPrompt = buildShortDramaFinalVideoPrompt({
   assets: [asset],
   references: [],
   aspectRatio: '16:9',
+  visualStyle: '现实权谋正剧风',
 })
 
 assert.match(finalPrompt, /@祁同伟（大学阶段）（参考<图1>）/)
 assert.ok(!finalPrompt.includes('@祁同伟 濒死'), '短名引用应替换为带参考图的正式素材名')
+assert.match(finalPrompt, /主体与风格锚点/)
+assert.match(finalPrompt, /现实权谋正剧风/)
+assert.match(finalPrompt, /场景与环境/)
+assert.match(finalPrompt, /参考图约束/)
+assert.match(finalPrompt, /动态分镜脚本/)
+assert.match(finalPrompt, /台词与声音/)
+assert.match(finalPrompt, /负面提示词/)
 
 const aliasSegment: ShortDramaSegment = {
   ...segment,
@@ -59,6 +67,7 @@ const aliasPrompt = buildShortDramaFinalVideoPrompt({
   assets: [asset],
   references: [],
   aspectRatio: '16:9',
+  visualStyle: '现实权谋正剧风',
 })
 
 assert.match(aliasPrompt, /@祁同伟（大学阶段）（参考<图1>）/)

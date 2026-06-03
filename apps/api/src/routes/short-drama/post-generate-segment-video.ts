@@ -31,7 +31,7 @@ type ShortDramaSegmentVideoState = ShortDramaSegment & {
 
 const SEEDANCE_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
 const SEEDANCE_2_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-const NEGATIVE_VIDEO_PROMPT = '画面模糊、人物畸形、光影杂乱、卡通画风、画质糊边、多余杂物、画面卡顿、镜头跳切突兀、人物身份混乱、参考形象不一致、手持道具朝向跳变、关键道具接触点无因果变化'
+const NEGATIVE_VIDEO_PROMPT = '画面模糊、人物畸形、光影杂乱、卡通画风、画质糊边、多余杂物、画面卡顿、镜头跳切突兀、人物身份混乱、参考形象不一致、手持道具朝向跳变、关键道具接触点无因果变化、动作断层、人物站位凭空变化、背景虚假、情绪表演抽象空泛'
 
 interface PromptReferenceAsset {
   asset: ShortDramaAsset
@@ -125,8 +125,9 @@ export function buildShortDramaFinalVideoPrompt(input: {
   toPublicUrl?: (url: string) => string
   references: PromptReferenceAsset[]
   aspectRatio: ShortDramaAspectRatio
+  visualStyle?: string
 }): string {
-  const { segment, aspectRatio } = input
+  const { segment, aspectRatio, visualStyle } = input
   const references = input.references.length > 0
     ? input.references
     : buildPromptReferences(segment, input.assets, input.toPublicUrl ?? ((url) => url))
@@ -135,14 +136,11 @@ export function buildShortDramaFinalVideoPrompt(input: {
   const shotCountText = shots.length > 0 ? `${shots.length} 段镜头依次连贯播放` : '多段镜头依次连贯播放'
   const settingText = sceneSetting || segment.title
   const totalDuration = segment.durationSeconds
+  const styleAnchor = visualStyle?.trim() || '真人影视剧写实风格'
 
-  const basePrompt = [
-    `写实现代都市短片，${attachReferenceLabels(settingText, references)}`,
-    '真人影视剧画质，4K 高清，电影运镜，画面流畅自然',
-    '细腻人物面部微表情，真实肢体动作，环境光影统一，镜头衔接自然',
-    '严格继承上一镜末尾的人物站位、身体朝向、视线方向、手持道具、道具朝向和接触点；除非镜头文字明确写出移动、转向、放下或移开的动作过程，否则不得改变',
-    `画面比例 ${aspectRatio}，${shotCountText}，总时长 ${totalDuration}s`,
-  ].join('，')
+  const referenceLines = references.length > 0
+    ? references.map(reference => `图${reference.figureIndex}：${reference.asset.kind === 'scene' ? '场景参考' : '角色参考'}，@${reference.asset.name}，${reference.asset.description}`).join('\n')
+    : '无参考图时，严格依据片段文本保持人物、场景和风格一致。'
 
   const timelineLines: string[] = []
   if (shots.length > 0) {
@@ -160,12 +158,31 @@ export function buildShortDramaFinalVideoPrompt(input: {
   }
 
   return [
-    '整体基础提示（全局通用）',
-    basePrompt,
+    '主体与风格锚点',
+    [
+      `${styleAnchor}，真人影视剧画质，4K 高清，电影运镜，画面流畅自然`,
+      `本片段主体：${attachReferenceLabels(segment.title, references)}`,
+      '细腻人物面部微表情，真实肢体动作，表演克制可见，避免只用抽象情绪表达',
+      `画面比例 ${aspectRatio}，${shotCountText}，总时长 ${totalDuration}s`,
+    ].join('，'),
     '',
-    `分段时序提示（按镜头时间拆分，对应 ${timelineLines.length} 个分镜）`,
+    '场景与环境',
+    attachReferenceLabels(settingText, references),
+    '',
+    '参考图约束',
+    referenceLines,
+    '出现 @素材名 时必须锁定对应参考图的人物长相、服装阶段、场景结构和光影气质；不得把参考角色换脸、换身份或换年龄阶段。',
+    '',
+    '运镜与节奏',
+    '按照片段脚本中的景别、机位、运动方式和节奏执行。特殊运镜如低角度压迫、手持跟拍、慢推、主观视角、急速切回必须明确体现；普通镜头保持服务叙事，不做无意义炫技。',
+    '',
+    `动态分镜脚本（按镜头时间拆分，对应 ${timelineLines.length} 个分镜）`,
     '每个分镜都从上一分镜的动作落点继续，重点保持手部动作、手持物、道具朝向、接触身体/桌面的位置和环境状态一致。',
+    '严格继承上一镜末尾的人物站位、身体朝向、视线方向、手持道具、道具朝向和接触点；除非镜头文字明确写出移动、转向、放下或移开的动作过程，否则不得改变。',
     ...timelineLines,
+    '',
+    '台词与声音',
+    '如片段文字包含对白、OS、VO 或字幕，只表现为角色正在说话、压低声音、停顿、呼吸、环境音或字幕提示；不要凭空新增剧情台词。需要保留脚步声、喘息声、门响、枪声、纸张摩擦等能增强叙事连续性的声音线索。',
     '',
     '负面提示词（规避劣质画面）',
     NEGATIVE_VIDEO_PROMPT,
@@ -278,6 +295,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         assets: state.assets.items,
         references: promptReferences,
         aspectRatio: state.settings.aspectRatio,
+        visualStyle: state.settings.style,
       })
 
       // 查找视频模型
