@@ -23,8 +23,12 @@ setDefaultResultOrder('ipv4first')
 
 const execFileAsync = promisify(execFile)
 const logger = buildLogger()
-const DOWNLOAD_TIMEOUT_MS = 60_000
-const DOWNLOAD_RETRY_DELAYS_MS = [0, 2_000, 5_000]
+// 连接超时：建立 TCP 连接的最长等待时间
+const CONNECT_TIMEOUT_MS = 30_000
+// 读取超时：连接建立后，读取数据的最长空闲时间
+const READ_TIMEOUT_MS = 120_000
+// 下载重试策略：立即重试 → 等待 3s → 等待 10s → 等待 30s
+const DOWNLOAD_RETRY_DELAYS_MS = [0, 3_000, 10_000, 30_000]
 let downloadHttpsProxyAgent: Agent | null = null
 
 function sleep(ms: number): Promise<void> {
@@ -36,6 +40,11 @@ function getDownloadProxyUrl(): string | null {
 }
 
 function shouldBypassProxy(hostname: string): boolean {
+  // 火山引擎 CDN 域名不走代理，避免代理服务器不稳定导致超时
+  if (hostname.includes('volces.com') || hostname.includes('.tos-cn-')) {
+    return true
+  }
+
   const noProxy = process.env.no_proxy ?? process.env.NO_PROXY
   if (!noProxy) return false
 
@@ -73,10 +82,18 @@ function getDownloadAgent(parsedUrl: URL): Agent | undefined {
 function requestToBuffer(url: string, redirectCount = 0): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url)
+    let connected = false
+    let connectTimer: NodeJS.Timeout | null = null
+    let readTimer: NodeJS.Timeout | null = null
+
+    const cleanup = () => {
+      if (connectTimer) clearTimeout(connectTimer)
+      if (readTimer) clearTimeout(readTimer)
+    }
+
     const request = (parsedUrl.protocol === 'http:' ? httpGet : httpsGet)(
       parsedUrl,
       {
-        timeout: DOWNLOAD_TIMEOUT_MS,
         headers: {
           'User-Agent': 'aigc-worker-transfer/1.0',
           'Accept': 'image/*,video/*,*/*',
@@ -84,6 +101,9 @@ function requestToBuffer(url: string, redirectCount = 0): Promise<Buffer> {
         agent: getDownloadAgent(parsedUrl),
       },
       (res) => {
+        connected = true
+        cleanup()
+
         const statusCode = res.statusCode ?? 0
         const location = res.headers.location
 
@@ -110,16 +130,38 @@ function requestToBuffer(url: string, redirectCount = 0): Promise<Buffer> {
           return
         }
 
+        // 连接建立后，设置读取超时
+        readTimer = setTimeout(() => {
+          request.destroy(new Error(`数据读取超时: ${READ_TIMEOUT_MS}ms url=${url}`))
+        }, READ_TIMEOUT_MS)
+
         const chunks: Buffer[] = []
-        res.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
-        res.on('end', () => resolve(Buffer.concat(chunks)))
+        res.on('data', chunk => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+          // 每次收到数据重置读取超时
+          if (readTimer) clearTimeout(readTimer)
+          readTimer = setTimeout(() => {
+            request.destroy(new Error(`数据读取超时: ${READ_TIMEOUT_MS}ms url=${url}`))
+          }, READ_TIMEOUT_MS)
+        })
+        res.on('end', () => {
+          cleanup()
+          resolve(Buffer.concat(chunks))
+        })
       },
     )
 
-    request.on('timeout', () => {
-      request.destroy(new Error(`下载超时: ${DOWNLOAD_TIMEOUT_MS}ms url=${url}`))
+    // 连接超时：仅针对 TCP 连接建立阶段
+    connectTimer = setTimeout(() => {
+      if (!connected) {
+        request.destroy(new Error(`连接建立超时: ${CONNECT_TIMEOUT_MS}ms url=${url}`))
+      }
+    }, CONNECT_TIMEOUT_MS)
+
+    request.on('error', (err) => {
+      cleanup()
+      reject(err)
     })
-    request.on('error', reject)
   })
 }
 
@@ -128,29 +170,46 @@ function requestToBuffer(url: string, redirectCount = 0): Promise<Buffer> {
  */
 async function downloadToBuffer(url: string): Promise<Buffer> {
   let lastError: unknown
+  const startTime = Date.now()
 
   for (let attempt = 0; attempt < DOWNLOAD_RETRY_DELAYS_MS.length; attempt++) {
     const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt]
     if (delayMs > 0) await sleep(delayMs)
 
+    const attemptStartTime = Date.now()
     try {
-      return await requestToBuffer(url)
+      const buffer = await requestToBuffer(url)
+      const duration = Date.now() - attemptStartTime
+      logger.info({
+        url,
+        attempt: attempt + 1,
+        duration,
+        size: buffer.length,
+        downloadProxyProtocol: getProxyProtocol(getDownloadProxyUrl()),
+        bypassProxy: shouldBypassProxy(new URL(url).hostname),
+      }, '下载远程文件成功')
+      return buffer
     } catch (error) {
       lastError = error
+      const duration = Date.now() - attemptStartTime
       logger.warn({
         url,
         attempt: attempt + 1,
         maxAttempts: DOWNLOAD_RETRY_DELAYS_MS.length,
+        duration,
+        nextRetryDelayMs: attempt + 1 < DOWNLOAD_RETRY_DELAYS_MS.length ? DOWNLOAD_RETRY_DELAYS_MS[attempt + 1] : null,
         downloadProxyProtocol: getProxyProtocol(getDownloadProxyUrl()),
+        bypassProxy: shouldBypassProxy(new URL(url).hostname),
         err: error instanceof Error ? error.message : String(error),
       }, '下载远程文件失败，准备重试')
     }
   }
 
+  const totalDuration = Date.now() - startTime
   const cause = lastError instanceof Error && (lastError as NodeJS.ErrnoException).cause
     ? ` cause=${String((lastError as NodeJS.ErrnoException).cause)}`
     : ''
-  throw new Error(`下载网络错误: ${lastError instanceof Error ? lastError.message : String(lastError)}${cause} url=${url}`)
+  throw new Error(`下载网络错误(总耗时${totalDuration}ms): ${lastError instanceof Error ? lastError.message : String(lastError)}${cause} url=${url}`)
 }
 
 /**
@@ -169,7 +228,9 @@ async function uploadToTos(key: string, buffer: Buffer, contentType: string): Pr
 async function extractVideoThumbnail(videoUrl: string): Promise<Buffer | null> {
   const tmpDir = await mkdtemp(join(tmpdir(), 'aigc-thumb-'))
   const outPath = join(tmpDir, 'thumb.jpg')
+  const startTime = Date.now()
   try {
+    // ffmpeg 提取缩略图：60 秒超时（包含下载视频文件的时间）
     await execFileAsync('ffmpeg', [
       '-i', videoUrl,
       '-ss', '0',
@@ -178,10 +239,19 @@ async function extractVideoThumbnail(videoUrl: string): Promise<Buffer | null> {
       '-q:v', '3',
       '-y',
       outPath,
-    ], { timeout: 30_000 })
-    return await readFile(outPath)
+    ], { timeout: 60_000 })
+    const buffer = await readFile(outPath)
+    const duration = Date.now() - startTime
+    logger.info({ videoUrl, duration, size: buffer.length }, 'ffmpeg 缩略图提取成功')
+    return buffer
   } catch (err) {
-    logger.warn({ err: String(err), videoUrl }, 'ffmpeg 缩略图提取失败')
+    const duration = Date.now() - startTime
+    logger.warn({
+      err: String(err),
+      videoUrl,
+      duration,
+      stderr: err instanceof Error && 'stderr' in err ? String(err.stderr) : null,
+    }, 'ffmpeg 缩略图提取失败')
     return null
   } finally {
     await rm(tmpDir, { recursive: true, force: true })
@@ -242,22 +312,34 @@ export const transferWorker = new Worker<TransferJobData>(
         .where(sql<boolean>`${originalUrl}::text = ANY(output_urls)`)
         .execute()
 
-      logger.info({ jobId: job.id, taskId, storageUrl }, 'Transfer 完成')
+      logger.info({ jobId: job.id, taskId, storageUrl, thumbnailUrl }, 'Transfer 完成')
     } catch (err) {
-      // Node.js fetch 错误的根因藏在 cause 里，必须一起打印
+      // Node.js 错误的根因藏在 cause 里，必须一起打印
       const msg = err instanceof Error ? err.message : String(err)
       const cause = err instanceof Error && (err as NodeJS.ErrnoException).cause
         ? String((err as NodeJS.ErrnoException).cause)
         : undefined
+      const code = err instanceof Error && 'code' in err ? String(err.code) : undefined
+      const parsedUrl = new URL(originalUrl)
+
       logger.error({
         jobId: job.id,
         taskId,
         assetId,
+        assetType,
         originalUrl,
+        originalUrlHostname: parsedUrl.hostname,
         err: msg,
         cause,
+        code,
+        attemptsMade: job.attemptsMade,
+        maxAttempts: job.opts.attempts ?? 1,
         storage: getStorageRuntimeInfo(),
+        proxyUrl: getDownloadProxyUrl(),
         downloadProxyProtocol: getProxyProtocol(getDownloadProxyUrl()),
+        bypassProxy: shouldBypassProxy(parsedUrl.hostname),
+        connectTimeoutMs: CONNECT_TIMEOUT_MS,
+        readTimeoutMs: READ_TIMEOUT_MS,
       }, 'Transfer 失败')
 
       const attempts = job.opts.attempts ?? 1
@@ -269,6 +351,12 @@ export const transferWorker = new Worker<TransferJobData>(
           .set({ transfer_status: 'failed' })
           .where('id', '=', assetId)
           .execute()
+        logger.error({
+          jobId: job.id,
+          taskId,
+          assetId,
+          attemptsMade: job.attemptsMade + 1,
+        }, 'Transfer 最终失败，已标记为 failed')
       }
 
       throw err
