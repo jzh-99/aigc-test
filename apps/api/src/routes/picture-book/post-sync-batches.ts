@@ -59,6 +59,10 @@ const route: FastifyPluginAsync = async (app) => {
         applySyncedAssetToState(state, row.kind, row.refId, url, status)
       }
 
+      // 孤儿资产修复：state 中 pending/processing 但无对应 picture_book_project_assets 记录的资产
+      // 说明生成接口调用失败（batch 未创建），前端状态却已更新为 pending，导致"永久生成中"
+      markOrphanAssetsAsFailed(state, rows)
+
       state.steps = normalizeStepsAfterSync(state)
 
       const charges = await getDb()
@@ -187,6 +191,64 @@ function normalizeAssetStatus(status: string | null): 'pending' | 'processing' |
   return 'pending'
 }
 
+/**
+ * 孤儿资产修复：
+ * state 中 status 为 pending/processing，但 picture_book_project_assets 无对应记录的资产，
+ * 说明生成接口调用失败（task_batches 从未被创建），前端状态却已更新为 pending，导致"永久生成中"。
+ * 这类孤儿资产不会被前面的行遍历覆盖到（rows 里根本没有它们），必须单独处理。
+ */
+function markOrphanAssetsAsFailed(state: any, rows: Array<{ kind: string; refId: string }>): void {
+  // 数据库中存在记录的 refId 集合（按 kind 分组）
+  const knownRefs = new Map<string, Set<string>>()
+  for (const row of rows) {
+    if (!knownRefs.has(row.kind)) knownRefs.set(row.kind, new Set())
+    knownRefs.get(row.kind)!.add(row.refId)
+  }
+
+  const isOrphanPending = (item: any, kind: string): boolean => {
+    if (!item.id) return false
+    if (item.status !== 'pending' && item.status !== 'processing') return false
+    return !knownRefs.get(kind)?.has(item.id)
+  }
+
+  if (Array.isArray(state.assets?.characters)) {
+    state.assets.characters = state.assets.characters.map((item: any) =>
+      isOrphanPending(item, 'character') ? { ...item, status: 'failed', imageUrl: null } : item,
+    )
+  }
+
+  if (Array.isArray(state.assets?.backgrounds)) {
+    state.assets.backgrounds = state.assets.backgrounds.map((item: any) =>
+      isOrphanPending(item, 'background') ? { ...item, status: 'failed', imageUrl: null } : item,
+    )
+  }
+
+  if (Array.isArray(state.storyboard)) {
+    state.storyboard = state.storyboard.map((page: any) => {
+      const refId = `page_${page.page}`
+      const updated = { ...page }
+
+      if ((page.status === 'pending' || page.status === 'processing') && !knownRefs.get('page_image')?.has(refId)) {
+        updated.status = 'failed'
+      }
+
+      // 音频孤儿：voice 有 zh/en 占位但无实际 URL，且无对应资产记录
+      if (page.voice && typeof page.voice === 'object') {
+        const voice = { ...page.voice }
+        if (voice.zh && !voice.zh.startsWith?.('http') && !knownRefs.get('page_audio_zh')?.has(refId)) {
+          voice.zh = ''
+        }
+        if (voice.en && !voice.en.startsWith?.('http') && !knownRefs.get('page_audio_en')?.has(refId)) {
+          voice.en = ''
+        }
+        updated.voice = voice
+      }
+
+      return updated
+    })
+  }
+}
+
 function applySyncedAssetToState(state: any, kind: string, refId: string, url: string | null, status: string): void {
   if (kind === 'character') {
     state.assets.characters = state.assets.characters.map((item: any) => item.id === refId ? { ...item, imageUrl: url ?? item.imageUrl ?? null, status } : item)
@@ -196,11 +258,17 @@ function applySyncedAssetToState(state: any, kind: string, refId: string, url: s
     state.assets.backgrounds = state.assets.backgrounds.map((item: any) => item.id === refId ? { ...item, imageUrl: url ?? item.imageUrl ?? null, status } : item)
     return
   }
-  if (!url) return
   if (kind === 'page_image') {
-    state.storyboard = state.storyboard.map((page: any) => `page_${page.page}` === refId ? { ...page, imageUrl: url } : page)
+    state.storyboard = state.storyboard.map((page: any) => `page_${page.page}` === refId
+      ? {
+          ...page,
+          imageUrl: url ?? page.imageUrl ?? null,
+          status: status === 'completed' || status === 'failed' ? status : page.status,
+        }
+      : page)
     return
   }
+  if (!url) return
   if (kind === 'page_audio_zh') {
     state.storyboard = state.storyboard.map((page: any) => `page_${page.page}` === refId ? { ...page, voice: { ...page.voice, zh: url } } : page)
     return
