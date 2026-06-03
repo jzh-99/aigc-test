@@ -507,7 +507,7 @@ async function main() {
       ],
       params_schema: {
         resolution: ['1k', '2k', '4k'],
-        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
         image: [],
       },
       category_references: SIX_IMAGE_CATEGORY_REFERENCES,
@@ -539,7 +539,7 @@ async function main() {
       ],
       params_schema: {
         resolution: ['1k', '2k', '4k'],
-        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
         image: [],
       },
       category_references: SIX_IMAGE_CATEGORY_REFERENCES,
