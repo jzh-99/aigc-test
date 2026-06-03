@@ -868,6 +868,13 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
       state.script.outlines.length < state.settings.episodeCount
     )
   const isEditingSummary = Boolean(editingSummaryHeading || characterBioDialog)
+  const summarySectionsForNavigation = state.script.refinedPrompt ? parseScriptSummary(state.script.refinedPrompt) : {}
+  const hasCharacterBioNavigation = Boolean(
+    summarySectionsForNavigation.人物小传 &&
+    parseCharacterBios(summarySectionsForNavigation.人物小传).length > 0
+  )
+  const hasOutlinesNavigation = state.script.outlines.length > 0
+  const hasConfirmNavigation = !isLocked && state.script.outlines.length === state.settings.episodeCount
 
   useEffect(() => {
     if (isEditingSummary) return
@@ -1300,37 +1307,48 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
           <div className="px-1.5 font-medium text-muted-foreground">导航</div>
           <div className="space-y-0.5">
             <div className="px-1.5 pt-1 text-[11px] font-medium text-foreground">剧本</div>
-            {[
-              ['原始创意', '#short-drama-original'],
-              ['剧本摘要', '#short-drama-summary'],
-              ['人物小传', '#short-drama-character-bios'],
-            ].map(([label, href]) => (
-              <a
-                key={href}
-                href={href}
-                className="block rounded-md px-3 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
-              >
-                {label}
-              </a>
-            ))}
-          </div>
-          <div className="space-y-0.5">
-            <div className="px-1.5 pt-1 text-[11px] font-medium text-foreground">分集</div>
             <a
-              href="#short-drama-outlines"
+              href="#short-drama-original"
               className="block rounded-md px-3 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
             >
-              分集剧本
+              原始创意
             </a>
-          </div>
-          <div className="space-y-0.5 border-t border-border/60 pt-1">
             <a
-              href="#short-drama-confirm"
-              className="block rounded-md px-1.5 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+              href="#short-drama-summary"
+              className="block rounded-md px-3 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
             >
-              确认剧本
+              剧本摘要
             </a>
+            {hasCharacterBioNavigation && (
+              <a
+                href="#short-drama-character-bios"
+                className="block rounded-md px-3 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+              >
+                人物小传
+              </a>
+            )}
           </div>
+          {hasOutlinesNavigation && (
+            <div className="space-y-0.5">
+              <div className="px-1.5 pt-1 text-[11px] font-medium text-foreground">分集</div>
+              <a
+                href="#short-drama-outlines"
+                className="block rounded-md px-3 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+              >
+                分集剧本
+              </a>
+            </div>
+          )}
+          {hasConfirmNavigation && (
+            <div className="space-y-0.5 border-t border-border/60 pt-1">
+              <a
+                href="#short-drama-confirm"
+                className="block rounded-md px-1.5 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+              >
+                确认剧本
+              </a>
+            </div>
+          )}
         </nav>
       </aside>
     </div>
