@@ -19,12 +19,13 @@ function isPendingStatus(status?: string): boolean {
 
 function hasPendingWork(state: PictureBookState): boolean {
   // 检查资产生成状态
-  const hasPendingAssets = state.assets?.items?.some(
+  const allAssets = [...(state.assets?.characters ?? []), ...(state.assets?.backgrounds ?? [])]
+  const hasPendingAssets = allAssets.some(
     a => isPendingStatus(a.status)
-  ) ?? false
+  )
 
   // 检查分镜生成状态
-  const hasPendingStoryboards = state.storyboards?.items?.some(
+  const hasPendingStoryboards = state.storyboard?.some(
     s => isPendingStatus(s.status)
   ) ?? false
 

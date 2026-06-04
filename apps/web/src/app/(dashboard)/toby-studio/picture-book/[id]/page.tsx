@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookOpenCheck, CheckCircle2, Loader2, WandSparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpenCheck, CheckCircle2, Loader2, Sparkles, WandSparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -596,6 +596,7 @@ export default function PictureBookEditorPage() {
             onGenerateOneImage={(refId) => void generateOneStoryboardImage(refId)}
             onGenerateOneAudio={(refId, voiceZhId, voiceEnId) => void generateOneStoryboardAudio(refId, voiceZhId, voiceEnId)}
           />
+          </>
         )}
         {state.steps.active === 'preview' && <StepPreview state={state} />}
       </main>
