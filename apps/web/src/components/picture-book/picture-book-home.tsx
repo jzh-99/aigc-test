@@ -49,12 +49,13 @@ export function PictureBookHome() {
         aspect_ratio: aspectRatio,
         onChunk: (text) => setStreamText((prev) => prev + text),
       })
+      // 成功后保持加载状态，直接跳转（组件卸载时自然结束）
       router.push(`/toby-studio/picture-book/${result.projectId}`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '生成剧本失败')
-    } finally {
+      // 只有失败时才重置状态
       setSubmitting(false)
       setStreamText('')
+      toast.error(error instanceof Error ? error.message : '生成剧本失败')
     }
   }
 
