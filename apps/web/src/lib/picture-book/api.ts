@@ -10,6 +10,7 @@ import type {
   PictureBookState,
   PictureBookStyle,
   PictureBookTarget,
+  PictureBookElement,
 } from './types'
 
 const BASE = '/picture-book'
@@ -161,18 +162,46 @@ export function deletePictureBookProject(projectId: string) {
   return fetchWithAuth<{ success: boolean }>(`${BASE}/projects/${projectId}`, { method: 'DELETE' })
 }
 
-export function generatePictureBookAssetPrompts(projectId: string): Promise<{ success: boolean; taskId: string }> {
-  return fetchWithAuth<{ success: boolean; taskId: string }>(
-    `${BASE}/asset-prompts`,
-    jsonInit('POST', { project_id: projectId }),
-  )
+export async function generatePictureBookAssetPrompts(projectId: string): Promise<{ success: boolean; assets: { characters: PictureBookElement[]; backgrounds: PictureBookElement[] }; state: PictureBookState }> {
+  const token = useAuthStore.getState().accessToken
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${BASE}/asset-prompts`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({ project_id: projectId }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const msg = (err as any)?.error?.message ?? '生成角色/背景提示词失败'
+    throw new Error(msg)
+  }
+
+  return consumeSSEStream<{ success: boolean; assets: { characters: PictureBookElement[]; backgrounds: PictureBookElement[] }; state: PictureBookState }>(res)
 }
 
-export function generatePictureBookStoryboardPrompts(projectId: string): Promise<{ success: boolean; taskId: string }> {
-  return fetchWithAuth<{ success: boolean; taskId: string }>(
-    `${BASE}/storyboard-prompts`,
-    jsonInit('POST', { project_id: projectId }),
-  )
+export async function generatePictureBookStoryboardPrompts(projectId: string): Promise<{ success: boolean; storyboard: any[]; state: PictureBookState }> {
+  const token = useAuthStore.getState().accessToken
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${BASE}/storyboard-prompts`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({ project_id: projectId }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const msg = (err as any)?.error?.message ?? '生成分镜提示词失败'
+    throw new Error(msg)
+  }
+
+  return consumeSSEStream<{ success: boolean; storyboard: any[]; state: PictureBookState }>(res)
 }
 
 export function generatePictureBookAssets(projectId: string, targets?: PictureBookTarget[], params?: Record<string, unknown>) {

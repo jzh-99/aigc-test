@@ -200,10 +200,10 @@ export default function PictureBookEditorPage() {
       project.updateState(nextState)
       await project.flushDraft(nextState)
       const result = await generatePictureBookAssetPrompts(projectId)
+      // SSE 返回的 state 已经包含更新，直接刷新
       await project.mutate()
       setConfirmDialogOpen(false)
-      toast.success('故事和分页内容已确认，角色/背景提示词生成任务已提交', {
-        description: `任务 ID: ${result.taskId}`,
+      toast.success('故事和分页内容已确认，角色/背景提示词已生成', {
         duration: 5000,
       })
     } catch (error) {
@@ -314,10 +314,10 @@ export default function PictureBookEditorPage() {
       project.updateState(nextState)
       await project.flushDraft(nextState)
       const result = await generatePictureBookStoryboardPrompts(projectId)
+      // SSE 返回的 state 已经包含更新，直接刷新
       await project.mutate()
       setConfirmAssetsDialogOpen(false)
-      toast.success('角色/背景已确认，绘本分镜提示词生成任务已提交', {
-        description: `任务 ID: ${result.taskId}`,
+      toast.success('角色/背景已确认，绘本分镜提示词已生成', {
         duration: 5000,
       })
     } catch (error) {
@@ -468,8 +468,7 @@ export default function PictureBookEditorPage() {
                         try {
                           const result = await generatePictureBookAssetPrompts(projectId)
                           await project.mutate()
-                          toast.success('角色/背景提示词重新生成任务已提交', {
-                            description: `任务 ID: ${result.taskId}`,
+                          toast.success('角色/背景提示词已重新生成', {
                             duration: 5000,
                           })
                         } catch (error) {
@@ -550,8 +549,7 @@ export default function PictureBookEditorPage() {
                       try {
                         const result = await generatePictureBookStoryboardPrompts(projectId)
                         await project.mutate()
-                        toast.success('分镜提示词重新生成任务已提交', {
-                          description: `任务 ID: ${result.taskId}`,
+                        toast.success('分镜提示词已重新生成', {
                           duration: 5000,
                         })
                       } catch (error) {
