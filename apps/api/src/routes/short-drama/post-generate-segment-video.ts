@@ -138,6 +138,9 @@ export function buildShortDramaFinalVideoPrompt(input: {
   const settingText = sceneSetting || segment.title
   const totalDuration = segment.durationSeconds
   const styleAnchor = visualStyle?.trim() || '真人影视剧写实风格'
+  const stylizedStyleGuard = /2d|二维|3d|三维|动漫|漫画|插画|卡通|国漫|日漫|赛璐璐|黏土|粘土|clay|盲盒|定格|虾仁/i.test(styleAnchor)
+    ? '风格化动画画面质感，保持线条、上色、材质、光影和角色表演统一；如果是 3D、黏土、盲盒、定格动画或虾仁动画风格，必须强化对应的造型体积、材质和动画美术特征；禁止真人照片、写实摄影、影视剧剧照或真实摄影棚质感'
+    : '高质量短剧画面，画面质感严格服从上述风格'
 
   const referenceLines = references.length > 0
     ? references.map(reference => `图${reference.figureIndex}：${reference.asset.kind === 'scene' ? '场景参考' : reference.asset.kind === 'requisite' ? '道具参考' : '角色参考'}，@${reference.asset.name}，${reference.asset.description}`).join('\n')
@@ -161,9 +164,9 @@ export function buildShortDramaFinalVideoPrompt(input: {
   return [
     '主体与风格锚点',
     [
-      `${styleAnchor}，真人影视剧画质，4K 高清，电影运镜，画面流畅自然`,
+      `${styleAnchor}，${stylizedStyleGuard}，4K 高清，电影运镜，画面流畅自然`,
       `本片段主体：${attachReferenceLabels(segment.title, references)}`,
-      '细腻人物面部微表情，真实肢体动作，表演克制可见，避免只用抽象情绪表达',
+      '细腻人物面部微表情，可信肢体动作，表演克制可见，避免只用抽象情绪表达',
       `画面比例 ${aspectRatio}，${shotCountText}，总时长 ${totalDuration}s`,
     ].join('，'),
     '',

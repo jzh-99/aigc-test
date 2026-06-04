@@ -16,11 +16,20 @@ interface GenerateAssetsBody {
   episodeId?: string
 }
 
-function buildAssetImagePrompt(asset: { kind: string; name: string; description: string }): string {
+function buildAssetImagePrompt(
+  asset: { kind: string; name: string; description: string },
+  visualStyle: string
+): string {
   const basePrompt = `${asset.name}：${asset.description}`.trim()
+  const stylePrompt = [
+    `项目视觉风格：${visualStyle || '短剧统一视觉风格'}。`,
+    '必须严格按该视觉风格生成，角色、场景、道具的画风、线条、材质、色彩、光影和细节表现都要统一遵循该风格。',
+    '如果项目视觉风格是 2D/3D 动漫、漫画、插画、卡通、国漫、日漫、赛璐璐、黏土/粘土、盲盒、定格动画或虾仁动画风格，禁止生成真人照片、写实摄影、影视剧剧照或真实摄影棚质感。',
+  ].join('')
 
   if (asset.kind === 'character') {
     return [
+      stylePrompt,
       basePrompt,
       '人物形象要求：9:16竖版全身正面定妆照，完整展示头顶到鞋底，人物居中站立，从头到脚完整入镜，保留身体比例和完整服装细节，单人出镜，白色纯净背景，光线均匀，五官清晰。',
       '禁止：半身照、胸像、头部特写、裁切头部或脚部、多人合影、剧情场景、文字标注、边框、图表、装饰物、手持道具、额外物品、复杂背景。',
@@ -29,6 +38,7 @@ function buildAssetImagePrompt(asset: { kind: string; name: string; description:
 
   if (asset.kind === 'scene') {
     return [
+      stylePrompt,
       basePrompt,
       '场景形象要求：16:9横版场景设定图，只展示环境空间和地点氛围，不出现任何人物、人体、脸部、背影或人群。',
       '禁止：角色入镜、人物肖像、手部特写、文字标注、关系图、剧情分镜拼图。',
@@ -37,13 +47,14 @@ function buildAssetImagePrompt(asset: { kind: string; name: string; description:
 
   if (asset.kind === 'requisite') {
     return [
+      stylePrompt,
       basePrompt,
       '道具形象要求：16:9横版道具设定图，只展示道具外观、材质和细节，不出现任何人物、手部、脸部或人群。',
       '禁止：角色入镜、手部特写、文字标注、关系图。',
     ].join('\n')
   }
 
-  return basePrompt
+  return [stylePrompt, basePrompt].join('\n')
 }
 
 export default async function postGenerateAssets(app: FastifyInstance): Promise<void> {
@@ -134,7 +145,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
       }
 
       // 创建 batch + tasks，入队
-      const targetPrompts = targetAssets.map(buildAssetImagePrompt)
+      const targetPrompts = targetAssets.map(asset => buildAssetImagePrompt(asset, state.settings.style))
       const sourceMetadata = makeShortDramaSourceMetadata({
         projectId: project.id,
         episodeId: episodeId ?? undefined,

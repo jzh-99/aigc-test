@@ -131,18 +131,17 @@ export function AssetLibraryPanel({ assets, episodeNumber, projectId, episodeMen
   return (
     <aside className="rounded-2xl border bg-card/80 p-3">
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <h3 className="text-sm font-semibold">素材库</h3>
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-2">
             <Switch
               id="show-all-assets"
               checked={showAll}
               onCheckedChange={setShowAll}
-              className="h-4 w-7"
             />
             <label
               htmlFor="show-all-assets"
-              className="cursor-pointer text-[11px] text-muted-foreground select-none"
+              className="min-w-6 cursor-pointer select-none text-[11px] text-muted-foreground"
             >
               {showAll ? '全部' : '本集'}
             </label>
@@ -197,13 +196,13 @@ export function AssetLibraryPanel({ assets, episodeNumber, projectId, episodeMen
               <div className={`group relative block w-full shrink-0 overflow-hidden bg-muted/40 text-left dark:bg-slate-900/70 ${
                 activeKind === 'character' ? 'h-36' : 'aspect-video h-auto'
               }`}>
-                <span className={`absolute left-1.5 top-1.5 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm ${
+                {/* <span className={`absolute left-1.5 top-1.5 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm ${
                   asset.imageUrl
                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200'
                     : 'bg-muted text-muted-foreground dark:bg-slate-800 dark:text-slate-300'
                 }`}>
                   {asset.imageUrl ? '已出图' : '未出图'}
-                </span>
+                </span> */}
                 {asset.imageUrl ? (
                   <>
                     <img src={asset.imageUrl} alt={asset.name} className={`h-full w-full transition-transform duration-300 group-hover:scale-105 ${imageFitClass}`} />
