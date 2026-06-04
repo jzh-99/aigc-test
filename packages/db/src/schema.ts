@@ -412,6 +412,8 @@ export interface ProviderApiLogsTable {
   operation: string
   method: string
   endpoint: string
+  request_url: string | null
+  referer: string | null
   request_payload: ColumnType<unknown, string | null, string | null> | null
   request_truncated: Generated<boolean>
   response_status: number | null

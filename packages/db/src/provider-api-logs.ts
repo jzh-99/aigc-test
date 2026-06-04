@@ -17,6 +17,8 @@ export interface ProviderApiLogInput {
   operation: string
   method: string
   endpoint: string
+  requestUrl?: string | null  // 完整的请求 URL（包含协议、host、路径、查询参数）
+  referer?: string | null  // 业务来源（触发此次 AI 调用的业务接口路径）
   requestPayload?: unknown
   responseStatus?: number | null
   responsePayload?: unknown
@@ -91,6 +93,8 @@ export async function recordProviderApiLog(input: ProviderApiLogInput): Promise<
         operation: input.operation,
         method: input.method,
         endpoint: input.endpoint,
+        request_url: input.requestUrl ?? null,
+        referer: input.referer ?? null,
         request_payload: jsonOrNull(request.payload),
         request_truncated: request.truncated,
         response_status: input.responseStatus ?? null,
