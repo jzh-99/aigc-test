@@ -141,7 +141,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
     })
   }, [assets])
 
-  const handleGeneratePrompts = async () => {
+  const handleGeneratePrompts = async (triggeredBy: 'auto' | 'manual' = 'auto') => {
     setGeneratingPrompts(true)
     setAssetPromptStreamText('')
     setAssetPromptProgressMessage('')
@@ -162,7 +162,16 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
         toast.success('素材描述生成完成')
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '生成失败')
+      const errorMessage = err instanceof Error ? err.message : '生成失败'
+
+      // 如果是自动触发（页面刷新）且任务已在进行中，静默处理
+      if (triggeredBy === 'auto' && (errorMessage.includes('未完成') || errorMessage.includes('进行中'))) {
+        console.info('素材描述生成任务已在进行中，等待完成')
+        return
+      }
+
+      // 手动触发或其他错误才提示用户
+      toast.error(errorMessage)
     } finally {
       setGeneratingPrompts(false)
     }
@@ -181,7 +190,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
     if (!shouldAutoGenerate) return
 
     autoPromptKeyRef.current = autoPromptKey
-    void handleGeneratePrompts()
+    void handleGeneratePrompts('auto')
   }, [projectId, isLocked, processedOutlineCount, totalOutlineCount, isAssetPromptGenerating, generatingPrompts])
 
   const handleGenerateOne = async (assetId: string) => {
@@ -407,11 +416,21 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
           </div>
           {!isLocked && (
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={handleGeneratePrompts} disabled={generatingPrompts}>
-                {generatingPrompts ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleGeneratePrompts('manual')}
+                disabled={generatingPrompts || isAssetPromptGenerating}
+              >
+                {(generatingPrompts || isAssetPromptGenerating) ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
                 {promptButtonText}
               </Button>
-              <Button size="sm" variant="outline" onClick={handleBatchGenerate} disabled={generatingImages}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleBatchGenerate}
+                disabled={generatingImages || isAssetPromptGenerating || processedOutlineCount < totalOutlineCount}
+              >
                 {generatingImages ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
                 批量生图
               </Button>

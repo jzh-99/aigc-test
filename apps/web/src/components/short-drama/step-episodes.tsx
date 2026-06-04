@@ -38,7 +38,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
   ).length
   const isGeneratingSegments = generatingEpisodeNumber !== null
 
-  const generateMissingSegments = async (episodeNumbers: number[]) => {
+  const generateMissingSegments = async (episodeNumbers: number[], triggeredBy: 'auto' | 'manual' = 'auto') => {
     if (episodeNumbers.length === 0) return
 
     setGeneratedCount(0)
@@ -61,6 +61,14 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           onStateChange()
         } catch (err) {
           const message = err instanceof Error ? err.message : 'AI 生成失败，请稍后重试'
+
+          // 如果是自动触发且任务已在进行中，静默处理第一个错误
+          if (triggeredBy === 'auto' && episodeNumbers.indexOf(episodeNumber) === 0 &&
+              (message.includes('未完成') || message.includes('进行中'))) {
+            console.info(`第 ${episodeNumber} 集片段脚本生成任务已在进行中，等待完成`)
+            break
+          }
+
           setFailedEpisodeErrors(current => ({ ...current, [episodeNumber]: message }))
           onStateChange()
           toast.error(message)
@@ -79,7 +87,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
 
   const retryEpisodeSegments = async (episodeNumber: number) => {
     if (isGeneratingSegments) return
-    await generateMissingSegments([episodeNumber])
+    await generateMissingSegments([episodeNumber], 'manual')
   }
 
   useEffect(() => {
@@ -89,7 +97,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
     if (autoGenerateKeyRef.current === autoGenerateKey) return
     autoGenerateKeyRef.current = autoGenerateKey
 
-    void generateMissingSegments(pendingSegmentEpisodes)
+    void generateMissingSegments(pendingSegmentEpisodes, 'auto')
   }, [projectId, pendingSegmentEpisodes, failedEpisodeCount, isGeneratingSegments])
 
   const handleBatchExport = async () => {
@@ -137,7 +145,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
             <Button
               size="sm"
               variant="outline"
-              onClick={() => generateMissingSegments(pendingSegmentEpisodes)}
+              onClick={() => generateMissingSegments(pendingSegmentEpisodes, 'manual')}
               disabled={isGeneratingSegments}
             >
               {isGeneratingSegments ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Film className="w-3.5 h-3.5 mr-1" />}
