@@ -102,11 +102,34 @@ export default function PictureBookEditorPage() {
       || generatingStoryboardAudioIds.length > 0
     if (!hasPendingAssets && !hasPendingStoryboard) return
 
-    const timer = window.setInterval(() => {
-      void project.syncBatches().catch(() => {})
-    }, 10000)
+    // 指数退避轮询：初始 2 秒，逐渐增加到最大 15 秒
+    let interval = 2000
+    const maxInterval = 15000
+    let pollCount = 0
+    let timerId: number
 
-    return () => window.clearInterval(timer)
+    const scheduleNext = () => {
+      pollCount++
+      // 每轮询 3 次，间隔时间增加 1.5 倍
+      if (pollCount % 3 === 0) {
+        interval = Math.min(Math.floor(interval * 1.5), maxInterval)
+      }
+      timerId = window.setTimeout(poll, interval)
+    }
+
+    const poll = () => {
+      void project.syncBatches().then(() => {
+        scheduleNext()
+      }).catch(() => {
+        scheduleNext()
+      })
+    }
+
+    poll() // 立即执行第一次
+
+    return () => {
+      if (timerId) window.clearTimeout(timerId)
+    }
   }, [project, projectId, state, generatingAssetIds, generatingStoryboardImageIds, generatingStoryboardAudioIds])
 
   useEffect(() => {
@@ -176,12 +199,24 @@ export default function PictureBookEditorPage() {
     try {
       project.updateState(nextState)
       await project.flushDraft(nextState)
-      await generatePictureBookAssetPrompts(projectId)
+      const result = await generatePictureBookAssetPrompts(projectId)
       await project.mutate()
       setConfirmDialogOpen(false)
-      toast.success('故事和分页内容已确认，角色/背景提示词生成任务已提交')
+      toast.success('故事和分页内容已确认，角色/背景提示词生成任务已提交', {
+        description: `任务 ID: ${result.taskId}`,
+        duration: 5000,
+      })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '确认失败')
+      const errorMessage = error instanceof Error ? error.message : '确认失败'
+      toast.error(errorMessage, {
+        duration: 5000,
+        action: {
+          label: '重试',
+          onClick: () => {
+            void confirmScript()
+          },
+        },
+      })
     } finally {
       setConfirmingScript(false)
     }
@@ -278,12 +313,24 @@ export default function PictureBookEditorPage() {
     try {
       project.updateState(nextState)
       await project.flushDraft(nextState)
-      await generatePictureBookStoryboardPrompts(projectId)
+      const result = await generatePictureBookStoryboardPrompts(projectId)
       await project.mutate()
       setConfirmAssetsDialogOpen(false)
-      toast.success('角色/背景已确认，绘本分镜提示词生成任务已提交')
+      toast.success('角色/背景已确认，绘本分镜提示词生成任务已提交', {
+        description: `任务 ID: ${result.taskId}`,
+        duration: 5000,
+      })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '确认失败')
+      const errorMessage = error instanceof Error ? error.message : '确认失败'
+      toast.error(errorMessage, {
+        duration: 5000,
+        action: {
+          label: '重试',
+          onClick: () => {
+            void confirmAssets()
+          },
+        },
+      })
     } finally {
       setConfirmingAssets(false)
     }
@@ -310,9 +357,18 @@ export default function PictureBookEditorPage() {
       await action()
       await project.mutate()
       await project.syncBatches()
-      toast.success('操作已提交')
+      toast.success('操作已提交，正在后台处理中')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '操作失败')
+      const errorMessage = error instanceof Error ? error.message : '操作失败'
+      toast.error(errorMessage, {
+        duration: 5000,
+        action: {
+          label: '重试',
+          onClick: () => {
+            void runAction(key, action)
+          },
+        },
+      })
     } finally {
       setLoadingAction(null)
     }
@@ -346,6 +402,33 @@ export default function PictureBookEditorPage() {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 pb-32 md:px-6">
+        {(() => {
+          const allItems = state.assets.characters.concat(state.assets.backgrounds)
+          const pendingAssets = allItems.filter(item => isPendingGenerationStatus(item.status))
+          const pendingStoryboardImages = state.storyboard.filter(page => isPendingGenerationStatus(page.status))
+          const pendingStoryboardAudio = state.storyboard.filter(page => !page.voice.zh || !page.voice.en)
+          const hasPending = pendingAssets.length > 0 || pendingStoryboardImages.length > 0 || generatingStoryboardAudioIds.length > 0
+
+          if (!hasPending) return null
+
+          return (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
+              <div className="flex items-start gap-3">
+                <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+                <div className="flex-1 space-y-1">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">后台任务处理中</p>
+                  <div className="space-y-0.5 text-xs text-blue-700 dark:text-blue-300">
+                    {pendingAssets.length > 0 && <p>• 角色/背景图片生成中：{pendingAssets.length} 个</p>}
+                    {pendingStoryboardImages.length > 0 && <p>• 分镜图片生成中：{pendingStoryboardImages.length} 页</p>}
+                    {generatingStoryboardAudioIds.length > 0 && <p>• 语音生成中：{generatingStoryboardAudioIds.length} 页</p>}
+                  </div>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">页面会自动刷新最新状态，请稍候...</p>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-normal">{project.project?.title ?? '未命名绘本'}</h1>
