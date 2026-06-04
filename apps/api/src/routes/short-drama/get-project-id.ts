@@ -1,8 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import type { ShortDramaState } from '@aigc/types'
-import { normalizeShortDramaState } from '@aigc/types'
-import { assertShortDramaProjectAccess } from './_shared.js'
+import { assertShortDramaProjectAccess, readShortDramaProjectState } from './_shared.js'
 
 const route: FastifyPluginAsync = async (app) => {
   // GET /short-drama/projects/:id - 获取项目详情
@@ -28,12 +26,7 @@ const route: FastifyPluginAsync = async (app) => {
           error: { code: 'PROJECT_NOT_FOUND', message: '短剧项目不存在' }
         })
       }
-      // 解析并 normalize state
-      let state = fullProject.state
-      if (typeof fullProject.state === 'string') {
-        state = JSON.parse(fullProject.state)
-      }
-      state = normalizeShortDramaState(state as ShortDramaState)
+      const state = await readShortDramaProjectState(fullProject.id)
 
       return {
         id: fullProject.id,

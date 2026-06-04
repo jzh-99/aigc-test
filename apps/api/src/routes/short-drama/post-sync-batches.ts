@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
-import { assertShortDramaProjectAccess } from './_shared.js'
+import { releaseRedisLock } from '../../lib/distributed-lock.js'
+import {
+  acquireShortDramaProjectStateLock,
+  assertShortDramaProjectAccess,
+  readShortDramaProjectState,
+  syncShortDramaSegmentsFromState,
+} from './_shared.js'
 
 const SYNCABLE_BATCH_STATUSES = ['pending', 'processing', 'completed', 'partial_complete', 'failed'] as const
 
@@ -21,8 +27,18 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
       const userId = request.user.id
 
       const { project } = await assertShortDramaProjectAccess(projectId, userId, false)
-      const state = project.state
       const db = getDb()
+
+      const syncLock = await acquireShortDramaProjectStateLock(app.redis, projectId)
+      if (!syncLock) {
+        return reply.status(409).send({
+          success: false,
+          error: { code: 'STATE_LOCKED', message: '项目状态正在更新，请稍后重试' },
+        })
+      }
+
+      try {
+      const state = await readShortDramaProjectState(projectId)
 
       // 查询该项目所有可同步的 batch，按创建时间倒序，确保最新的 batch 最后处理
       const batches = await db
@@ -63,6 +79,7 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
       }
 
       if (syncedCount > 0) {
+        await syncShortDramaSegmentsFromState(project.id, state)
         await db
           .updateTable('short_drama_projects')
           .set({
@@ -74,6 +91,9 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
       }
 
       return reply.send({ success: true, synced: syncedCount, state })
+      } finally {
+        await releaseRedisLock(app.redis, syncLock)
+      }
     }
   )
 }

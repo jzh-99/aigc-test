@@ -12,21 +12,20 @@ import { freezeCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { encryptProxyUrl } from '../../lib/storage.js'
 import { getVideoQueue } from '../../lib/queue.js'
+import { releaseRedisLock } from '../../lib/distributed-lock.js'
 import {
+  acquireShortDramaProjectStateLock,
   assertShortDramaProjectAccess,
-  invalidateShortDramaEpisodeExports,
+  markShortDramaSegmentVideoGenerating,
   makeShortDramaSourceMetadata,
+  readShortDramaProjectState,
+  syncShortDramaSegmentsFromState,
   validateShortDramaDuration,
 } from './_shared.js'
 
 interface GenerateSegmentVideoBody {
   model?: string
   resolution?: string
-}
-
-type ShortDramaSegmentVideoState = ShortDramaSegment & {
-  videoBatchId?: string | null
-  videoTaskId?: string | null
 }
 
 const SEEDANCE_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -245,9 +244,18 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
       }
 
       const { project, workspace } = await assertShortDramaProjectAccess(projectId, userId, true)
-      const state = project.state
       const teamId = workspace.team_id
 
+      const generationLock = await acquireShortDramaProjectStateLock(app.redis, projectId)
+      if (!generationLock) {
+        return reply.status(409).send({
+          success: false,
+          error: { code: 'STATE_LOCKED', message: '项目状态正在更新，请稍后重试' },
+        })
+      }
+
+      try {
+      const state = await readShortDramaProjectState(projectId)
       const episode = state.episodes.items.find(ep => ep.episodeNumber === episodeNumber)
       if (!episode) {
         return reply.status(404).send({
@@ -433,12 +441,10 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
           estimatedCredits: totalCost,
         })
 
-        // 更新 segment 状态为 generating，并让该集旧导出失效
-        segment.videoUrl = null
-        segment.status = 'generating'
-        ;(segment as ShortDramaSegmentVideoState).videoBatchId = batchId
-        ;(segment as ShortDramaSegmentVideoState).videoTaskId = taskId
-        invalidateShortDramaEpisodeExports(state, episodeNumber)
+        // 更新 segment 状态为 generating，并让该集旧导出失效。
+        // state 在项目级 Redis 锁内重新读取，避免批量提交与 sync 交错时用旧 JSON 覆盖新视频 URL。
+        markShortDramaSegmentVideoGenerating(state, episodeNumber, segmentId, batchId, taskId)
+        await syncShortDramaSegmentsFromState(project.id, state)
         await db
           .updateTable('short_drama_projects')
           .set({
@@ -464,6 +470,9 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         estimatedCredits: totalCost,
         state,
       })
+      } finally {
+        await releaseRedisLock(app.redis, generationLock)
+      }
     }
   )
 }

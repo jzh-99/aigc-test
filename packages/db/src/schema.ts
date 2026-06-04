@@ -524,6 +524,24 @@ export interface ShortDramaProjectsTable {
   updated_at: Generated<Date>
 }
 
+export interface ShortDramaSegmentsTable {
+  id: Generated<string>
+  project_id: string
+  episode_number: number
+  segment_id: string
+  order_index: number
+  title: string
+  prompt: string
+  mention_refs: ColumnType<unknown, string | undefined, string>
+  duration_seconds: number
+  status: Generated<'idle' | 'pending' | 'generating' | 'completed' | 'failed'>
+  video_url: string | null
+  video_batch_id: string | null
+  video_task_id: string | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── AI Assistant Errors ──────────────────────────────────────────────────────
 
 export interface AiAssistantErrorsTable {
@@ -664,6 +682,7 @@ export interface Database {
   picture_book_project_charges: PictureBookProjectChargesTable
   picture_book_project_assets: PictureBookProjectAssetsTable
   short_drama_projects: ShortDramaProjectsTable
+  short_drama_segments: ShortDramaSegmentsTable
   ai_assistant_errors: AiAssistantErrorsTable
   submission_errors: SubmissionErrorsTable
 }

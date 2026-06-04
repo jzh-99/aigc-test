@@ -3,7 +3,11 @@ import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
 import type { ShortDramaState } from '@aigc/types'
 import { normalizeShortDramaState } from '@aigc/types'
-import { assertShortDramaProjectAccess } from './_shared.js'
+import {
+  assertShortDramaProjectAccess,
+  readShortDramaProjectState,
+  syncShortDramaSegmentsFromState,
+} from './_shared.js'
 
 const route: FastifyPluginAsync = async (app) => {
   app.put<{
@@ -40,6 +44,7 @@ const route: FastifyPluginAsync = async (app) => {
     if (body.state !== undefined) {
       try {
         const normalizedState = normalizeShortDramaState(body.state)
+        await syncShortDramaSegmentsFromState(id, normalizedState)
         updates.state = JSON.stringify(normalizedState)
       } catch (error) {
         return reply.status(400).send({
@@ -117,12 +122,7 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 解析并 normalize state
-    let state = updatedProject.state
-    if (typeof updatedProject.state === 'string') {
-      state = JSON.parse(updatedProject.state)
-    }
-    state = normalizeShortDramaState(state as ShortDramaState)
+    const state = await readShortDramaProjectState(updatedProject.id)
 
     return {
       id: updatedProject.id,
