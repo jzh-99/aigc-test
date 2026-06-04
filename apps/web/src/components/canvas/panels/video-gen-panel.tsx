@@ -247,7 +247,7 @@ export function VideoGenPanel({
 
       {/* 提示词大文本框 */}
       <ResourceMentionTextarea
-        minHeightClassName="min-h-[140px]"
+        minHeightClassName="min-h-[180px]"
         placeholder="描述视频内容..."
         value={promptDraft}
         resources={mentionResources}
@@ -257,19 +257,13 @@ export function VideoGenPanel({
 
       {/* 多模态参考素材预览 */}
       {videoMode === 'multiref' && (
-        <div className="space-y-1">
-          {(multirefImages.length + multirefVideos.length + multirefAudios.length) === 0 ? (
-            <div className="text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">
-              可连接图片、视频、音频节点
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <ReferencePreviewGroup title="图片" count={multirefImages.length} type="image" resources={imageMentionResources} onRemoveReference={onRemoveReference} />
-              <ReferencePreviewGroup title="视频" count={multirefVideos.length} type="video" resources={videoMentionResources} onRemoveReference={onRemoveReference} />
-              <ReferencePreviewGroup title="音频" count={multirefAudios.length} type="audio" resources={audioMentionResources} onRemoveReference={onRemoveReference} />
-            </div>
-          )}
-        </div>
+        multirefImages.length + multirefVideos.length + multirefAudios.length > 0 && (
+          <div className="space-y-2">
+            <ReferencePreviewGroup title="图片" count={multirefImages.length} type="image" resources={imageMentionResources} onRemoveReference={onRemoveReference} />
+            <ReferencePreviewGroup title="视频" count={multirefVideos.length} type="video" resources={videoMentionResources} onRemoveReference={onRemoveReference} />
+            <ReferencePreviewGroup title="音频" count={multirefAudios.length} type="audio" resources={audioMentionResources} onRemoveReference={onRemoveReference} />
+          </div>
+        )
       )}
 
       {/* 关键帧预览 */}
@@ -384,6 +378,7 @@ export function VideoGenPanel({
                 { value: 'false', label: '无声' },
               ]}
               onChange={(val) => onUpdateCfg({ generateAudio: val === 'true' })}
+              iconOnly
             />
           )}
 
@@ -398,6 +393,7 @@ export function VideoGenPanel({
                 { value: 'true', label: '固定' },
               ]}
               onChange={(val) => onUpdateCfg({ cameraFixed: val === 'true' })}
+              iconOnly
             />
           )}
         </PanelToolbar>

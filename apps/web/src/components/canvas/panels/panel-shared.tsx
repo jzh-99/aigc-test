@@ -22,6 +22,8 @@ interface PopoverSelectProps {
   options: PopoverSelectOption[]
   onChange: (value: string) => void
   displayValue?: string
+  /** 仅展示图标，隐藏文字和箭头（适合空间紧凑的场景） */
+  iconOnly?: boolean
 }
 
 export function PopoverSelect({
@@ -31,6 +33,7 @@ export function PopoverSelect({
   options,
   onChange,
   displayValue,
+  iconOnly,
 }: PopoverSelectProps) {
   const [open, setOpen] = useState(false)
   const currentLabel = displayValue ?? options.find((o) => o.value === value)?.label ?? value
@@ -41,16 +44,22 @@ export function PopoverSelect({
         <button
           type="button"
           aria-label={label}
+          title={iconOnly ? `${label}: ${currentLabel}` : undefined}
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] transition-colors',
+            'inline-flex items-center rounded-lg border transition-colors',
+            iconOnly ? 'p-1.5' : 'gap-1.5 px-2 py-1.5 text-[11px]',
             open
               ? 'border-primary/40 bg-primary/5 text-primary'
               : 'border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-foreground',
           )}
         >
           <span className="flex items-center">{icon}</span>
-          <span className="max-w-[72px] truncate font-medium">{currentLabel}</span>
-          <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform', open && 'rotate-180')} />
+          {!iconOnly && (
+            <>
+              <span className="max-w-[72px] truncate font-medium">{currentLabel}</span>
+              <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform', open && 'rotate-180')} />
+            </>
+          )}
         </button>
       </Popover.Trigger>
 
@@ -115,7 +124,13 @@ export function ExecuteButton({
   onClick,
 }: ExecuteButtonProps) {
   return (
-    <div className="relative inline-flex items-center">
+    <div className="flex items-center gap-2">
+      {/* A豆数量标签 — 按钮左侧 */}
+      {!executing && credits > 0 && (
+        <span className="whitespace-nowrap rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">
+          {credits} A豆
+        </span>
+      )}
       <button
         type="button"
         onClick={onClick}
@@ -129,11 +144,6 @@ export function ExecuteButton({
       >
         {executing ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
       </button>
-      {!executing && credits > 0 && (
-        <span className="absolute -right-5 -top-1.5 whitespace-nowrap rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
-          {credits}
-        </span>
-      )}
     </div>
   )
 }

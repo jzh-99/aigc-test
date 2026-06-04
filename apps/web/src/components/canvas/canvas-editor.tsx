@@ -279,12 +279,15 @@ function FloatingParamPanel({
   const [tx, ty, zoom] = useStore((s) => s.transform)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const [measuredPanelHeight, setMeasuredPanelHeight] = useState<number | undefined>(undefined)
-  const PANEL_W = ['script_writer', 'storyboard_splitter'].includes(node.type ?? '')
+  // 重构后的单列面板宽度；视频面板因 Seedance 模式下最多 6 个工具栏按钮需要更宽空间
+  const PANEL_W = ['storyboard_splitter'].includes(node.type ?? '')
     ? 320
     : node.type === 'audio_gen'
     ? 780
-    : 640
-  const PANEL_MAX_H = 560
+    : node.type === 'video_gen'
+    ? 720
+    : 420
+  const PANEL_MAX_H = 640
   const PANEL_ESTIMATED_H = node.type === 'audio_gen' ? 470 : PANEL_MAX_H
   const GAP = 8
 

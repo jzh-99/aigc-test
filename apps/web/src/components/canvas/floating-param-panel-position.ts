@@ -39,6 +39,7 @@ function clampPanelLeft(left: number, panelWidth: number, viewportWidth: number)
 export function computeFloatingParamPanelPosition(input: FloatingParamPanelPositionInput) {
   const { panelWidth, panelHeight, viewportWidth, viewportHeight, gap, wrapperRect, transform, nodePosition, fallbackNodeSize, nodeRect } = input
 
+  // 水平方向：以节点中心为基准居中
   const nodeCenterX = nodeRect
     ? nodeRect.left + nodeRect.width / 2
     : wrapperRect.left + nodePosition.x * transform.zoom + transform.x + (fallbackNodeSize.width * transform.zoom) / 2
@@ -48,6 +49,8 @@ export function computeFloatingParamPanelPosition(input: FloatingParamPanelPosit
   const nodeBottom = nodeRect
     ? nodeRect.top + nodeRect.height
     : wrapperRect.top + nodePosition.y * transform.zoom + transform.y + fallbackNodeSize.height * transform.zoom
+
+  // 垂直方向：固定在节点正下方，空间不足时翻到上方
   const top = panelHeight == null
     ? Math.min(nodeBottom + gap, viewportHeight - LEGACY_PANEL_BOTTOM_GUARD)
     : (() => {
