@@ -247,7 +247,7 @@ export function ResourceMentionTextarea({
         contentEditable
         suppressContentEditableWarning
         className={cn(
-          'w-full whitespace-pre-wrap break-words p-2 text-xs bg-muted/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary',
+          'w-full whitespace-pre-wrap break-words p-2 text-xs bg-muted/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary max-h-[400px] overflow-y-auto',
           minHeightClassName,
         )}
         onFocus={() => setIsFocused(true)}

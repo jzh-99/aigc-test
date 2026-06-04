@@ -70,7 +70,7 @@ export function TextInputPanel({
     <div className="p-4 space-y-3">
       {/* AI 生成提示词 — 大文本框 */}
       <textarea
-        className="w-full min-h-[180px] p-3 text-sm leading-relaxed bg-muted/40 border border-border/60 rounded-xl resize-none focus:outline-none focus:border-primary/40 transition-colors placeholder:text-muted-foreground/70"
+        className="w-full min-h-[180px] max-h-[400px] p-3 text-sm leading-relaxed bg-muted/40 border border-border/60 rounded-xl resize-none focus:outline-none focus:border-primary/40 transition-colors placeholder:text-muted-foreground/70"
         placeholder="描述你想生成的文本内容…"
         value={aiPrompt}
         onChange={(e) => setAiPrompt(e.target.value)}

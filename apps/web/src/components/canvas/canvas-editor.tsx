@@ -339,7 +339,7 @@ function FloatingParamPanel({
     <div
       ref={panelRef}
       className="fixed z-40 drop-shadow-2xl"
-      style={{ top, left, width: PANEL_W, maxHeight: PANEL_MAX_H, overflowY: 'auto' }}
+      style={{ top, left, width: PANEL_W }}
     >
       <NodeParamPanel
         node={node}

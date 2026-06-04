@@ -353,7 +353,7 @@ function AudioTagEditor({
         aria-label={placeholder}
         contentEditable
         suppressContentEditableWarning
-        className="min-h-[180px] w-full whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-muted/40 p-3 text-sm leading-7 text-foreground shadow-sm outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+        className="min-h-[180px] max-h-[400px] overflow-y-auto w-full whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-muted/40 p-3 text-sm leading-7 text-foreground shadow-sm outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
         onFocus={() => setFocused(true)}
         onBlur={() => {
           setFocused(false)
