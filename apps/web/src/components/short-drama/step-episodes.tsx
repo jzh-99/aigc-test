@@ -58,7 +58,6 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           await generateShortDramaEpisodeSegments(projectId, episodeNumber)
           successCount += 1
           setGeneratedCount(count => count + 1)
-          onStateChange()
         } catch (err) {
           const message = err instanceof Error ? err.message : 'AI 生成失败，请稍后重试'
 
@@ -70,7 +69,6 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           }
 
           setFailedEpisodeErrors(current => ({ ...current, [episodeNumber]: message }))
-          onStateChange()
           toast.error(message)
           break
         }
@@ -81,7 +79,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
     }
 
     if (successCount > 0) {
-      toast.success(`已生成 ${successCount} 集片段脚本`)
+      toast.success(`已提交 ${successCount} 集片段脚本生成`)
     }
   }
 

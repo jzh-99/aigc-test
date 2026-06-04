@@ -11,6 +11,26 @@ import {
 } from '@/lib/picture-book/api'
 import type { PictureBookChargeSummary, PictureBookProject, PictureBookState } from '@/lib/picture-book/types'
 
+const POLL_INTERVAL = 3_000
+
+function isPendingStatus(status?: string): boolean {
+  return status === 'pending' || status === 'generating'
+}
+
+function hasPendingWork(state: PictureBookState): boolean {
+  // 检查资产生成状态
+  const hasPendingAssets = state.assets?.items?.some(
+    a => isPendingStatus(a.status)
+  ) ?? false
+
+  // 检查分镜生成状态
+  const hasPendingStoryboards = state.storyboards?.items?.some(
+    s => isPendingStatus(s.status)
+  ) ?? false
+
+  return hasPendingAssets || hasPendingStoryboards
+}
+
 export function usePictureBookProject(projectId?: string | null) {
   const projectKey = projectId ? `picture-book-project:${projectId}` : null
   const chargesKey = projectId ? `picture-book-project-charges:${projectId}` : null
@@ -19,6 +39,7 @@ export function usePictureBookProject(projectId?: string | null) {
   const [saveError, setSaveError] = useState<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestStateRef = useRef<PictureBookState | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const projectSWR = useSWR<PictureBookProject>(
     projectKey,
@@ -35,6 +56,38 @@ export function usePictureBookProject(projectId?: string | null) {
       latestStateRef.current = projectSWR.data.state
     }
   }, [projectSWR.data?.state])
+
+  // 自动轮询机制
+  useEffect(() => {
+    if (!projectId || !localState) return
+
+    if (hasPendingWork(localState)) {
+      if (!pollRef.current) {
+        pollRef.current = setInterval(async () => {
+          try {
+            const result = await syncPictureBookBatches(projectId)
+            latestStateRef.current = result.state
+            setLocalState(result.state)
+            await projectSWR.mutate()
+          } catch {
+            // 静默忽略同步错误
+          }
+        }, POLL_INTERVAL)
+      }
+    } else {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [projectId, localState, projectSWR])
 
   const flushDraft = useCallback(async (overrideState?: PictureBookState | null) => {
     if (!projectId) return

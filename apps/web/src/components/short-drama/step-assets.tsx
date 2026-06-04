@@ -147,20 +147,8 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
     setAssetPromptProgressMessage('')
     setAssetPromptWarningMessage('')
     try {
-      const result = await generateShortDramaAssetPrompts(projectId, {
-        onChunk: (text) => setAssetPromptStreamText((prev) => `${prev}${text}`),
-        onProgress: (progress) => setAssetPromptProgressMessage(progress.message),
-        onWarning: (warning) => {
-          setAssetPromptWarningMessage(warning.message)
-          toast.warning(warning.message)
-        },
-      })
-      onStateChange()
-      if (result.partial) {
-        toast.warning(result.warning ?? '素材描述已部分生成，请补充 A豆后继续生成')
-      } else {
-        toast.success('素材描述生成完成')
-      }
+      await generateShortDramaAssetPrompts(projectId)
+      toast.success('已提交素材描述生成')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '生成失败'
 
@@ -422,7 +410,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                 onClick={() => handleGeneratePrompts('manual')}
                 disabled={generatingPrompts || isAssetPromptGenerating}
               >
-                {(generatingPrompts || isAssetPromptGenerating) ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+                {generatingPrompts ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
                 {promptButtonText}
               </Button>
               <Button
