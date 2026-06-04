@@ -108,6 +108,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   }
   const processedOutlineCount = state.assets.processedOutlineCount
   const totalOutlineCount = state.script.outlines.length
+  const isAssetPromptGenerating = state.assets.status === 'generating'
   const canContinuePrompts = processedOutlineCount > 0 && processedOutlineCount < totalOutlineCount
   const promptButtonText = processedOutlineCount >= totalOutlineCount && totalOutlineCount > 0
     ? '描述已生成'
@@ -173,6 +174,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       !isLocked &&
       totalOutlineCount > 0 &&
       processedOutlineCount < totalOutlineCount &&
+      !isAssetPromptGenerating &&
       !generatingPrompts &&
       autoPromptKeyRef.current !== autoPromptKey
 
@@ -180,7 +182,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
     autoPromptKeyRef.current = autoPromptKey
     void handleGeneratePrompts()
-  }, [projectId, isLocked, processedOutlineCount, totalOutlineCount, generatingPrompts])
+  }, [projectId, isLocked, processedOutlineCount, totalOutlineCount, isAssetPromptGenerating, generatingPrompts])
 
   const handleGenerateOne = async (assetId: string) => {
     const targetAsset = assets.find(asset => asset.id === assetId)

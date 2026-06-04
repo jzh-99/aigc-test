@@ -16,6 +16,7 @@ import { freezeCredits } from '../../services/credit.js'
 // 保守预估：每个素材描述批次预冻结 15 积分
 const ESTIMATED_CREDITS = 15
 const ASSET_PROMPT_BATCH_MAX_TOKENS = 5000
+const activeAssetPromptProjectIds = new Set<string>()
 
 function parseAssetPromptBatch(aiResponse: string): ShortDramaAssetPromptInput[] {
   const parsed = parseAndValidateJson(aiResponse, ['characters', 'scenes', 'requisites'])
@@ -120,6 +121,14 @@ const route: FastifyPluginAsync = async (app) => {
         error: { code: 'ALREADY_GENERATED', message: '素材描述已生成' },
       })
     }
+
+    if (activeAssetPromptProjectIds.has(projectId)) {
+      return reply.status(409).send({
+        error: { code: 'GENERATION_IN_PROGRESS', message: '素材描述正在生成中，请稍后刷新查看进度' },
+      })
+    }
+
+    activeAssetPromptProjectIds.add(projectId)
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -339,6 +348,7 @@ const route: FastifyPluginAsync = async (app) => {
         state,
       })
     } finally {
+      activeAssetPromptProjectIds.delete(projectId)
       reply.raw.end()
     }
   })
