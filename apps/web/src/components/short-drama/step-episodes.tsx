@@ -25,7 +25,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
   const episodes = state.episodes.items
   const pendingSegmentEpisodes = useMemo(
     () => episodes
-      .filter(ep => ep.segments.length === 0 && ep.status !== 'failed' && !failedEpisodeErrors[ep.episodeNumber])
+      .filter(ep => ep.segments.length === 0 && ep.status !== 'failed' && ep.status !== 'generating' && !failedEpisodeErrors[ep.episodeNumber])
       .map(ep => ep.episodeNumber),
     [episodes, failedEpisodeErrors]
   )

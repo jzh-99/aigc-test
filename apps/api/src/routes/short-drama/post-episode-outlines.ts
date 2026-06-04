@@ -11,6 +11,7 @@ import {
   buildShortDramaOutlineBatches,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
+import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 
 // 保守预估：分集分场剧本需要支撑约 2 分钟成片
 const ESTIMATED_CREDITS = 50
@@ -108,8 +109,24 @@ const route: FastifyPluginAsync = async (app) => {
     const startEpisode = state.script.outlines.length + 1
     const batches = buildShortDramaOutlineBatches(startEpisode, episodeCount)
 
-    state.script.status = 'generating'
-    await saveShortDramaProjectState(projectId, state, 0)
+    let generationLock: RedisLockHandle | null = null
+    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:episode-outlines`)
+    if (!generationLock) {
+      return reply.status(409).send({
+        error: { code: 'GENERATION_IN_PROGRESS', message: '分集剧本正在生成中，请稍后刷新查看进度' },
+      })
+    }
+
+    try {
+      state.script.status = 'generating'
+      await saveShortDramaProjectState(projectId, state, 0)
+    } catch (error) {
+      await releaseRedisLock(app.redis, generationLock)
+      app.log.error({ error, projectId }, '短剧分集大纲生成状态保存失败')
+      return reply.status(500).send({
+        error: { code: 'DATABASE_ERROR', message: '保存生成状态失败，请稍后重试' },
+      })
+    }
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -268,6 +285,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
     } finally {
+      await releaseRedisLock(app.redis, generationLock)
       reply.raw.end()
     }
   })

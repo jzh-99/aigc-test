@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { type PictureBookElement, type PictureBookPageScript } from '@aigc/types'
 import { sql } from 'kysely'
+import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { assertPictureBookProjectAccess, callPictureBookQwenStream, parsePictureBookJson, PICTURE_BOOK_MODELS } from './_shared.js'
 
 interface AssetPromptInput {
@@ -74,6 +75,14 @@ const route: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const access = await assertPictureBookProjectAccess(request.body.project_id, request.user.id, true)
       if (!access) return reply.status(404).send({ error: { code: 'PROJECT_NOT_FOUND', message: '绘本项目不存在' } })
+
+      let generationLock: RedisLockHandle | null = null
+      generationLock = await acquireRedisLock(app.redis, `lock:picture-book:${request.body.project_id}:asset-prompts`)
+      if (!generationLock) {
+        return reply.status(409).send({
+          error: { code: 'GENERATION_IN_PROGRESS', message: '绘本资产提示词正在生成中，请稍后刷新查看进度' },
+        })
+      }
 
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -160,6 +169,7 @@ const route: FastifyPluginAsync = async (app) => {
         app.log.error(err, 'picture-book asset prompts error')
         sendEvent('error', { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' })
       } finally {
+        await releaseRedisLock(app.redis, generationLock)
         reply.raw.end()
       }
     },

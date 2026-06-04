@@ -11,8 +11,9 @@ import {
   type PictureBookState,
   type PictureBookStyle,
 } from '@aigc/types'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'kysely'
+import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { assertPictureBookWorkspaceAccess, callPictureBookQwenStream, parsePictureBookJson, PICTURE_BOOK_MODELS } from './_shared.js'
 
 interface ScriptBody {
@@ -121,6 +122,24 @@ const route: FastifyPluginAsync = async (app) => {
       const access = await assertPictureBookWorkspaceAccess(body.workspace_id, request.user.id, true)
       if (!access) return reply.status(403).send({ error: { code: 'FORBIDDEN', message: '无权修改该工作区' } })
 
+      const requestHash = createHash('sha1')
+        .update(JSON.stringify({
+          workspaceId: body.workspace_id,
+          userId: request.user.id,
+          prompt: body.prompt.trim(),
+          style: body.style,
+          pageCount: body.page_count,
+          aspectRatio,
+        }))
+        .digest('hex')
+      let generationLock: RedisLockHandle | null = null
+      generationLock = await acquireRedisLock(app.redis, `lock:picture-book:create-script:${requestHash}`)
+      if (!generationLock) {
+        return reply.status(409).send({
+          error: { code: 'GENERATION_IN_PROGRESS', message: '绘本大纲正在生成中，请稍后查看项目列表或刷新页面' },
+        })
+      }
+
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -211,6 +230,7 @@ const route: FastifyPluginAsync = async (app) => {
         app.log.error(err, 'picture-book script generate error')
         sendEvent('error', { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' })
       } finally {
+        await releaseRedisLock(app.redis, generationLock)
         reply.raw.end()
       }
     },

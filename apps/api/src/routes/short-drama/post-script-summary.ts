@@ -10,6 +10,7 @@ import {
   saveShortDramaProjectState,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
+import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 
 // 保守预估：结构化剧集设定内容较长，预冻结 25 积分
 const ESTIMATED_CREDITS = 25
@@ -50,20 +51,38 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
+    let generationLock: RedisLockHandle | null = null
+    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:script-summary`)
+    if (!generationLock) {
+      return reply.status(409).send({
+        error: { code: 'GENERATION_IN_PROGRESS', message: '剧本摘要正在生成中，请稍后刷新查看进度' },
+      })
+    }
+
     // 预冻结积分
     let creditAccountId: string
     try {
       const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS)
       creditAccountId = freezeResult.creditAccountId
     } catch (error) {
+      await releaseRedisLock(app.redis, generationLock)
       const message = error instanceof Error ? error.message : '积分冻结失败'
       return reply.status(402).send({
         error: { code: 'INSUFFICIENT_CREDITS', message },
       })
     }
 
-    state.script.status = 'generating'
-    await saveShortDramaProjectState(projectId, state, 0)
+    try {
+      state.script.status = 'generating'
+      await saveShortDramaProjectState(projectId, state, 0)
+    } catch (error) {
+      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成状态保存失败')
+      await releaseRedisLock(app.redis, generationLock)
+      app.log.error({ error, projectId }, '短剧摘要生成状态保存失败')
+      return reply.status(500).send({
+        error: { code: 'DATABASE_ERROR', message: '保存生成状态失败，请稍后重试' },
+      })
+    }
 
     // 调用 AI 生成结构化剧集设定
     const REDACTED = [
@@ -160,6 +179,7 @@ const route: FastifyPluginAsync = async (app) => {
         message: error instanceof Error ? error.message : 'AI 生成失败，请稍后重试',
       })
     } finally {
+      await releaseRedisLock(app.redis, generationLock)
       reply.raw.end()
     }
   })

@@ -16,6 +16,7 @@ import {
   calculateTextGenerationCredits,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
+import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 
 // 保守预估：每次文本生成预冻结 25 积分（片段脚本通常较长）
 const ESTIMATED_CREDITS = 25
@@ -89,15 +90,39 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
+    let generationLock: RedisLockHandle | null = null
+    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:episode-segments:${episodeNumber}`)
+    if (!generationLock) {
+      return reply.status(409).send({
+        error: { code: 'GENERATION_IN_PROGRESS', message: `第 ${episodeNumber} 集片段脚本正在生成中，请稍后刷新查看进度` },
+      })
+    }
+
     // 预冻结积分
     let creditAccountId: string
     try {
       const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS)
       creditAccountId = freezeResult.creditAccountId
     } catch (error) {
+      await releaseRedisLock(app.redis, generationLock)
       const message = error instanceof Error ? error.message : '积分冻结失败'
       return reply.status(402).send({
         error: { code: 'INSUFFICIENT_CREDITS', message },
+      })
+    }
+
+    const now = new Date().toISOString()
+    episode.status = 'generating'
+    episode.updatedAt = now
+    state.episodes.status = 'generating'
+    try {
+      await saveShortDramaProjectState(projectId, state, 0)
+    } catch (error) {
+      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '片段脚本生成状态保存失败')
+      await releaseRedisLock(app.redis, generationLock)
+      app.log.error({ error, projectId, episodeNumber }, '短剧片段脚本生成状态保存失败')
+      return reply.status(500).send({
+        error: { code: 'DATABASE_ERROR', message: '保存生成状态失败，请稍后重试' },
       })
     }
 
@@ -230,6 +255,7 @@ const route: FastifyPluginAsync = async (app) => {
       })
       app.log.error({ error, projectId, episodeNumber }, message)
       sendEvent('error', { code, message })
+      await releaseRedisLock(app.redis, generationLock)
       reply.raw.end()
     }
 
@@ -295,7 +321,6 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     // 校验每个片段的核心字段
-    const now = new Date().toISOString()
     const parsedSegments = []
 
     for (let i = 0; i < segments.length; i++) {
@@ -475,6 +500,7 @@ const route: FastifyPluginAsync = async (app) => {
       credits: settledCredits,
       state,
     })
+    await releaseRedisLock(app.redis, generationLock)
     reply.raw.end()
   })
 }
