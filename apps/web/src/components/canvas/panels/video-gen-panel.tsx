@@ -1,9 +1,10 @@
-import { Film, ImageIcon, Loader2, Music, Play, X } from 'lucide-react'
+import { Clock, Cpu, Film, ImageIcon, Music, Play, Ratio, Volume2, Video, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { VideoMode } from '@/lib/canvas/types'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
 import { calculateReferenceVideoDurationSeconds, getVideoCategoryKeys, parseCategoryReferences, type ModelItem, type VideoCategory } from '@aigc/types'
 import { ResourceMentionTextarea } from './resource-mention-textarea'
+import { PopoverSelect, ExecuteButton, PanelToolbar } from './panel-shared'
 import type { CanvasReferenceMentionResource } from './resource-mentions'
 
 const VIDEO_MODE_TO_CATEGORY: Record<VideoMode, VideoCategory> = {
@@ -37,26 +38,14 @@ function ReferencePreviewItem({
   return (
     <div
       data-testid={`canvas-reference-preview-${resource.mentionLabel}`}
-      className="group/reference relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border bg-muted/40"
+      className="group/reference relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/40"
       title={`${resource.mentionLabel} · ${resource.sourceLabel}`}
     >
       {(isImage || (isVideo && previewImageUrl)) && (
-        <img
-          src={previewImageUrl ?? resource.url}
-          alt={resource.mentionLabel}
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
+        <img src={previewImageUrl ?? resource.url} alt={resource.mentionLabel} className="h-full w-full object-cover" loading="lazy" />
       )}
       {isVideo && !previewImageUrl && (
-        <video
-          src={resource.url}
-          className="h-full w-full bg-black object-cover"
-          muted
-          playsInline
-          preload="metadata"
-          aria-label={resource.mentionLabel}
-        />
+        <video src={resource.url} className="h-full w-full bg-black object-cover" muted playsInline preload="metadata" aria-label={resource.mentionLabel} />
       )}
       {isAudio && (
         <div className="flex h-full w-full items-center justify-center bg-emerald-50">
@@ -70,7 +59,7 @@ function ReferencePreviewItem({
           </div>
         </div>
       )}
-      <span className={cn('absolute left-1 top-1 rounded px-1 text-[9px] font-bold leading-4 shadow', getReferenceBadgeClass(resource))}>
+      <span className={cn('absolute left-0.5 top-0.5 rounded px-0.5 text-[8px] font-bold leading-4 shadow', getReferenceBadgeClass(resource))}>
         @{resource.mentionLabel}
       </span>
       <button
@@ -78,13 +67,10 @@ function ReferencePreviewItem({
         data-testid={`canvas-reference-remove-${resource.mentionLabel}`}
         aria-label="取消引用"
         title={`取消引用${resource.mentionLabel}`}
-        onClick={(event) => {
-          event.stopPropagation()
-          onRemoveReference(resource.id)
-        }}
-        className="pointer-events-none absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-background/95 text-muted-foreground opacity-0 shadow transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
+        onClick={(event) => { event.stopPropagation(); onRemoveReference(resource.id) }}
+        className="pointer-events-none absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-background/95 text-muted-foreground opacity-0 shadow transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
       >
-        <X className="h-2.5 w-2.5" />
+        <X className="h-2 w-2" />
       </button>
     </div>
   )
@@ -104,7 +90,6 @@ function ReferencePreviewGroup({
   onRemoveReference: (resourceId: string) => void
 }) {
   if (resources.length === 0) return null
-
   const Icon = type === 'video' ? Film : type === 'audio' ? Music : ImageIcon
   const iconClassName = type === 'video' ? 'text-violet-600' : type === 'audio' ? 'text-emerald-600' : 'text-blue-600'
 
@@ -114,16 +99,9 @@ function ReferencePreviewGroup({
         <Icon className={cn('h-3 w-3', iconClassName)} />
         <span>{title} {count}</span>
       </div>
-      <div
-        data-testid={`canvas-reference-preview-list-${type}`}
-        className="flex max-w-full gap-1.5 overflow-x-auto pb-1"
-      >
+      <div data-testid={`canvas-reference-preview-list-${type}`} className="flex max-w-full gap-1.5 overflow-x-auto pb-1">
         {resources.map((resource) => (
-          <ReferencePreviewItem
-            key={resource.id}
-            resource={resource}
-            onRemoveReference={onRemoveReference}
-          />
+          <ReferencePreviewItem key={resource.id} resource={resource} onRemoveReference={onRemoveReference} />
         ))}
       </div>
     </div>
@@ -208,7 +186,6 @@ export function VideoGenPanel({
     const num = Number(item.value)
     return { value: num, label: num === -1 ? '自动' : `${num}s` }
   })
-  // 从模型 schema 读取分辨率可选项，超过 1 个才显示选择器
   const resolutionOptions = extractSchemaEnums(currentDbModel?.params_schema, 'resolution').map((e) => e.value)
   const showResolutionSelector = resolutionOptions.length > 1
 
@@ -225,247 +202,213 @@ export function VideoGenPanel({
   const videoMentionResources = mentionResources.filter((resource) => resource.type === 'video')
   const audioMentionResources = mentionResources.filter((resource) => resource.type === 'audio')
 
+  // Popover 选项列表
+  const modelOptions = filteredModels.map((m) => ({ value: m.code, label: m.name }))
+  const resolutionPopOptions = resolutionOptions.map((r) => ({ value: r, label: r.toUpperCase() }))
+  const aspectPopOptions = aspectRatioOptions.map((ar) => ({ value: ar.value, label: ar.label }))
+  const durationPopOptions = durationOptions.map((opt) => ({ value: String(opt.value), label: opt.label }))
+
   return (
-    <div className="flex gap-0 divide-x divide-border">
-      <div className="p-3 flex flex-col gap-2" style={{ width: 220 }}>
-        <div className="flex rounded-lg overflow-hidden border border-border text-[11px] font-medium">
-          {availableModes.map((category) => {
-            const mode = CATEGORY_TO_VIDEO_MODE[category]
-            const label = currentCategories[category]?.label ?? category
-            return (
-              <button
-                key={category}
-                data-testid={`video-mode-${mode}`}
-                onClick={() => onVideoModeChange(mode)}
-                disabled={!currentCategories[category]}
-                className={cn(
-                  'flex-1 py-1 transition-colors',
-                  videoMode === mode
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted/40 text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed'
-                )}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
-
-        <label className="text-[11px] font-medium text-muted-foreground">提示词</label>
-        {upstreamTextNodeLabels.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {upstreamTextNodeLabels.map((label, i) => (
-              <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
-                [{label}]+
-              </span>
-            ))}
-          </div>
-        )}
-        <ResourceMentionTextarea
-          minHeightClassName="min-h-[80px]"
-          placeholder="描述视频内容..."
-          value={promptDraft}
-          resources={mentionResources}
-          onChange={setPromptDraft}
-          onBlur={flushPromptDraft}
-        />
-
-        {videoMode === 'multiref' && (
-          <div className="space-y-1">
-            {(multirefImages.length + multirefVideos.length + multirefAudios.length) === 0 ? (
-              <div className="text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">
-                可连接图片、视频、音频节点
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <ReferencePreviewGroup title="图片" count={multirefImages.length} type="image" resources={imageMentionResources} onRemoveReference={onRemoveReference} />
-                <ReferencePreviewGroup title="视频" count={multirefVideos.length} type="video" resources={videoMentionResources} onRemoveReference={onRemoveReference} />
-                <ReferencePreviewGroup title="音频" count={multirefAudios.length} type="audio" resources={audioMentionResources} onRemoveReference={onRemoveReference} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {videoMode === 'keyframe' && (
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-muted-foreground">
-                {keyframeImages.length === 0 ? '文生视频' : keyframeImages.length === 1 ? '首帧生视频' : '首帧 → 尾帧'}
-              </label>
-              {keyframeImages.length === 2 && (
-                <button
-                  data-testid="video-keyframe-swap"
-                  onClick={() => setKeyframeSwapped((v) => !v)}
-                  className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground transition-colors"
-                  title="交换首尾帧"
-                >
-                  ⇄ 交换
-                </button>
+    <div className="p-4 space-y-3">
+      {/* 视频模式切换 — 紧凑 segment control */}
+      <div className="flex rounded-lg overflow-hidden border border-border/60 text-[11px] font-medium">
+        {availableModes.map((category) => {
+          const mode = CATEGORY_TO_VIDEO_MODE[category]
+          const label = currentCategories[category]?.label ?? category
+          return (
+            <button
+              key={category}
+              data-testid={`video-mode-${mode}`}
+              onClick={() => onVideoModeChange(mode)}
+              disabled={!currentCategories[category]}
+              className={cn(
+                'flex-1 py-1.5 transition-colors',
+                videoMode === mode
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/40 text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed'
               )}
-            </div>
-            <div className="flex items-center gap-2">
-              {[0, 1].map((idx) => {
-                const frame = displayedKeyframes[idx]
-                const label = idx === 0 ? '首' : '尾'
-                return (
-                  <div
-                    key={idx}
-                    className={cn(
-                      'relative w-14 h-14 rounded border flex items-center justify-center text-[10px] text-muted-foreground font-medium',
-                      frame ? 'group/reference border-border' : 'border-dashed border-muted-foreground/30 bg-muted/20'
-                    )}
-                  >
-                    {frame ? (
-                      <>
-                        <img src={frame.url} alt="" className="w-full h-full object-cover rounded" />
-                        <span className="absolute -top-1 -left-1 text-[9px] bg-amber-500 text-white rounded px-1 font-bold">{label}</span>
-                        <button
-                          type="button"
-                          data-testid={`canvas-keyframe-remove-${idx}`}
-                          aria-label="取消引用"
-                          title={`取消引用${label}帧`}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onRemoveReference(frame.edgeId)
-                          }}
-                          className="pointer-events-none absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-background text-muted-foreground opacity-0 shadow ring-1 ring-border transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </>
-                    ) : (
-                      <span>{label}帧</span>
-                    )}
-                  </div>
-                )
-              })}
-              {keyframeImages.length === 0 && <span className="text-[10px] text-muted-foreground">连接图片节点</span>}
-            </div>
-          </div>
-        )}
+            >
+              {label}
+            </button>
+          )
+        })}
       </div>
 
-      <div className="p-3 flex flex-col gap-2" style={{ width: 200 }}>
+      {/* 上游文本节点标签 */}
+      {upstreamTextNodeLabels.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {upstreamTextNodeLabels.map((label, i) => (
+            <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] text-blue-600 font-medium">
+              [{label}]+
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* 提示词大文本框 */}
+      <ResourceMentionTextarea
+        minHeightClassName="min-h-[140px]"
+        placeholder="描述视频内容..."
+        value={promptDraft}
+        resources={mentionResources}
+        onChange={setPromptDraft}
+        onBlur={flushPromptDraft}
+      />
+
+      {/* 多模态参考素材预览 */}
+      {videoMode === 'multiref' && (
         <div className="space-y-1">
-          <label className="text-[11px] font-medium text-muted-foreground">模型</label>
-          <div className="flex flex-col gap-1">
-            {filteredModels.map((m) => {
-              const isActive = videoModel === m.code
+          {(multirefImages.length + multirefVideos.length + multirefAudios.length) === 0 ? (
+            <div className="text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">
+              可连接图片、视频、音频节点
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <ReferencePreviewGroup title="图片" count={multirefImages.length} type="image" resources={imageMentionResources} onRemoveReference={onRemoveReference} />
+              <ReferencePreviewGroup title="视频" count={multirefVideos.length} type="video" resources={videoMentionResources} onRemoveReference={onRemoveReference} />
+              <ReferencePreviewGroup title="音频" count={multirefAudios.length} type="audio" resources={audioMentionResources} onRemoveReference={onRemoveReference} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 关键帧预览 */}
+      {videoMode === 'keyframe' && (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] text-muted-foreground">
+              {keyframeImages.length === 0 ? '文生视频' : keyframeImages.length === 1 ? '首帧生视频' : '首帧 → 尾帧'}
+            </label>
+            {keyframeImages.length === 2 && (
+              <button
+                data-testid="video-keyframe-swap"
+                onClick={() => setKeyframeSwapped((v) => !v)}
+                className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 hover:bg-muted text-muted-foreground transition-colors"
+                title="交换首尾帧"
+              >
+                ⇄ 交换
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {[0, 1].map((idx) => {
+              const frame = displayedKeyframes[idx]
+              const label = idx === 0 ? '首' : '尾'
               return (
-                <button
-                  key={m.code}
-                  onClick={() => onVideoModelChange(m.code)}
+                <div
+                  key={idx}
                   className={cn(
-                    'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-left transition-colors border',
-                    isActive ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-muted/40 border-transparent hover:bg-muted text-foreground'
+                    'relative w-14 h-14 rounded-lg border flex items-center justify-center text-[10px] text-muted-foreground font-medium',
+                    frame ? 'group/reference border-border/60' : 'border-dashed border-muted-foreground/30 bg-muted/20'
                   )}
                 >
-                  <Film className="w-3 h-3 shrink-0" />
-                  <span className="flex-1 truncate text-[10px]">{m.name}</span>
-                </button>
+                  {frame ? (
+                    <>
+                      <img src={frame.url} alt="" className="w-full h-full object-cover rounded-lg" />
+                      <span className="absolute -top-1 -left-1 text-[9px] bg-amber-500 text-white rounded px-1 font-bold">{label}</span>
+                      <button
+                        type="button"
+                        data-testid={`canvas-keyframe-remove-${idx}`}
+                        aria-label="取消引用"
+                        title={`取消引用${label}帧`}
+                        onClick={(event) => { event.stopPropagation(); onRemoveReference(frame.edgeId) }}
+                        className="pointer-events-none absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-background text-muted-foreground opacity-0 shadow ring-1 ring-border transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <span>{label}帧</span>
+                  )}
+                </div>
               )
             })}
+            {keyframeImages.length === 0 && <span className="text-[10px] text-muted-foreground">连接图片节点</span>}
           </div>
         </div>
+      )}
 
-        {/* 分辨率选择器：仅当模型 schema 提供超过 1 个选项时显示 */}
-        {showResolutionSelector && (
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium text-muted-foreground">分辨率</label>
-            <div className="flex flex-wrap gap-1">
-              {resolutionOptions.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => onVideoResolutionChange(r)}
-                  className={cn(
-                    'px-2 py-0.5 rounded text-[11px] font-medium border transition-colors',
-                    videoResolution === r
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-muted/40 border-transparent hover:bg-muted'
-                  )}
-                >
-                  {r.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      {/* 底部工具栏：Popover 属性 + 执行按钮 */}
+      <div className="flex items-center justify-between pt-1">
+        <PanelToolbar>
+          {/* 模型选择 */}
+          <PopoverSelect
+            icon={<Cpu className="h-3.5 w-3.5" />}
+            label="模型"
+            value={videoModel}
+            options={modelOptions}
+            onChange={onVideoModelChange}
+          />
 
-        <div className="space-y-1">
-          <label className="text-[11px] font-medium text-muted-foreground">比例</label>
-          <select
-            value={videoAspect}
-            onChange={(e) => onUpdateCfg({ aspectRatio: e.target.value })}
-            className="w-full h-7 px-2 text-[11px] bg-muted/60 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            {aspectRatioOptions.map((ar) => (
-              <option key={ar.value} value={ar.value}>{ar.label}</option>
-            ))}
-          </select>
-        </div>
+          {/* 分辨率选择 */}
+          {showResolutionSelector && (
+            <PopoverSelect
+              icon={<Film className="h-3.5 w-3.5" />}
+              label="分辨率"
+              value={videoResolution}
+              options={resolutionPopOptions}
+              onChange={onVideoResolutionChange}
+            />
+          )}
 
-        {isSeedance && (
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium text-muted-foreground">时长</label>
-            <select
+          {/* 比例选择 */}
+          {aspectPopOptions.length > 0 && (
+            <PopoverSelect
+              icon={<Ratio className="h-3.5 w-3.5" />}
+              label="比例"
+              value={videoAspect}
+              options={aspectPopOptions}
+              onChange={(val) => onUpdateCfg({ aspectRatio: val })}
+            />
+          )}
+
+          {/* 时长选择（仅 Seedance 模型） */}
+          {isSeedance && (
+            <PopoverSelect
+              icon={<Clock className="h-3.5 w-3.5" />}
+              label="时长"
               value={String(videoDuration)}
-              onChange={(e) => onUpdateCfg({ duration: Number(e.target.value) })}
-              className="w-full h-7 px-2 text-[11px] bg-muted/60 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              {durationOptions.map((opt) => (
-                <option key={opt.value} value={String(opt.value)}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-        )}
+              options={durationPopOptions}
+              onChange={(val) => onUpdateCfg({ duration: Number(val) })}
+            />
+          )}
 
-        {isSeedance && (
-          <div className="grid grid-cols-2 gap-1">
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">音频</label>
-              <div className="flex gap-1">
-                {[{ v: true, l: '有声' }, { v: false, l: '无声' }].map(({ v, l }) => (
-                  <button
-                    key={String(v)}
-                    onClick={() => onUpdateCfg({ generateAudio: v })}
-                    className={cn(
-                      'flex-1 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                      generateAudio === v ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted'
-                    )}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">镜头</label>
-              <div className="flex gap-1">
-                {[{ v: false, l: '自由' }, { v: true, l: '固定' }].map(({ v, l }) => (
-                  <button
-                    key={String(v)}
-                    onClick={() => onUpdateCfg({ cameraFixed: v })}
-                    className={cn(
-                      'flex-1 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                      cameraFixed === v ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 border-transparent hover:bg-muted'
-                    )}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+          {/* 音频开关（仅 Seedance 模型） */}
+          {isSeedance && (
+            <PopoverSelect
+              icon={<Volume2 className="h-3.5 w-3.5" />}
+              label="音频"
+              value={String(generateAudio)}
+              options={[
+                { value: 'true', label: '有声' },
+                { value: 'false', label: '无声' },
+              ]}
+              onChange={(val) => onUpdateCfg({ generateAudio: val === 'true' })}
+            />
+          )}
 
-        <button
-          data-testid="canvas-execute-video"
+          {/* 镜头控制（仅 Seedance 模型） */}
+          {isSeedance && (
+            <PopoverSelect
+              icon={<Video className="h-3.5 w-3.5" />}
+              label="镜头"
+              value={String(cameraFixed)}
+              options={[
+                { value: 'false', label: '自由' },
+                { value: 'true', label: '固定' },
+              ]}
+              onChange={(val) => onUpdateCfg({ cameraFixed: val === 'true' })}
+            />
+          )}
+        </PanelToolbar>
+
+        <ExecuteButton
+          icon={<Play className="h-4 w-4" />}
+          credits={videoCredits}
+          executing={executing}
+          disabled={!hasPrompt}
           onClick={onExecute}
-          disabled={executing || !hasPrompt}
-          className="mt-auto w-full flex items-center justify-center gap-1 bg-primary text-primary-foreground py-2 rounded-lg text-[11px] font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition"
-        >
-          {executing ? <><Loader2 className="w-3 h-3 animate-spin" />提交中</> : <><Play className="w-3 h-3" />执行 · {videoCredits}积分</>}
-        </button>
+        />
       </div>
     </div>
   )

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import useSWR from 'swr'
-import { AudioWaveform, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Music, Search, Wand2, X } from 'lucide-react'
+import { AudioWaveform, ChevronLeft, ChevronRight, ChevronsUpDown, Cpu, Loader2, Music, Search, Sliders, Wand2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { apiFetcher } from '@/lib/api-client'
 import { getPriceByResolution } from '@/components/generation/shared/schema-utils'
+import { PopoverSelect, ExecuteButton, RangePopover, PanelToolbar } from './panel-shared'
 import type { ModelItem, SystemVoiceDemoResponse, SystemVoiceItem } from '@aigc/types'
 import {
   calculateTtsCredits,
@@ -94,9 +95,17 @@ export function AudioGenPanel({
     }
   }
 
+  // 构建模型选项
+  const modelOptions = (models ?? []).map((item) => ({
+    value: item.code,
+    label: item.name,
+    hint: `${getPriceByResolution(item, 'default', item.credit_cost)}/千字`,
+  }))
+
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_220px_180px] divide-x divide-border">
-      <div className="flex min-w-0 flex-col gap-2 p-3">
+    <div className="p-4 space-y-4">
+      {/* 合成文本 — 大文本编辑器 */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className="text-[11px] font-medium text-muted-foreground">合成文本</label>
           <span className={cn('font-mono text-[10px]', characterCount > TTS_MAX_TEXT_LENGTH ? 'text-destructive' : 'text-muted-foreground')}>
@@ -109,96 +118,116 @@ export function AudioGenPanel({
           onChange={updateText}
           onBlur={flushTextDraft}
         />
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/80 bg-background/90 p-2 shadow-sm">
-          <DropdownButton
-            label="停顿"
-            open={pauseOpen}
-            setOpen={setPauseOpen}
-            items={[
-              ...PAUSE_OPTIONS.map((item) => ({
-                label: item.label,
-                onSelect: () => updateText(insertAtCursor(textDraft, toPauseTag(item.value), textDraft.length, textDraft.length)),
-              })),
-              {
-                label: '自定义',
-                onSelect: () => {
-                  const rawValue = window.prompt('请输入停顿时长，范围 0.01 到 99.99 秒，最多两位小数')
-                  if (rawValue == null) return
-                  const seconds = validatePauseSeconds(rawValue)
-                  if (seconds == null) {
-                    toast.error('停顿时长需在 0.01 到 99.99 秒之间，最多两位小数')
-                    return
-                  }
-                  updateText(insertAtCursor(textDraft, toPauseTag(seconds), textDraft.length, textDraft.length))
-                },
-              },
-            ]}
-          />
-          <DropdownButton
-            label="语气词"
-            open={interjectionOpen}
-            setOpen={setInterjectionOpen}
-            items={INTERJECTION_OPTIONS.map((item) => ({
+      </div>
+
+      {/* 文本编辑工具栏：停顿、语气词 */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/20 p-2">
+        <DropdownButton
+          label="停顿"
+          open={pauseOpen}
+          setOpen={setPauseOpen}
+          items={[
+            ...PAUSE_OPTIONS.map((item) => ({
               label: item.label,
-              onSelect: () => updateText(insertAtCursor(textDraft, item.value, textDraft.length, textDraft.length)),
-            }))}
+              onSelect: () => updateText(insertAtCursor(textDraft, toPauseTag(item.value), textDraft.length, textDraft.length)),
+            })),
+            {
+              label: '自定义',
+              onSelect: () => {
+                const rawValue = window.prompt('请输入停顿时长，范围 0.01 到 99.99 秒，最多两位小数')
+                if (rawValue == null) return
+                const seconds = validatePauseSeconds(rawValue)
+                if (seconds == null) {
+                  toast.error('停顿时长需在 0.01 到 99.99 秒之间，最多两位小数')
+                  return
+                }
+                updateText(insertAtCursor(textDraft, toPauseTag(seconds), textDraft.length, textDraft.length))
+              },
+            },
+          ]}
+        />
+        <DropdownButton
+          label="语气词"
+          open={interjectionOpen}
+          setOpen={setInterjectionOpen}
+          items={INTERJECTION_OPTIONS.map((item) => ({
+            label: item.label,
+            onSelect: () => updateText(insertAtCursor(textDraft, item.value, textDraft.length, textDraft.length)),
+          }))}
+        />
+      </div>
+
+      {/* 音色选择摘要 */}
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-medium text-muted-foreground">音色</label>
+        {voicesLoading && <VoiceSummarySkeleton />}
+        {voicesError && <div className="rounded-lg bg-destructive/10 p-2 text-[10px] text-destructive">音色加载失败</div>}
+        {!voicesLoading && !voicesError && (
+          <VoiceSummary
+            voice={selectedVoice}
+            onChoose={() => setVoiceDialogOpen(true)}
+            onPlay={selectedVoice ? () => playVoiceDemo(selectedVoice) : undefined}
+            loading={selectedVoice?.id === demoLoadingId}
           />
-        </div>
+        )}
       </div>
 
-      <div className="flex min-w-0 flex-col gap-3 p-3">
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium text-muted-foreground">模型</label>
-          <div className="flex flex-col gap-1">
-            {(models ?? []).map((item) => {
-              const active = item.code === model
-              return (
-                <button
-                  key={item.code}
-                  type="button"
-                  onClick={() => onModelChange(item.code)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors',
-                    active ? 'border-primary/40 bg-primary/10 text-primary' : 'border-transparent bg-muted/40 text-foreground hover:bg-muted',
-                  )}
-                >
-                  <Music className="h-3 w-3 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{getPriceByResolution(item, 'default', item.credit_cost)}/千字</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      {/* 底部工具栏：Popover 属性 + 执行按钮 */}
+      <div className="flex items-center justify-between pt-1">
+        <PanelToolbar>
+          {/* 模型选择 */}
+          <PopoverSelect
+            icon={<Cpu className="h-3.5 w-3.5" />}
+            label="模型"
+            value={model}
+            options={modelOptions}
+            onChange={onModelChange}
+          />
 
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium text-muted-foreground">音色</label>
-          {voicesLoading && <VoiceSummarySkeleton />}
-          {voicesError && <div className="rounded-lg bg-destructive/10 p-2 text-[10px] text-destructive">音色加载失败</div>}
-          {!voicesLoading && !voicesError && (
-            <VoiceSummary
-              voice={selectedVoice}
-              onChoose={() => setVoiceDialogOpen(true)}
-              onPlay={selectedVoice ? () => playVoiceDemo(selectedVoice) : undefined}
-              loading={selectedVoice?.id === demoLoadingId}
-            />
-          )}
-        </div>
-      </div>
+          {/* 语速 */}
+          <RangePopover
+            icon={<Sliders className="h-3.5 w-3.5" />}
+            label="语速"
+            value={speed}
+            min={0.5}
+            max={2}
+            step={0.05}
+            onChange={(value) => onUpdateCfg({ speed: value })}
+            formatValue={(v) => `${v.toFixed(2)}x`}
+          />
 
-      <div className="flex min-w-0 flex-col gap-3 p-3">
-        <RangeControl label="语速" min={0.5} max={2} step={0.05} value={speed} onChange={(value) => onUpdateCfg({ speed: value })} />
-        <RangeControl label="音调" min={-12} max={12} step={1} value={pitch} onChange={(value) => onUpdateCfg({ pitch: value })} />
-        <RangeControl label="音量" min={1} max={10} step={0.5} value={volume} onChange={(value) => onUpdateCfg({ volume: value })} />
-        <button
-          data-testid="canvas-execute-audio"
-          type="button"
+          {/* 音调 */}
+          <RangePopover
+            icon={<Music className="h-3.5 w-3.5" />}
+            label="音调"
+            value={pitch}
+            min={-12}
+            max={12}
+            step={1}
+            onChange={(value) => onUpdateCfg({ pitch: value })}
+            formatValue={(v) => (v >= 0 ? `+${v}` : String(v))}
+          />
+
+          {/* 音量 */}
+          <RangePopover
+            icon={<AudioWaveform className="h-3.5 w-3.5" />}
+            label="音量"
+            value={volume}
+            min={1}
+            max={10}
+            step={0.5}
+            onChange={(value) => onUpdateCfg({ volume: value })}
+            formatValue={(v) => v.toFixed(1)}
+          />
+        </PanelToolbar>
+
+        <ExecuteButton
+          icon={<Wand2 className="h-4 w-4" />}
+          credits={estimatedCredits}
+          executing={executing}
+          disabled={characterCount === 0 || characterCount > TTS_MAX_TEXT_LENGTH || !voiceId}
           onClick={onExecute}
-          disabled={executing || characterCount === 0 || characterCount > TTS_MAX_TEXT_LENGTH || !voiceId}
-          className="mt-auto flex w-full items-center justify-center gap-1 rounded-lg bg-primary py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {executing ? <><Loader2 className="h-3 w-3 animate-spin" />提交中</> : <><Wand2 className="h-3 w-3" />执行 · {estimatedCredits}积分</>}
-        </button>
+        />
       </div>
 
       {voiceDialogOpen && (
@@ -278,7 +307,6 @@ function AudioTagEditor({
       }
     }
 
-    // 跳过浏览器可能插入的零宽字符文本节点或 BR
     if (neighbor && !(neighbor instanceof HTMLElement && neighbor.dataset.audioToken)) {
       const next = event.key === 'Backspace' ? neighbor.previousSibling : neighbor.nextSibling
       if (next instanceof HTMLElement && next.dataset.audioToken) {
@@ -312,7 +340,6 @@ function AudioTagEditor({
     const after = value.slice(charIndex + tokenText.length)
     const nextValue = before + after
     onChange(nextValue)
-    // 编辑器聚焦时 useEffect 不会重新渲染 DOM，需要手动同步
     renderAudioEditorContent(editor, nextValue)
     placeCaretAtEnd(editor)
   }
@@ -326,7 +353,7 @@ function AudioTagEditor({
         aria-label={placeholder}
         contentEditable
         suppressContentEditableWarning
-        className="min-h-[190px] w-full whitespace-pre-wrap break-words rounded-xl border border-border/80 bg-background p-3 text-sm leading-7 text-foreground shadow-sm outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
+        className="min-h-[180px] w-full whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-muted/40 p-3 text-sm leading-7 text-foreground shadow-sm outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
         onFocus={() => setFocused(true)}
         onBlur={() => {
           setFocused(false)
@@ -346,7 +373,7 @@ function AudioTagEditor({
         onKeyDown={handleDeleteToken}
       />
       {value.length === 0 && !focused && (
-        <div className="pointer-events-none absolute left-3 top-3 text-sm text-muted-foreground">{placeholder}</div>
+        <div className="pointer-events-none absolute left-3 top-3 text-sm text-muted-foreground/70">{placeholder}</div>
       )}
     </div>
   )
@@ -450,18 +477,18 @@ function DropdownButton({
         aria-expanded={open}
         onClick={() => setOpen(!open)}
         className={cn(
-          'inline-flex min-w-24 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition-colors',
+          'inline-flex min-w-24 items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-[11px] font-medium shadow-sm transition-colors',
           open
             ? 'border-primary/45 bg-primary/10 text-primary'
-            : 'border-border bg-background text-foreground hover:border-primary/35 hover:bg-primary/5',
+            : 'border-border/60 bg-background text-foreground hover:border-primary/35 hover:bg-primary/5',
         )}
       >
         {label}
-        <ChevronsUpDown className={cn('h-4 w-4', open ? 'text-primary' : 'text-muted-foreground')} />
+        <ChevronsUpDown className={cn('h-3 w-3', open ? 'text-primary' : 'text-muted-foreground')} />
       </button>
       {open && menuStyle && createPortal(
         <div
-          className="fixed z-[120] overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl shadow-foreground/10"
+          className="fixed z-[120] overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 shadow-xl shadow-foreground/10"
           style={menuStyle}
         >
           {items.map((item) => (
@@ -472,7 +499,7 @@ function DropdownButton({
                 item.onSelect()
                 setOpen(false)
               }}
-              className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-popover-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              className="block w-full rounded-lg px-3 py-2 text-left text-[11px] font-medium text-popover-foreground transition-colors hover:bg-primary/10 hover:text-primary"
             >
               {item.label}
             </button>
@@ -558,14 +585,14 @@ function VoiceSelectDialog({
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-8 backdrop-blur-sm">
-      <div role="dialog" aria-modal="true" aria-label="音色选择" className="flex h-[78vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      <div role="dialog" aria-modal="true" aria-label="音色选择" className="flex h-[78vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border/80 bg-popover text-popover-foreground shadow-2xl">
+        <div className="flex items-center justify-between border-b border-border/80 px-5 py-4">
           <h2 className="text-base font-semibold">音色选择</h2>
           <button type="button" aria-label="关闭" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="flex items-center gap-3 border-b border-border px-5 py-3">
+        <div className="flex items-center gap-3 border-b border-border/80 px-5 py-3">
           <div className="rounded-lg bg-background px-4 py-2 text-sm font-medium shadow-sm">音色库</div>
           <div className="ml-auto flex min-w-[300px] items-center gap-2 rounded-lg bg-muted px-3 py-2">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -616,7 +643,7 @@ function VoiceSelectDialog({
             </div>
           )}
         </div>
-        <div className="flex items-center border-t border-border px-5 py-3 text-sm text-muted-foreground">
+        <div className="flex items-center border-t border-border/80 px-5 py-3 text-sm text-muted-foreground">
           <button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1} className="rounded-md p-2 hover:bg-muted disabled:opacity-40">
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -629,39 +656,5 @@ function VoiceSelectDialog({
       </div>
     </div>,
     document.body,
-  )
-}
-
-function RangeControl({
-  label,
-  min,
-  max,
-  step,
-  value,
-  onChange,
-}: {
-  label: string
-  min: number
-  max: number
-  step: number
-  value: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-[11px]">
-        <label className="font-medium text-muted-foreground">{label}</label>
-        <span className="font-mono text-muted-foreground">{value}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full accent-primary"
-      />
-    </div>
   )
 }

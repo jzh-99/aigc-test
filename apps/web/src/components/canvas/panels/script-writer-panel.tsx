@@ -2,15 +2,25 @@
 
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Clock, Palette, Sparkles } from 'lucide-react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { CanvasApiError, executeScriptWriterNode } from '@/lib/canvas/canvas-api'
 import type { ScriptWriterConfig } from '@/lib/canvas/types'
 import { generateUUID } from '@/lib/utils'
+import { PopoverSelect, ExecuteButton, PanelToolbar } from './panel-shared'
 
 const STYLE_OPTIONS = ['现代都市', '古装', '科幻', '动漫', '纪录片', '悬疑', '奇幻']
+
+const DURATION_OPTIONS = [
+  { value: '30', label: '30秒' },
+  { value: '60', label: '1分钟' },
+  { value: '120', label: '2分钟' },
+  { value: '180', label: '3分钟' },
+  { value: '300', label: '5分钟' },
+  { value: '600', label: '10分钟' },
+]
 
 interface Props {
   nodeId: string
@@ -69,77 +79,75 @@ export function ScriptWriterPanel({ nodeId, canvasId, config, onExecuted }: Prop
     }
   }, [config, nodeId, token, addNodeOutput, setNodeStatus, setNodeError, onExecuted])
 
+  const styleOptions = STYLE_OPTIONS.map((s) => ({ value: s, label: s }))
+
   return (
-    <div className="p-3 space-y-3">
-      <div>
-        <label className="text-[11px] font-medium text-muted-foreground block mb-1">故事描述</label>
-        <textarea
-          className="w-full h-20 p-2 text-xs bg-muted/60 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-          placeholder="简单描述你想要的故事内容…"
-          value={config.description}
-          onChange={(e) => updateCfg({ description: e.target.value })}
+    <div className="p-4 space-y-4">
+      {/* 故事描述 — 大文本框 */}
+      <textarea
+        className="w-full min-h-[180px] p-3 text-sm leading-relaxed bg-muted/40 border border-border/60 rounded-xl resize-none focus:outline-none focus:border-primary/40 transition-colors placeholder:text-muted-foreground/70"
+        placeholder="简单描述你想要的故事内容…"
+        value={config.description}
+        onChange={(e) => updateCfg({ description: e.target.value })}
+      />
+
+      {/* 底部工具栏 */}
+      <div className="flex items-center justify-between pt-1">
+        <PanelToolbar>
+          {/* 风格选择 */}
+          <PopoverSelect
+            icon={<Palette className="h-3.5 w-3.5" />}
+            label="风格"
+            value={config.style}
+            options={styleOptions}
+            onChange={(val) => updateCfg({ style: val })}
+          />
+
+          {/* 时长选择 */}
+          <PopoverSelect
+            icon={<Clock className="h-3.5 w-3.5" />}
+            label="时长"
+            value={String(config.duration)}
+            options={DURATION_OPTIONS}
+            onChange={(val) => updateCfg({ duration: Number(val) })}
+          />
+        </PanelToolbar>
+
+        <ExecuteButton
+          icon={<Sparkles className="h-4 w-4" />}
+          credits={0}
+          executing={executing}
+          disabled={!config.description.trim()}
+          onClick={handleExecute}
         />
       </div>
 
-      <div className="flex gap-2">
-        <div className="flex-1">
-          <label className="text-[11px] font-medium text-muted-foreground block mb-1">风格</label>
-          <select
-            value={config.style}
-            onChange={(e) => updateCfg({ style: e.target.value })}
-            className="w-full text-xs bg-background border border-border rounded px-2 py-1.5"
-          >
-            {STYLE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-        <div className="w-20">
-          <label className="text-[11px] font-medium text-muted-foreground block mb-1">时长(秒)</label>
-          <input
-            type="number"
-            min={10}
-            max={600}
-            step={10}
-            value={config.duration}
-            onChange={(e) => updateCfg({ duration: Number(e.target.value) })}
-            className="w-full text-xs bg-background border border-border rounded px-2 py-1.5"
-          />
-        </div>
-      </div>
-
-      <button
-        onClick={handleExecute}
-        disabled={executing || !config.description.trim()}
-        className="w-full text-xs bg-primary text-primary-foreground rounded-lg py-1.5 hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-      >
-        {executing && <Loader2 size={11} className="animate-spin" />}
-        {executing ? '生成中…' : '生成剧本'}
-      </button>
-
+      {/* 生成结果展示 */}
       {isDone && script && (
-        <div className="space-y-2 pt-1 border-t border-border">
+        <div className="space-y-3 pt-2 border-t border-border/60">
           {characters.length > 0 && (
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground mb-1">角色</p>
-              <div className="flex flex-wrap gap-1">
+              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">角色</p>
+              <div className="flex flex-wrap gap-1.5">
                 {characters.map((c, i) => (
-                  <span key={i} className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded">{c}</span>
+                  <span key={i} className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded-md">{c}</span>
                 ))}
               </div>
             </div>
           )}
           {scenes.length > 0 && (
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground mb-1">场景</p>
-              <div className="flex flex-wrap gap-1">
+              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">场景</p>
+              <div className="flex flex-wrap gap-1.5">
                 {scenes.map((s, i) => (
-                  <span key={i} className="text-[10px] bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded">{s}</span>
+                  <span key={i} className="text-[10px] bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md">{s}</span>
                 ))}
               </div>
             </div>
           )}
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground mb-1">剧本</p>
-            <div className="max-h-48 overflow-y-auto text-[11px] text-foreground bg-muted/40 rounded p-2 whitespace-pre-wrap leading-relaxed">
+            <p className="text-[11px] font-medium text-muted-foreground mb-1.5">剧本</p>
+            <div className="max-h-48 overflow-y-auto text-[11px] text-foreground bg-muted/30 rounded-lg p-3 whitespace-pre-wrap leading-relaxed">
               {script}
             </div>
           </div>
