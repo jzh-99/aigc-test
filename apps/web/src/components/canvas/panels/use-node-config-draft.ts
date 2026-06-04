@@ -31,13 +31,25 @@ export function useNodeConfigDraft({
     updateNodeData(nodeId, { config: { ...latestCfg, ...patch } as CanvasNodeConfig })
   }, [nodeId, updateNodeData])
 
+  // 节点切换时强制同步草稿状态，避免不同节点间的状态泄漏
+  const prevNodeIdRef = useRef(nodeId)
+  useEffect(() => {
+    if (prevNodeIdRef.current !== nodeId) {
+      // 节点切换时立即同步新节点的配置值
+      setTextDraft(textFromConfig)
+      setPromptDraft(promptFromConfig)
+      prevNodeIdRef.current = nodeId
+    }
+  }, [nodeId, textFromConfig, promptFromConfig])
+
+  // 同一节点内配置变化时同步（如生成结果回填）
   useEffect(() => {
     setTextDraft(textFromConfig)
-  }, [nodeId, textFromConfig])
+  }, [textFromConfig])
 
   useEffect(() => {
     setPromptDraft(promptFromConfig)
-  }, [nodeId, promptFromConfig])
+  }, [promptFromConfig])
 
   const flushTextDraft = useCallback(() => {
     if (!isTextInput) return
