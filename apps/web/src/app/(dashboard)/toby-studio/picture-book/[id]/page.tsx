@@ -444,33 +444,154 @@ export default function PictureBookEditorPage() {
 
         {state.steps.active === 'script' && <StepScriptOutline state={state} onChange={project.updateState} locked={Boolean(state.locks?.script)} />}
         {state.steps.active === 'assets' && (
-          <StepAssets
-            state={state}
-            onChange={project.updateState}
-            loading={Boolean(loadingAction) || confirmingAssets}
-            locked={Boolean(state.locks?.assets)}
-            generatingIds={generatingAssetIds}
-            imageGenerating={loadingAction === 'assets-images'}
-            onGenerateImages={() => void generateAssetImages()}
-            onGenerateOne={(kind, refId) => void generateAssetImages({ kind, refId })}
-          />
+          <>
+            {/* 资产为空时的兜底方案 */}
+            {state.assets.characters.length === 0 && state.assets.backgrounds.length === 0 ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-950/30">
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/50">
+                      <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-amber-900 dark:text-amber-100">角色/背景提示词为空</h3>
+                      <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                        看起来上一步生成角色/背景提示词失败了，或者数据未正确保存。您可以重新生成提示词，或者手动添加角色/背景。
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      onClick={async () => {
+                        if (!state) return
+                        setLoadingAction('regenerate-asset-prompts')
+                        try {
+                          const result = await generatePictureBookAssetPrompts(projectId)
+                          await project.mutate()
+                          toast.success('角色/背景提示词重新生成任务已提交', {
+                            description: `任务 ID: ${result.taskId}`,
+                            duration: 5000,
+                          })
+                        } catch (error) {
+                          const errorMessage = error instanceof Error ? error.message : '重新生成失败'
+                          toast.error(errorMessage, {
+                            duration: 5000,
+                          })
+                        } finally {
+                          setLoadingAction(null)
+                        }
+                      }}
+                      disabled={loadingAction === 'regenerate-asset-prompts'}
+                      className="bg-amber-600 hover:bg-amber-700 dark:bg-amber-700 dark:hover:bg-amber-600"
+                    >
+                      {loadingAction === 'regenerate-asset-prompts' ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <WandSparkles className="mr-2 h-4 w-4" />
+                      )}
+                      重新生成提示词
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (!state) return
+                        // 手动添加一个空的角色和背景
+                        const nextState = {
+                          ...state,
+                          assets: {
+                            characters: [{ id: 'character_1', name: '角色 1', prompt: '', imageUrl: null }],
+                            backgrounds: [{ id: 'background_1', name: '背景 1', prompt: '', imageUrl: null }],
+                          },
+                        }
+                        project.updateState(nextState)
+                        toast.info('已添加空白模板，请编辑名称和提示词')
+                      }}
+                    >
+                      手动添加
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <StepAssets
+              state={state}
+              onChange={project.updateState}
+              loading={Boolean(loadingAction) || confirmingAssets}
+              locked={Boolean(state.locks?.assets)}
+              generatingIds={generatingAssetIds}
+              imageGenerating={loadingAction === 'assets-images'}
+              onGenerateImages={() => void generateAssetImages()}
+              onGenerateOne={(kind, refId) => void generateAssetImages({ kind, refId })}
+            />
+          </>
         )}
         {state.steps.active === 'storyboard' && (
-          <StepStoryboard
-            state={state}
-            onChange={project.updateState}
-            loading={Boolean(loadingAction)}
-            generatingImageIds={generatingStoryboardImageIds}
-            generatingAudioIds={generatingStoryboardAudioIds}
-            onGenerateImages={() => {
-              const pendingIds = state.storyboard.filter(p => !p.imageUrl).map(p => `page_${p.page}`)
-              setGeneratingStoryboardImageIds(prev => [...new Set([...prev, ...pendingIds])])
-              void runAction('storyboard-images', () => generatePictureBookStoryboardImages(projectId))
-            }}
-            onGenerateAudio={(voiceZhId, voiceEnId) => {
-              const pendingIds = state.storyboard.filter(p => !p.voice.zh || !p.voice.en).map(p => `page_${p.page}`)
-              setGeneratingStoryboardAudioIds(prev => [...new Set([...prev, ...pendingIds])])
-              void runAction('storyboard-audio', () => generatePictureBookStoryboardAudio(projectId, { voice_zh_id: voiceZhId, voice_en_id: voiceEnId }))
+          <>
+            {/* 分镜为空时的兜底方案 */}
+            {state.storyboard.length === 0 ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-950/30">
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/50">
+                      <BookOpenCheck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-amber-900 dark:text-amber-100">分镜提示词为空</h3>
+                      <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                        看起来上一步生成分镜提示词失败了，或者数据未正确保存。您可以重新生成分镜提示词。
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={async () => {
+                      if (!state) return
+                      setLoadingAction('regenerate-storyboard-prompts')
+                      try {
+                        const result = await generatePictureBookStoryboardPrompts(projectId)
+                        await project.mutate()
+                        toast.success('分镜提示词重新生成任务已提交', {
+                          description: `任务 ID: ${result.taskId}`,
+                          duration: 5000,
+                        })
+                      } catch (error) {
+                        const errorMessage = error instanceof Error ? error.message : '重新生成失败'
+                        toast.error(errorMessage, {
+                          duration: 5000,
+                        })
+                      } finally {
+                        setLoadingAction(null)
+                      }
+                    }}
+                    disabled={loadingAction === 'regenerate-storyboard-prompts'}
+                    className="bg-amber-600 hover:bg-amber-700 dark:bg-amber-700 dark:hover:bg-amber-600"
+                  >
+                    {loadingAction === 'regenerate-storyboard-prompts' ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <WandSparkles className="mr-2 h-4 w-4" />
+                    )}
+                    重新生成分镜提示词
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            <StepStoryboard
+              state={state}
+              onChange={project.updateState}
+              loading={Boolean(loadingAction)}
+              generatingImageIds={generatingStoryboardImageIds}
+              generatingAudioIds={generatingStoryboardAudioIds}
+              onGenerateImages={() => {
+                const pendingIds = state.storyboard.filter(p => !p.imageUrl).map(p => `page_${p.page}`)
+                setGeneratingStoryboardImageIds(prev => [...new Set([...prev, ...pendingIds])])
+                void runAction('storyboard-images', () => generatePictureBookStoryboardImages(projectId))
+              }}
+              onGenerateAudio={(voiceZhId, voiceEnId) => {
+                const pendingIds = state.storyboard.filter(p => !p.voice.zh || !p.voice.en).map(p => `page_${p.page}`)
+                setGeneratingStoryboardAudioIds(prev => [...new Set([...prev, ...pendingIds])])
+                void runAction('storyboard-audio', () => generatePictureBookStoryboardAudio(projectId, { voice_zh_id: voiceZhId, voice_en_id: voiceEnId }))
             }}
             onGenerateOneImage={(refId) => void generateOneStoryboardImage(refId)}
             onGenerateOneAudio={(refId, voiceZhId, voiceEnId) => void generateOneStoryboardAudio(refId, voiceZhId, voiceEnId)}
