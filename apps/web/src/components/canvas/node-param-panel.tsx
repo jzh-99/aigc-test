@@ -409,6 +409,7 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
         status: 'pending',
         actual_credits: result.estimated_credits ?? 0,
         created_at: new Date().toISOString(),
+        module: 'image',
       })
 
       const activeTeamId = useAuthStore.getState().activeTeamId

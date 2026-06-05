@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { assertCanvasEnabledForWorkspace } from './_shared.js'
 
+const CANVAS_HISTORY_MEDIA_MODULES = ['image', 'video', 'tts', 'music', 'music_voice_clone'] as const
+
 // GET /canvases/:id/history — 画布历史批次列表（含任务+资产信息，游标分页）
 const route: FastifyPluginAsync = async (app) => {
   app.get<{
@@ -50,6 +52,7 @@ const route: FastifyPluginAsync = async (app) => {
       .where('canvas_id', '=', id)
       .where('is_deleted', '=', false)
       .where('is_hidden', '=', false)
+      .where('module', 'in', CANVAS_HISTORY_MEDIA_MODULES as any)
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .limit(limitN + 1) as any

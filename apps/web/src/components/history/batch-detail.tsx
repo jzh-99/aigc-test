@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Download, RotateCcw, Check, ImagePlus, Loader2 } from 'lucide-react'
+import { Download, RotateCcw, Check, ImagePlus, Loader2, Music } from 'lucide-react'
 import { useBatch, cancelSeedanceBatch } from '@/hooks/use-batches'
 import { downloadImage } from '@/lib/download'
 import { translateTaskError } from '@/lib/error-messages'
@@ -141,7 +141,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
   }
 
   async function handleSendAllToReference() {
-    if (completedAssets.length === 0) return
+    if (completedImageUrls.length === 0) return
     if (referenceCount >= 10) {
       toast.error('最多添加 10 张参考图')
       return
@@ -149,12 +149,12 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
     setSendingAll(true)
     try {
       const availableSlots = 10 - referenceCount
-      const toAdd = completedAssets.slice(0, availableSlots)
+      const toAdd = completedImageUrls.slice(0, availableSlots)
       for (const url of toAdd) {
         addReferenceImage({ id: generateUUID(), previewUrl: url })
       }
       toast.success('已发送至参考区')
-      if (completedAssets.length > availableSlots) {
+      if (completedImageUrls.length > availableSlots) {
         toast.info(`参考区最多 10 张，已添加前 ${availableSlots} 张`)
       }
       onReferenceAdded?.()
@@ -163,12 +163,29 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
     }
   }
 
-  const completedAssets = batch.tasks
+  const completedAssetItems = batch.tasks
     .filter((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))
-    .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
-  const completedUrls = completedAssets
+    .map((t) => ({
+      type: t.asset!.type,
+      url: t.asset!.storage_url ?? t.asset!.original_url!,
+    }))
+  const completedImageUrls = completedAssetItems
+    .filter((asset) => asset.type === 'image')
+    .map((asset) => asset.url)
+  const completedVideoUrls = completedAssetItems
+    .filter((asset) => asset.type === 'video')
+    .map((asset) => asset.url)
+  const completedAudioUrls = completedAssetItems
+    .filter((asset) => asset.type === 'audio')
+    .map((asset) => asset.url)
 
-  const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
+  const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation' || completedVideoUrls.length > 0
+  const isAudio = !isVideo && (
+    (batch as any).module === 'tts' ||
+    (batch as any).module === 'music' ||
+    (batch as any).module === 'music_voice_clone' ||
+    completedAudioUrls.length > 0
+  )
   const canCancelSeedance = (batch.status === 'pending' || batch.status === 'processing') && batch.provider === 'volcengine' && /^seedance-/i.test(batch.model)
 
   const thumbnailAspect = parseAspectRatio((batch as any).params?.aspect_ratio)
@@ -232,7 +249,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
         )}
       </Button>
 
-      {!isVideo && completedUrls.length > 0 && (
+      {!isVideo && !isAudio && completedImageUrls.length > 0 && (
         <Button
           size="sm"
           className="w-full gap-2"
@@ -251,6 +268,42 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
         <p className="text-sm font-medium mb-3">生成结果</p>
         {batch.tasks.length === 0 ? (
           <p className="text-sm text-muted-foreground">无任务数据</p>
+        ) : isAudio ? (
+          /* Audio tasks */
+          <div className="space-y-3">
+            {batch.tasks.map((task) => {
+              const url = task.asset?.storage_url ?? task.asset?.original_url
+              if (task.status === 'completed' && url) {
+                return (
+                  <div key={task.id} className="rounded-lg border border-border/70 bg-muted/20 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                        <Music className="h-3.5 w-3.5 shrink-0" />
+                        <span>音频结果</span>
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-7 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => downloadImage(url, 'audio')}>
+                        <Download className="h-3.5 w-3.5" />
+                        下载
+                      </Button>
+                    </div>
+                    <audio src={url} controls className="block h-9 w-full rounded-md" />
+                  </div>
+                )
+              }
+              return (
+                <div key={task.id} className="flex h-20 items-center justify-center rounded-lg border bg-muted text-xs text-muted-foreground">
+                  {task.status === 'failed' ? (
+                    <div className="text-center px-3">
+                      <p className="font-medium text-destructive">生成失败</p>
+                      {task.error_message && (
+                        <p className="mt-1 line-clamp-3 text-xs text-destructive/80">{translateTaskError(task.error_message)}</p>
+                      )}
+                    </div>
+                  ) : task.status === 'processing' ? '音频生成中...' : '等待中'}
+                </div>
+              )
+            })}
+          </div>
         ) : isVideo ? (
           /* Video tasks */
           <div className="space-y-3">
@@ -295,7 +348,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
               const url = task.asset?.storage_url ?? task.asset?.original_url
 
               if (task.status === 'completed' && url) {
-                const urlIndex = completedUrls.indexOf(url)
+                const urlIndex = completedImageUrls.indexOf(url)
                 return (
                   <div
                     key={task.id}
@@ -327,7 +380,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7 bg-background/80 hover:bg-background"
-                          onClick={(e) => { e.stopPropagation(); downloadImage(url, task.asset?.type as 'image' | 'video' | undefined) }}
+                          onClick={(e) => { e.stopPropagation(); downloadImage(url, task.asset?.type) }}
                         >
                           <Download className="h-3.5 w-3.5" />
                         </Button>
@@ -355,12 +408,12 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
       </div>
 
       {/* Lightbox (images only) */}
-      {!isVideo && lightboxIndex !== null && completedUrls[lightboxIndex] && (
+      {!isVideo && !isAudio && lightboxIndex !== null && completedImageUrls[lightboxIndex] && (
         <ImageLightbox
-          url={completedUrls[lightboxIndex]}
+          url={completedImageUrls[lightboxIndex]}
           onClose={() => setLightboxIndex(null)}
           onPrev={lightboxIndex > 0 ? () => setLightboxIndex((i) => i! - 1) : undefined}
-          onNext={lightboxIndex < completedUrls.length - 1 ? () => setLightboxIndex((i) => i! + 1) : undefined}
+          onNext={lightboxIndex < completedImageUrls.length - 1 ? () => setLightboxIndex((i) => i! + 1) : undefined}
         />
       )}
     </div>

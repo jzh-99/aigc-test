@@ -1,4 +1,4 @@
-function buildFilename(type?: 'image' | 'video'): string {
+function buildFilename(type?: 'image' | 'video' | 'audio'): string {
   const now = new Date()
   const ts =
     now.getFullYear().toString() +
@@ -8,11 +8,11 @@ function buildFilename(type?: 'image' | 'video'): string {
     String(now.getHours()).padStart(2, '0') +
     String(now.getMinutes()).padStart(2, '0') +
     String(now.getSeconds()).padStart(2, '0')
-  const ext = type === 'video' ? 'mp4' : 'jpg'
+  const ext = type === 'video' ? 'mp4' : type === 'audio' ? 'mp3' : 'jpg'
   return `aigc-${ts}.${ext}`
 }
 
-export function downloadAsset(url: string, type?: 'image' | 'video') {
+export function downloadAsset(url: string, type?: 'image' | 'video' | 'audio') {
   const filename = buildFilename(type)
   const a = document.createElement('a')
   a.href = url

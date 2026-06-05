@@ -12,6 +12,7 @@ import type { CanvasAssetItem, CanvasHistoryItem } from '@/lib/canvas/canvas-api
 type Tab = 'history' | 'assets'
 type AssetSubTab = 'image' | 'video' | 'audio'
 type PreviewType = 'image' | 'video' | 'audio'
+type HistoryMediaType = 'image' | 'video' | 'audio'
 
 interface Props {
   canvasId: string
@@ -23,6 +24,21 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   processing: { label: '生成中', cls: 'bg-blue-100 text-blue-700' },
   pending: { label: '排队中', cls: 'bg-yellow-100 text-yellow-700' },
   failed: { label: '失败', cls: 'bg-red-100 text-red-600' },
+}
+
+const AUDIO_HISTORY_MODULES = new Set(['tts', 'music', 'music_voice_clone'])
+const MEDIA_HISTORY_MODULES = new Set(['image', 'video', ...AUDIO_HISTORY_MODULES])
+
+function getHistoryMediaType(batch: CanvasHistoryItem): HistoryMediaType | null {
+  if (!batch.module) return 'image'
+  if (AUDIO_HISTORY_MODULES.has(batch.module)) return 'audio'
+  if (batch.module === 'video') return 'video'
+  if (batch.module === 'image') return 'image'
+  return null
+}
+
+function getHistoryUnit(type: HistoryMediaType): string {
+  return type === 'image' ? '张' : '条'
 }
 
 export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
@@ -85,8 +101,9 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
   const historyData = useMemo(() => {
     const fallback = { items: [] as CanvasHistoryItem[], loading: true, loaded: false, nextCursor: null as string | null }
     const section = bucket?.history ?? fallback
+    const items = section.items.filter((item) => !item.module || MEDIA_HISTORY_MODULES.has(item.module))
     return {
-      items: section.items,
+      items,
       loading: token ? section.loading : true,
       loaded: section.loaded,
       hasMore: !!section.nextCursor,
@@ -257,6 +274,8 @@ function HistoryTab({
     <div className="divide-y">
       {items.map((batch) => {
         const st = STATUS_MAP[batch.status] ?? { label: batch.status, cls: 'bg-muted text-muted-foreground' }
+        const mediaType = getHistoryMediaType(batch)
+        if (!mediaType) return null
         const statusHint = batch.status === 'pending'
           ? typeof batch.queue_position === 'number'
             ? `前方还有 ${batch.queue_position} 个任务`
@@ -279,7 +298,7 @@ function HistoryTab({
             </div>
             <p className="text-xs text-foreground line-clamp-2 mb-1.5">{batch.prompt || '(无提示词)'}</p>
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <span>{batch.completed_count}/{batch.quantity} {(batch.module === 'video' || /^(seedance-|veo)/i.test(batch.model || '')) ? '条' : '张'}</span>
+              <span>{batch.completed_count}/{batch.quantity} {getHistoryUnit(mediaType)}</span>
               {statusHint && (
                 <>
                   <span>·</span>
