@@ -66,6 +66,10 @@ export interface ShortDramaEpisodeOutline {
   episodeNumber: number
   title: string
   summary: string
+  // 分集生成时由 AI 顺手抽取的素材索引，仅作为素材步骤去重和命名锚点；
+  // description 仍由素材步骤基于剧本摘要单独生成，旧数据无此字段时保持向后兼容。
+  mentionedCharacters?: string[]
+  mentionedScenes?: string[]
 }
 
 export interface ShortDramaAsset {

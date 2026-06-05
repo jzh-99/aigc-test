@@ -62,10 +62,25 @@ function parseEpisodeOutlineBatch(
       throw new Error(`第 ${from + index} 集的字段格式错误或缺少必需字段`)
     }
 
+    const dedupeStrings = (raw: unknown[]): string[] => {
+      const seen = new Set<string>()
+      const result: string[] = []
+      for (const item of raw) {
+        if (typeof item !== 'string') continue
+        const trimmed = item.trim()
+        if (!trimmed || seen.has(trimmed)) continue
+        seen.add(trimmed)
+        result.push(trimmed)
+      }
+      return result
+    }
+
     return {
       episodeNumber: ep.episodeNumber,
       title: ep.title,
       summary: ep.synopsis,
+      mentionedCharacters: dedupeStrings(ep.characters),
+      mentionedScenes: dedupeStrings(ep.scenes),
     }
   })
 }
