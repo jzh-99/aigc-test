@@ -88,11 +88,12 @@ export default function ShortDramaEditorPage() {
   const displayState = activeStep === state.steps.active
     ? state
     : { ...state, steps: { ...state.steps, active: activeStep } }
+  const visualStyle = state.settings.style.trim()
 
   return (
     <div className="-mx-4 -mt-4 min-h-[calc(100vh-4.25rem)] bg-background md:-mx-6 md:-mt-6">
       <div className="sticky top-[-1rem] z-20 flex h-16 items-center border-b bg-card/95 px-5 backdrop-blur md:top-[-1.5rem] md:px-8">
-        <Link href="/toby-studio/short-drama" className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-foreground">
+        <Link href="/toby-studio/short-drama" prefetch={false} className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           返回 AI短剧
         </Link>
@@ -135,7 +136,14 @@ export default function ShortDramaEditorPage() {
               </>
             ) : (
               <>
-                <h1 className="min-w-0 flex-1 truncate text-xl font-bold text-foreground">{project.title}</h1>
+                <div className="min-w-0 flex-1 items-center gap-2 sm:flex">
+                  <h1 className="min-w-0 truncate text-xl font-bold text-foreground">{project.title}</h1>
+                  {visualStyle && (
+                    <span className="mt-2 inline-flex max-w-full shrink-0 items-center rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary sm:mt-0">
+                      {visualStyle}
+                    </span>
+                  )}
+                </div>
                 <Button size="icon" variant="ghost" onClick={() => setEditingTitle(true)} aria-label="编辑剧名">
                   <Pencil className="h-4 w-4" />
                 </Button>
