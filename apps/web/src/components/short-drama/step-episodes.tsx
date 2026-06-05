@@ -263,7 +263,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
             {isGeneratingSegments ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Film className="w-3.5 h-3.5 mr-1" />}
             {selectingSegments
               ? `确认生成 (${selectedEpisodeNumbers.length})`
-              : `生成片段脚本 (${remainingSegmentEpisodes.length})`}
+              : '批量生成片段脚本'}
           </Button>
           {exportableCount > 0 && (
             <Button size="sm" onClick={handleBatchExport} disabled={exporting}>
