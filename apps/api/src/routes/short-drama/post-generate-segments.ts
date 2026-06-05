@@ -83,13 +83,6 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 检查是否已有片段脚本
-    if (episode.segments.length > 0) {
-      return reply.status(400).send({
-        error: { code: 'ALREADY_GENERATED', message: '该集的片段脚本已生成' },
-      })
-    }
-
     let generationLock: RedisLockHandle | null = null
     generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:episode-segments:${episodeNumber}`)
     if (!generationLock) {

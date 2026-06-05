@@ -797,46 +797,119 @@ function EpisodeOutlineList({
   onEditTitle: (episodeNumber: number) => void
   onEditScene: (episodeNumber: number, sceneIndex: number) => void
 }) {
-  return (
-    <div className="space-y-3">
-      {outlines.map(outline => {
-        const scenes = parseEpisodeSceneBlocks(outline.summary)
-        return (
-          <section key={outline.episodeNumber} className="rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:shadow-none">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">第 {outline.episodeNumber} 集</div>
-                <h4 className="mt-1 text-sm font-semibold text-foreground">{outline.title}</h4>
-              </div>
-              {canEdit && (
-                <SummaryIconButton label={`编辑第${outline.episodeNumber}集标题`} onClick={() => onEditTitle(outline.episodeNumber)} />
-              )}
-            </div>
+  const groups = buildEpisodeOutlineGroups(outlines)
 
-            <div className="mt-3 space-y-2">
-              {scenes.length > 0 ? scenes.map((scene, index) => (
-                <div key={`${outline.episodeNumber}-${scene.heading}-${index}`} className="rounded-lg border border-border/60 bg-muted/25 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs font-semibold text-muted-foreground">{scene.heading}</div>
-                    {canEdit && (
-                      <SummaryIconButton label={`编辑${scene.heading}`} onClick={() => onEditScene(outline.episodeNumber, index)} />
-                    )}
+  return (
+    <div className="space-y-5">
+      {groups.map(group => (
+        <div key={group.id} id={group.id} className="scroll-mt-24 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <span className="h-px flex-1 bg-border/70" />
+            <span>第 {group.label} 集</span>
+            <span className="h-px flex-1 bg-border/70" />
+          </div>
+          {group.outlines.map(outline => {
+            const scenes = parseEpisodeSceneBlocks(outline.summary)
+            return (
+              <section key={outline.episodeNumber} className="rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:shadow-none">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">第 {outline.episodeNumber} 集</div>
+                    <h4 className="mt-1 text-sm font-semibold text-foreground">{outline.title}</h4>
                   </div>
-                  <div className="mt-2 whitespace-pre-wrap text-xs leading-6 text-muted-foreground">
-                    {scene.body}
-                  </div>
+                  {canEdit && (
+                    <SummaryIconButton label={`编辑第${outline.episodeNumber}集标题`} onClick={() => onEditTitle(outline.episodeNumber)} />
+                  )}
                 </div>
-              )) : (
-                <div className="whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/25 p-3 text-xs leading-6 text-muted-foreground">
-                  {outline.summary}
+
+                <div className="mt-3 space-y-2">
+                  {scenes.length > 0 ? scenes.map((scene, index) => (
+                    <div key={`${outline.episodeNumber}-${scene.heading}-${index}`} className="rounded-lg border border-border/60 bg-muted/25 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs font-semibold text-muted-foreground">{scene.heading}</div>
+                        {canEdit && (
+                          <SummaryIconButton label={`编辑${scene.heading}`} onClick={() => onEditScene(outline.episodeNumber, index)} />
+                        )}
+                      </div>
+                      <div className="mt-2 whitespace-pre-wrap text-xs leading-6 text-muted-foreground">
+                        {scene.body}
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/25 p-3 text-xs leading-6 text-muted-foreground">
+                      {outline.summary}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </section>
-        )
-      })}
+              </section>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
+}
+
+const EPISODE_NAV_GROUP_SIZE = 5
+
+function formatEpisodeRangeLabel(from: number, to: number): string {
+  return from === to ? String(from) : `${from}-${to}`
+}
+
+function buildEpisodeOutlineGroups(outlines: Array<{ episodeNumber: number; title: string; summary: string }>) {
+  const groups: Array<{
+    id: string
+    label: string
+    from: number
+    to: number
+    outlines: Array<{ episodeNumber: number; title: string; summary: string }>
+  }> = []
+
+  for (const outline of outlines) {
+    const groupIndex = Math.floor((outline.episodeNumber - 1) / EPISODE_NAV_GROUP_SIZE)
+    const from = groupIndex * EPISODE_NAV_GROUP_SIZE + 1
+    const to = from + EPISODE_NAV_GROUP_SIZE - 1
+    let group = groups.find(item => item.from === from)
+    if (!group) {
+      group = {
+        id: `short-drama-outlines-${from}-${to}`,
+        label: formatEpisodeRangeLabel(from, to),
+        from,
+        to,
+        outlines: [],
+      }
+      groups.push(group)
+    }
+    group.outlines.push(outline)
+  }
+
+  return groups.map((group) => {
+    const firstEpisodeNumber = group.outlines[0]?.episodeNumber ?? group.from
+    const lastEpisodeNumber = group.outlines[group.outlines.length - 1]?.episodeNumber ?? group.to
+    return {
+      ...group,
+      label: formatEpisodeRangeLabel(firstEpisodeNumber, lastEpisodeNumber),
+    }
+  })
+}
+
+function formatOutlineProgressMessage(message: string): string {
+  if (!message) return ''
+  return message
+    .replace(/大纲/g, '剧本')
+    .replace(/分集剧本剧本/g, '分集剧本')
+}
+
+function getCurrentOutlineProgressMessage(state: StepScriptOutlineProps['state'], message: string): string {
+  const formattedMessage = formatOutlineProgressMessage(message)
+  if (formattedMessage) return formattedMessage
+
+  const from = state.script.outlines.length + 1
+  const to = Math.min(from + EPISODE_NAV_GROUP_SIZE - 1, state.settings.episodeCount)
+  if (from <= state.settings.episodeCount) {
+    return `正在生成第 ${formatEpisodeRangeLabel(from, to)} 集剧本，页面会自动刷新状态...`
+  }
+  return '正在生成分集剧本，页面会自动刷新状态...'
 }
 
 export function StepScriptOutline({ projectId, state, onStateChange }: StepScriptOutlineProps) {
@@ -882,6 +955,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     summarySectionsForNavigation.人物小传 &&
     parseCharacterBios(summarySectionsForNavigation.人物小传).length > 0
   )
+  const outlineNavigationGroups = buildEpisodeOutlineGroups(state.script.outlines)
   const hasOutlinesNavigation = state.script.outlines.length > 0
   const hasConfirmNavigation = !isLocked && state.script.outlines.length === state.settings.episodeCount
   const sourceLabel = state.script.source === 'upload' ? '原始剧本' : '原始创意'
@@ -1323,14 +1397,10 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
           </div>
         )}
 
-        {generatingOutlines && outlineProgressMessage && (
-          <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-violet-800">
-            {outlineProgressMessage}
-          </div>
-        )}
-        {!generatingOutlines && isOutlinesGenerating && (
-          <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-violet-800">
-            大纲生成中，页面会自动刷新状态...
+        {isOutlinesGenerating && (
+          <div className="flex items-center gap-2 rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/20 dark:text-violet-200">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            <span>{getCurrentOutlineProgressMessage(state, outlineProgressMessage)}</span>
           </div>
         )}
 
@@ -1445,12 +1515,15 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
           {hasOutlinesNavigation && (
             <div className="space-y-0.5">
               <div className="px-1.5 pt-1 text-[11px] font-medium text-foreground">分集</div>
-              <a
-                href="#short-drama-outlines"
-                className="block rounded-md px-3 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
-              >
-                分集剧本
-              </a>
+              {outlineNavigationGroups.map(group => (
+                <a
+                  key={group.id}
+                  href={`#${group.id}`}
+                  className="block rounded-md px-3 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+                >
+                  {group.label}
+                </a>
+              ))}
             </div>
           )}
           {hasConfirmNavigation && (

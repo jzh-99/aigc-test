@@ -303,6 +303,9 @@ export function ShortDramaHome() {
                       {normalizedOriginalScript.length.toLocaleString()} / {SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS.toLocaleString()} 字
                     </span>
                   </div>
+                  <div className="border-t bg-muted/40 px-3 py-2 text-xs text-muted-foreground dark:border-[#201b49] dark:bg-[#090817]/70">
+                    系统按每集约 2 分钟节奏生成，过长内容会自动压缩归并
+                  </div>
                   {isOriginalScriptTooLong && (
                     <div className="border-t border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-950/60 dark:bg-red-950/20">
                       请精简后再确认剧本

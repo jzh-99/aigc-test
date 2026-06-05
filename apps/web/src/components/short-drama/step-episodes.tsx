@@ -2,9 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { AlertCircle, Loader2, Download, Play, Film, RotateCcw } from 'lucide-react'
+import { AlertCircle, Loader2, Download, Play, Film, RotateCcw, CheckSquare, Square, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { ShortDramaState } from '@aigc/types'
 import { exportShortDramaBatch, generateShortDramaEpisodeSegments } from '@/lib/short-drama/api'
 
@@ -22,9 +31,13 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
   const [generatedCount, setGeneratedCount] = useState(0)
   const [generateTotalCount, setGenerateTotalCount] = useState(0)
   const [failedEpisodeErrors, setFailedEpisodeErrors] = useState<Record<number, string>>({})
+  const [selectingSegments, setSelectingSegments] = useState(false)
+  const [selectedEpisodeNumbers, setSelectedEpisodeNumbers] = useState<number[]>([])
+  const [confirmGenerateEpisodes, setConfirmGenerateEpisodes] = useState<number[] | null>(null)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const episodes = state.episodes.items
+  const selectedEpisodeSet = useMemo(() => new Set(selectedEpisodeNumbers), [selectedEpisodeNumbers])
 
   // 包含后端持久化的 generating 状态，刷新后可从 state 恢复
   const serverGeneratingEpisodes = useMemo(
@@ -35,15 +48,23 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
   const isLocalGenerating = generatingEpisodeNumber !== null
   const isGeneratingSegments = isLocalGenerating || isServerGenerating
 
-  const pendingSegmentEpisodes = useMemo(
+  const remainingSegmentEpisodes = useMemo(
     () => episodes
-      .filter(ep => ep.segments.length === 0 && ep.status !== 'failed' && ep.status !== 'generating' && !failedEpisodeErrors[ep.episodeNumber])
+      .filter(ep =>
+        ep.status !== 'generating' &&
+        (
+          ep.segments.length === 0 ||
+          ep.status === 'failed' ||
+          Boolean(failedEpisodeErrors[ep.episodeNumber])
+        )
+      )
       .map(ep => ep.episodeNumber),
     [episodes, failedEpisodeErrors]
   )
   const generatedEpisodeCount = episodes.filter(ep => ep.segments.length > 0).length
-  const failedEpisodeCount = episodes.filter(ep =>
-    ep.segments.length === 0 && (ep.status === 'failed' || failedEpisodeErrors[ep.episodeNumber])
+  const ungeneratedEpisodeCount = episodes.length - generatedEpisodeCount
+  const recentFailedEpisodeCount = episodes.filter(ep =>
+    ep.status === 'failed' || failedEpisodeErrors[ep.episodeNumber]
   ).length
   const exportableCount = episodes.filter(ep =>
     ep.segments.length > 0 && ep.segments.every(s => !!s.videoUrl)
@@ -80,9 +101,11 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
     }
   }, [isServerGenerating, isLocalGenerating, onStateChange])
 
-  const generateMissingSegments = async (episodeNumbers: number[]) => {
+  const generateSelectedSegments = async (episodeNumbers: number[]) => {
     if (episodeNumbers.length === 0) return
 
+    setSelectingSegments(false)
+    setSelectedEpisodeNumbers([])
     setGeneratedCount(0)
     setGenerateTotalCount(episodeNumbers.length)
 
@@ -112,9 +135,48 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
     }
   }
 
-  const retryEpisodeSegments = async (episodeNumber: number) => {
+  const requestGenerateSegments = (episodeNumbers: number[]) => {
     if (isGeneratingSegments) return
-    await generateMissingSegments([episodeNumber])
+    if (episodeNumbers.length === 0) {
+      toast.info('请先选择要生成的集')
+      return
+    }
+
+    const orderedEpisodeNumbers = episodes
+      .map(ep => ep.episodeNumber)
+      .filter(episodeNumber => episodeNumbers.includes(episodeNumber))
+    const hasGeneratedEpisodes = orderedEpisodeNumbers.some(episodeNumber => {
+      const episode = episodes.find(ep => ep.episodeNumber === episodeNumber)
+      return Boolean(episode && episode.segments.length > 0)
+    })
+
+    if (hasGeneratedEpisodes) {
+      setConfirmGenerateEpisodes(orderedEpisodeNumbers)
+      return
+    }
+
+    void generateSelectedSegments(orderedEpisodeNumbers)
+  }
+
+  const toggleEpisodeSelection = (episodeNumber: number) => {
+    setSelectedEpisodeNumbers(current =>
+      current.includes(episodeNumber)
+        ? current.filter(item => item !== episodeNumber)
+        : [...current, episodeNumber]
+    )
+  }
+
+  const selectAllEpisodes = () => {
+    setSelectedEpisodeNumbers(episodes.map(ep => ep.episodeNumber))
+  }
+
+  const selectRemainingEpisodes = () => {
+    setSelectedEpisodeNumbers(remainingSegmentEpisodes)
+  }
+
+  const cancelSegmentSelection = () => {
+    setSelectingSegments(false)
+    setSelectedEpisodeNumbers([])
   }
 
   const handleBatchExport = async () => {
@@ -141,17 +203,19 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          共 {episodes.length} 集 · 已生成 {generatedEpisodeCount} · 可导出 {exportableCount}
-          {failedEpisodeCount > 0 && (
-            <span className="ml-2 inline-flex items-center gap-1 text-destructive">
+      <div className="flex min-h-9 items-center justify-between gap-3">
+        <div className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          <span className="inline-flex h-6 items-center">
+            共 {episodes.length} 集 · 已生成 {generatedEpisodeCount} · 未生成 {ungeneratedEpisodeCount} · 可导出 {exportableCount}
+          </span>
+          {recentFailedEpisodeCount > 0 && (
+            <span className="inline-flex h-6 items-center gap-1 text-amber-700">
               <AlertCircle className="h-3.5 w-3.5" />
-              {failedEpisodeCount} 集生成失败
+              最近失败 {recentFailedEpisodeCount}
             </span>
           )}
           {isGeneratingSegments && (
-            <span className="ml-2 inline-flex items-center gap-1 text-primary">
+            <span className="inline-flex h-6 items-center gap-1 text-primary">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               {isLocalGenerating
                 ? `正在生成第 ${generatingEpisodeNumber} 集（${generatedCount}/${generateTotalCount}）`
@@ -159,23 +223,53 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {pendingSegmentEpisodes.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => generateMissingSegments(pendingSegmentEpisodes)}
-              disabled={isGeneratingSegments}
-            >
-              {isGeneratingSegments ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Film className="w-3.5 h-3.5 mr-1" />}
-              生成片段脚本 ({pendingSegmentEpisodes.length})
-            </Button>
+        <div className="flex min-h-9 shrink-0 items-center gap-2">
+          {selectingSegments && (
+            <>
+              <Button size="sm" variant="ghost" onClick={selectAllEpisodes} disabled={isGeneratingSegments}>
+                全部
+              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="ghost" onClick={selectRemainingEpisodes} disabled={isGeneratingSegments}>
+                      剩余
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    勾选将会选择剩余未生成和生成失败的全部集数
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <Button size="sm" variant="ghost" onClick={cancelSegmentSelection} disabled={isGeneratingSegments}>
+                <X className="w-3.5 h-3.5 mr-1" />
+                取消
+              </Button>
+            </>
           )}
-          {exportableCount > 0 && (
-          <Button size="sm" onClick={handleBatchExport} disabled={exporting}>
-            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Download className="w-3.5 h-3.5 mr-1" />}
-            批量导出 ({exportableCount})
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (!selectingSegments) {
+                setSelectingSegments(true)
+                setSelectedEpisodeNumbers([])
+                return
+              }
+              requestGenerateSegments(selectedEpisodeNumbers)
+            }}
+            disabled={isGeneratingSegments || (selectingSegments && selectedEpisodeNumbers.length === 0)}
+          >
+            {isGeneratingSegments ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Film className="w-3.5 h-3.5 mr-1" />}
+            {selectingSegments
+              ? `确认生成 (${selectedEpisodeNumbers.length})`
+              : `生成片段脚本 (${remainingSegmentEpisodes.length})`}
           </Button>
+          {exportableCount > 0 && (
+            <Button size="sm" onClick={handleBatchExport} disabled={exporting}>
+              {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Download className="w-3.5 h-3.5 mr-1" />}
+              批量导出 ({exportableCount})
+            </Button>
           )}
         </div>
       </div>
@@ -185,23 +279,39 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           暂无分集数据
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="max-h-[560px] space-y-3 overflow-y-auto pr-2">
           {episodes.map(episode => {
             const segmentCount = episode.segments.length
             const completedSegments = episode.segments.filter(s => s.status === 'completed').length
             const isCurrentGenerating = generatingEpisodeNumber === episode.episodeNumber || episode.status === 'generating'
             const failureMessage = failedEpisodeErrors[episode.episodeNumber] ?? episode.errorMessage ?? 'AI 生成失败，请稍后重试'
-            const isFailed = segmentCount === 0 && (episode.status === 'failed' || !!failedEpisodeErrors[episode.episodeNumber])
+            const isSelected = selectedEpisodeSet.has(episode.episodeNumber)
+            const isFailed = episode.status === 'failed' || !!failedEpisodeErrors[episode.episodeNumber]
+            const canGenerateEpisode = !isGeneratingSegments && !isCurrentGenerating
+            const generateButtonLabel = segmentCount > 0 || isFailed ? '重新生成' : '生成片段脚本'
+            const failureDisplayMessage = segmentCount > 0
+              ? `最近一次重新生成失败，已保留原片段脚本（${segmentCount} 个片段）`
+              : failureMessage
 
             return (
               <div
                 key={episode.episodeNumber}
-                className={`p-4 rounded-lg border ${isFailed ? 'border-destructive/30 bg-destructive/5' : ''}`}
+                className={`p-4 rounded-lg border transition ${isFailed ? (segmentCount > 0 ? 'border-amber-200 bg-amber-50/60' : 'border-destructive/30 bg-destructive/5') : isSelected ? 'border-primary/40 bg-primary/5' : ''}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {isFailed ? (
-                      <AlertCircle className="w-4 h-4 text-destructive" />
+                    {selectingSegments ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleEpisodeSelection(episode.episodeNumber)}
+                        disabled={isGeneratingSegments}
+                        className="text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label={isSelected ? `取消选择第${episode.episodeNumber}集` : `选择第${episode.episodeNumber}集`}
+                      >
+                        {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                      </button>
+                    ) : isFailed ? (
+                      <AlertCircle className={`w-4 h-4 ${segmentCount > 0 ? 'text-amber-600' : 'text-destructive'}`} />
                     ) : (
                       <Film className="w-4 h-4 text-muted-foreground" />
                     )}
@@ -209,31 +319,36 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
                       <div className="font-medium text-sm">
                         第 {episode.episodeNumber} 集：{episode.title}
                       </div>
-                      <div className={`text-xs mt-0.5 ${isFailed ? 'text-destructive' : 'text-muted-foreground'}`}>
+                      <div className={`text-xs mt-0.5 ${isFailed ? (segmentCount > 0 ? 'text-amber-700' : 'text-destructive') : 'text-muted-foreground'}`}>
                         {isCurrentGenerating
                           ? '片段脚本生成中...'
                           : isFailed
-                            ? failureMessage
+                            ? (
+                              <span className="inline-flex items-center gap-1 font-medium">
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                {failureDisplayMessage}
+                              </span>
+                            )
                             : `${segmentCount} 个片段 · ${completedSegments} 已完成`}
                       </div>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {isFailed && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => retryEpisodeSegments(episode.episodeNumber)}
-                        disabled={isGeneratingSegments}
-                      >
-                        {isCurrentGenerating ? (
-                          <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                        ) : (
-                          <RotateCcw className="w-3.5 h-3.5 mr-1" />
-                        )}
-                        重新生成
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant={segmentCount > 0 || isFailed ? 'outline' : 'default'}
+                      onClick={() => requestGenerateSegments([episode.episodeNumber])}
+                      disabled={!canGenerateEpisode}
+                    >
+                      {isCurrentGenerating ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                      ) : segmentCount > 0 || isFailed ? (
+                        <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                      ) : (
+                        <Film className="w-3.5 h-3.5 mr-1" />
+                      )}
+                      {isCurrentGenerating ? '生成中' : generateButtonLabel}
+                    </Button>
                     <Link href={`/toby-studio/short-drama/${projectId}/episodes/${episode.episodeNumber}`}>
                       <Button size="sm" variant="outline">
                         <Play className="w-3.5 h-3.5 mr-1" />
@@ -247,6 +362,35 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           })}
         </div>
       )}
+      <Dialog open={Boolean(confirmGenerateEpisodes)} onOpenChange={(open) => {
+        if (!open) setConfirmGenerateEpisodes(null)
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认重新生成片段脚本</DialogTitle>
+            <DialogDescription>
+              已选择的集里包含已经生成过片段脚本的内容。确认后会重新生成并覆盖这些集的片段脚本，原有片段脚本和相关视频状态可能不再保留。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            将生成第 {confirmGenerateEpisodes?.join('、')} 集，共 {confirmGenerateEpisodes?.length ?? 0} 集。
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmGenerateEpisodes(null)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                const episodeNumbers = confirmGenerateEpisodes ?? []
+                setConfirmGenerateEpisodes(null)
+                void generateSelectedSegments(episodeNumbers)
+              }}
+            >
+              确认生成
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
