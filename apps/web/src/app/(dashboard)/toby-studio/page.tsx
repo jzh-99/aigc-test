@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BookOpenText, Music2, Sparkles, Video } from 'lucide-react'
+import { BookOpenText, ImageIcon, Music2, Presentation, Sparkles, Video } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
@@ -28,6 +28,22 @@ const studioModules = [
     status: '已开放',
     available: true,
   },
+  {
+    title: 'AI 海报',
+    description: '面向品牌宣传、活动物料与营销视觉的海报创作模块。',
+    href: '/toby-studio/poster',
+    icon: ImageIcon,
+    status: '待开放',
+    available: false,
+  },
+  {
+    title: 'AI PPT',
+    description: '面向提纲生成、页面排版与演示文稿制作的创作模块。',
+    href: '/toby-studio/ppt',
+    icon: Presentation,
+    status: '待开放',
+    available: false,
+  },
 ]
 
 export default function TobyStudioPage() {
@@ -45,7 +61,7 @@ export default function TobyStudioPage() {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
         {studioModules.map((item) => {
           const Icon = item.icon
           const content = (
