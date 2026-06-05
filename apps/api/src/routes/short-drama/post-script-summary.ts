@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { assertShortDramaProjectAccess } from './_shared.js'
+import { assertShortDramaProjectAccess, validateShortDramaEpisodeCount } from './_shared.js'
 import {
   callQwenForTextStream,
   saveShortDramaStateAndSettleCredits,
@@ -129,11 +129,19 @@ const route: FastifyPluginAsync = async (app) => {
       if (typeof parsed.title !== 'string' || typeof parsed.summary !== 'string') {
         throw new Error('AI 返回的 title 或 summary 格式错误')
       }
+      let episodeCount: number | undefined
+      if (state.script.source === 'upload') {
+        if (typeof parsed.episodeCount !== 'number') {
+          throw new Error('AI 返回的 episodeCount 格式错误')
+        }
+        episodeCount = validateShortDramaEpisodeCount(parsed.episodeCount, 'upload')
+      }
 
       const actualCredits = calculateTextGenerationCredits(aiResponse)
       applyShortDramaScriptSummaryResult(state, {
         title: parsed.title,
         summary: parsed.summary,
+        episodeCount,
       })
 
       const settledCredits = (await saveShortDramaStateAndSettleCredits({
@@ -146,6 +154,7 @@ const route: FastifyPluginAsync = async (app) => {
         teamId,
         status: 'summary_ready',
         title: parsed.title,
+        episodeCount,
       })).settledCredits
 
       sendEvent('done', {

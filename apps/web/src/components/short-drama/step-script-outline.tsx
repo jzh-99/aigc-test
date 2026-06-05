@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Loader2, Sparkles, Check, Pencil, Save, X, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -12,11 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS } from '@aigc/types'
 import type { ShortDramaState } from '@aigc/types'
 import {
   generateShortDramaScriptSummary,
   generateShortDramaEpisodeOutlines,
   saveShortDramaProject,
+  updateShortDramaScriptSource,
 } from '@/lib/short-drama/api'
 
 interface StepScriptOutlineProps {
@@ -64,6 +67,7 @@ const CHARACTER_NAME_MAX_LENGTH = 20
 const CHARACTER_BIO_MAX_LENGTH = 1200
 const EPISODE_TITLE_MAX_LENGTH = 30
 const EPISODE_SCENE_MAX_LENGTH = 2500
+const ORIGINAL_PROMPT_MAX_LENGTH = 2000
 
 const CHARACTER_BIO_FIELDS = [
   '角色类型',
@@ -778,11 +782,6 @@ function ScriptSummaryView({
       )}
 
       <SummaryTextBlock title="故事梗概" heading="故事梗概" value={sections.故事梗概} canEdit={canStartEdit} editing={editingHeading === '故事梗概'} saving={savingHeading === '故事梗概'} draftValue={draft.故事梗概} onEdit={onEditHeading} onChange={onChangeHeading} onSave={onSaveHeading} onCancel={onCancelEdit} />
-      <SummaryTextBlock title="导演阐述" heading="导演阐述" value={sections.导演阐述} canEdit={canStartEdit} editing={editingHeading === '导演阐述'} saving={savingHeading === '导演阐述'} draftValue={draft.导演阐述} onEdit={onEditHeading} onChange={onChangeHeading} onSave={onSaveHeading} onCancel={onCancelEdit} />
-      <SummaryTextBlock title="影像风格" heading="影像风格" value={sections.影像风格} canEdit={canStartEdit} editing={editingHeading === '影像风格'} saving={savingHeading === '影像风格'} draftValue={draft.影像风格} onEdit={onEditHeading} onChange={onChangeHeading} onSave={onSaveHeading} onCancel={onCancelEdit} />
-      <SummaryTextBlock title="妆造方向" heading="妆造方向" value={sections.妆造方向} canEdit={canStartEdit} editing={editingHeading === '妆造方向'} saving={savingHeading === '妆造方向'} draftValue={draft.妆造方向} onEdit={onEditHeading} onChange={onChangeHeading} onSave={onSaveHeading} onCancel={onCancelEdit} />
-      <SummaryTextBlock title="核心场景与布景" heading="核心场景与布景" value={sections.核心场景与布景} canEdit={canStartEdit} editing={editingHeading === '核心场景与布景'} saving={savingHeading === '核心场景与布景'} draftValue={draft.核心场景与布景} onEdit={onEditHeading} onChange={onChangeHeading} onSave={onSaveHeading} onCancel={onCancelEdit} />
-      <SummaryTextBlock title="灯光气质" heading="灯光气质" value={sections.灯光气质} canEdit={canStartEdit} editing={editingHeading === '灯光气质'} saving={savingHeading === '灯光气质'} draftValue={draft.灯光气质} onEdit={onEditHeading} onChange={onChangeHeading} onSave={onSaveHeading} onCancel={onCancelEdit} />
     </div>
   )
 }
@@ -856,12 +855,20 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   const [savingSummaryHeading, setSavingSummaryHeading] = useState<SummaryHeading | null>(null)
   const [episodeOutlineDialog, setEpisodeOutlineDialog] = useState<EpisodeOutlineDialogDraft | null>(null)
   const [savingEpisodeOutline, setSavingEpisodeOutline] = useState(false)
+  const [sourceEditOpen, setSourceEditOpen] = useState(false)
+  const [sourceEditDraft, setSourceEditDraft] = useState('')
+  const [savingSourceEdit, setSavingSourceEdit] = useState(false)
   const generatingSummaryRef = useRef(false)
   const generatingOutlinesRef = useRef(false)
   const typedSummaryStreamText = useTypewriterText(summaryStreamText, generatingSummary)
   const typedOutlineStreamText = useTypewriterText(outlineStreamText, generatingOutlines)
   const isLocked = state.locks.script
   const isSummaryGenerating = generatingSummary || (state.script.status === 'generating' && !state.script.refinedPrompt)
+  const canEditSource = !isLocked && !state.script.refinedPrompt && !isSummaryGenerating
+  const isUploadSource = state.script.source === 'upload'
+  const sourceMaxLength = isUploadSource ? SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS : ORIGINAL_PROMPT_MAX_LENGTH
+  const sourceDraftLength = sourceEditDraft.trim().length
+  const isSourceDraftTooLong = sourceDraftLength > sourceMaxLength
   const isOutlinesGenerating =
     generatingOutlines ||
     (
@@ -944,6 +951,46 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     setSummaryDraft(createSummaryDraft(state.script.refinedPrompt ?? '', state.settings.episodeCount))
     setEditingSummaryHeading(heading)
     setCharacterBioDialog(null)
+  }
+
+  const handleOpenSourceEdit = () => {
+    if (!canEditSource) return
+    const initial = isUploadSource ? state.script.originalScript : state.script.originalPrompt
+    setSourceEditDraft(initial ?? '')
+    setSourceEditOpen(true)
+  }
+
+  const handleCancelSourceEdit = () => {
+    if (savingSourceEdit) return
+    setSourceEditOpen(false)
+  }
+
+  const handleSaveSourceEdit = async () => {
+    if (savingSourceEdit) return
+    const trimmed = sourceEditDraft.trim()
+    if (!trimmed) {
+      toast.error(isUploadSource ? '原始剧本不能为空' : '原始创意不能为空')
+      return
+    }
+    if (trimmed.length > sourceMaxLength) {
+      toast.error(`内容不能超过 ${sourceMaxLength.toLocaleString()} 字`)
+      return
+    }
+    setSavingSourceEdit(true)
+    try {
+      await updateShortDramaScriptSource(
+        projectId,
+        isUploadSource ? { originalScript: trimmed } : { originalPrompt: trimmed },
+      )
+      toast.success(isUploadSource ? '原始剧本已更新' : '原始创意已更新')
+      setSourceEditOpen(false)
+      onStateChange()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败，请稍后重试'
+      toast.error(message)
+    } finally {
+      setSavingSourceEdit(false)
+    }
   }
 
   const handleEditCharacterBio = (name: string) => {
@@ -1191,7 +1238,15 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_112px]">
       <div className="min-w-0 space-y-6">
       <section id="short-drama-original" className="scroll-mt-24 space-y-2">
-        <h3 className="font-medium">{sourceLabel}</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-medium">{sourceLabel}</h3>
+          {canEditSource && (
+            <Button size="sm" variant="outline" onClick={handleOpenSourceEdit}>
+              <Pencil className="w-3.5 h-3.5 mr-1" />
+              编辑{sourceLabel}
+            </Button>
+          )}
+        </div>
         <p className="max-h-[360px] overflow-y-auto rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground whitespace-pre-wrap">
           {sourceText || '（无）'}
         </p>
@@ -1314,6 +1369,51 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
           剧本已锁定确认
         </div>
       )}
+
+      <Dialog
+        open={sourceEditOpen}
+        onOpenChange={open => {
+          if (!open) handleCancelSourceEdit()
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>编辑{sourceLabel}</DialogTitle>
+            <DialogDescription>
+              修改后会替换当前{sourceLabel}，最多 {sourceMaxLength.toLocaleString()} 字。仅在摘要尚未生成时可编辑。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              value={sourceEditDraft}
+              onChange={event => setSourceEditDraft(event.target.value)}
+              placeholder={isUploadSource ? '在这里粘贴或编辑原始剧本...' : '在这里编辑原始创意...'}
+              className={`${isUploadSource ? 'min-h-[320px]' : 'min-h-[180px]'} resize-none rounded-lg border-border bg-muted/35 p-4 text-sm focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#070615]`}
+              autoFocus
+            />
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className={isSourceDraftTooLong ? 'text-red-500' : 'text-muted-foreground'}>
+                {sourceDraftLength.toLocaleString()} / {sourceMaxLength.toLocaleString()} 字
+              </span>
+              {isSourceDraftTooLong && (
+                <span className="text-red-500">请精简后再保存</span>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelSourceEdit} disabled={savingSourceEdit}>
+              取消
+            </Button>
+            <Button
+              onClick={handleSaveSourceEdit}
+              disabled={savingSourceEdit || !sourceEditDraft.trim() || isSourceDraftTooLong}
+            >
+              {savingSourceEdit ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
 
       <aside className="-mr-8 hidden xl:block">

@@ -208,6 +208,17 @@ export function createShortDramaProject(
   })
 }
 
+export function updateShortDramaScriptSource(
+  projectId: string,
+  payload: { originalPrompt?: string; originalScript?: string }
+): Promise<{ success: true; state: ShortDramaState }> {
+  return fetchWithAuth(`/short-drama/projects/${projectId}/script/source`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
 export function uploadShortDramaScript(file: File): Promise<ShortDramaScriptUploadResult> {
   const formData = new FormData()
   formData.append('file', file)

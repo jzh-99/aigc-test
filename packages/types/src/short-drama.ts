@@ -8,7 +8,19 @@ export const SHORT_DRAMA_ASPECT_RATIOS = ['9:16', '16:9'] as const
 
 export const SHORT_DRAMA_EPISODE_COUNTS = [5, 10, 15, 20] as const
 
-export const SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT = 50
+// 灵感生成模式集数上限
+export const SHORT_DRAMA_IDEA_MAX_EPISODE_COUNT = 80
+
+// 上传剧本模式集数上限（由 AI 从原剧本结构推断）
+export const SHORT_DRAMA_UPLOAD_MAX_EPISODE_COUNT = 100
+
+export type ShortDramaScriptSourceMode = 'idea' | 'upload'
+
+export function getShortDramaMaxEpisodeCount(mode: ShortDramaScriptSourceMode): number {
+  return mode === 'upload'
+    ? SHORT_DRAMA_UPLOAD_MAX_EPISODE_COUNT
+    : SHORT_DRAMA_IDEA_MAX_EPISODE_COUNT
+}
 
 export const SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS = 100000
 
@@ -169,11 +181,14 @@ export function isShortDramaAspectRatio(value: string): value is ShortDramaAspec
   return (SHORT_DRAMA_ASPECT_RATIOS as readonly string[]).includes(value)
 }
 
-export function isShortDramaEpisodeCount(value: number): boolean {
-  return (
-    (SHORT_DRAMA_EPISODE_COUNTS as readonly number[]).includes(value) ||
-    (value > 0 && value <= SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT)
-  )
+export function isShortDramaEpisodeCount(
+  value: number,
+  mode: ShortDramaScriptSourceMode = 'idea',
+): boolean {
+  if ((SHORT_DRAMA_EPISODE_COUNTS as readonly number[]).includes(value)) {
+    return true
+  }
+  return value > 0 && value <= getShortDramaMaxEpisodeCount(mode)
 }
 
 export function isShortDramaDurationSeconds(value: number, allowed: number[]): boolean {
@@ -418,6 +433,7 @@ export function makeUploadedShortDramaState(params: {
 export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>): ShortDramaState {
   const aspectRatio = partial.settings?.aspectRatio
   const episodeCount = partial.settings?.episodeCount
+  const scriptSource: ShortDramaScriptSourceMode = partial.script?.source === 'upload' ? 'upload' : 'idea'
   const outlines = (partial.script?.outlines ?? []) as ShortDramaEpisodeOutline[]
   const processedOutlineCount = partial.assets?.processedOutlineCount
   const normalizedProcessedOutlineCount = typeof processedOutlineCount === 'number'
@@ -456,7 +472,7 @@ export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>):
       aspectRatio:
         aspectRatio && isShortDramaAspectRatio(aspectRatio) ? aspectRatio : '9:16',
       episodeCount:
-        episodeCount && isShortDramaEpisodeCount(episodeCount) ? episodeCount : 5,
+        episodeCount && isShortDramaEpisodeCount(episodeCount, scriptSource) ? episodeCount : 5,
       durationSeconds: partial.settings?.durationSeconds ?? SHORT_DRAMA_DEFAULT_DURATION_SECONDS,
       billingMode: partial.settings?.billingMode ?? 'estimate_actual',
     },

@@ -4,7 +4,6 @@ import {
   SHORT_DRAMA_DEFAULT_DURATION_SECONDS,
   SHORT_DRAMA_EPISODE_COUNTS,
   SHORT_DRAMA_IMAGE_MODEL,
-  SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT,
   SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS,
   SHORT_DRAMA_SHOT_DURATION_SECONDS,
   SHORT_DRAMA_STYLE_TABS,
@@ -32,7 +31,6 @@ assert.equal(SHORT_DRAMA_IMAGE_MODEL, 'seedream-5.0-lite')
 assert.equal(SHORT_DRAMA_VIDEO_MODEL, 'seedance-2.0')
 assert.deepEqual(SHORT_DRAMA_ASPECT_RATIOS, ['9:16', '16:9'])
 assert.deepEqual(SHORT_DRAMA_EPISODE_COUNTS, [5, 10, 15, 20])
-assert.equal(SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT, 50)
 assert.equal(SHORT_DRAMA_DEFAULT_DURATION_SECONDS, 4)
 assert.equal(SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS, 100000)
 
@@ -41,7 +39,11 @@ assert.equal(isShortDramaAspectRatio('9:16'), true)
 assert.equal(isShortDramaAspectRatio('1:1'), false)
 assert.equal(isShortDramaEpisodeCount(5), true)
 assert.equal(isShortDramaEpisodeCount(50), true)
-assert.equal(isShortDramaEpisodeCount(51), false)
+assert.equal(isShortDramaEpisodeCount(80), true)
+assert.equal(isShortDramaEpisodeCount(81), false)
+assert.equal(isShortDramaEpisodeCount(100, 'upload'), true)
+assert.equal(isShortDramaEpisodeCount(101, 'upload'), false)
+assert.equal(isShortDramaEpisodeCount(0), false)
 assert.equal(isShortDramaDurationSeconds(4, [4, 5, 8]), true)
 assert.equal(isShortDramaDurationSeconds(6, [4, 5, 8]), false)
 
@@ -113,7 +115,7 @@ assert.equal(uploadedState.script.originalScript, '第一集\n主角推门而入
 assert.equal(uploadedState.settings.aspectRatio, '16:9')
 assert.equal(uploadedState.settings.episodeCount, 5)
 
-// normalizeShortDramaState - 非法值归一化
+// normalizeShortDramaState - 非法值归一化（idea 模式上限 80，超过回退 5）
 const normalized = normalizeShortDramaState({
   steps: { active: 'episodes', completed: ['script', 'assets'] },
   locks: { script: true, assets: true, episodes: false },
@@ -127,6 +129,13 @@ const normalized = normalizeShortDramaState({
 })
 assert.equal(normalized.settings.aspectRatio, '9:16')
 assert.equal(normalized.settings.episodeCount, 5)
+
+// normalizeShortDramaState - 上传模式允许到 100
+const normalizedUpload = normalizeShortDramaState({
+  script: { source: 'upload', originalScript: 'x' },
+  settings: { episodeCount: 100 } as any,
+})
+assert.equal(normalizedUpload.settings.episodeCount, 100)
 
 // normalizeShortDramaState - 嵌套对象深度补默认值
 const nestedPartial = normalizeShortDramaState({

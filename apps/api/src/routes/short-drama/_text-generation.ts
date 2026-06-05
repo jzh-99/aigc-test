@@ -330,8 +330,11 @@ export function buildShortDramaOutlineBatches(
  */
 export function applyShortDramaScriptSummaryResult(
   state: ShortDramaState,
-  result: { title: string; summary: string }
+  result: { title: string; summary: string; episodeCount?: number }
 ): void {
+  if (result.episodeCount !== undefined) {
+    state.settings.episodeCount = result.episodeCount
+  }
   state.script.refinedPrompt = result.summary
   state.script.status = 'completed'
 }
@@ -532,6 +535,7 @@ export async function saveShortDramaStateAndSettleCredits(input: {
   teamId: string
   status?: string
   title?: string
+  episodeCount?: number
 }): Promise<{ settledCredits: number }> {
   const {
     projectId,
@@ -543,6 +547,7 @@ export async function saveShortDramaStateAndSettleCredits(input: {
     teamId,
     status,
     title,
+    episodeCount,
   } = input
 
   // 安全处理：对齐 worker complete pipeline 逻辑
@@ -570,6 +575,10 @@ export async function saveShortDramaStateAndSettleCredits(input: {
 
     if (title !== undefined) {
       projectUpdate.title = title
+    }
+
+    if (episodeCount !== undefined) {
+      projectUpdate.episode_count = episodeCount
     }
 
     await trx

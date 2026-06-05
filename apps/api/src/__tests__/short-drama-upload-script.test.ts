@@ -45,6 +45,9 @@ const uploadState = makeUploadedShortDramaState({
 const uploadPrompts = buildShortDramaScriptSummaryPrompts(uploadState)
 assert.match(uploadPrompts.userPrompt, /原始剧本：第一集/)
 assert.match(uploadPrompts.systemPrompt, /从用户提供的原始剧本中提炼/)
+assert.match(uploadPrompts.systemPrompt, /episodeCount/)
+assert.match(uploadPrompts.userPrompt, /"episodeCount": 12/)
+assert.doesNotMatch(uploadPrompts.userPrompt, /项目设置：\n- 集数：/)
 assert.doesNotMatch(uploadPrompts.userPrompt, /用户创意：/)
 console.log('✓ 上传模式摘要 prompt 从原始剧本提炼')
 

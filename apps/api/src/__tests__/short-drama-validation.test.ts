@@ -48,26 +48,37 @@ try {
 
 console.log('\n测试 validateShortDramaEpisodeCount...')
 
-// 测试有效集数
+// 测试有效集数（idea 默认）
 assert.equal(validateShortDramaEpisodeCount(1), 1)
 assert.equal(validateShortDramaEpisodeCount(25), 25)
 assert.equal(validateShortDramaEpisodeCount(50), 50)
-console.log('✓ 有效集数通过校验')
+assert.equal(validateShortDramaEpisodeCount(80), 80)
+console.log('✓ idea 模式有效集数通过校验')
 
-// 测试超出范围
+// 测试 idea 模式上限
 try {
-  validateShortDramaEpisodeCount(51)
+  validateShortDramaEpisodeCount(81, 'idea')
   assert.fail('应该抛出错误')
 } catch (error) {
-  assert.ok((error as Error).message.includes('集数必须在 1 到 50 之间'))
-  console.log('✓ 集数 51 抛出正确错误')
+  assert.ok((error as Error).message.includes('集数不能超过 80'))
+  console.log('✓ idea 模式 81 抛出上限错误')
+}
+
+// 测试 upload 模式上限
+assert.equal(validateShortDramaEpisodeCount(100, 'upload'), 100)
+try {
+  validateShortDramaEpisodeCount(101, 'upload')
+  assert.fail('应该抛出错误')
+} catch (error) {
+  assert.ok((error as Error).message.includes('集数不能超过 100'))
+  console.log('✓ upload 模式 101 抛出上限错误')
 }
 
 try {
   validateShortDramaEpisodeCount(0)
   assert.fail('应该抛出错误')
 } catch (error) {
-  assert.ok((error as Error).message.includes('集数必须在 1 到 50 之间'))
+  assert.ok((error as Error).message.includes('集数必须大于 0'))
   console.log('✓ 集数 0 抛出正确错误')
 }
 

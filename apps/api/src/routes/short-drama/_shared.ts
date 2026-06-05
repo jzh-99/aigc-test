@@ -1,6 +1,13 @@
 import { getDb } from '@aigc/db'
-import type { ShortDramaAsset, ShortDramaBatchExport, ShortDramaMentionRef, ShortDramaSegment, ShortDramaState } from '@aigc/types'
-import { normalizeShortDramaState } from '@aigc/types'
+import type {
+  ShortDramaAsset,
+  ShortDramaBatchExport,
+  ShortDramaMentionRef,
+  ShortDramaScriptSourceMode,
+  ShortDramaSegment,
+  ShortDramaState,
+} from '@aigc/types'
+import { getShortDramaMaxEpisodeCount, normalizeShortDramaState } from '@aigc/types'
 import type { Redis } from 'ioredis'
 import { acquireRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 
@@ -56,18 +63,27 @@ export function extractShortDramaJsonObject(raw: string): Record<string, unknown
 // ============================================================================
 
 /**
- * 校验短剧集数是否在允许范围内
+ * 校验短剧集数是否为符合模式上限的正整数
  * @param value - 待校验的集数
+ * @param mode - 'idea' 灵感模式（默认，上限 80）；'upload' 上传剧本模式（上限 100）
  * @returns 校验通过的集数
- * @throws 如果集数不在 1-50 范围内或不是整数
+ * @throws 集数不是正整数或超出该模式上限时抛出
  */
-export function validateShortDramaEpisodeCount(value: unknown): number {
+export function validateShortDramaEpisodeCount(
+  value: unknown,
+  mode: ShortDramaScriptSourceMode = 'idea',
+): number {
   if (typeof value !== 'number' || !Number.isInteger(value)) {
     throw new Error('集数必须是整数')
   }
 
-  if (value < 1 || value > 50) {
-    throw new Error('集数必须在 1 到 50 之间')
+  if (value < 1) {
+    throw new Error('集数必须大于 0')
+  }
+
+  const max = getShortDramaMaxEpisodeCount(mode)
+  if (value > max) {
+    throw new Error(`集数不能超过 ${max}`)
   }
 
   return value

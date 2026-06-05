@@ -1,12 +1,12 @@
 import { strict as assert } from 'node:assert'
-import { makeDefaultShortDramaState, normalizeShortDramaState } from '@aigc/types'
+import { makeDefaultShortDramaState, makeUploadedShortDramaState, normalizeShortDramaState } from '@aigc/types'
 import {
   applyShortDramaAssetPromptsBatchResult,
   applyShortDramaEpisodeOutlinesBatchResult,
   applyShortDramaEpisodeOutlinesResult,
   applyShortDramaScriptSummaryResult,
   buildShortDramaOutlineBatches,
-  extractDoubaoStreamDeltaText,
+  extractQwenStreamDeltaText,
 } from '../routes/short-drama/_text-generation.js'
 
 console.log('测试短剧文本生成状态写回...')
@@ -26,6 +26,23 @@ applyShortDramaScriptSummaryResult(summaryState, {
 assert.equal(summaryState.script.refinedPrompt, '一个普通外卖员意外获得超能力，在都市中守护弱小。')
 assert.equal(summaryState.script.status, 'completed')
 console.log('✓ 摘要生成结果会写回 script.refinedPrompt')
+
+const uploadedSummaryState = makeUploadedShortDramaState({
+  originalScript: '一段非标准原始剧本。',
+  style: '真人都市',
+  aspectRatio: '9:16',
+  episodeCount: 1,
+})
+
+applyShortDramaScriptSummaryResult(uploadedSummaryState, {
+  title: '上传剧本',
+  summary: '从原始剧本提炼出的摘要。',
+  episodeCount: 12,
+})
+
+assert.equal(uploadedSummaryState.settings.episodeCount, 12)
+assert.equal(uploadedSummaryState.script.refinedPrompt, '从原始剧本提炼出的摘要。')
+console.log('✓ 上传剧本摘要结果会写回模型分析出的集数')
 
 const outlinesState = makeDefaultShortDramaState({
   prompt: '外卖员获得超能力',
@@ -200,13 +217,13 @@ assert.equal(normalizedPartialState.assets.processedOutlineCount, 0)
 console.log('✓ 旧素材状态会按 completed 状态兼容补齐已处理集数')
 
 assert.equal(
-  extractDoubaoStreamDeltaText('data: {"choices":[{"delta":{"content":"你好"}}]}'),
+  extractQwenStreamDeltaText('data: {"choices":[{"delta":{"content":"你好"}}]}'),
   '你好'
 )
-assert.equal(extractDoubaoStreamDeltaText('data: [DONE]'), '')
-assert.equal(extractDoubaoStreamDeltaText(': ping'), '')
-assert.equal(extractDoubaoStreamDeltaText('data: {不是合法 JSON'), '')
-assert.equal(extractDoubaoStreamDeltaText('event: chunk'), '')
+assert.equal(extractQwenStreamDeltaText('data: [DONE]'), '')
+assert.equal(extractQwenStreamDeltaText(': ping'), '')
+assert.equal(extractQwenStreamDeltaText('data: {不是合法 JSON'), '')
+assert.equal(extractQwenStreamDeltaText('event: chunk'), '')
 console.log('✓ 可以从 OpenAI 兼容 SSE 行提取文本增量')
 
 console.log('\n✅ 短剧文本生成状态写回测试通过！')

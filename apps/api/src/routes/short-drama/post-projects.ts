@@ -1,7 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
-import { makeDefaultShortDramaState, makeUploadedShortDramaState } from '@aigc/types'
+import {
+  makeDefaultShortDramaState,
+  makeUploadedShortDramaState,
+} from '@aigc/types'
 import { assertShortDramaWorkspaceAccess, validateShortDramaEpisodeCount } from './_shared.js'
 import { normalizeShortDramaOriginalScript } from './_script-source.js'
 
@@ -68,15 +71,19 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 校验 episode_count
+    // 校验集数。上传剧本模式先使用占位集数，实际集数由摘要提炼时的大模型返回。
     let episodeCount: number
-    try {
-      episodeCount = validateShortDramaEpisodeCount(body.episode_count)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '集数参数无效'
-      return reply.status(400).send({
-        error: { code: 'VALIDATION_ERROR', message }
-      })
+    if (source === 'upload') {
+      episodeCount = 1
+    } else {
+      try {
+        episodeCount = validateShortDramaEpisodeCount(body.episode_count, 'idea')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '集数参数无效'
+        return reply.status(400).send({
+          error: { code: 'VALIDATION_ERROR', message }
+        })
+      }
     }
 
     // 生成默认 state
