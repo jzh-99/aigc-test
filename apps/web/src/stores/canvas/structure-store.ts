@@ -48,6 +48,7 @@ interface CanvasStructureState {
   removeEdgeById: (edgeId: string) => void
   removeEdgesByTarget: (nodeId: string, handleIds: string[]) => void
   updateNodeData: (nodeId: string, partialData: Partial<AppNode['data']>) => void
+  organizeNodes: () => number
   applyAgentWorkflow: (workflow: AgentWorkflow) => void
 }
 
@@ -185,6 +186,121 @@ function getReferenceKind(node: AppNode | undefined, options: { includeText?: bo
   return null
 }
 
+const ORGANIZE_NODE_SIZE: Record<string, { width: number; height: number }> = {
+  image_gen: { width: 280, height: 300 },
+  text_input: { width: 260, height: 170 },
+  asset: { width: 180, height: 230 },
+  video_gen: { width: 300, height: 260 },
+  audio_gen: { width: 260, height: 190 },
+  script_writer: { width: 260, height: 150 },
+  storyboard_splitter: { width: 320, height: 250 },
+  video_stitch: { width: 300, height: 260 },
+}
+const ORGANIZE_GRID_SIZE = 24
+
+function getOrganizeNodeSize(node: AppNode) {
+  return ORGANIZE_NODE_SIZE[node.type ?? ''] ?? { width: 280, height: 220 }
+}
+
+function snapToOrganizeGrid(value: number) {
+  return Math.round(value / ORGANIZE_GRID_SIZE) * ORGANIZE_GRID_SIZE
+}
+
+function organizeCanvasNodes(nodes: AppNode[], edges: AppEdge[]): AppNode[] {
+  if (nodes.length <= 1) return nodes
+
+  const nodeIds = new Set(nodes.map((node) => node.id))
+  const incoming = new Map<string, string[]>()
+  const outgoing = new Map<string, string[]>()
+
+  nodes.forEach((node) => {
+    incoming.set(node.id, [])
+    outgoing.set(node.id, [])
+  })
+
+  edges.forEach((edge) => {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) return
+    incoming.get(edge.target)?.push(edge.source)
+    outgoing.get(edge.source)?.push(edge.target)
+  })
+
+  const indegree = new Map(nodes.map((node) => [node.id, incoming.get(node.id)?.length ?? 0]))
+  const queue = nodes
+    .filter((node) => (indegree.get(node.id) ?? 0) === 0)
+    .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)
+    .map((node) => node.id)
+  const layerById = new Map<string, number>()
+  const visited = new Set<string>()
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!
+    visited.add(nodeId)
+
+    const upstreamLayer = Math.max(
+      -1,
+      ...(incoming.get(nodeId) ?? []).map((sourceId) => layerById.get(sourceId) ?? -1),
+    )
+    layerById.set(nodeId, Math.max(layerById.get(nodeId) ?? 0, upstreamLayer + 1))
+
+    for (const targetId of outgoing.get(nodeId) ?? []) {
+      layerById.set(targetId, Math.max(layerById.get(targetId) ?? 0, (layerById.get(nodeId) ?? 0) + 1))
+      const nextIndegree = (indegree.get(targetId) ?? 0) - 1
+      indegree.set(targetId, nextIndegree)
+      if (nextIndegree === 0) queue.push(targetId)
+    }
+  }
+
+  nodes
+    .filter((node) => !visited.has(node.id))
+    .forEach((node) => {
+      const upstreamLayer = Math.max(
+        -1,
+        ...(incoming.get(node.id) ?? []).map((sourceId) => layerById.get(sourceId) ?? 0),
+      )
+      layerById.set(node.id, upstreamLayer + 1)
+    })
+
+  const minX = snapToOrganizeGrid(Math.min(...nodes.map((node) => node.position.x)))
+  const minY = snapToOrganizeGrid(Math.min(...nodes.map((node) => node.position.y)))
+  const layers = new Map<number, AppNode[]>()
+
+  nodes.forEach((node) => {
+    const layer = layerById.get(node.id) ?? 0
+    layers.set(layer, [...(layers.get(layer) ?? []), node])
+  })
+
+  const positionById = new Map<string, { x: number; y: number }>()
+  const xGap = 120
+  const yGap = 72
+  let currentX = minX
+
+  Array.from(layers.entries())
+    .sort(([a], [b]) => a - b)
+    .forEach(([, layerNodes]) => {
+      let currentY = minY
+      const sortedLayerNodes = layerNodes
+        .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)
+      const maxLayerWidth = Math.max(...sortedLayerNodes.map((node) => getOrganizeNodeSize(node).width))
+
+      sortedLayerNodes
+        .forEach((node) => {
+          const nodeSize = getOrganizeNodeSize(node)
+          positionById.set(node.id, {
+            x: snapToOrganizeGrid(currentX),
+            y: snapToOrganizeGrid(currentY),
+          })
+          currentY += nodeSize.height + yGap
+        })
+
+      currentX += maxLayerWidth + xGap
+    })
+
+  return nodes.map((node) => ({
+    ...node,
+    position: positionById.get(node.id) ?? node.position,
+  }))
+}
+
 function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Connection): string | null {
   if (!connection.source || !connection.target || connection.source === connection.target) return null
 
@@ -215,6 +331,12 @@ function validateConnection(nodes: AppNode[], edges: AppEdge[], connection: Conn
       })
       if (limitError) return limitError
     }
+  }
+
+  if (targetNode?.type === 'storyboard_splitter') {
+    if (sourceNode?.type !== 'text_input') return '脚本节点只能连接文本节点'
+    const existingInput = edges.some((e) => e.target === connection.target)
+    if (existingInput) return '脚本节点只能连接一个文本节点'
   }
 
   if (targetNode?.type === 'video_stitch') {
@@ -467,6 +589,20 @@ export const useCanvasStructureStore = create<CanvasStructureState>((set, get) =
     next[index] = updatedNode
     pushSnapshot(get, set, { nodes, edges }, true)
     set({ nodes: next })
+  },
+
+  organizeNodes: () => {
+    const { nodes, edges } = get()
+    const next = organizeCanvasNodes(nodes, edges)
+    const changedCount = next.filter((node, index) => {
+      const current = nodes[index]
+      return node.position.x !== current.position.x || node.position.y !== current.position.y
+    }).length
+    if (changedCount === 0) return 0
+
+    pushSnapshot(get, set, { nodes, edges }, true)
+    set({ nodes: next })
+    return changedCount
   },
 
   applyAgentWorkflow: (workflow) => {

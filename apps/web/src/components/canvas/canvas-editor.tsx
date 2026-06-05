@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
 import ReactFlow, {
+  Background,
   Controls,
   MiniMap,
   Panel,
@@ -27,7 +28,7 @@ import { NodeParamPanel } from './node-param-panel'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
 import { getUpstreamNodeIds } from '@/lib/canvas/dag'
 import { generateUUID } from '@/lib/utils'
-import { Loader2 } from 'lucide-react'
+import { Grid3X3, LayoutGrid, Loader2 } from 'lucide-react'
 import { getCanvasNodeMiniMapColor, getCanvasNodeMiniMapStrokeColor, getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import {
   getCanvasUploadMediaKind,
@@ -253,6 +254,7 @@ const NODE_CANVAS_W: Record<string, number> = {
 }
 
 const PARAM_PANEL_INTERACTIVE_NODE_TYPES = new Set(['text_input', 'script_writer', 'storyboard_splitter'])
+const CANVAS_GRID_STORAGE_KEY = 'toby-canvas-show-grid'
 
 function isInteractiveNodeClick(event: unknown): boolean {
   if (!(event instanceof MouseEvent)) return false
@@ -382,15 +384,20 @@ function Flow({
   const addNodesWithEdges = useCanvasStructureStore((s) => s.addNodesWithEdges)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
+  const organizeNodes = useCanvasStructureStore((s) => s.organizeNodes)
   const generatingNodeIds = useCanvasExecutionStore((s) => s.generatingNodeIds)
   const setHighlightedNodes = useCanvasExecutionStore((s) => s.setHighlightedNodes)
   const replaceNodeOutput = useCanvasExecutionStore((s) => s.replaceNodeOutput)
   const initNodeState = useCanvasExecutionStore((s) => s.initNodeState)
-  const { project } = useReactFlow()
+  const { project, fitView } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
+  const [showGrid, setShowGrid] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.localStorage.getItem(CANVAS_GRID_STORAGE_KEY) !== 'false'
+  })
   const token = useAuthStore((s) => s.accessToken)
   const [uploading, setUploading] = useState(false)
 
@@ -717,6 +724,32 @@ function Flow({
     addNode(type, position)
   }, [addNode, project, nodes])
 
+  const handleOrganizeNodes = useCallback(() => {
+    const changedCount = organizeNodes()
+    // if (changedCount === 0) {
+    //   toast.info(nodes.length <= 1 ? '暂无可整理的节点' : '画布已经很整齐了')
+    //   return
+    // }
+
+    setHighlightedNodes(new Set())
+    setSelectedNodeId(null)
+    setSelectedNodeIds([])
+    setSelectedEdgeId(null)
+    window.setTimeout(() => {
+      fitView({ padding: 0.18, duration: 260 })
+    }, 0)
+    void onSave()
+    // toast.success(`已整理 ${changedCount} 个节点`)
+  }, [fitView, nodes.length, onSave, organizeNodes, setHighlightedNodes])
+
+  const handleToggleGrid = useCallback(() => {
+    setShowGrid((current) => {
+      const next = !current
+      window.localStorage.setItem(CANVAS_GRID_STORAGE_KEY, String(next))
+      return next
+    })
+  }, [])
+
   // Delete key: remove selected node or edge
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -956,6 +989,24 @@ function Flow({
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode="Shift"
       >
+        {showGrid && (
+          <>
+            <Background
+              id="canvas-grid-minor"
+              gap={24}
+              size={1.5}
+              color="hsl(var(--muted-foreground))"
+              className="opacity-50"
+            />
+            <Background
+              id="canvas-grid-major"
+              gap={120}
+              size={2.4}
+              color="hsl(var(--muted-foreground))"
+              className="opacity-70"
+            />
+          </>
+        )}
         <Controls
           className="!bg-card !border-border [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-muted-foreground [&>button:hover]:!bg-muted [&>button:hover]:!text-foreground"
         />
@@ -971,6 +1022,26 @@ function Flow({
           <AddNodePanel onSelect={handleAddNode} />
         </Panel>
         <Panel position="top-right" className="flex gap-1.5">
+          <button
+            onClick={handleToggleGrid}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border shadow-sm transition-colors ${
+              showGrid
+                ? 'bg-muted text-foreground border-border'
+                : 'bg-card hover:bg-muted text-muted-foreground border-border'
+            }`}
+            title={showGrid ? '隐藏网格' : '显示网格'}
+          >
+            <Grid3X3 className="h-3.5 w-3.5" />
+            网格
+          </button>
+          <button
+            onClick={handleOrganizeNodes}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-card hover:bg-muted text-muted-foreground rounded-lg border border-border shadow-sm transition-colors"
+            title="整理画布节点"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            整理
+          </button>
           <button
             onClick={() => {
               flushHistory()

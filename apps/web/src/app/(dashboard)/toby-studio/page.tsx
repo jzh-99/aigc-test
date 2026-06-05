@@ -61,7 +61,7 @@ export default function TobyStudioPage() {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {studioModules.map((item) => {
           const Icon = item.icon
           const content = (
