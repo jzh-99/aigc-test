@@ -877,6 +877,10 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   )
   const hasOutlinesNavigation = state.script.outlines.length > 0
   const hasConfirmNavigation = !isLocked && state.script.outlines.length === state.settings.episodeCount
+  const sourceLabel = state.script.source === 'upload' ? '原始剧本' : '原始创意'
+  const sourceText = state.script.source === 'upload'
+    ? state.script.originalScript
+    : state.script.originalPrompt
 
   useEffect(() => {
     if (isEditingSummary) return
@@ -1187,9 +1191,9 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_112px]">
       <div className="min-w-0 space-y-6">
       <section id="short-drama-original" className="scroll-mt-24 space-y-2">
-        <h3 className="font-medium">原始创意</h3>
-        <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-          {state.script.originalPrompt || '（无）'}
+        <h3 className="font-medium">{sourceLabel}</h3>
+        <p className="max-h-[360px] overflow-y-auto rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground whitespace-pre-wrap">
+          {sourceText || '（无）'}
         </p>
       </section>
 
@@ -1321,7 +1325,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
               href="#short-drama-original"
               className="block rounded-md px-3 py-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
             >
-              原始创意
+              {sourceLabel}
             </a>
             <a
               href="#short-drama-summary"

@@ -5,6 +5,7 @@ import {
   SHORT_DRAMA_EPISODE_COUNTS,
   SHORT_DRAMA_IMAGE_MODEL,
   SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT,
+  SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS,
   SHORT_DRAMA_SHOT_DURATION_SECONDS,
   SHORT_DRAMA_STYLE_TABS,
   SHORT_DRAMA_TEXT_MODEL,
@@ -18,6 +19,7 @@ import {
   isShortDramaEpisodeCount,
   isShortDramaShotDurationSeconds,
   makeDefaultShortDramaState,
+  makeUploadedShortDramaState,
   normalizeShortDramaState,
   sortShortDramaSegments,
   updateShortDramaShotDuration,
@@ -32,6 +34,7 @@ assert.deepEqual(SHORT_DRAMA_ASPECT_RATIOS, ['9:16', '16:9'])
 assert.deepEqual(SHORT_DRAMA_EPISODE_COUNTS, [5, 10, 15, 20])
 assert.equal(SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT, 50)
 assert.equal(SHORT_DRAMA_DEFAULT_DURATION_SECONDS, 4)
+assert.equal(SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS, 100000)
 
 // 类型守卫
 assert.equal(isShortDramaAspectRatio('9:16'), true)
@@ -89,11 +92,26 @@ const state = makeDefaultShortDramaState({
 })
 assert.equal(state.steps.active, 'script')
 assert.equal(state.script.originalPrompt, '落魄千金回村创业')
+assert.equal(state.script.source, 'idea')
+assert.equal(state.script.originalScript, '')
 assert.equal(state.settings.style, '真人都市')
 assert.equal(state.settings.aspectRatio, '9:16')
 assert.equal(state.settings.episodeCount, 20)
 assert.equal(state.settings.billingMode, 'estimate_actual')
 assert.equal(state.locks.script, false)
+
+// makeUploadedShortDramaState
+const uploadedState = makeUploadedShortDramaState({
+  originalScript: '第一集\n主角推门而入。',
+  style: '真人都市',
+  aspectRatio: '16:9',
+  episodeCount: 5,
+})
+assert.equal(uploadedState.script.source, 'upload')
+assert.equal(uploadedState.script.originalPrompt, '')
+assert.equal(uploadedState.script.originalScript, '第一集\n主角推门而入。')
+assert.equal(uploadedState.settings.aspectRatio, '16:9')
+assert.equal(uploadedState.settings.episodeCount, 5)
 
 // normalizeShortDramaState - 非法值归一化
 const normalized = normalizeShortDramaState({
@@ -118,6 +136,8 @@ const nestedPartial = normalizeShortDramaState({
 assert.equal(nestedPartial.steps.active, 'assets')
 assert.deepEqual(nestedPartial.steps.completed, [])
 assert.equal(nestedPartial.script.originalPrompt, '测试')
+assert.equal(nestedPartial.script.source, 'idea')
+assert.equal(nestedPartial.script.originalScript, '')
 assert.equal(nestedPartial.script.refinedPrompt, null)
 assert.deepEqual(nestedPartial.script.outlines, [])
 assert.equal(nestedPartial.script.status, 'idle')

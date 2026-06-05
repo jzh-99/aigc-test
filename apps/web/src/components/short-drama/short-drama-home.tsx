@@ -3,14 +3,28 @@
 import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Check, ChevronDown, Film, Loader2, Sparkles } from 'lucide-react'
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  FileText,
+  Film,
+  Loader2,
+  Sparkles,
+  Upload,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuthStore } from '@/stores/auth-store'
-import { SHORT_DRAMA_ASPECT_RATIOS, SHORT_DRAMA_EPISODE_COUNTS, SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT } from '@aigc/types'
+import {
+  SHORT_DRAMA_ASPECT_RATIOS,
+  SHORT_DRAMA_EPISODE_COUNTS,
+  SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT,
+  SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS,
+} from '@aigc/types'
 import type { ShortDramaAspectRatio } from '@aigc/types'
 import { ShortDramaStyleDialog } from './short-drama-style-dialog'
 import { ShortDramaProjectCard } from './short-drama-project-card'
@@ -18,6 +32,7 @@ import { StudioReturnBar } from '@/components/toby-studio/studio-return-bar'
 import {
   createShortDramaProject,
   listRecentShortDramaProjects,
+  uploadShortDramaScript,
   type ShortDramaProjectListItem,
 } from '@/lib/short-drama/api'
 
@@ -26,21 +41,32 @@ type DramaSelectOption<T extends string | number> = {
   label: string
 }
 
+type ShortDramaCreateMode = 'idea' | 'upload'
+
 export function ShortDramaHome() {
   const router = useRouter()
   const workspaceId = useAuthStore(s => s.activeWorkspaceId)
 
+  const [mode, setMode] = useState<ShortDramaCreateMode>('idea')
   const [prompt, setPrompt] = useState('')
+  const [originalScript, setOriginalScript] = useState('')
+  const [scriptFileName, setScriptFileName] = useState('')
   const [style, setStyle] = useState('真人都市')
   const [aspectRatio, setAspectRatio] = useState<ShortDramaAspectRatio>('9:16')
   const [episodeCount, setEpisodeCount] = useState(10)
   const [episodeInput, setEpisodeInput] = useState('10')
   const [submitting, setSubmitting] = useState(false)
+  const [parsingScript, setParsingScript] = useState(false)
   const parsedEpisodeCount = Number(episodeInput)
   const isEpisodeCountValid =
     Number.isInteger(parsedEpisodeCount) &&
     parsedEpisodeCount > 0 &&
     parsedEpisodeCount <= SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT
+  const normalizedOriginalScript = originalScript.trim()
+  const isOriginalScriptTooLong = normalizedOriginalScript.length > SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS
+  const canSubmit = mode === 'idea'
+    ? Boolean(prompt.trim())
+    : Boolean(normalizedOriginalScript) && !isOriginalScriptTooLong
 
   const { data: recentProjects, isLoading: loadingProjects } = useSWR<ShortDramaProjectListItem[]>(
     workspaceId ? ['short-drama-recent', workspaceId] : null,
@@ -49,16 +75,22 @@ export function ShortDramaHome() {
   )
 
   const handleSubmit = async () => {
-    if (!prompt.trim() || !workspaceId) return
+    if (!canSubmit || !workspaceId) return
     if (!isEpisodeCountValid) {
       toast.error(`集数需为 1-${SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT} 的整数`)
+      return
+    }
+    if (mode === 'upload' && isOriginalScriptTooLong) {
+      toast.error(`原始剧本不能超过 ${SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS} 字`)
       return
     }
     setSubmitting(true)
     try {
       const result = await createShortDramaProject({
         workspaceId,
-        prompt: prompt.trim(),
+        prompt: mode === 'idea' ? prompt.trim() : '',
+        source: mode,
+        originalScript: mode === 'upload' ? normalizedOriginalScript : undefined,
         style,
         aspectRatio,
         episodeCount: parsedEpisodeCount,
@@ -69,6 +101,21 @@ export function ShortDramaHome() {
       toast.error(err instanceof Error ? err.message : '创建失败')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleScriptFileChange = async (file: File | null) => {
+    if (!file) return
+    setParsingScript(true)
+    try {
+      const result = await uploadShortDramaScript(file)
+      setOriginalScript(result.text)
+      setScriptFileName(file.name)
+      toast.success('原始剧本已解析')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '文件解析失败')
+    } finally {
+      setParsingScript(false)
     }
   }
 
@@ -120,13 +167,81 @@ export function ShortDramaHome() {
             </div>
 
             <div className="space-y-5 p-5 md:p-6">
-              <Textarea
-                placeholder="描述你的短剧创意，例如：一个普通外卖员意外获得超能力，在都市中行侠仗义的故事..."
-                value={prompt}
-                onChange={e => setPrompt(e.target.value)}
-                className="min-h-[168px] resize-none rounded-lg border-border bg-muted/35 p-4 text-sm shadow-inner focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#070615]"
-                maxLength={2000}
-              />
+              <div className="inline-flex rounded-lg border bg-muted/40 p-1 dark:border-[#201b49] dark:bg-[#070615]">
+                <button
+                  type="button"
+                  onClick={() => setMode('idea')}
+                  className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors ${
+                    mode === 'idea' ? 'bg-background text-foreground shadow-sm dark:bg-white/10' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  创意生成
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('upload')}
+                  className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors ${
+                    mode === 'upload' ? 'bg-background text-foreground shadow-sm dark:bg-white/10' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  上传剧本
+                </button>
+              </div>
+
+              {mode === 'idea' ? (
+                <Textarea
+                  placeholder="描述你的短剧创意，例如：一个普通外卖员意外获得超能力，在都市中行侠仗义的故事..."
+                  value={prompt}
+                  onChange={e => setPrompt(e.target.value)}
+                  className="min-h-[168px] resize-none rounded-lg border-border bg-muted/35 p-4 text-sm shadow-inner focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#070615]"
+                  maxLength={2000}
+                />
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-3 rounded-lg border border-dashed bg-muted/25 p-4 dark:border-[#302858] dark:bg-[#070615] sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">原始剧本</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {scriptFileName || '支持 txt/docx，也可以直接粘贴正文'}
+                      </p>
+                    </div>
+                    <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary dark:border-[#201b49] dark:bg-[#0d0b1d]">
+                      {parsingScript ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      上传文件
+                      <input
+                        type="file"
+                        accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        className="hidden"
+                        disabled={parsingScript}
+                        onChange={event => {
+                          const file = event.target.files?.[0] ?? null
+                          void handleScriptFileChange(file)
+                          event.target.value = ''
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <Textarea
+                    placeholder="粘贴原始剧本文本，或上传 txt/docx 后自动解析到这里..."
+                    value={originalScript}
+                    onChange={e => {
+                      setOriginalScript(e.target.value)
+                      if (scriptFileName) setScriptFileName('')
+                    }}
+                    className="min-h-[220px] resize-none rounded-lg border-border bg-muted/35 p-4 text-sm shadow-inner focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#070615]"
+                  />
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className={isOriginalScriptTooLong ? 'text-red-500' : 'text-muted-foreground'}>
+                      {normalizedOriginalScript.length.toLocaleString()} / {SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS.toLocaleString()} 字
+                    </span>
+                    {isOriginalScriptTooLong && (
+                      <span className="text-red-500">请精简后再确认剧本</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
@@ -175,13 +290,13 @@ export function ShortDramaHome() {
                 </p>
                 <Button
                   onClick={handleSubmit}
-                  disabled={!prompt.trim() || submitting || !workspaceId || !isEpisodeCountValid}
+                  disabled={!canSubmit || submitting || !workspaceId || !isEpisodeCountValid || parsingScript}
                   className="h-11 gap-2 rounded-lg px-5 font-semibold"
                 >
                   {submitting ? (
                     <><Loader2 className="h-4 w-4 animate-spin" />创建中...</>
                   ) : (
-                    <><Sparkles className="h-4 w-4" />开始创作</>
+                    <><Sparkles className="h-4 w-4" />{mode === 'upload' ? '确认剧本' : '开始创作'}</>
                   )}
                 </Button>
               </div>

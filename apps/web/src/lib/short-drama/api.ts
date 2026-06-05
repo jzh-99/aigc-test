@@ -9,6 +9,8 @@ import type { ShortDramaState, ShortDramaAspectRatio } from '@aigc/types'
 export interface CreateShortDramaProjectInput {
   workspaceId: string
   prompt: string
+  source?: 'idea' | 'upload'
+  originalScript?: string
   style: string
   aspectRatio: ShortDramaAspectRatio
   episodeCount: number
@@ -91,6 +93,11 @@ export interface ShortDramaStreamOptions {
   onChunk?: (text: string) => void
   onProgress?: (progress: ShortDramaStreamProgress) => void
   onWarning?: (warning: ShortDramaStreamWarning) => void
+}
+
+export interface ShortDramaScriptUploadResult {
+  text: string
+  charCount: number
 }
 
 const API_BASE = '/api/v1'
@@ -192,10 +199,21 @@ export function createShortDramaProject(
     body: JSON.stringify({
       workspace_id: input.workspaceId,
       prompt: input.prompt,
+      source: input.source ?? 'idea',
+      original_script: input.originalScript,
       style: input.style,
       aspect_ratio: input.aspectRatio,
       episode_count: input.episodeCount,
     }),
+  })
+}
+
+export function uploadShortDramaScript(file: File): Promise<ShortDramaScriptUploadResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return fetchWithAuth('/short-drama/script/upload', {
+    method: 'POST',
+    body: formData,
   })
 }
 

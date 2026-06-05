@@ -10,6 +10,8 @@ export const SHORT_DRAMA_EPISODE_COUNTS = [5, 10, 15, 20] as const
 
 export const SHORT_DRAMA_MAX_CUSTOM_EPISODE_COUNT = 50
 
+export const SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS = 100000
+
 export const SHORT_DRAMA_DEFAULT_DURATION_SECONDS = 4
 
 export const SHORT_DRAMA_SHOT_DURATION_SECONDS = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const
@@ -29,6 +31,8 @@ export type ShortDramaStyleTab = (typeof SHORT_DRAMA_STYLE_TABS)[number]
 export type ShortDramaAspectRatio = (typeof SHORT_DRAMA_ASPECT_RATIOS)[number]
 
 export type ShortDramaStepId = 'script' | 'assets' | 'episodes'
+
+export type ShortDramaScriptSource = 'idea' | 'upload'
 
 export type ShortDramaProjectStatus = 'draft' | 'generating' | 'completed' | 'failed'
 
@@ -124,7 +128,9 @@ export interface ShortDramaState {
     completed: ShortDramaStepId[]
   }
   script: {
+    source: ShortDramaScriptSource
     originalPrompt: string
+    originalScript: string
     refinedPrompt: string | null
     outlines: ShortDramaEpisodeOutline[]
     status: ShortDramaGenerationStatus
@@ -351,7 +357,9 @@ export function makeDefaultShortDramaState(params: {
       completed: [],
     },
     script: {
+      source: 'idea',
       originalPrompt: params.prompt,
+      originalScript: '',
       refinedPrompt: null,
       outlines: [],
       status: 'idle',
@@ -383,6 +391,30 @@ export function makeDefaultShortDramaState(params: {
   }
 }
 
+export function makeUploadedShortDramaState(params: {
+  originalScript: string
+  style: string
+  aspectRatio: ShortDramaAspectRatio
+  episodeCount: number
+}): ShortDramaState {
+  return {
+    ...makeDefaultShortDramaState({
+      prompt: '',
+      style: params.style,
+      aspectRatio: params.aspectRatio,
+      episodeCount: params.episodeCount,
+    }),
+    script: {
+      source: 'upload',
+      originalPrompt: '',
+      originalScript: params.originalScript,
+      refinedPrompt: null,
+      outlines: [],
+      status: 'idle',
+    },
+  }
+}
+
 export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>): ShortDramaState {
   const aspectRatio = partial.settings?.aspectRatio
   const episodeCount = partial.settings?.episodeCount
@@ -400,7 +432,9 @@ export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>):
       completed: (partial.steps?.completed ?? []) as ShortDramaStepId[],
     },
     script: {
+      source: partial.script?.source ?? 'idea',
       originalPrompt: partial.script?.originalPrompt ?? '',
+      originalScript: partial.script?.originalScript ?? '',
       refinedPrompt: partial.script?.refinedPrompt ?? null,
       outlines,
       status: partial.script?.status ?? 'idle',

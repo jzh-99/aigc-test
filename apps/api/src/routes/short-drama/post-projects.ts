@@ -1,8 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
-import { makeDefaultShortDramaState } from '@aigc/types'
+import { makeDefaultShortDramaState, makeUploadedShortDramaState } from '@aigc/types'
 import { assertShortDramaWorkspaceAccess, validateShortDramaEpisodeCount } from './_shared.js'
+import { normalizeShortDramaOriginalScript } from './_script-source.js'
 
 // 标题截断长度常量
 const TITLE_MAX_LENGTH = 24
@@ -12,6 +13,8 @@ const route: FastifyPluginAsync = async (app) => {
     Body: {
       workspace_id: string
       prompt: string
+      source?: 'idea' | 'upload'
+      original_script?: string
       style: string
       aspect_ratio: '9:16' | '16:9'
       episode_count: number
@@ -31,12 +34,31 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 校验 prompt
-    const prompt = body.prompt?.trim()
-    if (!prompt) {
+    const source = body.source ?? 'idea'
+
+    if (source !== 'idea' && source !== 'upload') {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: '剧本来源仅支持创意生成或上传剧本' }
+      })
+    }
+
+    // 校验创意或原始剧本
+    const prompt = body.prompt?.trim() ?? ''
+    let originalScript = ''
+    if (source === 'idea' && !prompt) {
       return reply.status(400).send({
         error: { code: 'VALIDATION_ERROR', message: '请输入短剧创意' }
       })
+    }
+    if (source === 'upload') {
+      try {
+        originalScript = normalizeShortDramaOriginalScript(body.original_script ?? '')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '原始剧本无效'
+        return reply.status(400).send({
+          error: { code: 'VALIDATION_ERROR', message }
+        })
+      }
     }
 
     // 校验 aspect_ratio
@@ -58,15 +80,23 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     // 生成默认 state
-    const state = makeDefaultShortDramaState({
-      prompt,
-      style: body.style,
-      aspectRatio: body.aspect_ratio,
-      episodeCount,
-    })
+    const state = source === 'upload'
+      ? makeUploadedShortDramaState({
+          originalScript,
+          style: body.style,
+          aspectRatio: body.aspect_ratio,
+          episodeCount,
+        })
+      : makeDefaultShortDramaState({
+          prompt,
+          style: body.style,
+          aspectRatio: body.aspect_ratio,
+          episodeCount,
+        })
 
     // 生成标题（取 prompt 前 24 字符）
-    const title = prompt.slice(0, TITLE_MAX_LENGTH) || '未命名短剧'
+    const titleSource = source === 'upload' ? originalScript : prompt
+    const title = titleSource.slice(0, TITLE_MAX_LENGTH) || '未命名短剧'
 
     // 获取 workspace 的 team_id
     const workspace = await getDb()
@@ -89,7 +119,7 @@ const route: FastifyPluginAsync = async (app) => {
         team_id: workspace.team_id,
         user_id: request.user.id,
         title,
-        prompt,
+        prompt: source === 'upload' ? '' : prompt,
         style: state.settings.style,
         aspect_ratio: state.settings.aspectRatio,
         episode_count: state.settings.episodeCount,

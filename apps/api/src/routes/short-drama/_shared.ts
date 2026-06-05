@@ -1,5 +1,5 @@
 import { getDb } from '@aigc/db'
-import type { ShortDramaBatchExport, ShortDramaMentionRef, ShortDramaSegment, ShortDramaState } from '@aigc/types'
+import type { ShortDramaAsset, ShortDramaBatchExport, ShortDramaMentionRef, ShortDramaSegment, ShortDramaState } from '@aigc/types'
 import { normalizeShortDramaState } from '@aigc/types'
 import type { Redis } from 'ioredis'
 import { acquireRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
@@ -202,6 +202,121 @@ export function markShortDramaSegmentVideoGenerating(
   invalidateShortDramaEpisodeExports(state, episodeNumber)
 
   return true
+}
+
+// ============================================================================
+// Image Batch Sync
+// ============================================================================
+
+export interface ShortDramaImageTaskRow {
+  taskId: string
+  versionIndex: number
+  status: string
+  // 仅在 transfer 完成、文件落到 TOS 后才会有值；为空时表示原始 CDN 链接尚未搬运
+  storageUrl: string | null
+}
+
+export interface ShortDramaImageAssetIdMapping {
+  versionIndex: number
+  assetId: string
+}
+
+const REQUIRED_ASSET_KINDS: ReadonlyArray<ShortDramaState['assets']['items'][number]['kind']> = [
+  'character',
+  'scene',
+  'requisite',
+]
+
+function recomputeShortDramaAssetsStatus(state: ShortDramaState): ShortDramaState['assets']['status'] {
+  const requiredAssets = state.assets.items.filter(asset =>
+    REQUIRED_ASSET_KINDS.includes(asset.kind)
+  )
+
+  if (requiredAssets.length === 0) return state.assets.status
+
+  const allReady = requiredAssets.every(asset => asset.status === 'completed' && !!asset.imageUrl)
+  if (allReady) return 'completed'
+
+  if (requiredAssets.some(asset => asset.status === 'pending' || asset.status === 'generating')) {
+    return 'generating'
+  }
+
+  if (requiredAssets.some(asset => asset.status === 'failed')) {
+    return 'failed'
+  }
+
+  return 'idle'
+}
+
+/**
+ * 将一个图片 batch 的 task 状态应用到 state。
+ * 关键不变量：只有 transfer 完成、storage_url 非空时，才把 asset 标为 completed 并写入 imageUrl，
+ * 避免回写 AI 提供商的临时 CDN 地址（浏览器加载会因签名过期/跨域失败，呈现「准备好了但预览不可用」）。
+ */
+export function applyShortDramaImageBatchSync(
+  state: ShortDramaState,
+  assetIdMap: ShortDramaImageAssetIdMapping[],
+  tasks: ShortDramaImageTaskRow[],
+): boolean {
+  let changed = false
+  const now = new Date().toISOString()
+
+  for (const task of tasks) {
+    const mapping = assetIdMap.find(item => item.versionIndex === task.versionIndex)
+    if (!mapping) continue
+
+    const targetAsset = state.assets.items.find(asset => asset.id === mapping.assetId)
+    if (!targetAsset) continue
+
+    if (task.status === 'completed') {
+      // transfer 未完成，storage_url 还为空：保持 generating，等待下一次 sync
+      if (!task.storageUrl) {
+        if (
+          targetAsset.status !== 'completed' &&
+          targetAsset.status !== 'failed' &&
+          targetAsset.status !== 'generating'
+        ) {
+          targetAsset.status = 'generating'
+          targetAsset.updatedAt = now
+          changed = true
+        }
+        continue
+      }
+
+      if (targetAsset.status !== 'completed' || targetAsset.imageUrl !== task.storageUrl) {
+        targetAsset.imageUrl = task.storageUrl
+        targetAsset.status = 'completed'
+        targetAsset.updatedAt = now
+        changed = true
+      }
+    } else if (task.status === 'failed') {
+      if (targetAsset.status !== 'completed' && targetAsset.status !== 'failed') {
+        targetAsset.status = 'failed'
+        targetAsset.updatedAt = now
+        changed = true
+      }
+    } else {
+      const nextStatus: ShortDramaAsset['status'] =
+        task.status === 'processing' ? 'generating' : 'pending'
+      if (
+        targetAsset.status !== 'completed' &&
+        targetAsset.status !== 'failed' &&
+        targetAsset.status !== nextStatus
+      ) {
+        targetAsset.status = nextStatus
+        targetAsset.updatedAt = now
+        changed = true
+      }
+    }
+  }
+
+  const nextAssetsStatus = recomputeShortDramaAssetsStatus(state)
+  if (state.assets.status !== nextAssetsStatus) {
+    state.assets.status = nextAssetsStatus
+    changed = true
+  }
+
+  return changed
 }
 
 export interface ShortDramaSegmentStateRow {

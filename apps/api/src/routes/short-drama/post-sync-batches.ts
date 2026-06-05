@@ -3,9 +3,11 @@ import { getDb } from '@aigc/db'
 import { releaseRedisLock } from '../../lib/distributed-lock.js'
 import {
   acquireShortDramaProjectStateLock,
+  applyShortDramaImageBatchSync,
   assertShortDramaProjectAccess,
   readShortDramaProjectState,
   syncShortDramaSegmentsFromState,
+  type ShortDramaImageTaskRow,
 } from './_shared.js'
 
 const SYNCABLE_BATCH_STATUSES = ['pending', 'processing', 'completed', 'partial_complete', 'failed'] as const
@@ -120,70 +122,32 @@ async function syncImageBatch(
     .where('batch_id', '=', batch.id)
     .execute()
 
-  // 从 batch.params 中读取 assetIdMap 映射
   const assetIdMap = readAssetIdMap(batch)
-  let changed = false
 
-  for (const task of tasks) {
-    // 通过 assetIdMap 精确匹配 assetId
-    const mapping = assetIdMap.find(m => m.versionIndex === task.version_index)
-    if (!mapping) continue
-
-    const targetAsset = state.assets.items.find((a: any) => a.id === mapping.assetId)
-    if (!targetAsset) continue
-
-    if (task.status === 'completed') {
-      const assetRecord = await db
+  // 收集 completed task 的 storage_url：仅在 transfer 完成、文件落到 TOS 后才有值。
+  // 故意不再退回 original_url —— AI 提供商的临时 CDN 地址会过期/跨域失败，
+  // 写入会出现「已准备好但预览不可用」。transfer 未完成时让前端继续显示「生成中」。
+  const completedTaskIds = tasks.filter(t => t.status === 'completed').map(t => t.id)
+  const assetRows = completedTaskIds.length > 0
+    ? await db
         .selectFrom('assets')
-        .select(['storage_url', 'original_url'])
-        .where('task_id', '=', task.id)
-        .executeTakeFirst()
-
-      if (assetRecord) {
-        const imageUrl = assetRecord.storage_url ?? assetRecord.original_url ?? null
-        if (targetAsset.status !== 'completed' || targetAsset.imageUrl !== imageUrl) {
-          targetAsset.imageUrl = imageUrl
-          targetAsset.status = 'completed'
-          targetAsset.updatedAt = new Date().toISOString()
-          changed = true
-        }
-      }
-    } else if (task.status === 'failed') {
-      if (targetAsset.status !== 'completed' && targetAsset.status !== 'failed') {
-        targetAsset.status = 'failed'
-        targetAsset.updatedAt = new Date().toISOString()
-        changed = true
-      }
-    } else {
-      const nextStatus = task.status === 'processing' ? 'generating' : 'pending'
-      if (targetAsset.status !== 'completed' && targetAsset.status !== 'failed' && targetAsset.status !== nextStatus) {
-        targetAsset.status = nextStatus
-        targetAsset.updatedAt = new Date().toISOString()
-        changed = true
-      }
-    }
+        .select(['task_id', 'storage_url'])
+        .where('task_id', 'in', completedTaskIds)
+        .execute()
+    : []
+  const storageUrlByTaskId = new Map<string, string | null>()
+  for (const row of assetRows) {
+    storageUrlByTaskId.set(row.task_id, row.storage_url ?? null)
   }
 
-  const requiredAssets = state.assets.items.filter((asset: any) => asset.kind === 'character' || asset.kind === 'scene')
-  const hasPendingAsset = requiredAssets.some((asset: any) => asset.status === 'pending' || asset.status === 'generating')
-  const hasFailedAsset = requiredAssets.some((asset: any) => asset.status === 'failed')
-  const allAssetsReady = requiredAssets.length > 0 && requiredAssets.every(
-    (asset: any) => asset.status === 'completed' && !!asset.imageUrl
-  )
-  const nextAssetsStatus = allAssetsReady
-    ? 'completed'
-    : hasPendingAsset
-      ? 'generating'
-      : hasFailedAsset
-        ? 'failed'
-        : 'idle'
+  const taskRows: ShortDramaImageTaskRow[] = tasks.map(task => ({
+    taskId: task.id,
+    versionIndex: task.version_index,
+    status: String(task.status),
+    storageUrl: task.status === 'completed' ? storageUrlByTaskId.get(task.id) ?? null : null,
+  }))
 
-  if (state.assets.status !== nextAssetsStatus) {
-    state.assets.status = nextAssetsStatus
-    changed = true
-  }
-
-  return changed
+  return applyShortDramaImageBatchSync(state, assetIdMap, taskRows)
 }
 
 async function syncVideoBatch(
