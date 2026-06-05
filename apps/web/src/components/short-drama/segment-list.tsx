@@ -18,7 +18,7 @@ interface SegmentListProps {
   selectedIndex: number
   onSelectSegment: (index: number) => void
   onSegmentUpdate: (index: number, segment: ShortDramaSegment) => void
-  onSegmentAdd: () => void
+  onSegmentAdd: (afterIndex?: number) => void
   onSegmentDelete: (index: number) => void
   onSegmentMove: (from: number, to: number) => void
   onGenerateVideo: (segmentId: string) => void
@@ -52,7 +52,7 @@ export function SegmentList({
       <div className="rounded-2xl border bg-card/80 p-6 text-center">
         <p className="text-sm text-muted-foreground">暂无分镜</p>
         {!disabled && (
-          <Button variant="outline" onClick={onSegmentAdd} className="mt-4">
+          <Button variant="outline" onClick={() => onSegmentAdd()} className="mt-4">
             <Plus className="w-4 h-4 mr-2" />
             添加分镜
           </Button>
@@ -160,7 +160,7 @@ export function SegmentList({
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground">片段序列</span>
           {!disabled && (
-            <Button variant="ghost" size="sm" onClick={onSegmentAdd} className="h-7 px-2 text-xs">
+            <Button variant="ghost" size="sm" onClick={() => onSegmentAdd(selectedSafeIndex)} className="h-7 px-2 text-xs">
               <Plus className="mr-1 h-3.5 w-3.5" />
               添加
             </Button>

@@ -60,15 +60,6 @@ bash deploy/build-images.sh all
 bash deploy/build-images.sh api
 bash deploy/build-images.sh web
 bash deploy/build-images.sh worker
-
-
-# 结构迁移
-# 在 API 服务器 /home/vmuser/projects/aigc-api 下执行：
-docker exec -it aigc-api sh -lc 'tsx /app/migrate/scripts/migrate.ts'
-
-# 数据迁移
-# 执行 seed：
-docker exec -it aigc-api sh -lc 'tsx /app/migrate/scripts/seed.ts'
 ```
 
 产物输出到 `deploy/dist/`：
@@ -125,6 +116,14 @@ docker compose up -d --build --force-recreate
 
 # 查看日志
 docker logs aigc-api --tail 50 -f
+
+# 结构迁移
+# 在 API 服务器 /home/vmuser/projects/aigc-api 下执行：
+docker exec -it aigc-api sh -lc 'tsx /app/migrate/scripts/migrate.ts'
+
+# 数据迁移
+# 执行 seed：
+docker exec -it aigc-api sh -lc 'tsx /app/migrate/scripts/seed.ts'
 ```
 
 **关键环境变量**：

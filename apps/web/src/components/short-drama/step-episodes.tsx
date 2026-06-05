@@ -14,15 +14,27 @@ interface StepEpisodesProps {
   onStateChange: () => void
 }
 
+const POLL_INTERVAL = 3_000
+
 export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesProps) {
   const [exporting, setExporting] = useState(false)
   const [generatingEpisodeNumber, setGeneratingEpisodeNumber] = useState<number | null>(null)
   const [generatedCount, setGeneratedCount] = useState(0)
   const [generateTotalCount, setGenerateTotalCount] = useState(0)
   const [failedEpisodeErrors, setFailedEpisodeErrors] = useState<Record<number, string>>({})
-  const autoGenerateKeyRef = useRef<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const episodes = state.episodes.items
+
+  // 包含后端持久化的 generating 状态，刷新后可从 state 恢复
+  const serverGeneratingEpisodes = useMemo(
+    () => episodes.filter(ep => ep.status === 'generating').map(ep => ep.episodeNumber),
+    [episodes]
+  )
+  const isServerGenerating = serverGeneratingEpisodes.length > 0
+  const isLocalGenerating = generatingEpisodeNumber !== null
+  const isGeneratingSegments = isLocalGenerating || isServerGenerating
+
   const pendingSegmentEpisodes = useMemo(
     () => episodes
       .filter(ep => ep.segments.length === 0 && ep.status !== 'failed' && ep.status !== 'generating' && !failedEpisodeErrors[ep.episodeNumber])
@@ -36,14 +48,43 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
   const exportableCount = episodes.filter(ep =>
     ep.segments.length > 0 && ep.segments.every(s => !!s.videoUrl)
   ).length
-  const isGeneratingSegments = generatingEpisodeNumber !== null
 
-  const generateMissingSegments = async (episodeNumbers: number[], triggeredBy: 'auto' | 'manual' = 'auto') => {
+  // 后端正在生成时轮询刷新，直到生成完成
+  useEffect(() => {
+    if (!isServerGenerating || isLocalGenerating) {
+      if (pollRef.current) {
+        clearTimeout(pollRef.current)
+        pollRef.current = null
+      }
+      return
+    }
+
+    let cancelled = false
+
+    const schedulePoll = () => {
+      if (cancelled || pollRef.current) return
+      pollRef.current = setTimeout(() => {
+        pollRef.current = null
+        onStateChange()
+      }, POLL_INTERVAL)
+    }
+
+    schedulePoll()
+
+    return () => {
+      cancelled = true
+      if (pollRef.current) {
+        clearTimeout(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [isServerGenerating, isLocalGenerating, onStateChange])
+
+  const generateMissingSegments = async (episodeNumbers: number[]) => {
     if (episodeNumbers.length === 0) return
 
     setGeneratedCount(0)
     setGenerateTotalCount(episodeNumbers.length)
-    let successCount = 0
 
     try {
       for (const episodeNumber of episodeNumbers) {
@@ -56,18 +97,9 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
 
         try {
           await generateShortDramaEpisodeSegments(projectId, episodeNumber)
-          successCount += 1
           setGeneratedCount(count => count + 1)
         } catch (err) {
           const message = err instanceof Error ? err.message : 'AI 生成失败，请稍后重试'
-
-          // 如果是自动触发且任务已在进行中，静默处理第一个错误
-          if (triggeredBy === 'auto' && episodeNumbers.indexOf(episodeNumber) === 0 &&
-              (message.includes('未完成') || message.includes('进行中'))) {
-            console.info(`第 ${episodeNumber} 集片段脚本生成任务已在进行中，等待完成`)
-            break
-          }
-
           setFailedEpisodeErrors(current => ({ ...current, [episodeNumber]: message }))
           toast.error(message)
           break
@@ -76,27 +108,14 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
     } finally {
       setGeneratingEpisodeNumber(null)
       setGenerateTotalCount(0)
-    }
-
-    if (successCount > 0) {
-      toast.success(`已提交 ${successCount} 集片段脚本生成`)
+      onStateChange()
     }
   }
 
   const retryEpisodeSegments = async (episodeNumber: number) => {
     if (isGeneratingSegments) return
-    await generateMissingSegments([episodeNumber], 'manual')
+    await generateMissingSegments([episodeNumber])
   }
-
-  useEffect(() => {
-    if (pendingSegmentEpisodes.length === 0 || failedEpisodeCount > 0 || isGeneratingSegments) return
-
-    const autoGenerateKey = `${projectId}:${pendingSegmentEpisodes.join(',')}`
-    if (autoGenerateKeyRef.current === autoGenerateKey) return
-    autoGenerateKeyRef.current = autoGenerateKey
-
-    void generateMissingSegments(pendingSegmentEpisodes, 'auto')
-  }, [projectId, pendingSegmentEpisodes, failedEpisodeCount, isGeneratingSegments])
 
   const handleBatchExport = async () => {
     const exportable = episodes
@@ -134,7 +153,9 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           {isGeneratingSegments && (
             <span className="ml-2 inline-flex items-center gap-1 text-primary">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              正在生成第 {generatingEpisodeNumber} 集（{generatedCount}/{generateTotalCount}）
+              {isLocalGenerating
+                ? `正在生成第 ${generatingEpisodeNumber} 集（${generatedCount}/${generateTotalCount}）`
+                : `第 ${serverGeneratingEpisodes.join('、')} 集生成中...`}
             </span>
           )}
         </div>
@@ -143,7 +164,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
             <Button
               size="sm"
               variant="outline"
-              onClick={() => generateMissingSegments(pendingSegmentEpisodes, 'manual')}
+              onClick={() => generateMissingSegments(pendingSegmentEpisodes)}
               disabled={isGeneratingSegments}
             >
               {isGeneratingSegments ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Film className="w-3.5 h-3.5 mr-1" />}
@@ -168,7 +189,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           {episodes.map(episode => {
             const segmentCount = episode.segments.length
             const completedSegments = episode.segments.filter(s => s.status === 'completed').length
-            const isCurrentGenerating = generatingEpisodeNumber === episode.episodeNumber
+            const isCurrentGenerating = generatingEpisodeNumber === episode.episodeNumber || episode.status === 'generating'
             const failureMessage = failedEpisodeErrors[episode.episodeNumber] ?? episode.errorMessage ?? 'AI 生成失败，请稍后重试'
             const isFailed = segmentCount === 0 && (episode.status === 'failed' || !!failedEpisodeErrors[episode.episodeNumber])
 

@@ -37,6 +37,8 @@ function isPendingGenerationStatus(status: string | null | undefined): boolean {
   return status === 'pending' || status === 'processing'
 }
 
+const STORYBOARD_PROMPTS_FAILED_ERROR = 'storyboard_prompts_failed'
+
 function FloatingStepAction({
   icon,
   description,
@@ -92,45 +94,6 @@ export default function PictureBookEditorPage() {
   const [generatingStoryboardImageIds, setGeneratingStoryboardImageIds] = useState<string[]>([])
   const [generatingStoryboardAudioIds, setGeneratingStoryboardAudioIds] = useState<string[]>([])
   const state = project.state
-
-  useEffect(() => {
-    if (!state || !projectId) return
-    const allItems = state.assets.characters.concat(state.assets.backgrounds)
-    const hasPendingAssets = allItems.some(item => isPendingGenerationStatus(item.status)) || generatingAssetIds.length > 0
-    const hasPendingStoryboard = state.storyboard.some(page => isPendingGenerationStatus(page.status))
-      || generatingStoryboardImageIds.length > 0
-      || generatingStoryboardAudioIds.length > 0
-    if (!hasPendingAssets && !hasPendingStoryboard) return
-
-    // 指数退避轮询：初始 2 秒，逐渐增加到最大 15 秒
-    let interval = 2000
-    const maxInterval = 15000
-    let pollCount = 0
-    let timerId: number
-
-    const scheduleNext = () => {
-      pollCount++
-      // 每轮询 3 次，间隔时间增加 1.5 倍
-      if (pollCount % 3 === 0) {
-        interval = Math.min(Math.floor(interval * 1.5), maxInterval)
-      }
-      timerId = window.setTimeout(poll, interval)
-    }
-
-    const poll = () => {
-      void project.syncBatches().then(() => {
-        scheduleNext()
-      }).catch(() => {
-        scheduleNext()
-      })
-    }
-
-    poll() // 立即执行第一次
-
-    return () => {
-      if (timerId) window.clearTimeout(timerId)
-    }
-  }, [project, projectId, state, generatingAssetIds, generatingStoryboardImageIds, generatingStoryboardAudioIds])
 
   useEffect(() => {
     if (!state || generatingAssetIds.length === 0) return
@@ -231,6 +194,7 @@ export default function PictureBookEditorPage() {
     && generatingStoryboardImageIds.length === 0
     && generatingStoryboardAudioIds.length === 0
     : false
+  const showStoryboardPromptRegenerateCard = state?.draft.lastError === STORYBOARD_PROMPTS_FAILED_ERROR
 
   const generateAssetImages = async (target?: { kind: 'character' | 'background'; refId: string }) => {
     if (!state) return
@@ -322,6 +286,10 @@ export default function PictureBookEditorPage() {
       })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '确认失败'
+      project.updateState({
+        ...nextState,
+        draft: { ...nextState.draft, lastError: STORYBOARD_PROMPTS_FAILED_ERROR },
+      })
       toast.error(errorMessage, {
         duration: 5000,
         action: {
@@ -355,8 +323,7 @@ export default function PictureBookEditorPage() {
     setLoadingAction(key)
     try {
       await action()
-      await project.mutate()
-      await project.syncBatches()
+      await project.syncBatches({ refreshCharges: true })
       toast.success('操作已提交，正在后台处理中')
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '操作失败'
@@ -527,8 +494,8 @@ export default function PictureBookEditorPage() {
         )}
         {state.steps.active === 'storyboard' && (
           <>
-            {/* 分镜为空时的兜底方案 */}
-            {state.storyboard.length === 0 ? (
+            {/* 分镜提示词生成失败时的兜底方案 */}
+            {showStoryboardPromptRegenerateCard ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-950/30">
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
@@ -536,9 +503,9 @@ export default function PictureBookEditorPage() {
                       <BookOpenCheck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-amber-900 dark:text-amber-100">分镜提示词为空</h3>
+                      <h3 className="font-semibold text-amber-900 dark:text-amber-100">分镜提示词生成失败</h3>
                       <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                        看起来上一步生成分镜提示词失败了，或者数据未正确保存。您可以重新生成分镜提示词。
+                        上一步生成分镜提示词失败。您可以重新生成分镜提示词。
                       </p>
                     </div>
                   </div>
@@ -548,6 +515,10 @@ export default function PictureBookEditorPage() {
                       setLoadingAction('regenerate-storyboard-prompts')
                       try {
                         const result = await generatePictureBookStoryboardPrompts(projectId)
+                        project.updateState({
+                          ...result.state,
+                          draft: { ...result.state.draft, lastError: undefined },
+                        })
                         await project.mutate()
                         toast.success('分镜提示词已重新生成', {
                           duration: 5000,

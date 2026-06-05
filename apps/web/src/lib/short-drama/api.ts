@@ -244,27 +244,33 @@ export function deleteShortDramaProject(projectId: string): Promise<void> {
 }
 
 export function generateShortDramaScriptSummary(
-  projectId: string
-): Promise<{ success: boolean; taskId: string }> {
-  return fetchWithAuth(`/short-drama/projects/${projectId}/script/summary`, {
-    method: 'POST',
-  })
+  projectId: string,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
+    `/short-drama/projects/${projectId}/script/summary`,
+    options,
+  )
 }
 
 export function generateShortDramaEpisodeOutlines(
-  projectId: string
-): Promise<{ success: boolean; taskId: string }> {
-  return fetchWithAuth(`/short-drama/projects/${projectId}/script/episode-outlines`, {
-    method: 'POST',
-  })
+  projectId: string,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
+    `/short-drama/projects/${projectId}/script/episode-outlines`,
+    options,
+  )
 }
 
 export function generateShortDramaAssetPrompts(
-  projectId: string
-): Promise<{ success: boolean; taskId: string }> {
-  return fetchWithAuth(`/short-drama/projects/${projectId}/assets/prompts`, {
-    method: 'POST',
-  })
+  projectId: string,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
+    `/short-drama/projects/${projectId}/assets/prompts`,
+    options,
+  )
 }
 
 export function generateShortDramaAssets(
@@ -306,13 +312,12 @@ export function uploadShortDramaImage(
 
 export function generateShortDramaEpisodeSegments(
   projectId: string,
-  episodeNumber: number
-): Promise<{ success: boolean; taskId: string }> {
-  return fetchWithAuth(
+  episodeNumber: number,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
     `/short-drama/projects/${projectId}/episodes/${episodeNumber}/segments`,
-    {
-      method: 'POST',
-    }
+    options,
   )
 }
 

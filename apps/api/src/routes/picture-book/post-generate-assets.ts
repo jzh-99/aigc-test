@@ -9,6 +9,10 @@ type AssetTargetKind = 'character' | 'background'
 type RequestedTarget = { kind: AssetTargetKind; ref_id: string }
 type ResolvedTarget = { kind: AssetTargetKind; refId: string; name: string; prompt: string }
 
+const IMAGE_GENERATE_RATE_LIMIT_SPACING_MS = 6_200
+const RATE_LIMIT_RETRY_BUFFER_MS = 1_000
+const MAX_RATE_LIMIT_RETRY_DELAY_MS = 60_000
+
 export function makePictureBookImageParams(projectId: string, refId: string, style: string, aspectRatio = '16:9'): Record<string, unknown> {
   return {
     resolution: '2K',
@@ -40,9 +44,49 @@ async function injectJson(app: FastifyInstance, request: FastifyRequest, url: st
   const body = response.json() as any
   if (response.statusCode >= 400) {
     app.log.error({ url, statusCode: response.statusCode, body }, 'injectJson failed')
-    throw new Error(body?.error?.message ?? `request failed: ${response.statusCode}`)
+    const message = body?.error?.message ?? `request failed: ${response.statusCode}`
+    throw new InjectJsonError(response.statusCode, body?.error?.code, message)
   }
   return body
+}
+
+class InjectJsonError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    public readonly code: string | undefined,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'InjectJsonError'
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function parseRetryAfterMs(message: string): number {
+  const match = message.match(/请\s*(\d+)\s*秒后再试/)
+  if (!match) return IMAGE_GENERATE_RATE_LIMIT_SPACING_MS
+  return Math.min(Number(match[1]) * 1000 + RATE_LIMIT_RETRY_BUFFER_MS, MAX_RATE_LIMIT_RETRY_DELAY_MS)
+}
+
+function isRateLimitError(error: unknown): error is InjectJsonError {
+  return error instanceof InjectJsonError && (error.statusCode === 429 || error.code === 'RATE_LIMITED')
+}
+
+async function injectImageGenerateWithRateLimitRetry(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  payload: unknown,
+) {
+  try {
+    return await injectJson(app, request, '/api/v1/generate/image', payload)
+  } catch (error) {
+    if (!isRateLimitError(error)) throw error
+    await sleep(parseRetryAfterMs(error.message))
+    return await injectJson(app, request, '/api/v1/generate/image', payload)
+  }
 }
 
 async function recordImageBatch(input: {
@@ -143,7 +187,8 @@ const route: FastifyPluginAsync = async (app) => {
       const failures: Array<{ ref_id: string; message: string }> = []
       for (const target of targets) {
         try {
-          const batch = await injectJson(app, request, '/api/v1/generate/image', {
+          if (batches.length > 0) await sleep(IMAGE_GENERATE_RATE_LIMIT_SPACING_MS)
+          const imagePayload = {
             idempotency_key: `picture_book_${request.body.project_id}_${target.kind}_${target.refId}_${randomUUID()}`,
             model: PICTURE_BOOK_MODELS.image,
             prompt: target.prompt,
@@ -153,7 +198,8 @@ const route: FastifyPluginAsync = async (app) => {
               ...makePictureBookImageParams(request.body.project_id, target.refId, access.style, access.state.settings.aspectRatio ?? '16:9'),
               ...(request.body.params ?? {}),
             },
-          })
+          }
+          const batch = await injectImageGenerateWithRateLimitRetry(app, request, imagePayload)
           await recordImageBatch({
             projectId: request.body.project_id,
             workspaceId: access.workspaceId,

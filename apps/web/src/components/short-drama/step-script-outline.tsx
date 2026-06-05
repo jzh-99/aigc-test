@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, Sparkles, Check, Pencil, Save, X, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -856,6 +856,8 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   const [savingSummaryHeading, setSavingSummaryHeading] = useState<SummaryHeading | null>(null)
   const [episodeOutlineDialog, setEpisodeOutlineDialog] = useState<EpisodeOutlineDialogDraft | null>(null)
   const [savingEpisodeOutline, setSavingEpisodeOutline] = useState(false)
+  const generatingSummaryRef = useRef(false)
+  const generatingOutlinesRef = useRef(false)
   const typedSummaryStreamText = useTypewriterText(summaryStreamText, generatingSummary)
   const typedOutlineStreamText = useTypewriterText(outlineStreamText, generatingOutlines)
   const isLocked = state.locks.script
@@ -881,66 +883,55 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     setSummaryDraft(createSummaryDraft(state.script.refinedPrompt ?? '', state.settings.episodeCount))
   }, [isEditingSummary, state.script.refinedPrompt, state.settings.episodeCount])
 
-  // 自动触发剧本摘要生成
-  useEffect(() => {
-    if (isLocked || generatingSummary || isEditingSummary) return
-    if (state.script.refinedPrompt) return // 已有摘要
-    if (state.script.status === 'generating') return // 正在生成中
-
-    void handleGenerateSummary('auto')
-  }, [isLocked, generatingSummary, isEditingSummary, state.script.refinedPrompt, state.script.status])
-
-  // 自动触发分集大纲生成
-  useEffect(() => {
-    if (isLocked || generatingOutlines) return
-    if (!state.script.refinedPrompt) return // 摘要未生成
-    if (state.script.outlines.length >= state.settings.episodeCount) return // 已完成所有集
-    if (state.script.status === 'generating' && state.script.outlines.length > 0) return // 正在生成中
-
-    void handleGenerateOutlines('auto')
-  }, [isLocked, generatingOutlines, state.script.refinedPrompt, state.script.outlines.length, state.settings.episodeCount, state.script.status])
-
-  const handleGenerateSummary = async (triggeredBy: 'auto' | 'manual' = 'auto') => {
+  const handleGenerateSummary = async (triggeredBy: 'manual' = 'manual') => {
+    if (generatingSummaryRef.current || state.script.status === 'generating' || state.script.refinedPrompt) return
+    generatingSummaryRef.current = true
     setGeneratingSummary(true)
     setSummaryStreamText('')
     setStreamWarningMessage('')
     try {
-      await generateShortDramaScriptSummary(projectId)
-      toast.success('已提交剧本摘要生成')
+      const result = await generateShortDramaScriptSummary(projectId, {
+        onChunk: text => setSummaryStreamText(current => current + text),
+        onProgress: progress => setOutlineProgressMessage(progress.message),
+        onWarning: warning => setStreamWarningMessage(warning.message),
+      })
+      onStateChange()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '生成失败'
 
-      // 自动触发且任务已在进行中，静默处理
-      if (triggeredBy === 'auto' && (errorMessage.includes('未完成') || errorMessage.includes('进行中'))) {
-        console.info('剧本摘要生成任务已在进行中，等待完成')
-        return
-      }
-
       toast.error(errorMessage)
     } finally {
+      generatingSummaryRef.current = false
       setGeneratingSummary(false)
     }
   }
 
-  const handleGenerateOutlines = async (triggeredBy: 'auto' | 'manual' = 'auto') => {
+  const handleGenerateOutlines = async () => {
+    if (
+      generatingOutlinesRef.current ||
+      state.script.status === 'generating' ||
+      !state.script.refinedPrompt ||
+      state.script.outlines.length >= state.settings.episodeCount
+    ) return
+    generatingOutlinesRef.current = true
     setGeneratingOutlines(true)
     setOutlineStreamText('')
     setOutlineProgressMessage('')
     setStreamWarningMessage('')
     try {
-      await generateShortDramaEpisodeOutlines(projectId)
-      toast.success('已提交分集大纲生成')
+      const result = await generateShortDramaEpisodeOutlines(projectId, {
+        onChunk: text => setOutlineStreamText(current => current + text),
+        onProgress: progress => setOutlineProgressMessage(progress.message),
+        onWarning: warning => setStreamWarningMessage(warning.message),
+      })
+      onStateChange()
+      if (result.warning) setStreamWarningMessage(result.warning)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '生成失败'
 
-      // 自动触发且任务已在进行中，静默处理
-      if (triggeredBy === 'auto' && (errorMessage.includes('未完成') || errorMessage.includes('进行中'))) {
-        console.info('分集大纲生成任务已在进行中，等待完成')
-        return
-      }
-
       toast.error(errorMessage)
     } finally {
+      generatingOutlinesRef.current = false
       setGeneratingOutlines(false)
     }
   }
@@ -1253,7 +1244,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
         <div className="flex items-center justify-between">
           <h3 className="font-medium">分集剧本 ({state.script.outlines.length} 集)</h3>
           {!isLocked && state.script.refinedPrompt && (
-            <Button size="sm" variant="outline" onClick={() => handleGenerateOutlines('manual')} disabled={isOutlinesGenerating}>
+            <Button size="sm" variant="outline" onClick={() => handleGenerateOutlines()} disabled={isOutlinesGenerating}>
               {isOutlinesGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
               {isOutlinesGenerating
                 ? '剧本生成中'

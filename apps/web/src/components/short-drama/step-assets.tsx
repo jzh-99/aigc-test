@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ImageIcon, Loader2, Sparkles, Check, Upload, ZoomIn } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -94,7 +94,6 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   const [assetPromptStreamText, setAssetPromptStreamText] = useState('')
   const [assetPromptProgressMessage, setAssetPromptProgressMessage] = useState('')
   const [assetPromptWarningMessage, setAssetPromptWarningMessage] = useState('')
-  const autoPromptKeyRef = useRef<string | null>(null)
   const isLocked = state.locks.assets
 
   const assets = state.assets.items
@@ -141,45 +140,28 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
     })
   }, [assets])
 
-  const handleGeneratePrompts = async (triggeredBy: 'auto' | 'manual' = 'auto') => {
+  const handleGeneratePrompts = async () => {
+    if (generatingPrompts || isAssetPromptGenerating) return
+
     setGeneratingPrompts(true)
     setAssetPromptStreamText('')
     setAssetPromptProgressMessage('')
     setAssetPromptWarningMessage('')
     try {
-      await generateShortDramaAssetPrompts(projectId)
-      toast.success('已提交素材描述生成')
+      const result = await generateShortDramaAssetPrompts(projectId, {
+        onChunk: text => setAssetPromptStreamText(current => current + text),
+        onProgress: progress => setAssetPromptProgressMessage(progress.message),
+        onWarning: warning => setAssetPromptWarningMessage(warning.message),
+      })
+      if (result.warning) setAssetPromptWarningMessage(result.warning)
+      onStateChange()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '生成失败'
-
-      // 如果是自动触发（页面刷新）且任务已在进行中，静默处理
-      if (triggeredBy === 'auto' && (errorMessage.includes('未完成') || errorMessage.includes('进行中'))) {
-        console.info('素材描述生成任务已在进行中，等待完成')
-        return
-      }
-
-      // 手动触发或其他错误才提示用户
       toast.error(errorMessage)
     } finally {
       setGeneratingPrompts(false)
     }
   }
-
-  useEffect(() => {
-    const autoPromptKey = `${projectId}:${processedOutlineCount}:${totalOutlineCount}`
-    const shouldAutoGenerate =
-      !isLocked &&
-      totalOutlineCount > 0 &&
-      processedOutlineCount < totalOutlineCount &&
-      !isAssetPromptGenerating &&
-      !generatingPrompts &&
-      autoPromptKeyRef.current !== autoPromptKey
-
-    if (!shouldAutoGenerate) return
-
-    autoPromptKeyRef.current = autoPromptKey
-    void handleGeneratePrompts('auto')
-  }, [projectId, isLocked, processedOutlineCount, totalOutlineCount, isAssetPromptGenerating, generatingPrompts])
 
   const handleGenerateOne = async (assetId: string) => {
     const targetAsset = assets.find(asset => asset.id === assetId)
@@ -200,7 +182,6 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       })
       setSubmittedAssetIds((prev) => new Set(prev).add(assetId))
       onStateChange()
-      toast.success(`已提交「${targetAsset.name}」生成`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '生成失败')
     } finally {
@@ -329,7 +310,6 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       }
 
       onStateChange()
-      toast.success(`已提交 ${assetIds.length} 个素材生成${batches.length > 1 ? `（分 ${batches.length} 批）` : ''}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '生成失败')
     } finally {
@@ -407,7 +387,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => handleGeneratePrompts('manual')}
+                onClick={() => handleGeneratePrompts()}
                 disabled={generatingPrompts || isAssetPromptGenerating}
               >
                 {generatingPrompts ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}

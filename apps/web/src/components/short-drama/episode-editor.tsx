@@ -96,10 +96,11 @@ export function EpisodeEditor({
     }
   }, [projectId, episode, state, onStateChange])
 
-  const handleSegmentAdd = useCallback(async () => {
+  const handleSegmentAdd = useCallback(async (afterIndex?: number) => {
+    const insertAt = afterIndex !== undefined ? afterIndex + 1 : episode.segments.length
     const newSegment: ShortDramaSegment = {
       id: crypto.randomUUID(),
-      order: episode.segments.length,
+      order: insertAt,
       title: `分镜 ${episode.segments.length + 1}`,
       prompt: '',
       mentionRefs: [],
@@ -107,7 +108,11 @@ export function EpisodeEditor({
       videoUrl: null,
       status: 'idle',
     }
-    const newSegments = [...episode.segments, newSegment]
+    const newSegments = [
+      ...episode.segments.slice(0, insertAt),
+      newSegment,
+      ...episode.segments.slice(insertAt),
+    ].map((s, i) => ({ ...s, order: i }))
     const newEpisodes = state.episodes.items.map(ep =>
       ep.episodeNumber === episode.episodeNumber
         ? { ...ep, segments: newSegments }
@@ -117,7 +122,7 @@ export function EpisodeEditor({
       await saveShortDramaProject(projectId, {
         state: { ...state, episodes: { ...state.episodes, items: newEpisodes } },
       })
-      setSelectedSegmentIndex(newSegments.length - 1)
+      setSelectedSegmentIndex(insertAt)
       onStateChange()
     } catch (err) {
       toast.error('添加失败')

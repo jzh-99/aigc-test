@@ -13,8 +13,13 @@ import type { PictureBookChargeSummary, PictureBookProject, PictureBookState } f
 
 const POLL_INTERVAL = 3_000
 
+type SyncBatchesOptions = {
+  refreshProject?: boolean
+  refreshCharges?: boolean
+}
+
 function isPendingStatus(status?: string): boolean {
-  return status === 'pending' || status === 'generating'
+  return status === 'pending' || status === 'processing' || status === 'generating'
 }
 
 function hasPendingWork(state: PictureBookState): boolean {
@@ -40,7 +45,7 @@ export function usePictureBookProject(projectId?: string | null) {
   const [saveError, setSaveError] = useState<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestStateRef = useRef<PictureBookState | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const projectSWR = useSWR<PictureBookProject>(
     projectKey,
@@ -50,6 +55,7 @@ export function usePictureBookProject(projectId?: string | null) {
     chargesKey,
     () => getPictureBookCharges(projectId!),
   )
+  const chargesMutateRef = useRef(chargesSWR.mutate)
 
   useEffect(() => {
     if (projectSWR.data?.state) {
@@ -58,37 +64,64 @@ export function usePictureBookProject(projectId?: string | null) {
     }
   }, [projectSWR.data?.state])
 
+  useEffect(() => {
+    chargesMutateRef.current = chargesSWR.mutate
+  }, [chargesSWR.mutate])
+
+  const hasPending = localState ? hasPendingWork(localState) : false
+
   // 自动轮询机制
   useEffect(() => {
-    if (!projectId || !localState) return
-
-    if (hasPendingWork(localState)) {
-      if (!pollRef.current) {
-        pollRef.current = setInterval(async () => {
-          try {
-            const result = await syncPictureBookBatches(projectId)
-            latestStateRef.current = result.state
-            setLocalState(result.state)
-            await projectSWR.mutate()
-          } catch {
-            // 静默忽略同步错误
-          }
-        }, POLL_INTERVAL)
-      }
-    } else {
+    if (!projectId || !hasPending) {
       if (pollRef.current) {
-        clearInterval(pollRef.current)
+        clearTimeout(pollRef.current)
         pollRef.current = null
       }
+      return
     }
+
+    let cancelled = false
+    let polling = false
+
+    const schedulePoll = () => {
+      if (cancelled || pollRef.current) return
+      pollRef.current = setTimeout(() => {
+        pollRef.current = null
+        void poll()
+      }, POLL_INTERVAL)
+    }
+
+    const poll = async () => {
+      if (cancelled || polling) return
+      polling = true
+      try {
+        const result = await syncPictureBookBatches(projectId)
+        if (cancelled) return
+        latestStateRef.current = result.state
+        setLocalState(result.state)
+        if (!hasPendingWork(result.state)) {
+          await chargesMutateRef.current()
+          return
+        }
+        schedulePoll()
+      } catch {
+        // 静默忽略同步错误，下一轮继续尝试
+        schedulePoll()
+      } finally {
+        polling = false
+      }
+    }
+
+    schedulePoll()
 
     return () => {
+      cancelled = true
       if (pollRef.current) {
-        clearInterval(pollRef.current)
+        clearTimeout(pollRef.current)
         pollRef.current = null
       }
     }
-  }, [projectId, localState, projectSWR])
+  }, [projectId, hasPending])
 
   const flushDraft = useCallback(async (overrideState?: PictureBookState | null) => {
     if (!projectId) return
@@ -144,12 +177,17 @@ export function usePictureBookProject(projectId?: string | null) {
     await projectSWR.mutate()
   }, [projectId, projectSWR])
 
-  const syncBatches = useCallback(async () => {
+  const syncBatches = useCallback(async (options: SyncBatchesOptions = {}) => {
     if (!projectId) return
     const result = await syncPictureBookBatches(projectId)
     latestStateRef.current = result.state
     setLocalState(result.state)
-    await Promise.all([projectSWR.mutate(), chargesSWR.mutate()])
+
+    const refreshTasks: Promise<unknown>[] = []
+    if (options.refreshProject) refreshTasks.push(projectSWR.mutate())
+    if (options.refreshCharges) refreshTasks.push(chargesSWR.mutate())
+    if (refreshTasks.length > 0) await Promise.all(refreshTasks)
+
     return result
   }, [projectId, projectSWR, chargesSWR])
 
