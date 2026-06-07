@@ -9,6 +9,7 @@ const route: FastifyPluginAsync = async (app) => {
     Params: { id: string }
     Body: {
       identifier: string
+      username: string
       role?: 'editor' | 'viewer'
       credit_quota?: number
       default_password: string
@@ -18,9 +19,10 @@ const route: FastifyPluginAsync = async (app) => {
     schema: {
       body: {
         type: 'object',
-        required: ['identifier', 'default_password'],
+        required: ['identifier', 'username', 'default_password'],
         properties: {
-          identifier: { type: 'string', maxLength: 254 },
+          identifier: { type: 'string', pattern: '^\\d{11}$', minLength: 11, maxLength: 11 },
+          username: { type: 'string', minLength: 2, maxLength: 30 },
           role: { type: 'string', enum: ['editor', 'viewer'] },
           credit_quota: { type: 'number', minimum: 0, maximum: 1000000 },
           default_password: { type: 'string', minLength: 6, maxLength: 50 },
@@ -29,29 +31,35 @@ const route: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (request, reply) => {
-    const { identifier: rawIdentifier, role = 'editor', credit_quota = 1000, default_password } = request.body
+    const {
+      identifier: rawIdentifier,
+      username: rawUsername,
+      role = 'editor',
+      credit_quota = 1000,
+      default_password,
+    } = request.body
     const teamId = request.params.id
     const db = getDb()
 
     const identifier = rawIdentifier.trim()
+    const requestedUsername = rawUsername.trim()
     if (!identifier) {
       return reply.badRequest('账号不能为空')
     }
 
-    // 判断是邮箱还是手机号
-    const isEmail = identifier.includes('@')
-    const isPhone = /^\d{11}$/.test(identifier)
+    if (!/^\d{11}$/.test(identifier)) {
+      return reply.badRequest('手机号必须是 11 位数字')
+    }
 
-    if (!isEmail && !isPhone) {
-      return reply.badRequest('格式错误（需要邮箱或11位手机号）')
+    if (!/^[\u4e00-\u9fa5A-Za-z0-9_-]{2,30}$/.test(requestedUsername)) {
+      return reply.badRequest('用户名需为 2-30 位中文、字母、数字、下划线或横线')
     }
 
     // 检查用户是否已存在
     const existingUser = await db
       .selectFrom('users')
-      .select(['id', 'account'])
-      .$if(isEmail, (qb) => qb.where('email', '=', identifier))
-      .$if(isPhone, (qb) => qb.where('phone', '=', identifier))
+      .select(['id', 'account', 'username'])
+      .where('phone', '=', identifier)
       .executeTakeFirst()
 
     if (existingUser) {
@@ -71,18 +79,21 @@ const route: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // 生成唯一用户名
-    const baseUsername = isEmail ? identifier.split('@')[0] : identifier.slice(-4)
-    let username = baseUsername
-    let suffix = 1
-    while (true) {
-      const existing = await db
+    let username = requestedUsername
+    if (!existingUser) {
+      const existingUsername = await db
         .selectFrom('users')
         .select('id')
         .where('username', '=', username)
         .executeTakeFirst()
-      if (!existing) break
-      username = `${baseUsername}_${suffix++}`
+      if (existingUsername) {
+        return reply.status(409).send({
+          success: false,
+          error: { code: 'USERNAME_EXISTS', message: '用户名已存在' },
+        })
+      }
+    } else {
+      username = existingUser.username
     }
 
     // 哈希密码
@@ -95,8 +106,8 @@ const route: FastifyPluginAsync = async (app) => {
         .insertInto('users')
         .values({
           account: identifier,
-          email: isEmail ? identifier : null,
-          phone: isPhone ? identifier : null,
+          email: null,
+          phone: identifier,
           username,
           password_hash: passwordHash,
           role: 'member',
