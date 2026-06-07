@@ -41,7 +41,7 @@ export function isSeedanceModel(model: ModelItem): boolean {
 }
 
 /**
- * 从 params_pricing 中查找指定分辨率的积分单价
+ * 从 params_pricing 中查找指定分辨率的A豆单价
  * 找不到匹配时取第一条规则作为默认值
  */
 export function getPriceByResolution(model: ModelItem, resolution: string): number {

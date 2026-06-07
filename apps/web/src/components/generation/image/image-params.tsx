@@ -88,7 +88,7 @@ export function ImageParams({
                             <div className="text-xs text-muted-foreground leading-snug">{m.description}</div>
                           )}
                           <div className="flex items-center gap-1 text-xs font-medium text-primary mt-0.5">
-                            <Coins className="h-3 w-3" />{minPrice} 积分/张
+                            <Coins className="h-3 w-3" />{minPrice} A豆/张
                           </div>
                         </div>
                       </div>
@@ -156,7 +156,7 @@ export function ImageParams({
         <div className="flex-1" />
         <div className="flex items-center gap-1.5 text-sm font-medium">
           <Coins className="h-4 w-4 text-amber-500" />
-          <span>{estimatedCredits} 积分</span>
+          <span>{estimatedCredits} A豆</span>
         </div>
         <Button variant="gradient" size="lg" className="gap-2 px-8" onClick={onGenerate} disabled={isGenerating || disabled || promptEmpty}>
           {isGenerating ? <><Loader2 className="h-4 w-4 animate-spin" />生成中...</> : <><Sparkles className="h-4 w-4" />生成</>}

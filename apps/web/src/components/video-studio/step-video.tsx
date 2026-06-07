@@ -323,7 +323,7 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
               className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {(loading || isPending) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {loading || isPending ? '生成中…' : `生成视频 · ${calcVideoCost(fragment, videoParams, videoModels, durationOverride)}积分`}
+              {loading || isPending ? '生成中…' : `生成视频 · ${calcVideoCost(fragment, videoParams, videoModels, durationOverride)}A豆`}
             </button>
           )}
 
@@ -650,7 +650,7 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
                       className={`text-left px-2 py-1 rounded text-xs transition-colors ${videoParams.model === m.code ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     >
                       {m.name}
-                      <span className="ml-1 opacity-60">{getCreditsPerSec(m.code, videoModels)}积分/秒</span>
+                      <span className="ml-1 opacity-60">{getCreditsPerSec(m.code, videoModels)}A豆/秒</span>
                     </button>
                   ))}
                 </div>
@@ -695,7 +695,7 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
             className="w-full flex items-center justify-center gap-2 text-xs bg-primary text-primary-foreground py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {batchRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-            {batchRunning ? '批量生成中…' : `批量生成 (${batchEligibleCount}) · ${batchEligibleFragments.reduce((sum, fragment) => sum + calcVideoCost(fragment, videoParams, videoModels, fragmentDurations[fragment.id]), 0)}积分`}
+            {batchRunning ? '批量生成中…' : `批量生成 (${batchEligibleCount}) · ${batchEligibleFragments.reduce((sum, fragment) => sum + calcVideoCost(fragment, videoParams, videoModels, fragmentDurations[fragment.id]), 0)}A豆`}
           </button>
         )}
 

@@ -127,7 +127,7 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
     toast.success('已保存为默认参数')
   }
 
-  const estimatedCredits = avatarAudio ? `${Math.ceil(avatarAudio.duration) * 50} 积分` : '50 积分/秒'
+  const estimatedCredits = avatarAudio ? `${Math.ceil(avatarAudio.duration) * 50} A豆` : '50 A豆/秒'
   const isDisabled = isAvatarGenerating || !!disabled
 
   return (

@@ -17,7 +17,7 @@ export const ERROR_CODE_MAP: Record<string, string> = {
   ALREADY_EXISTS: '资源已存在',
 
   // 业务逻辑
-  INSUFFICIENT_CREDITS: '积分不足，请充值后继续',
+  INSUFFICIENT_CREDITS: 'A豆不足，请充值后继续',
   TOO_MANY_PENDING: '待处理任务过多，请等待完成后再提交',
   RATE_LIMITED: '请求过于频繁，请稍后再试',
   PROMPT_BLOCKED: '提示词包含敏感内容，请修改后重试',
@@ -65,7 +65,7 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /bad gateway|502/i, message: '网关错误，请稍后重试' },
 
   // 业务逻辑
-  { pattern: /insufficient (credits|balance)/i, message: '积分不足' },
+  { pattern: /insufficient (credits|balance)/i, message: 'A豆不足' },
   { pattern: /quota exceeded|limit exceeded/i, message: '已超出配额限制' },
   { pattern: /rate limit/i, message: '请求过于频繁，请稍后再试' },
 

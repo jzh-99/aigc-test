@@ -308,7 +308,7 @@ function HistoryTab({
               {batch.actual_credits != null && (
                 <>
                   <span>·</span>
-                  <span>{batch.actual_credits} 积分</span>
+                  <span>{batch.actual_credits} A豆</span>
                 </>
               )}
               <span className="ml-auto">

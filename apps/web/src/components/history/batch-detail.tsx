@@ -111,7 +111,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
     setCancelling(true)
     try {
       await cancelSeedanceBatch(batch.id)
-      toast.success('任务已取消，积分已退回')
+      toast.success('任务已取消，A豆已退回')
       onCancelled?.()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '取消任务失败')
@@ -207,7 +207,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
           <p className="font-medium">{MODEL_DISPLAY_NAMES[batch.model] ?? batch.model}</p>
         </div>
         <div>
-          <p className="text-muted-foreground">积分</p>
+          <p className="text-muted-foreground">A豆</p>
           <p className="font-medium">{batch.actual_credits || batch.estimated_credits}</p>
         </div>
         {batch.user && (

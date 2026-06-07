@@ -107,7 +107,7 @@ export function Topbar({ title }: TopbarProps) {
               <DropdownMenuItem asChild>
                 <Link href="/credits">
                   <Coins className="mr-2 h-4 w-4" />
-                  积分管理
+                  A豆管理
                 </Link>
               </DropdownMenuItem>
             )}

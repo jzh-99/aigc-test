@@ -41,7 +41,7 @@ export default function CreditsPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-semibold">积分管理</h1>
+        <h1 className="text-2xl font-semibold">A豆管理</h1>
         <p className="text-muted-foreground">查看个人余额、充值和消费记录</p>
       </div>
 

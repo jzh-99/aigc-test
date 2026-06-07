@@ -220,7 +220,7 @@ function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isP
               const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
               const price = model ? getPriceByResolution(model, resolution) : 10
               const label = item.urls.length > 0 ? '重新生成' : '生成参考图'
-              return `${label} · ${price * imageParams.quantity}积分`
+              return `${label} · ${price * imageParams.quantity}A豆`
             })()}
           </button>
           <label className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1.5 border rounded-lg transition-colors">
@@ -545,7 +545,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
                         className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.characterModel === m.code ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                       >
                         {m.name}
-                        <span className="ml-1 opacity-60">{price}积分/张</span>
+                        <span className="ml-1 opacity-60">{price}A豆/张</span>
                       </button>
                     )
                   })}
@@ -580,7 +580,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
                         className={`text-left px-2 py-1 rounded text-xs transition-colors ${imageParams.sceneModel === m.code ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                       >
                         {m.name}
-                        <span className="ml-1 opacity-60">{price}积分/张</span>
+                        <span className="ml-1 opacity-60">{price}A豆/张</span>
                       </button>
                     )
                   })}
@@ -631,7 +631,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
               const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
               return sum + (model ? getPriceByResolution(model, resolution) : 10) * imageParams.quantity
             }, 0)
-            return `批量生成全部 (${localItems.length}) · ${total}积分`
+            return `批量生成全部 (${localItems.length}) · ${total}A豆`
           })()}
         </button>
 

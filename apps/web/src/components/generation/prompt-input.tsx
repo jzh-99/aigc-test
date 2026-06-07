@@ -116,7 +116,7 @@ export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
         <div className="ml-auto flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <Coins className="h-4 w-4 text-accent-orange" />
-            <span>{estimatedCredits} 积分</span>
+            <span>{estimatedCredits} A豆</span>
           </div>
           <Button
             variant="gradient"

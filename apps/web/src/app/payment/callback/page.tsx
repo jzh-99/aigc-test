@@ -38,7 +38,7 @@ function PaymentCallbackContent() {
           <>
             <CheckCircle2 className="h-12 w-12 text-green-500" />
             <h1 className="text-xl font-semibold">支付成功</h1>
-            <p className="text-muted-foreground text-sm">积分将在几秒内到账</p>
+            <p className="text-muted-foreground text-sm">A豆将在几秒内到账</p>
             <Button onClick={() => router.push('/')}>返回首页</Button>
           </>
         )}

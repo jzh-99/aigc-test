@@ -579,9 +579,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
       const message = err instanceof Error ? err.message : '执行失败'
       const code = err instanceof CanvasApiError ? err.code : undefined
       const isSubmitFail = message.includes('视频生成服务暂时不可用') || message.includes('任务创建失败')
-      const displayMessage = isSubmitFail ? `${message}（积分已退回）` : message
+      const displayMessage = isSubmitFail ? `${message}（A豆已退回）` : message
       toast.error(displayMessage)
-      setNodeError(node.id, isSubmitFail ? '提交失败，积分已退回' : message, code)
+      setNodeError(node.id, isSubmitFail ? '提交失败，A豆已退回' : message, code)
     } finally {
       setExecuting(false)
     }

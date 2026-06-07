@@ -33,7 +33,7 @@ export default function AdminPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">管理后台</h1>
-        <p className="text-muted-foreground">管理所有团队、用户和积分</p>
+        <p className="text-muted-foreground">管理所有团队、用户和A豆</p>
       </div>
 
       <div className="flex gap-1 border-b">

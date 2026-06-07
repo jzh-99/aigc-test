@@ -25,7 +25,7 @@ export default function TeamPage() {
   const tabs = [
     { key: 'members' as TabKey, label: '成员管理' },
     { key: 'workspaces' as TabKey, label: '工作区管理' },
-    ...(isOwner ? [{ key: 'credits' as TabKey, label: '积分设置' }] : []),
+    ...(isOwner ? [{ key: 'credits' as TabKey, label: 'A豆设置' }] : []),
   ]
 
   if (!activeTeamId) {

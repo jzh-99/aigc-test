@@ -116,7 +116,7 @@ export function VideoParams({
                             )}
                             <div className="flex items-center gap-1 text-xs font-medium text-primary mt-0.5">
                               <Coins className="h-3 w-3" />
-                              {isModelSeedance ? `${minPrice} 积分/秒` : `${minPrice} 积分/次`}
+                              {isModelSeedance ? `${minPrice} A豆/秒` : `${minPrice} A豆/次`}
                             </div>
                           </div>
                         </div>
@@ -235,7 +235,7 @@ export function VideoParams({
         <div className="flex-1" />
         <div className="flex items-center gap-1.5 text-sm font-medium">
           <Coins className="h-4 w-4 text-amber-500" />
-          <span>{estimatedCredits} 积分</span>
+          <span>{estimatedCredits} A豆</span>
         </div>
         <Button variant="gradient" size="lg" className="gap-2 px-8" onClick={onGenerate} disabled={isDisabled || promptEmpty}>
           {isUploading ? <><Loader2 className="h-4 w-4 animate-spin" />上传中...</>

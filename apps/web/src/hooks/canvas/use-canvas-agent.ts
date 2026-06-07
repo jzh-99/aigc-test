@@ -166,7 +166,7 @@ export function estimateStepCredits(step: AgentStep, params: StepParams): number
     const node = nodes.find((n) => n.id === id)
     if (!node) return total
     if (node.type === 'image_gen' && isImageGenConfig(node.data.config)) {
-      // 积分从 params_pricing 读取，此处无法访问 DB 模型，返回 0 作为占位
+      // A豆从 params_pricing 读取，此处无法访问 DB 模型，返回 0 作为占位
       return total + 0
     }
     if (node.type === 'video_gen' || node.type === 'video_stitch') {

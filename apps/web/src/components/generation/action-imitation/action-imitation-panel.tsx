@@ -111,7 +111,7 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
     }
   }
 
-  const estimatedCredits = actionVideo ? `${Math.ceil(actionVideo.duration) * 20} 积分` : '20 积分/秒'
+  const estimatedCredits = actionVideo ? `${Math.ceil(actionVideo.duration) * 20} A豆` : '20 A豆/秒'
   const isDisabled = isActionGenerating || !!disabled
 
   return (

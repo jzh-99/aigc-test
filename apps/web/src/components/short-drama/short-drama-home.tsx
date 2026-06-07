@@ -398,7 +398,7 @@ export function ShortDramaHome() {
 
               <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
-                  创建项目后将消耗少量积分用于 AI 文本生成
+                  创建项目后将消耗少量A豆用于 AI 文本生成
                 </p>
                 <Button
                   onClick={handleSubmit}

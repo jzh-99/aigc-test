@@ -38,7 +38,7 @@ export function StatsCards() {
   if (isOwnerOrAdmin) {
     const balance = teamData?.credits?.balance ?? 0
     const frozen = teamData?.credits?.frozen_credits ?? 0
-    creditLabel = '可用积分'
+    creditLabel = '可用A豆'
     creditValue = Math.max(0, balance - frozen)
   } else {
     // Editor: show personal remaining = credit_quota - credit_used, min 0
@@ -50,7 +50,7 @@ export function StatsCards() {
       const frozen = teamData?.credits?.frozen_credits ?? 0
       creditValue = Math.max(0, balance - frozen)
     }
-    creditLabel = '可用积分'
+    creditLabel = '可用A豆'
   }
 
   // Editor quota details for subtitle

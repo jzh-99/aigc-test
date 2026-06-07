@@ -105,7 +105,7 @@ export function TopupModal({ open, onClose, teamId }: TopupModalProps) {
                     {p.tag}
                   </Badge>
                 )}
-                <div className="text-sm font-semibold">{p.credits.toLocaleString()} 积分</div>
+                <div className="text-sm font-semibold">{p.credits.toLocaleString()} A豆</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   ¥{(p.amount_fen / 100).toFixed(2)}
                   {p.type === 'monthly' && <span className="ml-0.5">/月</span>}

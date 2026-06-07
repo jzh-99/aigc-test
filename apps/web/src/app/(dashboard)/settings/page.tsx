@@ -224,7 +224,7 @@ export default function SettingsPage() {
                 <span className="font-medium">{activeTeam.owner.username}</span>
                 <span className="text-muted-foreground ml-2">{activeTeam.owner.email}</span>
               </p>
-              <p className="text-xs text-muted-foreground">如需调整积分配额或权限，请联系团队负责人</p>
+              <p className="text-xs text-muted-foreground">如需调整A豆配额或权限，请联系团队负责人</p>
             </div>
           </CardContent>
         </Card>

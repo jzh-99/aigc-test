@@ -106,7 +106,7 @@ function ModelList({ models, onEdit }: ModelListProps): React.ReactElement {
           <th className="text-left py-2 px-2 font-medium">描述</th>
           <th className="text-left py-2 px-2 font-medium">Code</th>
           <th className="text-left py-2 px-2 font-medium">提供商</th>
-          {/* <th className="text-right py-2 px-2 font-medium">积分消耗</th> */}
+          {/* <th className="text-right py-2 px-2 font-medium">A豆消耗</th> */}
           <th className="text-left py-2 px-2 font-medium">状态</th>
           <th className="text-right py-2 px-2 font-medium">操作</th>
         </tr>

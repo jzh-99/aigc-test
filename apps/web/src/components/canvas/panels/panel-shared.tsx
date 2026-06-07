@@ -108,7 +108,7 @@ export function PopoverSelect({
 }
 
 // ─── ExecuteButton ──────────────────────────────────────────────────────────
-// 圆形执行按钮 + 积分气泡
+// 圆形执行按钮 + A豆气泡
 
 interface ExecuteButtonProps {
   icon: React.ReactNode

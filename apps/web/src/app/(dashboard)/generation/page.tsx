@@ -127,14 +127,14 @@ export default function ImagePage() {
     batchListRef.current?.update(batch)
     batchListRef.current?.refresh()
     setTimeout(() => { batchListRef.current?.refresh() }, 800)
-    // 任务结束后刷新积分余额（积分已确认扣除或退还）
+    // 任务结束后刷新A豆余额（A豆已确认扣除或退还）
     if (activeTeamIdRef.current) mutate(`/teams/${activeTeamIdRef.current}`)
   }, [])
 
   const handleBatchCreated = useCallback((batch: BatchResponse) => {
     batchListRef.current?.prepend(batch)
     setActiveBatchIds((prev) => new Set(prev).add(batch.id))
-    // 提交后立即刷新积分（积分已冻结）
+    // 提交后立即刷新A豆（A豆已冻结）
     if (activeTeamId) mutate(`/teams/${activeTeamId}`)
   }, [activeTeamId])
 
@@ -188,7 +188,7 @@ export default function ImagePage() {
             <AlertDescription>
               {isOwnerOrAdmin
                 ? 'A豆余额不足，请充值后再继续生成。'
-                : '你的可用积分已耗尽，请联系团队负责人增加你的积分配额。'
+                : '你的可用A豆已耗尽，请联系团队负责人增加你的A豆配额。'
               }
             </AlertDescription>
           </Alert>

@@ -52,7 +52,7 @@ export function GuideStepCard({ step, onConfirm, disabled, completed, imageModel
   const isSeedance = isVideo && (params.videoModel ?? '').startsWith('seedance-')
   const aspectRatios = isSeedance ? VIDEO_ASPECT_RATIOS_SEEDANCE : VIDEO_ASPECT_RATIOS_VEO
 
-  // 积分估算：从 params_pricing 读取
+  // A豆估算：从 params_pricing 读取
   const credits = useMemo(() => {
     if (isImage && selectedImageModel) {
       const price = getPriceByResolution(selectedImageModel, params.resolution ?? '2k')
@@ -188,7 +188,7 @@ export function GuideStepCard({ step, onConfirm, disabled, completed, imageModel
           {credits > 0 && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
               <Zap className="w-3 h-3 text-yellow-500" />
-              <span>预计消耗 <span className="text-foreground font-medium">{credits}</span> 积分</span>
+              <span>预计消耗 <span className="text-foreground font-medium">{credits}</span> A豆</span>
             </div>
           )}
         </div>

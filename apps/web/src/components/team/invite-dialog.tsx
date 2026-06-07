@@ -67,7 +67,7 @@ export function InviteDialog({
 
     const quota = parseInt(creditQuota, 10)
     if (isNaN(quota) || quota < 0) {
-      toast.error('积分上限必须是非负整数')
+      toast.error('A豆上限必须是非负整数')
       return
     }
 

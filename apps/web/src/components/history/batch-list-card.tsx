@@ -383,7 +383,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
             </div>
           </div>
           <div className="text-right shrink-0">
-            <p className="text-xs text-muted-foreground">积分</p>
+            <p className="text-xs text-muted-foreground">A豆</p>
             <p className="text-sm font-medium">{batch.actual_credits || batch.estimated_credits}</p>
           </div>
         </div>
@@ -400,7 +400,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
             <div className="flex h-16 w-full items-center gap-2 rounded-md bg-destructive/10 px-3">
               <Video className="h-4 w-4 shrink-0 text-destructive" />
               <p className="text-xs text-destructive line-clamp-2">
-                {translateTaskError(firstError)}，本次失败任务积分已退还
+                {translateTaskError(firstError)}，本次失败任务A豆已退还
               </p>
             </div>
           ) : (
@@ -427,7 +427,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               (batch.status === 'failed' || batch.status === 'partial_complete') && firstError ? (
                 <div className="flex h-16 w-full items-center gap-2 rounded-md bg-destructive/10 px-3">
                   <p className="text-xs text-destructive line-clamp-2">
-                    {translateTaskError(firstError)}，本次失败任务积分已退还
+                    {translateTaskError(firstError)}，本次失败任务A豆已退还
                   </p>
                 </div>
               ) : (
