@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { useAuthStore } from '@/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +13,16 @@ import type { CreditBalance } from '@aigc/types'
 import Link from 'next/link'
 
 interface LedgerResponse { data: LedgerRow[]; total: number }
+interface TeamMember {
+  user_id: string
+  credit_quota: number | null
+  credit_used: number
+  role: string
+}
+interface TeamInfo {
+  credits: { balance: number; frozen_credits: number }
+  members: TeamMember[]
+}
 
 export default function CreditsPage() {
   const user = useAuthStore((s) => s.user)
@@ -25,24 +35,46 @@ export default function CreditsPage() {
 
   const [page, setPage] = useState(1)
   const [topupOpen, setTopupOpen] = useState(false)
+  const [ledgerAccount, setLedgerAccount] = useState<'personal' | 'team'>(activeTeamId ? 'team' : 'personal')
+
+  useEffect(() => {
+    setLedgerAccount(activeTeamId ? 'team' : 'personal')
+    setPage(1)
+  }, [activeTeamId])
 
   const { data: balanceData } = useSWR<CreditBalance>(
     activeTeamId ? `/payment/balance?team_id=${activeTeamId}` : '/payment/balance'
   )
+  const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
 
   const { data: ledgerData, isLoading: ledgerLoading } = useSWR<LedgerResponse>(
-    `/payment/ledger?account=personal&page=${page}&limit=20`
+    activeTeamId
+      ? `/payment/ledger?account=${ledgerAccount}&team_id=${activeTeamId}&page=${page}&limit=20`
+      : `/payment/ledger?account=personal&page=${page}&limit=20`
   )
 
   const totalPages = Math.ceil((ledgerData?.total ?? 0) / 20)
 
   const canTopup = allowMemberTopup || isOwnerOrAdmin
+  const personalBalance = balanceData?.personal_balance ?? 0
+  const teamBalance = balanceData?.team_balance ?? 0
+  const teamFrozen = teamData?.credits?.frozen_credits ?? 0
+  const memberCredit = useMemo(() => {
+    if (isOwnerOrAdmin) return null
+    return teamData?.members?.find((m) => m.user_id === user?.id) ?? null
+  }, [isOwnerOrAdmin, teamData?.members, user?.id])
+  const hasMemberQuota = memberCredit?.credit_quota !== null && memberCredit?.credit_quota !== undefined
+  const availableCredits = activeTeamId
+    ? hasMemberQuota
+      ? Math.max(0, Number(memberCredit?.credit_quota ?? 0) - Number(memberCredit?.credit_used ?? 0))
+      : Math.max(0, teamBalance - teamFrozen)
+    : personalBalance
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-semibold">A豆管理</h1>
-        <p className="text-muted-foreground">查看个人余额、充值和消费记录</p>
+        <p className="text-muted-foreground">查看当前工作区可用A豆和消费记录</p>
       </div>
 
       {/* Team credits nav for owner */}
@@ -63,15 +95,20 @@ export default function CreditsPage() {
         </Link>
       )}
 
-      {/* Personal balance */}
+      {/* Current workspace balance */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">个人A豆</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">可用A豆</CardTitle>
         </CardHeader>
         <CardContent className="flex items-end justify-between">
           <div className="flex items-center gap-2">
-            <Coins className="h-5 w-5 text-blue-400" />
-            <span className="text-2xl font-bold">{(balanceData?.personal_balance ?? 0).toLocaleString()}</span>
+            <Coins className="h-5 w-5 text-accent-orange" />
+            <span className="text-2xl font-bold">{availableCredits.toLocaleString()}</span>
+            {hasMemberQuota && (
+              <span className="text-xs text-muted-foreground">
+                配额 {Number(memberCredit?.credit_quota ?? 0).toLocaleString()} · 已用 {Number(memberCredit?.credit_used ?? 0).toLocaleString()}
+              </span>
+            )}
           </div>
           {canTopup && (
             <Button size="sm" onClick={() => setTopupOpen(true)}>充值个人A豆</Button>
@@ -79,11 +116,26 @@ export default function CreditsPage() {
         </CardContent>
       </Card>
 
+      {(allowMemberTopup || personalBalance > 0) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">个人A豆</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center gap-2">
+            <Coins className="h-5 w-5 text-blue-400" />
+            <span className="text-xl font-semibold">{personalBalance.toLocaleString()}</span>
+          </CardContent>
+        </Card>
+      )}
+
       <LedgerCard
-        isOwnerOrAdmin={false}
-        activeTeamId={null}
-        ledgerAccount="personal"
-        setLedgerAccount={() => {}}
+        isOwnerOrAdmin={isOwnerOrAdmin}
+        activeTeamId={activeTeamId}
+        ledgerAccount={ledgerAccount}
+        setLedgerAccount={(account) => {
+          setLedgerAccount(account)
+          setPage(1)
+        }}
         ledgerData={ledgerData}
         ledgerLoading={ledgerLoading}
         page={page}

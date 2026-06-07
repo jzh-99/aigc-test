@@ -2,13 +2,14 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Loader2, ChevronLeft, ChevronRight, Clock, UserRound, CircleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 const TYPE_LABELS: Record<string, string> = {
   topup: '充值', subscription: '订阅', freeze: '冻结',
-  confirm: '消费', refund: '退款', bonus: '赠送', expire: '过期',
+  confirm: '消费', refund: '退回', bonus: '赠送', expire: '过期',
 }
 
 const MODULE_LABELS: Record<string, string> = {
@@ -26,6 +27,15 @@ const TYPE_COLOR: Record<string, string> = {
   topup: 'text-green-600', subscription: 'text-green-600',
   bonus: 'text-green-600', refund: 'text-green-600',
   freeze: 'text-yellow-600', confirm: 'text-red-500', expire: 'text-muted-foreground',
+}
+
+const TYPE_BADGE_CLASS: Record<string, string> = {
+  topup: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300',
+  subscription: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300',
+  bonus: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300',
+  refund: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300',
+  confirm: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300',
+  expire: 'border-border bg-muted/50 text-muted-foreground',
 }
 
 export interface LedgerRow {
@@ -92,7 +102,7 @@ export function LedgerCard({
           <p className="text-center text-muted-foreground py-10 text-sm">暂无记录</p>
         ) : (
           <>
-            <div className="divide-y">
+            <div className="divide-y divide-border/70">
               {ledgerData.data.map((row) => (
                 <LedgerRowItem key={row.id} row={row} showUser={ledgerAccount === 'team'} />
               ))}
@@ -125,38 +135,85 @@ function LedgerRowItem({ row, showUser }: { row: LedgerRow; showUser: boolean })
   const hasTask = row.module || row.model
   const isCanvas = !!row.canvas_id
   const description = row.description?.trim() ?? ''
+  const moduleLabel = MODULE_LABELS[row.module ?? ''] ?? row.module
+  const isFailureRefund = row.type === 'refund' && /失败/.test(description)
+  const typeLabel = isFailureRefund ? '失败退回' : TYPE_LABELS[row.type] ?? row.type
+  const displayDescription = isFailureRefund ? description.replace(/[：:].*$/, '') : description
+  const amountText = isFailureRefund
+    ? `退回 ${Math.abs(row.amount).toLocaleString()}`
+    : `${TYPE_SIGN[row.type]}${Math.abs(row.amount).toLocaleString()}`
+  const amountColor = isFailureRefund ? 'text-muted-foreground' : TYPE_COLOR[row.type]
+  const refundTooltip = `任务先冻结 ${Math.abs(row.amount).toLocaleString()} A豆，失败后已退回可用额度`
+  const createdAt = new Date(row.created_at).toLocaleString('zh-CN')
 
   return (
-    <div className="px-6 py-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-              {TYPE_LABELS[row.type] ?? row.type}
+    <div className="px-6 py-4 transition-colors hover:bg-muted/30">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-5">
+        <div className="min-w-0 space-y-2">
+          <div className="flex items-center gap-2.5">
+            <Badge
+              variant="outline"
+              className={cn(
+                'h-5 rounded-full px-2 text-[11px] font-medium shrink-0',
+                TYPE_BADGE_CLASS[row.type],
+              )}
+            >
+              {typeLabel}
             </Badge>
             {hasTask && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-                {isCanvas ? '画布·' : ''}{MODULE_LABELS[row.module ?? ''] ?? row.module}
+              <Badge
+                variant="secondary"
+                className="h-5 rounded-full px-2 text-[11px] font-medium shrink-0 bg-accent-orange/10 text-accent-orange border border-accent-orange/15"
+              >
+                {isCanvas ? '画布 · ' : ''}{moduleLabel}
               </Badge>
             )}
             {showUser && row.username && (
-              <span className="text-xs text-muted-foreground shrink-0">by {row.username}</span>
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                <UserRound className="h-3 w-3" />
+                {row.username}
+              </span>
             )}
           </div>
 
-          {description && (
-            <p className="text-sm text-foreground/80 truncate max-w-[520px]">{description}</p>
-          )}
+          <p className="min-w-0 truncate text-sm font-medium text-foreground">
+            {displayDescription || typeLabel}
+          </p>
 
-          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-            {row.model && <span className="font-mono">{row.model}</span>}
-            <span>{new Date(row.created_at).toLocaleString('zh-CN')}</span>
+          <div className="flex min-w-0 items-center gap-3 text-xs text-muted-foreground">
+            {row.model && (
+              <span className="min-w-0 max-w-[260px] truncate rounded bg-muted/70 px-1.5 py-0.5 font-mono text-[11px]">
+                {row.model}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+              <Clock className="h-3 w-3" />
+              {createdAt}
+            </span>
           </div>
         </div>
 
-        <span className={cn('text-sm font-medium tabular-nums shrink-0 mt-0.5', TYPE_COLOR[row.type])}>
-          {TYPE_SIGN[row.type]}{Math.abs(row.amount).toLocaleString()}
-        </span>
+        <div className="flex min-w-[72px] justify-end">
+          {isFailureRefund ? (
+            <div className={cn('flex items-center justify-end gap-1.5 text-base font-semibold tabular-nums tracking-tight', amountColor)}>
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <CircleAlert className="h-4 w-4 cursor-help text-amber-500" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  {refundTooltip}
+                </TooltipContent>
+              </Tooltip>
+              <span>
+                {amountText}
+              </span>
+            </div>
+          ) : (
+            <span className={cn('text-base font-semibold tabular-nums tracking-tight', amountColor)}>
+              {amountText}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )
