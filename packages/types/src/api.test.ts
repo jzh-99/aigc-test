@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { ACTIVE_IMAGE_CATEGORY, calculateVideoEstimatedCredits, parseCategoryReferences, validateImageReferenceLimits } from './api.js'
+import { ACTIVE_IMAGE_CATEGORY, calculateVideoEstimatedCredits, parseCategoryReferences, validateImageReferenceLimits, DEFAULT_VIDEO_AUTO_DURATION_SECS } from './api.js'
 
 describe('calculateVideoEstimatedCredits', () => {
   test('按生成视频时长和参考视频总时长共同计费', () => {
@@ -8,10 +8,19 @@ describe('calculateVideoEstimatedCredits', () => {
       generatedDuration: 5,
       referenceVideoDurations: [2.2, 3.1],
       unitPrice: 10,
-      fallbackCreditCost: 15,
     })
 
     assert.equal(credits, 110)
+  })
+
+  test('自动时长时使用默认预估秒数', () => {
+    const credits = calculateVideoEstimatedCredits({
+      generatedDuration: 0,
+      referenceVideoDurations: [],
+      unitPrice: 10,
+    })
+
+    assert.equal(credits, 10 * DEFAULT_VIDEO_AUTO_DURATION_SECS)
   })
 })
 

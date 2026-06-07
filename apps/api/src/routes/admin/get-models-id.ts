@@ -12,7 +12,7 @@ const route: FastifyPluginAsync = async (app) => {
       .select([
         'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
         'pm.category_references',
-        'pm.credit_cost', 'pm.params_pricing', 'pm.params_schema', 'pm.resolution', 'pm.is_active',
+        'pm.params_pricing', 'pm.params_schema', 'pm.resolution', 'pm.is_active',
         'p.code as provider_code',
       ])
       .where('pm.id', '=', req.params.id)

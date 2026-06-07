@@ -13,7 +13,7 @@ const route: FastifyPluginAsync = async (app) => {
       )
       .select([
         'pm.id', 'pm.code', 'pm.name', 'pm.module',
-        'pm.credit_cost', 'pm.is_active as global_is_active',
+        'pm.is_active as global_is_active',
         'p.code as provider_code',
         'tmc.is_active as team_is_active',
       ])

@@ -491,7 +491,6 @@ describe('music validation helpers', () => {
       modelId: 'model-1',
       providerCode: 'mureka',
       providerId: 'provider-1',
-      credit_cost: 99,
       params_pricing: [
         { resolution: 'inspiration_song', model: 'mureka-9', unit_price: 18 },
         { resolution: 'instrumental', model: 'mureka-9', unit_price: 15 },
@@ -520,7 +519,6 @@ describe('music validation helpers', () => {
         modelId: 'model-1',
         providerCode: 'mureka',
         providerId: 'provider-1',
-        credit_cost: 99,
         params_pricing: [
           { resolution: 'lyrics', model: 'mureka-9', unit_price: 3 },
           { resolution: 'song', model: 'mureka-9', unit_price: 12 },

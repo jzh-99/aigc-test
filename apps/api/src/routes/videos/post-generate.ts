@@ -163,7 +163,6 @@ const route: FastifyPluginAsync = async (app) => {
       .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
       .select([
         'provider_models.id as modelId',
-        'provider_models.credit_cost',
         'provider_models.params_pricing',
         'provider_models.category_references',
         'providers.code as providerCode',
@@ -192,24 +191,23 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 按秒计费：生成时长 + 参考视频总时长；duration=-1（自动）时生成部分用 credit_cost 兜底
+    // 按秒计费：生成时长 + 参考视频总时长；duration=-1（自动）时用默认秒数预估
     const durationSec = typeof params.duration === 'number' && params.duration > 0 ? params.duration : null
     const referenceVideoDurations = Array.isArray(params.reference_video_durations)
       ? params.reference_video_durations.filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
       : []
     const resolutionStr = typeof params.resolution === 'string' ? params.resolution : undefined
-    const { unitPrice } = resolveUnitPrice(providerModel.params_pricing, resolutionStr, providerModel.credit_cost)
+    const { unitPrice } = resolveUnitPrice(providerModel.params_pricing, resolutionStr)
     const estimatedCredits = calculateVideoEstimatedCredits({
       generatedDuration: durationSec,
       referenceVideoDurations,
       unitPrice,
-      fallbackCreditCost: providerModel.credit_cost,
     })
 
     // 冻结积分
     let creditAccountId: string
     try {
-      const result = await freezeCredits(teamId, userId, estimatedCredits)
+      const result = await freezeCredits(teamId, userId, estimatedCredits, '视频生成冻结')
       creditAccountId = result.creditAccountId
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Credit error'
@@ -303,7 +301,7 @@ const route: FastifyPluginAsync = async (app) => {
         }],
       })
     } catch (err) {
-      await refundCredits(teamId, creditAccountId, userId, estimatedCredits).catch(() => {})
+      await refundCredits(teamId, creditAccountId, userId, estimatedCredits, undefined, undefined, '视频生成退款').catch(() => {})
       app.log.error({ err }, 'Failed to create video batch/task')
       return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回' } })
     }

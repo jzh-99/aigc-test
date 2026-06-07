@@ -142,7 +142,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       let creditAccountId: string
       try {
-        const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits)
+        const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits, '音乐生成冻结')
         creditAccountId = frozen.creditAccountId
         app.log.info({ ...logCtx, teamId: access.teamId, creditAccountId, estimatedCredits: credits.estimatedCredits }, 'Music generate credits frozen')
       } catch (error) {
@@ -268,7 +268,7 @@ const route: FastifyPluginAsync = async (app) => {
           }
         }
         try {
-          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits, created?.task.id, created?.batch.id)
+          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits, created?.task.id, created?.batch.id, '音乐生成退款')
         } catch (refundError) {
           app.log.error({ err: refundError }, 'Failed to refund music credits after task creation failure')
         }

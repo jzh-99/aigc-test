@@ -9,7 +9,6 @@ const VIDEO_MODEL_FIXTURE = {
   description: null,
   module: 'video',
   provider_code: 'volcengine',
-  credit_cost: 12,
   resolution: null,
   is_active: true,
   params_pricing: [
@@ -55,7 +54,6 @@ const IMAGE_MODEL_FIXTURE = {
   description: null,
   module: 'image',
   provider_code: 'gemini',
-  credit_cost: 5,
   resolution: null,
   is_active: true,
   params_pricing: [
@@ -93,7 +91,6 @@ const TTS_MODEL_FIXTURE = {
   description: null,
   module: 'tts',
   provider_code: 'minimax',
-  credit_cost: 1,
   resolution: null,
   is_active: true,
   params_pricing: [

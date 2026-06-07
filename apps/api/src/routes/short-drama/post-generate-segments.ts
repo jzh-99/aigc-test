@@ -18,8 +18,8 @@ import {
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 
-// 保守预估：每次文本生成预冻结 25 积分（片段脚本通常较长）
-const ESTIMATED_CREDITS = 25
+// 保守预估：片段脚本输入+输出均计费，输入较长，预冻结 40 积分
+const ESTIMATED_CREDITS = 40
 const EPISODE_TARGET_DURATION_SECONDS = 120
 const EPISODE_MIN_DURATION_SECONDS = 110
 const EPISODE_MAX_DURATION_SECONDS = 130
@@ -94,7 +94,7 @@ const route: FastifyPluginAsync = async (app) => {
     // 预冻结积分
     let creditAccountId: string
     try {
-      const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS)
+      const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS, '短剧片段脚本冻结')
       creditAccountId = freezeResult.creditAccountId
     } catch (error) {
       await releaseRedisLock(app.redis, generationLock)
@@ -459,8 +459,8 @@ const route: FastifyPluginAsync = async (app) => {
         ? 'generating'
         : 'completed'
 
-    // 计算实际积分消耗
-    const actualCredits = calculateTextGenerationCredits(aiResponse)
+    // 计算实际积分消耗（输入 + 输出字符均计费）
+    const actualCredits = calculateTextGenerationCredits(REDACTED + userPrompt, aiResponse)
 
     // 原子化保存状态并结算积分
     let settledCredits: number

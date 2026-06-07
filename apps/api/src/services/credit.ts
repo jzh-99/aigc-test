@@ -18,6 +18,7 @@ export async function freezeCredits(
   teamId: string,
   userId: string,
   amount: number,
+  description?: string,
 ): Promise<{ creditAccountId: string }> {
   const db = getDb()
 
@@ -96,7 +97,7 @@ export async function freezeCredits(
         user_id: userId,
         amount: -amount,
         type: 'freeze',
-        description: '图片生成冻结积分',
+        description: description ?? '积分冻结',
       })
       .execute()
 
@@ -113,6 +114,7 @@ export async function confirmCredits(
   amount: number,
   taskId?: string,
   batchId?: string,
+  description?: string,
 ): Promise<void> {
   const db = getDb()
 
@@ -136,7 +138,7 @@ export async function confirmCredits(
         type: 'confirm',
         task_id: taskId ?? null,
         batch_id: batchId ?? null,
-        description: '任务完成确认扣费',
+        description: description ?? '任务完成确认扣费',
       })
       .execute()
   })
@@ -152,6 +154,7 @@ export async function refundCredits(
   amount: number,
   taskId?: string,
   batchId?: string,
+  description?: string,
 ): Promise<void> {
   const db = getDb()
 
@@ -184,7 +187,7 @@ export async function refundCredits(
         type: 'refund',
         task_id: taskId ?? null,
         batch_id: batchId ?? null,
-        description: '任务失败退回积分',
+        description: description ?? '任务失败退回积分',
       })
       .execute()
   })

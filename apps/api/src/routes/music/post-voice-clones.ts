@@ -130,7 +130,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       let creditAccountId: string
       try {
-        const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits)
+        const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits, '音色克隆冻结')
         creditAccountId = frozen.creditAccountId
       } catch (error) {
         const message = getExpectedCreditErrorMessage(error)
@@ -241,7 +241,7 @@ const route: FastifyPluginAsync = async (app) => {
         }
         await cleanupUploadedAudio(sourceAudioUrl, app.log)
         try {
-          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits, created?.task.id, created?.batch.id)
+          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits, created?.task.id, created?.batch.id, '音色克隆退款')
         } catch (refundError) {
           app.log.error({ err: refundError }, 'Failed to refund music voice clone credits')
         }

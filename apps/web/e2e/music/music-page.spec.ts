@@ -33,7 +33,6 @@ test.describe('music page', () => {
             description: '高质量音乐生成模型',
             module: 'music',
             category_references: {},
-            credit_cost: 18,
             params_pricing: [
               { resolution: 'inspiration_song', model: 'mureka-9', unit_price: 18 },
               { resolution: 'instrumental', model: 'mureka-9', unit_price: 15 },

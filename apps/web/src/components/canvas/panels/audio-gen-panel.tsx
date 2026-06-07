@@ -65,7 +65,7 @@ export function AudioGenPanel({
   const [demoLoadingId, setDemoLoadingId] = useState<string | null>(null)
 
   const currentDbModel = models?.find((item) => item.code === model)
-  const unitPrice = currentDbModel ? getPriceByResolution(currentDbModel, 'default', currentDbModel.credit_cost) : 0
+  const unitPrice = currentDbModel ? getPriceByResolution(currentDbModel, 'default') : 0
   const characterCount = countTtsCharacters(textDraft)
   const estimatedCredits = calculateTtsCredits(characterCount, unitPrice)
 
@@ -99,7 +99,7 @@ export function AudioGenPanel({
   const modelOptions = (models ?? []).map((item) => ({
     value: item.code,
     label: item.name,
-    hint: `${getPriceByResolution(item, 'default', item.credit_cost)}/千字`,
+    hint: `${getPriceByResolution(item, 'default')}/千字`,
   }))
 
   return (

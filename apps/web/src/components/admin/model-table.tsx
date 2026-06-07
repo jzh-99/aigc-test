@@ -120,7 +120,6 @@ function ModelList({ models, onEdit }: ModelListProps): React.ReactElement {
             </td>
             <td className="py-2 px-2 text-muted-foreground font-mono">{model.code}</td>
             <td className="py-2 px-2 text-muted-foreground">{model.provider_code}</td>
-            {/* <td className="py-2 px-2 text-right">{model.credit_cost.toLocaleString()}</td> */}
             <td className="py-2 px-2">
               <Badge
                 variant={model.is_active ? 'success' : 'outline'}

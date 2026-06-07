@@ -218,7 +218,7 @@ function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isP
               const modelCode = item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel
               const model = imageModels.find((m) => m.code === modelCode)
               const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
-              const price = model ? getPriceByResolution(model, resolution, 10) : 10
+              const price = model ? getPriceByResolution(model, resolution) : 10
               const label = item.urls.length > 0 ? '重新生成' : '生成参考图'
               return `${label} · ${price * imageParams.quantity}积分`
             })()}
@@ -534,7 +534,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
                 <p className="text-[11px] text-muted-foreground">人物模型</p>
                 <div className="grid grid-cols-1 gap-1">
                   {imageModels.filter((m) => m.code.startsWith('seedream-5.0')).map((m) => {
-                    const price = getPriceByResolution(m, imageParams.characterResolution, 10)
+                    const price = getPriceByResolution(m, imageParams.characterResolution)
                     return (
                       <button
                         key={m.code}
@@ -569,7 +569,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
                 <p className="text-[11px] text-muted-foreground">场景模型</p>
                 <div className="grid grid-cols-1 gap-1">
                   {imageModels.filter((m) => !m.code.startsWith('seedream-5.0')).map((m) => {
-                    const price = getPriceByResolution(m, imageParams.sceneResolution, 10)
+                    const price = getPriceByResolution(m, imageParams.sceneResolution)
                     return (
                       <button
                         key={m.code}
@@ -629,7 +629,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
               const modelCode = item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel
               const model = imageModels.find((m) => m.code === modelCode)
               const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
-              return sum + (model ? getPriceByResolution(model, resolution, 10) : 10) * imageParams.quantity
+              return sum + (model ? getPriceByResolution(model, resolution) : 10) * imageParams.quantity
             }, 0)
             return `批量生成全部 (${localItems.length}) · ${total}积分`
           })()}

@@ -379,7 +379,6 @@ const route: FastifyPluginAsync = async (app) => {
       .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
       .select([
         'provider_models.id as modelId',
-        'provider_models.credit_cost',
         'provider_models.params_pricing',
         'provider_models.category_references',
         'providers.code as providerCode',
@@ -447,7 +446,7 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     const resolution = (params as Record<string, unknown> | undefined)?.resolution as string | undefined
-    const { unitPrice, resolvedModel } = resolveUnitPrice(providerModel.params_pricing, resolution, providerModel.credit_cost)
+    const { unitPrice, resolvedModel } = resolveUnitPrice(providerModel.params_pricing, resolution)
     // params_pricing 命中时用底层模型 code 替换请求中的 model
     const actualModel = resolvedModel ?? model
     const totalCost = unitPrice * quantity
@@ -455,7 +454,7 @@ const route: FastifyPluginAsync = async (app) => {
     // 冻结积分
     let creditAccountId: string
     try {
-      const result = await freezeCredits(teamId, userId, totalCost)
+      const result = await freezeCredits(teamId, userId, totalCost, '图片生成冻结')
       creditAccountId = result.creditAccountId
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Credit error'
@@ -510,7 +509,7 @@ const route: FastifyPluginAsync = async (app) => {
           batch_id: batchResult.id,
           user_id: userId,
           version_index: i,
-          estimated_credits: providerModel.credit_cost,
+          estimated_credits: unitPrice,
           status: 'pending' as const,
         }))
 
@@ -554,7 +553,7 @@ const route: FastifyPluginAsync = async (app) => {
         canvasId: canvas_id,
       })
       try {
-        await refundCredits(teamId, creditAccountId, userId, totalCost)
+        await refundCredits(teamId, creditAccountId, userId, totalCost, undefined, undefined, '图片生成退款')
       } catch (refundErr) {
         app.log.error({ refundErr }, 'CRITICAL: Failed to refund credits after batch creation failure')
       }

@@ -14,8 +14,8 @@ import {
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 
-// 保守预估：每个素材描述批次预冻结 15 积分
-const ESTIMATED_CREDITS = 15
+// 保守预估：每个素材描述批次输入+输出均计费，预冻结 25 积分
+const ESTIMATED_CREDITS = 25
 const ASSET_PROMPT_BATCH_MAX_TOKENS = 5000
 
 function parseAssetPromptBatch(aiResponse: string): ShortDramaAssetPromptInput[] {
@@ -160,7 +160,7 @@ const route: FastifyPluginAsync = async (app) => {
         let creditAccountId: string
 
         try {
-          const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS)
+          const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS, '短剧素材描述冻结')
           creditAccountId = freezeResult.creditAccountId
         } catch (error) {
           stoppedByBalance = true
@@ -314,7 +314,7 @@ const route: FastifyPluginAsync = async (app) => {
 
           const previousState = JSON.parse(JSON.stringify(state)) as typeof state
           const assets = parseAssetPromptBatch(aiResponse)
-          const actualCredits = calculateTextGenerationCredits(aiResponse)
+          const actualCredits = calculateTextGenerationCredits(systemPrompt + userPrompt, aiResponse)
           applyShortDramaAssetPromptsBatchResult(state, assets, batch.to)
 
           try {

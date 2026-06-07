@@ -48,7 +48,7 @@ export function ImageParams({
   const availableResolutions = extractSchemaEnums(currentDbModel?.params_schema, 'resolution')
 
   const unitPrice = currentDbModel
-    ? getPriceByResolution(currentDbModel, resolution, currentDbModel.credit_cost ?? 5)
+    ? getPriceByResolution(currentDbModel, resolution)
     : 0
 
   const estimatedCredits = unitPrice * quantity
@@ -77,7 +77,7 @@ export function ImageParams({
                 {(models ?? []).map((m) => {
                   const minPrice = m.params_pricing.length > 0
                     ? Math.min(...m.params_pricing.map((r) => r.unit_price))
-                    : m.credit_cost
+                    : 0
                   return (
                     <SelectItem key={m.code} value={m.code} className="py-2">
                       <div className="flex items-start gap-3">

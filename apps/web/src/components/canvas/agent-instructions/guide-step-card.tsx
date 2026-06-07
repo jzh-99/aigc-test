@@ -55,7 +55,7 @@ export function GuideStepCard({ step, onConfirm, disabled, completed, imageModel
   // 积分估算：从 params_pricing 读取
   const credits = useMemo(() => {
     if (isImage && selectedImageModel) {
-      const price = getPriceByResolution(selectedImageModel, params.resolution ?? '2k', 5)
+      const price = getPriceByResolution(selectedImageModel, params.resolution ?? '2k')
       return step.nodeIds.length * price
     }
     if (isVideo && selectedVideoModel) {

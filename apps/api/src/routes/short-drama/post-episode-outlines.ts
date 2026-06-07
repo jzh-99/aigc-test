@@ -13,8 +13,8 @@ import {
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 
-// 保守预估：分集分场剧本需要支撑约 2 分钟成片
-const ESTIMATED_CREDITS = 50
+// 保守预估：分集分场剧本输入+输出均计费，每批 5 集预冻结 70 积分
+const ESTIMATED_CREDITS = 70
 const OUTLINE_BATCH_MAX_TOKENS = 16000
 
 function parseEpisodeOutlineBatch(
@@ -170,7 +170,7 @@ const route: FastifyPluginAsync = async (app) => {
         let creditAccountId: string
 
         try {
-          const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS)
+          const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS, '短剧分集大纲冻结')
           creditAccountId = freezeResult.creditAccountId
         } catch (error) {
           stoppedByBalance = true
@@ -226,7 +226,7 @@ const route: FastifyPluginAsync = async (app) => {
 
           const previousState = JSON.parse(JSON.stringify(state)) as typeof state
           const outlines = parseEpisodeOutlineBatch(aiResponse, batch.from, batch.to)
-          const actualCredits = calculateTextGenerationCredits(aiResponse)
+          const actualCredits = calculateTextGenerationCredits(systemPrompt + userPrompt, aiResponse)
           applyShortDramaEpisodeOutlinesBatchResult(state, outlines)
 
           try {

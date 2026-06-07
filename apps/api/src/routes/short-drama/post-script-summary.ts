@@ -13,8 +13,8 @@ import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { buildShortDramaScriptSummaryPrompts, getShortDramaSummarySourceText } from './_script-source.js'
 
-// 保守预估：结构化剧集设定内容较长，预冻结 25 积分
-const ESTIMATED_CREDITS = 25
+// 保守预估：结构化剧集设定内容较长，输入+输出均计费，预冻结 35 积分
+const ESTIMATED_CREDITS = 35
 
 const route: FastifyPluginAsync = async (app) => {
   app.post<{
@@ -66,7 +66,7 @@ const route: FastifyPluginAsync = async (app) => {
     // 预冻结积分
     let creditAccountId: string
     try {
-      const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS)
+      const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS, '短剧剧本摘要冻结')
       creditAccountId = freezeResult.creditAccountId
     } catch (error) {
       await releaseRedisLock(app.redis, generationLock)
@@ -137,7 +137,7 @@ const route: FastifyPluginAsync = async (app) => {
         episodeCount = validateShortDramaEpisodeCount(parsed.episodeCount, 'upload')
       }
 
-      const actualCredits = calculateTextGenerationCredits(aiResponse)
+      const actualCredits = calculateTextGenerationCredits(systemPrompt + userPrompt, aiResponse)
       applyShortDramaScriptSummaryResult(state, {
         title: parsed.title,
         summary: parsed.summary,

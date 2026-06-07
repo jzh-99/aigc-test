@@ -299,13 +299,14 @@ export async function saveShortDramaProjectState(
 // ============================================================================
 
 /**
- * 计算文本生成消耗的积分
+ * 计算文本生成消耗的积分（输入 + 输出字符数）
+ * @param inputText - 发送给 AI 的输入文本（system prompt + user prompt）
  * @param outputText - AI 输出的文本
  * @returns 消耗的积分数
  */
-export function calculateTextGenerationCredits(outputText: string): number {
-  const charCount = outputText.length
-  return calculateShortDramaTextCredits(charCount, TEXT_CREDITS_PER_THOUSAND_CHARS)
+export function calculateTextGenerationCredits(inputText: string, outputText: string): number {
+  const totalChars = inputText.length + outputText.length
+  return calculateShortDramaTextCredits(totalChars, TEXT_CREDITS_PER_THOUSAND_CHARS)
 }
 
 export function buildShortDramaOutlineBatches(
@@ -664,7 +665,7 @@ export async function safeRefundCredits(
 ): Promise<void> {
   try {
     const { refundCredits } = await import('../../services/credit.js')
-    await refundCredits(teamId, creditAccountId, userId, amount)
+    await refundCredits(teamId, creditAccountId, userId, amount, undefined, undefined, `短剧退款（${context}）`)
   } catch (refundError) {
     app.log.error(
       { refundError, projectId, creditAccountId, teamId, userId, amount, context },

@@ -88,7 +88,7 @@ export default async function postExportBatch(app: FastifyInstance): Promise<voi
       // 冻结总积分
       let creditAccountId: string
       try {
-        const result = await freezeCredits(teamId, userId, totalCost)
+        const result = await freezeCredits(teamId, userId, totalCost, '短剧批量导出冻结')
         creditAccountId = result.creditAccountId
       } catch (err) {
         const msg = err instanceof Error ? err.message : '积分不足'
@@ -163,7 +163,7 @@ export default async function postExportBatch(app: FastifyInstance): Promise<voi
       } catch (err) {
         app.log.error({ err }, 'Failed to create batch export jobs, refunding')
         try {
-          await refundCredits(teamId, creditAccountId, userId, totalCost)
+          await refundCredits(teamId, creditAccountId, userId, totalCost, undefined, undefined, '短剧批量导出退款')
         } catch (refundErr) {
           app.log.error({ refundErr }, 'CRITICAL: Failed to refund after batch export failure')
         }

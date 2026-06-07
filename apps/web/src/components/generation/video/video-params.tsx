@@ -68,7 +68,7 @@ export function VideoParams({
   const unitPrice = currentDbModel
     ? (() => {
         const resolution = videoResolution || (dbResolutions.length > 0 ? dbResolutions[0].value : '720p')
-        return getPriceByResolution(currentDbModel, resolution, currentDbModel.credit_cost)
+        return getPriceByResolution(currentDbModel, resolution)
       })()
     : 0
 
@@ -103,7 +103,7 @@ export function VideoParams({
                   {availableModels.map((m) => {
                     const minPrice = m.params_pricing.length > 0
                       ? Math.min(...m.params_pricing.map((r) => r.unit_price))
-                      : m.credit_cost
+                      : 0
                     const isModelSeedance = m.code.startsWith('seedance-')
                     return (
                       <SelectItem key={m.code} value={m.code} className="py-2">

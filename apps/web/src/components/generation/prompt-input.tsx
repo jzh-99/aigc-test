@@ -20,7 +20,7 @@ export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
   const { prompt, setPrompt, modelType, setModelType, resolution, setResolution, quantity, setQuantity, isGenerating, imageModels } = useGenerationStore()
   const currentModel = imageModels.find((m) => m.code === modelType)
   const estimatedCredits = currentModel
-    ? getPriceByResolution(currentModel, resolution, 5) * quantity
+    ? getPriceByResolution(currentModel, resolution) * quantity
     : quantity
   const showQualitySelector = modelType !== 'gpt-image-2'
   const { generate } = useGenerate()

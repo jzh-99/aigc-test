@@ -68,7 +68,7 @@ const route: FastifyPluginAsync = async (app) => {
       )
       .select([
         'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
-        'pm.category_references', 'pm.credit_cost', 'pm.params_pricing',
+        'pm.category_references', 'pm.params_pricing',
         'pm.params_schema', 'pm.resolution', 'p.code as provider_code',
         'pm.is_active as global_is_active', 'tmc.is_active as team_is_active',
       ])
@@ -90,7 +90,7 @@ const route: FastifyPluginAsync = async (app) => {
       .map((r) => normalizeModelJsonFields({
         id: r.id, code: r.code, name: r.name, description: r.description,
         module: r.module, category_references: r.category_references,
-        credit_cost: r.credit_cost, params_pricing: r.params_pricing,
+        params_pricing: r.params_pricing,
         params_schema: r.params_schema, resolution: r.resolution,
         is_active: true, provider_code: r.provider_code,
       }))

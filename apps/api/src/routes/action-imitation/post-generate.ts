@@ -40,7 +40,7 @@ const route: FastifyPluginAsync = async (app) => {
     // 从 DB 动态查询当前激活的动作模仿模型 code 及计费配置
     const actionModel = await db
       .selectFrom('provider_models')
-      .select(['code', 'credit_cost', 'params_pricing'])
+      .select(['code', 'params_pricing'])
       .where('module', '=', 'action_imitation')
       .where('is_active', '=', true)
       .executeTakeFirst()
@@ -101,15 +101,15 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 按视频时长计算积分（params_pricing 有规则时按分辨率匹配单价，否则回退 credit_cost 每秒积分）
-    const { unitPrice } = resolveUnitPrice(actionModel.params_pricing, undefined, actionModel.credit_cost)
+    // 按视频时长计算积分（从 params_pricing 规则中匹配单价）
+    const { unitPrice } = resolveUnitPrice(actionModel.params_pricing, undefined)
     const estimatedSeconds = Math.ceil(video_duration)
     const estimatedCredits = estimatedSeconds * unitPrice
 
     // 冻结积分
     let creditAccountId: string
     try {
-      const result = await freezeCredits(teamId, userId, estimatedCredits)
+      const result = await freezeCredits(teamId, userId, estimatedCredits, '动作模仿生成冻结')
       creditAccountId = result.creditAccountId
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Credit error'
@@ -164,7 +164,7 @@ const route: FastifyPluginAsync = async (app) => {
       taskId = _bt.taskId
     } catch (err) {
       app.log.error({ err }, 'Failed to create action_imitation batch/task, refunding credits')
-      try { await refundCredits(teamId, creditAccountId, userId, estimatedCredits) } catch { /* ignore */ }
+      try { await refundCredits(teamId, creditAccountId, userId, estimatedCredits, undefined, undefined, '动作模仿生成退款') } catch { /* ignore */ }
       return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回' } })
     }
 

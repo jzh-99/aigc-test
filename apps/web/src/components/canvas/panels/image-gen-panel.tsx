@@ -56,7 +56,7 @@ export function ImageGenPanel({
   const displayAspectRatios = aspectRatios.length > 0 ? aspectRatios : [...ASPECT_RATIOS_IMAGE]
 
   const credits = currentDbModel
-    ? getPriceByResolution(currentDbModel, resolution, currentDbModel.credit_cost ?? 5)
+    ? getPriceByResolution(currentDbModel, resolution)
     : 0
 
   const showQualitySelector = modelType !== 'gpt-image-2' && resolutions.length > 1
@@ -65,7 +65,7 @@ export function ImageGenPanel({
   const modelOptions = (models ?? []).map((m) => {
     const maxReferenceImages = getMaxImageReferenceCount(m)
     const isReferenceOverLimit = orderedImageRefs.length > maxReferenceImages
-    const modelCredits = m.params_pricing[0]?.unit_price ?? m.credit_cost ?? 5
+    const modelCredits = m.params_pricing[0]?.unit_price ?? 5
     return {
       value: m.code,
       label: m.name,

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Sparkles, Check, Pencil, Save, X, Plus } from 'lucide-react'
+import { Loader2, Sparkles, Check, Pencil, Save, X, Plus, Coins } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -1331,6 +1331,12 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
           <h3 className="font-medium">剧本摘要</h3>
           {!isLocked && (
             <div className="flex items-center gap-2">
+              {!state.script.refinedPrompt && !isSummaryGenerating && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Coins className="h-3.5 w-3.5 text-amber-500" />
+                  预计 ~35 A豆
+                </span>
+              )}
               <Button size="sm" variant="outline" onClick={() => handleGenerateSummary('manual')} disabled={isSummaryGenerating || isEditingSummary}>
                 {isSummaryGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
                 {isSummaryGenerating ? '摘要生成中' : state.script.refinedPrompt ? '摘要已生成' : '生成摘要'}
@@ -1377,14 +1383,26 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
         <div className="flex items-center justify-between">
           <h3 className="font-medium">分集剧本 ({state.script.outlines.length} 集)</h3>
           {!isLocked && state.script.refinedPrompt && (
-            <Button size="sm" variant="outline" onClick={() => handleGenerateOutlines()} disabled={isOutlinesGenerating}>
-              {isOutlinesGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
-              {isOutlinesGenerating
-                ? '剧本生成中'
-                : state.script.outlines.length > 0 && state.script.outlines.length < state.settings.episodeCount
-                ? '继续生成剧本'
-                : '生成分集剧本'}
-            </Button>
+            <div className="flex items-center gap-2">
+              {!isOutlinesGenerating && (() => {
+                const remaining = state.settings.episodeCount - state.script.outlines.length
+                const batches = Math.ceil(remaining / 5)
+                return remaining > 0 ? (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Coins className="h-3.5 w-3.5 text-amber-500" />
+                    预计 {batches} 批 × 70 ≈ {batches * 70} A豆
+                  </span>
+                ) : null
+              })()}
+              <Button size="sm" variant="outline" onClick={() => handleGenerateOutlines()} disabled={isOutlinesGenerating}>
+                {isOutlinesGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+                {isOutlinesGenerating
+                  ? '剧本生成中'
+                  : state.script.outlines.length > 0 && state.script.outlines.length < state.settings.episodeCount
+                  ? '继续生成剧本'
+                  : '生成分集剧本'}
+              </Button>
+            </div>
           )}
         </div>
         {streamWarningMessage && (

@@ -23,11 +23,13 @@ export interface VideoReferenceCounts {
   text: number
 }
 
+/** 视频自动时长（duration=-1）时的默认预估秒数 */
+export const DEFAULT_VIDEO_AUTO_DURATION_SECS = 5
+
 export interface VideoBillingInput {
   generatedDuration?: number | null
   referenceVideoDurations?: number[]
   unitPrice: number
-  fallbackCreditCost: number
 }
 
 function normalizePositiveSeconds(value: unknown): number {
@@ -43,9 +45,10 @@ export function calculateVideoEstimatedCredits(input: VideoBillingInput): number
   const generatedDuration = normalizePositiveSeconds(input.generatedDuration)
   const referenceDuration = calculateReferenceVideoDurationSeconds(input.referenceVideoDurations)
   const referenceCredits = referenceDuration * input.unitPrice
+  // 自动时长（duration=-1）时，用默认秒数预估；实际费用在生成完成后确认
   const generatedCredits = generatedDuration > 0
     ? generatedDuration * input.unitPrice
-    : input.fallbackCreditCost
+    : input.unitPrice * DEFAULT_VIDEO_AUTO_DURATION_SECS
 
   return generatedCredits + referenceCredits
 }
@@ -357,7 +360,6 @@ export interface ModelItem {
   description: string | null
   module: AigcModule
   category_references: CategoryReferences | unknown  // 模型支持的生成模式与参考素材数量限制
-  credit_cost: number
   params_pricing: ParamsPricingRule[]
   params_schema: unknown  // JSON Schema for frontend dynamic form rendering
   resolution: string | null

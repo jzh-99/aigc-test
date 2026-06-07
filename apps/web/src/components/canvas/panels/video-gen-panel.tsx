@@ -385,13 +385,15 @@ export function VideoGenPanel({
   const showResolutionSelector = resolutionOptions.length > 1
 
   const videoUnitPrice = currentDbModel
-    ? getPriceByResolution(currentDbModel, videoResolution || resolutionOptions[0] || '', currentDbModel.credit_cost)
+    ? getPriceByResolution(currentDbModel, videoResolution || resolutionOptions[0] || '')
     : 0
   const referenceDuration = videoMode === 'multiref' ? calculateReferenceVideoDurationSeconds(multirefVideoDurations) : 0
+  // 自动时长时用默认秒数预估（与后端 calculateVideoEstimatedCredits 逻辑一致）
+  const DEFAULT_VIDEO_AUTO_DURATION_SECS = 5
   const videoCredits = currentDbModel && isSeedance
     ? (videoDuration > 0
       ? (videoDuration + referenceDuration) * videoUnitPrice
-      : currentDbModel.credit_cost + referenceDuration * videoUnitPrice)
+      : videoUnitPrice * DEFAULT_VIDEO_AUTO_DURATION_SECS + referenceDuration * videoUnitPrice)
     : videoUnitPrice
   const imageMentionResources = mentionResources.filter((resource) => resource.type === 'image')
   const videoMentionResources = mentionResources.filter((resource) => resource.type === 'video')

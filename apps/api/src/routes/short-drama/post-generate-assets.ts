@@ -112,7 +112,6 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
         .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
         .select([
           'provider_models.id as modelId',
-          'provider_models.credit_cost',
           'provider_models.params_pricing',
           'providers.code as providerCode',
         ])
@@ -128,13 +127,13 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
         })
       }
 
-      const { unitPrice } = resolveUnitPrice(providerModel.params_pricing, null, providerModel.credit_cost)
+      const { unitPrice } = resolveUnitPrice(providerModel.params_pricing, null)
       const totalCost = unitPrice * targetAssets.length
 
       // 冻结积分
       let creditAccountId: string
       try {
-        const result = await freezeCredits(teamId, userId, totalCost)
+        const result = await freezeCredits(teamId, userId, totalCost, '短剧素材图片生成冻结')
         creditAccountId = result.creditAccountId
       } catch (err) {
         const msg = err instanceof Error ? err.message : '积分不足'
@@ -260,7 +259,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
       } catch (err) {
         app.log.error({ err }, 'Failed to create asset generation batch, refunding')
         try {
-          await refundCredits(teamId, creditAccountId, userId, totalCost)
+          await refundCredits(teamId, creditAccountId, userId, totalCost, undefined, undefined, '短剧素材图片生成退款')
         } catch (refundErr) {
           app.log.error({ refundErr }, 'CRITICAL: Failed to refund credits after asset batch failure')
         }

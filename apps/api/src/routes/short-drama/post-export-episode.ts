@@ -92,7 +92,7 @@ export default async function postExportEpisode(app: FastifyInstance): Promise<v
       // 冻结积分
       let creditAccountId: string
       try {
-        const result = await freezeCredits(teamId, userId, exportCredits)
+        const result = await freezeCredits(teamId, userId, exportCredits, '短剧单集导出冻结')
         creditAccountId = result.creditAccountId
       } catch (err) {
         const msg = err instanceof Error ? err.message : '积分不足'
@@ -158,7 +158,7 @@ export default async function postExportEpisode(app: FastifyInstance): Promise<v
       } catch (err) {
         app.log.error({ err }, 'Failed to create export job, refunding')
         try {
-          await refundCredits(teamId, creditAccountId, userId, exportCredits)
+          await refundCredits(teamId, creditAccountId, userId, exportCredits, undefined, undefined, '短剧单集导出退款')
         } catch (refundErr) {
           app.log.error({ refundErr }, 'CRITICAL: Failed to refund after export failure')
         }

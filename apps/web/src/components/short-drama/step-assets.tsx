@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ImageIcon, Loader2, Sparkles, Check, Upload, ZoomIn } from 'lucide-react'
+import { ImageIcon, Loader2, Sparkles, Check, Upload, ZoomIn, Coins } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
@@ -383,7 +383,17 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
             ))}
           </div>
           {!isLocked && (
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              {!generatingPrompts && !isAssetPromptGenerating && processedOutlineCount < totalOutlineCount && (() => {
+                const remaining = totalOutlineCount - processedOutlineCount
+                const batches = Math.ceil(remaining / 5)
+                return (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Coins className="h-3.5 w-3.5 text-amber-500" />
+                    预计 {batches} 批 × 25 ≈ {batches * 25} A豆
+                  </span>
+                )
+              })()}
               <Button
                 size="sm"
                 variant="outline"

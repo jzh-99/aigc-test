@@ -366,7 +366,6 @@ async function main() {
       code: qwenModelCode,
       name: qwenModelCode,
       description: '画布文本节点 AI 生成、分镜拆分等文本类任务使用的 Qwen 模型',
-      credit_cost: 1,
       params_pricing: [{ resolution: 'default', model: qwenModelCode, unit_price: 1 }],
       category_references: TEXT_TO_TEXT_CATEGORY_REFERENCES,
       params_schema: {
@@ -381,8 +380,7 @@ async function main() {
       code: 'qwen3.7-max',
       name: 'qwen3.7-max',
       description: '画布文本节点 AI 生成、分镜拆分等文本类任务使用的 Qwen 模型',
-      credit_cost: 1,
-      params_pricing: [{ resolution: 'default', model: 'qwen3.7-max', unit_price: 1 }],
+      params_pricing: [{ resolution: 'default', model: 'qwen3.7-max', unit_price: 4 }],
       category_references: TEXT_TO_TEXT_CATEGORY_REFERENCES,
       params_schema: {
         endpoint: 'chat/completions',
@@ -404,7 +402,6 @@ async function main() {
         description: m.description,
         module: 'agent',
         category_references: JSON.stringify(m.category_references),
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
@@ -414,7 +411,6 @@ async function main() {
         description: m.description,
         module: 'agent',
         category_references: JSON.stringify(m.category_references),
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
@@ -499,7 +495,6 @@ async function main() {
       code: 'gemini-3.1-flash-image-preview',
       name: '全能图片2',
       description: '快速生成，适合日常使用',
-      credit_cost: 1,
       params_pricing: [
         { resolution: '1k', model: 'gemini-3.1-flash-image-preview', unit_price: 1 },
         { resolution: '2k', model: 'gemini-3.1-flash-image-preview-2k', unit_price: 1 },
@@ -516,7 +511,6 @@ async function main() {
       code: 'gpt-image-2',
       name: '超能图片2',
       description: '文字渲染准确，UI截图逼真，照片级真实感',
-      credit_cost: 2,
       params_pricing: [
         { resolution: '2k', model: 'gpt-image-2', unit_price: 2 },
       ],
@@ -531,7 +525,6 @@ async function main() {
       code: 'nano-banana-2',
       name: '全能图片Pro',
       description: '高质量输出，细节丰富',
-      credit_cost: 4,
       params_pricing: [
         { resolution: '1k', model: 'nano-banana-2', unit_price: 4 },
         { resolution: '2k', model: 'nano-banana-2-2k', unit_price: 4 },
@@ -562,7 +555,6 @@ async function main() {
         description: m.description,
         module: 'image',
         category_references: JSON.stringify(m.category_references),
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify((m.params_pricing ?? [])),
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
@@ -572,7 +564,6 @@ async function main() {
         description: m.description,
         module: 'image',
         category_references: JSON.stringify(m.category_references),
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing ?? []),
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
@@ -713,7 +704,6 @@ async function main() {
       code: 'seedream-5.0-lite',
       name: 'Seedream 5.0',
       description: '最新火山引擎模型，联网搜索增强',
-      credit_cost: 10,
       params_pricing: [
         { resolution: '2k', model: 'seedream-5.0-lite', unit_price: 4 },
         { resolution: '3k', model: 'seedream-5.0-lite', unit_price: 4 },
@@ -730,7 +720,6 @@ async function main() {
       code: 'seedream-4.5',
       name: 'Seedream 4.5',
       description: '高分辨率图像生成',
-      credit_cost: 10,
       params_pricing: [
         { resolution: '2k', model: 'seedream-4.5', unit_price: 4 },
         { resolution: '4k', model: 'seedream-4.5', unit_price: 4 },
@@ -746,7 +735,6 @@ async function main() {
       code: 'seedream-4.0',
       name: 'Seedream 4.0',
       description: '多分辨率图像生成',
-      credit_cost: 10,
       params_pricing: [
         { resolution: '1k', model: 'seedream-4.0', unit_price: 3 },
         { resolution: '2k', model: 'seedream-4.0', unit_price: 3 },
@@ -771,7 +759,6 @@ async function main() {
         description: m.description,
         module: 'image',
         category_references: JSON.stringify(m.category_references),
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
@@ -781,7 +768,6 @@ async function main() {
         description: m.description,
         module: 'image',
         category_references: JSON.stringify(m.category_references),
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
@@ -816,7 +802,6 @@ async function main() {
       code: 'seedance-1.5-pro',
       name: 'Seedance 1.5 Pro',
       description: '有声视频生成，支持首尾帧',
-      credit_cost: 15,
       category_references: FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-1.5-pro', unit_price: 5 },
@@ -835,7 +820,6 @@ async function main() {
       code: 'seedance-2.0',
       name: 'Seedance 2.0',
       description: '新一代有声视频，支持首尾帧',
-      credit_cost: 15,
       category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-2.0', unit_price: 7 },
@@ -854,7 +838,6 @@ async function main() {
       code: 'seedance-2.0-fast',
       name: 'Seedance 2.0 Fast',
       description: '新一代有声视频，支持首尾帧',
-      credit_cost: 15,
       category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-2.0-fast', unit_price: 5 },
@@ -880,7 +863,6 @@ async function main() {
         description: m.description,
         module: 'video',
         category_references: JSON.stringify(m.category_references),
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,
         is_active: true,
@@ -889,7 +871,6 @@ async function main() {
         name: m.name,
         description: m.description,
         category_references: JSON.stringify(m.category_references),
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,
         is_active: true,
@@ -899,8 +880,8 @@ async function main() {
   }
 
   const volcSingleModels = [
-    { code: 'jimeng_realman_avatar_picture_omni_v15', name: '数字人生成', module: 'avatar' as const, credit_cost: 50 },
-    { code: 'jimeng_dreamactor_m20_gen_video', name: '动作模仿', module: 'action_imitation' as const, credit_cost: 20 },
+    { code: 'jimeng_realman_avatar_picture_omni_v15', name: '数字人生成', module: 'avatar' as const, params_pricing: [{ resolution: 'default', model: 'jimeng_realman_avatar_picture_omni_v15', unit_price: 50 }] },
+    { code: 'jimeng_dreamactor_m20_gen_video', name: '动作模仿', module: 'action_imitation' as const, params_pricing: [{ resolution: 'default', model: 'jimeng_dreamactor_m20_gen_video', unit_price: 20 }] },
   ]
 
   for (const m of volcSingleModels) {
@@ -911,14 +892,13 @@ async function main() {
         code: m.code,
         name: m.name,
         module: m.module,
-        credit_cost: m.credit_cost,
-        params_pricing: JSON.stringify([]),
+        params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify({}),
         is_active: true,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
         name: m.name,
-        credit_cost: m.credit_cost,
+        params_pricing: JSON.stringify(m.params_pricing),
         is_active: true,
       }))
       .execute()
@@ -986,7 +966,6 @@ async function main() {
       name: 'Mureka 8 音乐生成',
       description: '音乐生成模型，按灵感歌曲、纯音乐、自定义歌曲三种业务模式配置价格',
       module: 'music' as const,
-      credit_cost: 12,
       category_references: MUSIC_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: 'inspiration_song', model: 'mureka-8', unit_price: 12 },
@@ -1000,7 +979,6 @@ async function main() {
       name: 'Mureka 9 音乐生成',
       description: '高质量音乐生成模型，按灵感歌曲、纯音乐、自定义歌曲三种业务模式配置价格',
       module: 'music' as const,
-      credit_cost: 18,
       category_references: MUSIC_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: 'inspiration_song', model: 'mureka-9', unit_price: 18 },
@@ -1021,7 +999,6 @@ async function main() {
         description: m.description,
         module: m.module,
         category_references: m.category_references ? JSON.stringify(m.category_references) : null,
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
@@ -1031,7 +1008,6 @@ async function main() {
         description: m.description,
         module: m.module,
         category_references: m.category_references ? JSON.stringify(m.category_references) : null,
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
@@ -1079,14 +1055,12 @@ async function main() {
       code: 'speech-2.8-hd',
       name: 'MiniMax Speech 2.8 HD',
       description: '高清音质文本转语音模型',
-      credit_cost: 2,
       params_pricing: [{ resolution: 'default', model: 'speech-2.8-hd', unit_price: 2 }],
     },
     {
       code: 'speech-2.8-turbo',
       name: 'MiniMax Speech 2.8 Turbo',
       description: '快速文本转语音模型',
-      credit_cost: 1,
       params_pricing: [{ resolution: 'default', model: 'speech-2.8-turbo', unit_price: 1 }],
     },
   ]
@@ -1118,7 +1092,6 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'tts',
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(minimaxTtsParamsSchema),
         is_active: true,
@@ -1127,7 +1100,6 @@ async function main() {
         name: m.name,
         description: m.description,
         module: 'tts',
-        credit_cost: m.credit_cost,
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(minimaxTtsParamsSchema),
         is_active: true,
@@ -1500,7 +1472,6 @@ async function main() {
     code: 'short_drama_episode_export_credits',
     name: 'AI 短剧单集合成导出费用',
     description: '每导出 1 集 AI 短剧 MP4 固定消耗的 A豆数量',
-    credit_cost: 2,
   }
 
   await db
@@ -1511,15 +1482,14 @@ async function main() {
       name: shortDramaExportModel.name,
       description: shortDramaExportModel.description,
       module: 'video',
-      credit_cost: shortDramaExportModel.credit_cost,
-      params_pricing: JSON.stringify([]),
+      params_pricing: JSON.stringify([{ resolution: 'default', model: 'short_drama_episode_export_credits', unit_price: 2 }]),
       params_schema: JSON.stringify({}),
       is_active: true,
     })
     .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
       name: shortDramaExportModel.name,
       description: shortDramaExportModel.description,
-      credit_cost: shortDramaExportModel.credit_cost,
+      params_pricing: JSON.stringify([{ resolution: 'default', model: 'short_drama_episode_export_credits', unit_price: 2 }]),
     }))
     .execute()
   console.log(`  provider_models seeded (${shortDramaExportModel.code})`)

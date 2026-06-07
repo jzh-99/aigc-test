@@ -129,7 +129,6 @@ const route: FastifyPluginAsync = async (app) => {
       .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
       .select([
         'provider_models.id as modelId',
-        'provider_models.credit_cost',
         'provider_models.params_pricing',
         'providers.code as providerCode',
         'providers.config as providerConfig',
@@ -173,13 +172,13 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.status(500).send({ success: false, error: { code: 'PROVIDER_CONFIG_MISSING', message: 'TTS 服务地址未配置' } })
     }
 
-    const { unitPrice, resolvedModel } = resolveUnitPrice(providerModel.params_pricing, 'default', providerModel.credit_cost)
+    const { unitPrice, resolvedModel } = resolveUnitPrice(providerModel.params_pricing, 'default')
     const actualModel = resolvedModel ?? model
     const estimatedCredits = Math.max(1, Math.ceil(characterCount / 1000)) * unitPrice
 
     let creditAccountId: string
     try {
-      const result = await freezeCredits(teamId, userId, estimatedCredits)
+      const result = await freezeCredits(teamId, userId, estimatedCredits, 'TTS 语音合成冻结')
       creditAccountId = result.creditAccountId
     } catch (err) {
       const message = err instanceof Error ? err.message : 'A豆余额不足'
@@ -284,7 +283,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       batchId = created.batch.id
       taskId = created.task.id
-      await confirmCredits(creditAccountId, userId, estimatedCredits, taskId, batchId)
+      await confirmCredits(creditAccountId, userId, estimatedCredits, taskId, batchId, 'TTS 语音合成确认')
 
       return reply.status(201).send({
         id: created.batch.id,
@@ -316,7 +315,7 @@ const route: FastifyPluginAsync = async (app) => {
       })
     } catch (err) {
       app.log.error({ err }, 'TTS generation failed')
-      await refundCredits(teamId, creditAccountId, userId, estimatedCredits, taskId ?? undefined, batchId ?? undefined).catch(() => {})
+      await refundCredits(teamId, creditAccountId, userId, estimatedCredits, taskId ?? undefined, batchId ?? undefined, 'TTS 语音合成退款').catch(() => {})
       const message = err instanceof Error ? err.message : '音频生成失败'
       return reply.status(502).send({ success: false, error: { code: 'TTS_GENERATION_FAILED', message: `${message}（积分已退回）` } })
     }

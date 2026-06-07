@@ -317,7 +317,6 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
         .select([
           'provider_models.id as modelId',
-          'provider_models.credit_cost',
           'provider_models.params_pricing',
           'provider_models.category_references',
           'providers.code as providerCode',
@@ -341,13 +340,13 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         })
       }
 
-      const { unitPrice } = resolveUnitPrice(modelRecord.params_pricing, resolution, modelRecord.credit_cost)
+      const { unitPrice } = resolveUnitPrice(modelRecord.params_pricing, resolution)
       const totalCost = isSeedance ? durationSeconds * unitPrice : unitPrice
 
       // 冻结积分
       let creditAccountId: string
       try {
-        const result = await freezeCredits(teamId, userId, totalCost)
+        const result = await freezeCredits(teamId, userId, totalCost, '短剧片段视频生成冻结')
         creditAccountId = result.creditAccountId
       } catch (err) {
         const msg = err instanceof Error ? err.message : '积分不足'

@@ -873,7 +873,6 @@ async function getActiveProviderModel(db: Db, teamId: string, module: 'music' | 
     .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
     .select([
       'provider_models.id as modelId',
-      'provider_models.credit_cost',
       'provider_models.params_pricing',
       'providers.code as providerCode',
       'providers.id as providerId',

@@ -297,7 +297,6 @@ export interface ProviderModelsTable {
     | 'music'
     | 'music_voice_clone'
   category_references: ColumnType<unknown, string, string> | null
-  credit_cost: number
   params_pricing: ColumnType<unknown, string, string>
   params_schema: ColumnType<unknown, string, string>
   resolution: string | null

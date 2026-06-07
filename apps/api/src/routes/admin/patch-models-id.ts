@@ -8,7 +8,6 @@ const route: FastifyPluginAsync = async (app) => {
     Body: {
       name?: string
       description?: string | null
-      credit_cost?: number
       params_pricing?: unknown
       params_schema?: unknown
       resolution?: string | null
@@ -16,11 +15,10 @@ const route: FastifyPluginAsync = async (app) => {
     }
   }>('/admin/models/:id', async (req, reply) => {
     const db = getDb()
-    const { name, description, credit_cost, params_pricing, params_schema, resolution, is_active } = req.body
+    const { name, description, params_pricing, params_schema, resolution, is_active } = req.body
     const updates: Record<string, unknown> = {}
     if (name !== undefined) updates.name = name
     if (description !== undefined) updates.description = description
-    if (credit_cost !== undefined) updates.credit_cost = credit_cost
     if (params_pricing !== undefined) updates.params_pricing = JSON.stringify(params_pricing)
     if (params_schema !== undefined) updates.params_schema = JSON.stringify(params_schema)
     if (resolution !== undefined) updates.resolution = resolution
