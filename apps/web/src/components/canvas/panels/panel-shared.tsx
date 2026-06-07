@@ -24,6 +24,7 @@ interface PopoverSelectProps {
   displayValue?: string
   /** 仅展示图标，隐藏文字和箭头（适合空间紧凑的场景） */
   iconOnly?: boolean
+  valueClassName?: string
 }
 
 export function PopoverSelect({
@@ -34,6 +35,7 @@ export function PopoverSelect({
   onChange,
   displayValue,
   iconOnly,
+  valueClassName,
 }: PopoverSelectProps) {
   const [open, setOpen] = useState(false)
   const currentLabel = displayValue ?? options.find((o) => o.value === value)?.label ?? value
@@ -56,7 +58,7 @@ export function PopoverSelect({
           <span className="flex items-center">{icon}</span>
           {!iconOnly && (
             <>
-              <span className="max-w-[72px] truncate font-medium">{currentLabel}</span>
+              <span className={cn('truncate font-medium', valueClassName ?? 'max-w-[72px]')}>{currentLabel}</span>
               <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform', open && 'rotate-180')} />
             </>
           )}

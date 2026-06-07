@@ -23,7 +23,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { uploadAssetFile, createNodeOutput } from '@/lib/canvas/canvas-api'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { toast } from 'sonner'
-import { computeFloatingParamPanelPosition } from './floating-param-panel-position'
 import { NodeParamPanel } from './node-param-panel'
 import type { AppNode, AppEdge } from '@/lib/canvas/types'
 import { getUpstreamNodeIds } from '@/lib/canvas/dag'
@@ -270,6 +269,7 @@ function FloatingParamPanel({
   onClose,
   onExecuted,
   onStoryboardExpandedRef,
+  isDragging,
 }: {
   node: AppNode
   canvasId: string
@@ -277,70 +277,56 @@ function FloatingParamPanel({
   onClose: () => void
   onExecuted: () => void
   onStoryboardExpandedRef?: MutableRefObject<((shotNodeIds: string[]) => void) | null>
+  isDragging?: boolean
 }) {
   const [tx, ty, zoom] = useStore((s) => s.transform)
-  const panelRef = useRef<HTMLDivElement | null>(null)
-  const [measuredPanelHeight, setMeasuredPanelHeight] = useState<number | undefined>(undefined)
+  const [measuredNodeSize, setMeasuredNodeSize] = useState<{ width: number; height: number } | null>(null)
   // 重构后的单列面板宽度；视频面板因 Seedance 模式下最多 6 个工具栏按钮需要更宽空间
   const PANEL_W = ['storyboard_splitter'].includes(node.type ?? '')
     ? 320
     : node.type === 'audio_gen'
     ? 780
     : node.type === 'video_gen'
-    ? 720
+    ? 680
     : 420
-  const PANEL_MAX_H = 640
-  const PANEL_ESTIMATED_H = node.type === 'audio_gen' ? 470 : PANEL_MAX_H
-  const GAP = 8
+  const GAP = 4
 
   useEffect(() => {
-    const panel = panelRef.current
-    if (!panel) return
-
-    const updatePanelHeight = () => {
-      setMeasuredPanelHeight(Math.min(panel.getBoundingClientRect().height, PANEL_MAX_H))
+    const domNode = wrapperRef.current?.querySelector(`[data-id="${node.id}"]`) as HTMLElement | null
+    if (!domNode) {
+      setMeasuredNodeSize(null)
+      return
     }
-    updatePanelHeight()
 
-    const resizeObserver = new ResizeObserver(updatePanelHeight)
-    resizeObserver.observe(panel)
+    const updateNodeSize = () => {
+      const next = {
+        width: domNode.offsetWidth,
+        height: domNode.offsetHeight,
+      }
+      setMeasuredNodeSize((current) => (
+        current?.width === next.width && current.height === next.height ? current : next
+      ))
+    }
+    updateNodeSize()
+
+    const resizeObserver = new ResizeObserver(updateNodeSize)
+    resizeObserver.observe(domNode)
     return () => resizeObserver.disconnect()
-  }, [PANEL_MAX_H, node.id])
+  }, [node.id, wrapperRef])
 
-  const rect = wrapperRef.current?.getBoundingClientRect()
-  if (!rect) return null
+  if (isDragging) return null
 
-  const domNode = wrapperRef.current?.querySelector(`[data-id="${node.id}"]`) as HTMLElement | null
-  const nodeRect = domNode?.getBoundingClientRect()
-  // 参数面板必须跟随节点的实际 DOM 中心，避免动态宽度节点出现视觉偏移。
-  const { top: rawTop, left } = computeFloatingParamPanelPosition({
-    panelWidth: PANEL_W,
-    panelHeight: measuredPanelHeight ?? PANEL_ESTIMATED_H,
-    viewportWidth: window.innerWidth,
-    viewportHeight: window.innerHeight,
-    gap: GAP,
-    wrapperRect: rect,
-    transform: { x: tx, y: ty, zoom },
-    nodePosition: node.position,
-    fallbackNodeSize: {
-      width: NODE_CANVAS_W[node.type ?? ''] ?? 280,
-      height: NODE_CANVAS_H[node.type ?? ''] ?? 200,
-    },
-    nodeRect: nodeRect
-      ? {
-          left: nodeRect.left,
-          top: nodeRect.top,
-          width: nodeRect.width,
-          height: nodeRect.height,
-        }
-      : undefined,
-  })
-  const top = rawTop
+  const nodeWidth = measuredNodeSize?.width ?? NODE_CANVAS_W[node.type ?? ''] ?? 280
+  const nodeHeight = measuredNodeSize?.height ?? NODE_CANVAS_H[node.type ?? ''] ?? 200
+  const nodeCenterX = node.position.x * zoom + tx + (nodeWidth * zoom) / 2
+  const nodeBottom = node.position.y * zoom + ty + nodeHeight * zoom
 
-  return createPortal(
+  const top = nodeBottom + GAP
+  const left = nodeCenterX - PANEL_W / 2
+
+  return (
     <div
-      ref={panelRef}
-      className="fixed z-40 drop-shadow-2xl"
+      className="absolute z-20 drop-shadow-2xl"
       style={{ top, left, width: PANEL_W }}
     >
       <NodeParamPanel
@@ -350,8 +336,7 @@ function FloatingParamPanel({
         onExecuted={onExecuted}
         onStoryboardExpandedRef={onStoryboardExpandedRef}
       />
-    </div>,
-    document.body
+    </div>
   )
 }
 
@@ -394,6 +379,7 @@ function Flow({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
   const [showGrid, setShowGrid] = useState(() => {
     if (typeof window === 'undefined') return true
     return window.localStorage.getItem(CANVAS_GRID_STORAGE_KEY) !== 'false'
@@ -911,6 +897,14 @@ function Flow({
     setContextMenu((prev) => (prev ? null : prev))
   }, [])
 
+  const handleNodeDragStart = useCallback((_: unknown, node: AppNode) => {
+    setDraggingNodeId(node.id)
+  }, [])
+
+  const handleNodeDragStop = useCallback(() => {
+    setDraggingNodeId(null)
+  }, [])
+
   return (
     <div
       className="w-full h-full relative"
@@ -971,6 +965,8 @@ function Flow({
         onConnectEnd={handleConnectEnd as any}
         nodeTypes={nodeTypes}
         onNodeClick={handleNodeClick as any}
+        onNodeDragStart={handleNodeDragStart as any}
+        onNodeDragStop={handleNodeDragStop as any}
         onEdgeClick={handleEdgeClick as any}
         onPaneClick={handlePaneClick}
         onPaneContextMenu={handlePaneContextMenu as any}
@@ -1008,7 +1004,7 @@ function Flow({
           </>
         )}
         <Controls
-          className="!bg-card !border-border [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-muted-foreground [&>button:hover]:!bg-muted [&>button:hover]:!text-foreground"
+          className="!rounded-lg !border !border-border/80 !bg-background/95 !shadow-lg !shadow-foreground/10 [&>button]:!h-8 [&>button]:!w-8 [&>button]:!border-border/80 [&>button]:!bg-card [&>button]:!text-foreground [&>button]:!shadow-sm [&>button:hover]:!bg-muted [&>button:hover]:!text-primary [&_svg]:!h-4 [&_svg]:!w-4 [&_svg]:!stroke-current"
         />
         <MiniMap
           nodeColor={(node) => getCanvasNodeMiniMapColor(node.type)}
@@ -1114,6 +1110,7 @@ function Flow({
           onClose={() => setSelectedNodeId(null)}
           onExecuted={kickPoll}
           onStoryboardExpandedRef={onStoryboardExpandedRef}
+          isDragging={draggingNodeId === selectedNode.id}
         />
       )}
 
