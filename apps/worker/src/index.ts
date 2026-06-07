@@ -20,6 +20,7 @@ import { musicVoiceCloneWorker } from './workers/music-voice-clone.js'
 import { cronWorker, scheduleCronJobs } from './workers/cron-worker.js'
 import { shortDramaExportWorker } from './workers/short-drama-export.js'
 import { getRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
+import { DEFAULT_JOB_OPTIONS } from './lib/queue-options.js'
 import { startVideoPoller } from './pollers/video-poller.js'
 import { startAvatarPoller } from './pollers/avatar-poller.js'
 import { startActionImitationPoller } from './pollers/action-imitation-poller.js'
@@ -31,6 +32,21 @@ const logger = buildLogger()
 const WORKER_LOCK_KEY = `worker:singleton:lock:${hostname()}`
 const LOCK_TTL_MS = 10_000 // 10 秒，心跳续期间隔的 2 倍
 const LOCK_VALUE = String(process.pid)
+const IMAGE_ADAPTER_TIMEOUT_MS = 330_000 // 5.5 分钟，早于 timeout-guardian 的 6 分钟兜底
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 async function acquireSingletonLock(): Promise<boolean> {
   const redis = getRedis()
@@ -116,7 +132,11 @@ const imageWorker = new Worker<GenerationJobData>(
         prompt: data.prompt,
         params: data.params,
       }
-      const result = await adapter.generateImage(providerRequest)
+      const result = await withTimeout(
+        adapter.generateImage(providerRequest),
+        IMAGE_ADAPTER_TIMEOUT_MS,
+        `Image adapter timed out after ${IMAGE_ADAPTER_TIMEOUT_MS}ms`,
+      )
       const aiElapsed = Date.now() - aiStart
       await recordProviderApiLog({
         batchId: data.batchId,
@@ -185,10 +205,10 @@ logger.info('Music voice clone worker started — listening on music-voice-clone
 // Worker 重启后，之前正在执行的 job lock 可能还没过期，手动将它们标记为 failed 并重试
 async function recoverStalledJobs() {
   const queues = [
-    new Queue('image-queue', { connection: getBullMQConnection() }),
-    new Queue('transfer-queue', { connection: getBullMQConnection() }),
-    new Queue('video-queue', { connection: getBullMQConnection() }),
-    new Queue('storyboard-queue', { connection: getBullMQConnection() }),
+    new Queue('image-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS }),
+    new Queue('transfer-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS }),
+    new Queue('video-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS }),
+    new Queue('storyboard-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS }),
   ]
 
   for (const queue of queues) {

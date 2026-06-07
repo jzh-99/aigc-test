@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
+import { normalizeStorageUrl } from '../../lib/storage.js'
 
 // POST /canvases/:id/node-outputs/:nodeId — 写入预生成输出（如视频工作室导出）
 // 若节点已存在 is_selected=true 的记录则替换，否则新增
@@ -28,7 +29,8 @@ const route: FastifyPluginAsync = async (app) => {
       if (!member) return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '无权访问该画布' } })
 
       // 构建 PostgreSQL text[] 字面量：ARRAY['url1','url2']
-      const urlsArray = sql<string>`ARRAY[${sql.join(output_urls.map((u) => sql`${u}`), sql`, `)}]`
+      const normalizedOutputUrls = output_urls.map((url) => normalizeStorageUrl(url) ?? url)
+      const urlsArray = sql<string>`ARRAY[${sql.join(normalizedOutputUrls.map((u) => sql`${u}`), sql`, `)}]`
 
       // 查找该节点已有的 is_selected 记录，有则替换，无则新增
       const existing = await db

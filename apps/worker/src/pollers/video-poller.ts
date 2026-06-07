@@ -1,6 +1,7 @@
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
+import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
 import { Queue } from 'bullmq'
 import { buildLogger } from '../logger.js'
 import { recordProviderPollAudit } from '../lib/provider-poll-audit.js'
@@ -16,7 +17,7 @@ import {
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
   if (!_transferQueue) {
-    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection() })
+    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _transferQueue
 }

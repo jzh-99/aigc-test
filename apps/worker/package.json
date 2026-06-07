@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "queue:clean": "tsx src/scripts/clean-bullmq-cache.ts",
+    "queue:clean:dist": "node dist/scripts/clean-bullmq-cache.js"
   },
   "dependencies": {
     "@aigc/db": "workspace:*",

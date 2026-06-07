@@ -271,6 +271,27 @@ docker logs aigc-<service> --tail 100
 
 ---
 
+## BullMQ 队列缓存清理
+
+完成和失败的 BullMQ job 只是队列执行记录，不是业务历史数据；业务历史以数据库记录为准。需要手动释放 Redis 历史缓存时，在 Worker 服务器执行：
+
+```bash
+cd deploy/worker/
+
+# 先预览各队列 completed/failed 数量，不删除
+sh clean-bullmq-cache.sh --dry-run
+
+# 清理所有默认队列的 completed/failed
+sh clean-bullmq-cache.sh
+
+# 只清理某个队列或某种状态
+sh clean-bullmq-cache.sh --queue image-queue --state failed
+```
+
+默认只清理 `completed` 和 `failed`，不会清理等待中、执行中、延迟中和定时调度任务。
+
+---
+
 ## 本地开发环境
 
 本地开发使用根目录的 `docker-compose.yml`，它只包含 PostgreSQL + Redis：

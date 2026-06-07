@@ -5,6 +5,7 @@ import { sql } from 'kysely'
 import type { GenerationJobData } from '@aigc/types'
 import { failPipeline } from '../pipelines/fail.js'
 import { getRedis, getBullMQConnection } from '../lib/redis.js'
+import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
 
 const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
@@ -12,7 +13,7 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 let _imageQueue: Queue | null = null
 function getImageQueue(): Queue {
   if (!_imageQueue) {
-    _imageQueue = new Queue('image-queue', { connection: getBullMQConnection() })
+    _imageQueue = new Queue('image-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _imageQueue
 }

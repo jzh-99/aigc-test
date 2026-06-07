@@ -2,6 +2,11 @@ import { Queue } from 'bullmq'
 import type { RedisOptions } from 'ioredis'
 import type { MusicJobData, MusicVoiceCloneJobData } from '@aigc/types'
 
+const DEFAULT_JOB_OPTIONS = {
+  removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
+  removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
+}
+
 // 延迟解析 REDIS_URL：模块顶层不能读 process.env，因为 ESM import 在 dotenv config() 之前执行
 function getRedisOptions(): RedisOptions & { maxRetriesPerRequest: null } {
   const url = process.env.REDIS_URL ?? 'redis://localhost:6379'
@@ -49,49 +54,49 @@ export function __setQueuesForTest(queues: {
 
 export function getImageQueue(): Queue {
   if (!_imageQueue) {
-    _imageQueue = new Queue('image-queue', { connection: getRedisOptions() })
+    _imageQueue = new Queue('image-queue', { connection: getRedisOptions(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _imageQueue
 }
 
 export function getTransferQueue(): Queue {
   if (!_transferQueue) {
-    _transferQueue = new Queue('transfer-queue', { connection: getRedisOptions() })
+    _transferQueue = new Queue('transfer-queue', { connection: getRedisOptions(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _transferQueue
 }
 
 export function getVideoQueue(): Queue {
   if (!_videoQueue) {
-    _videoQueue = new Queue('video-queue', { connection: getRedisOptions() })
+    _videoQueue = new Queue('video-queue', { connection: getRedisOptions(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _videoQueue
 }
 
 export function getStoryboardQueue(): Queue {
   if (!_storyboardQueue) {
-    _storyboardQueue = new Queue('storyboard-queue', { connection: getRedisOptions() })
+    _storyboardQueue = new Queue('storyboard-queue', { connection: getRedisOptions(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _storyboardQueue
 }
 
 export function getMusicQueue(): Queue<MusicJobData> {
   if (!_musicQueue) {
-    _musicQueue = new Queue<MusicJobData>('music-queue', { connection: getRedisOptions() })
+    _musicQueue = new Queue<MusicJobData>('music-queue', { connection: getRedisOptions(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _musicQueue
 }
 
 export function getMusicVoiceCloneQueue(): Queue<MusicVoiceCloneJobData> {
   if (!_musicVoiceCloneQueue) {
-    _musicVoiceCloneQueue = new Queue<MusicVoiceCloneJobData>('music-voice-clone-queue', { connection: getRedisOptions() })
+    _musicVoiceCloneQueue = new Queue<MusicVoiceCloneJobData>('music-voice-clone-queue', { connection: getRedisOptions(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _musicVoiceCloneQueue
 }
 
 export function getShortDramaExportQueue(): Queue {
   if (!_shortDramaExportQueue) {
-    _shortDramaExportQueue = new Queue('short-drama-export-queue', { connection: getRedisOptions() })
+    _shortDramaExportQueue = new Queue('short-drama-export-queue', { connection: getRedisOptions(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _shortDramaExportQueue
 }

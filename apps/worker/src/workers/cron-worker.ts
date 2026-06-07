@@ -1,5 +1,6 @@
 import { Worker, Queue } from 'bullmq'
 import { getBullMQConnection } from '../lib/redis.js'
+import { CRON_JOB_OPTIONS } from '../lib/queue-options.js'
 import { runTimeoutGuardian } from '../jobs/timeout-guardian.js'
 import { runPurgeOldRecords } from '../jobs/purge-old-records.js'
 import { runPurgeDeletedProjects } from '../jobs/purge-deleted-projects.js'
@@ -18,7 +19,7 @@ export const CRON_JOB_PURGE_DELETED_PROJECTS = 'purge-deleted-projects'
  * 注册 BullMQ repeat job，多台机器调用是幂等的——相同 name+pattern 只会存在一个调度
  */
 export async function scheduleCronJobs(): Promise<void> {
-  const queue = new Queue(CRON_QUEUE_NAME, { connection: getBullMQConnection() })
+  const queue = new Queue(CRON_QUEUE_NAME, { connection: getBullMQConnection(), defaultJobOptions: CRON_JOB_OPTIONS })
 
   await queue.upsertJobScheduler(
     CRON_JOB_TIMEOUT_GUARDIAN,

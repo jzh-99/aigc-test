@@ -3,6 +3,7 @@ import { sql } from 'kysely'
 import { Queue } from 'bullmq'
 import type { GenerationJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
+import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
 import { buildLogger } from '../logger.js'
 
 const logger = buildLogger()
@@ -10,7 +11,7 @@ const logger = buildLogger()
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
   if (!_transferQueue) {
-    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection() })
+    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _transferQueue
 }

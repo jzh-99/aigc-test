@@ -40,6 +40,11 @@ pnpm --filter @aigc/types build # 单独构建types 包
 pnpm --filter @aigc/web dev       # 前端 :6006
 pnpm --filter @aigc/api dev       # API  :7001
 pnpm --filter @aigc/worker dev    # Worker
+
+# 清理bullmq
+pnpm queue:clean -- --dry-run
+pnpm queue:clean
+pnpm queue:clean -- --queue image-queue --state failed
 ```
 
 ### 数据库

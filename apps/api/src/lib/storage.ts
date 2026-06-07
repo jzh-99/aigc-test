@@ -108,6 +108,33 @@ const BUCKET = process.env.TOS_BUCKET ?? 'toby-ai-dev'
 // 预签名 URL 有效期（秒），默认 1 小时
 const PRESIGN_EXPIRES = parseInt(process.env.STORAGE_PRESIGN_EXPIRES ?? '3600', 10)
 
+function getStorageKeyFromPublicUrl(storageUrl: string, publicUrl: string): string | null {
+  const base = publicUrl.replace(/\/+$/, '')
+  if (!base || storageUrl === base) return null
+  if (!storageUrl.startsWith(`${base}/`)) return null
+
+  const rawKey = storageUrl.slice(base.length + 1).split(/[?#]/)[0]
+  if (!rawKey) return null
+
+  try {
+    return decodeURIComponent(rawKey)
+  } catch {
+    return rawKey
+  }
+}
+
+export function normalizeStorageUrl(storageUrl: string | null | undefined): string | null {
+  if (!storageUrl) return null
+
+  for (const base of [process.env.TOS_PUBLIC_URL ?? '', process.env.S3_PUBLIC_URL ?? '']) {
+    if (!base) continue
+    const key = getStorageKeyFromPublicUrl(storageUrl, base)
+    if (key) return `${base.replace(/\/+$/, '')}/${key}`
+  }
+
+  return storageUrl
+}
+
 // ── 代理 URL 加密（AES-256-GCM）────────────────────────────────────────────────
 // 防止存储服务器 IP 和 AI 提供商 CDN 地址暴露给前端用户
 
@@ -154,7 +181,7 @@ export async function signAssetUrl(storageUrl: string | null | undefined): Promi
 
   if (tosPublicUrl && storageUrl.startsWith(tosPublicUrl)) {
     // TOS 地址 → 始终用 TOS SDK 预签名，与 STORAGE_DRIVER 无关
-    const key = storageUrl.slice(tosPublicUrl.length + 1)
+    const key = getStorageKeyFromPublicUrl(storageUrl, tosPublicUrl)
     if (!key) return storageUrl
     try {
       const tos = getTos()
@@ -166,7 +193,7 @@ export async function signAssetUrl(storageUrl: string | null | undefined): Promi
 
   if (s3PublicUrl && storageUrl.startsWith(s3PublicUrl)) {
     // S3/MinIO 地址 → 用 S3 SDK 预签名
-    const key = storageUrl.slice(s3PublicUrl.length + 1)
+    const key = getStorageKeyFromPublicUrl(storageUrl, s3PublicUrl)
     if (!key) return storageUrl
     try {
       const cmd = new GetObjectCommand({ Bucket: BUCKET, Key: key })
@@ -227,10 +254,9 @@ export function extractStorageKey(storageUrl: string): string | null {
   const tosPublicUrl = process.env.TOS_PUBLIC_URL ?? ''
   const s3PublicUrl = process.env.S3_PUBLIC_URL ?? ''
   for (const base of [tosPublicUrl, s3PublicUrl]) {
-    if (base && storageUrl.startsWith(base)) {
-      const key = storageUrl.slice(base.length + 1)
-      return key || null
-    }
+    if (!base) continue
+    const key = getStorageKeyFromPublicUrl(storageUrl, base)
+    if (key) return key
   }
   return null
 }

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { assertCanvasEnabledForWorkspace } from './_shared.js'
+import { normalizeStorageUrl } from '../../lib/storage.js'
 
 // PATCH /canvases/:id — 保存 structure_data（带乐观锁）
 const route: FastifyPluginAsync = async (app) => {
@@ -50,7 +51,7 @@ const route: FastifyPluginAsync = async (app) => {
         updated_at: sql`now()`,
         ...(name !== undefined ? { name } : {}),
         ...(structure_data !== undefined ? { structure_data: JSON.stringify(structure_data) } : {}),
-        ...(thumbnail_url !== undefined ? { thumbnail_url } : {}),
+        ...(thumbnail_url !== undefined ? { thumbnail_url: normalizeStorageUrl(thumbnail_url) } : {}),
       })
       .where('id', '=', id)
       .where('version', '=', version)
