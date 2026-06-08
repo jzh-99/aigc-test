@@ -28,6 +28,7 @@ describe('creativeNavItems', () => {
         ['视频工坊', '/video-studio'],
       ]
     )
+    assert.equal(video?.children?.find((item) => item.label === '视频工坊')?.feature, 'videoStudio')
   })
 })
 

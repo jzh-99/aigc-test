@@ -11,22 +11,28 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { creativeNavItems, isNavItemActive } from './nav-config'
+import { useTeamFeatures } from '@/hooks/use-team-features'
 
 export function CreativeTopNav() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const query = searchParams.toString()
   const currentPath = query ? `${pathname}?${query}` : pathname
+  const { showVideoStudioTab } = useTeamFeatures()
 
   return (
     <nav className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="创作主导航">
       {creativeNavItems.map((item) => {
         const Icon = item.icon
-        const active = item.children
-          ? item.children.some((child) => isNavItemActive(child.href, currentPath))
+        const visibleChildren = item.children?.filter((child) => {
+          if (child.feature === 'videoStudio') return showVideoStudioTab
+          return true
+        })
+        const active = visibleChildren
+          ? visibleChildren.some((child) => isNavItemActive(child.href, currentPath))
           : isNavItemActive(item.href, currentPath)
 
-        if (item.children) {
+        if (visibleChildren) {
           return (
             <DropdownMenu key={item.href}>
               <DropdownMenuTrigger
@@ -41,7 +47,7 @@ export function CreativeTopNav() {
                 <ChevronDown className="h-3.5 w-3.5" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48">
-                {item.children.map((child) => {
+                {visibleChildren.map((child) => {
                   const childActive = isNavItemActive(child.href, currentPath)
 
                   return (

@@ -24,6 +24,7 @@ export interface NavItem {
     href: string
     label: string
     description?: string
+    feature?: 'videoStudio'
   }>
 }
 
@@ -37,7 +38,7 @@ export const creativeNavItems: NavItem[] = [
     description: '视频生成与项目创作',
     children: [
       { href: '/generation?mode=video', label: '快速生成', description: '单次 AI 视频生成' },
-      { href: '/video-studio', label: '视频工坊', description: '项目式视频创作' },
+      { href: '/video-studio', label: '视频工坊', description: '项目式视频创作', feature: 'videoStudio' },
     ],
   },
   { href: '/toby-studio', label: 'Toby Studio', icon: WandSparkles, description: '剧情与内容工作室' },

@@ -1,9 +1,8 @@
-import Link from 'next/link'
-
 import {
   creativeEntryCards,
   inspirationItems,
 } from '@/components/dashboard/creative-home-data'
+import { CreativeEntryActions } from '@/components/dashboard/creative-entry-actions'
 
 const entryEyebrows: Record<string, string> = {
   'AI 生图': '文字成图',
@@ -69,19 +68,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-2">
-                  {card.actions.map((action, actionIndex) => (
-                    <Link
-                      key={action.href}
-                      href={action.href}
-                      className={
-                        actionIndex === 0
-                          ? 'inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90'
-                          : 'inline-flex h-9 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary'
-                      }
-                    >
-                      {action.label}
-                    </Link>
-                  ))}
+                  <CreativeEntryActions actions={card.actions} />
                 </div>
               </article>
             )

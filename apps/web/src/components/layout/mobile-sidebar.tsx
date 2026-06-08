@@ -17,6 +17,7 @@ import {
   managementNavItems,
   type NavItem,
 } from './nav-config'
+import { useTeamFeatures } from '@/hooks/use-team-features'
 
 export function MobileSidebar() {
   const pathname = usePathname()
@@ -26,6 +27,7 @@ export function MobileSidebar() {
   const { setMobileOpen } = useLayoutStore()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
+  const { showVideoStudioTab } = useTeamFeatures()
 
   const visibleManagementItems = managementNavItems.filter((item) => {
     if (item.requireUserRole && user?.role !== item.requireUserRole) return false
@@ -34,26 +36,56 @@ export function MobileSidebar() {
   })
 
   function renderNavItem(item: NavItem) {
-    const isActive = item.children
-      ? item.children.some((child) => isNavItemActive(child.href, currentPath))
+    const visibleChildren = item.children?.filter((child) => {
+      if (child.feature === 'videoStudio') return showVideoStudioTab
+      return true
+    })
+    const isActive = visibleChildren
+      ? visibleChildren.some((child) => isNavItemActive(child.href, currentPath))
       : isNavItemActive(item.href, currentPath)
 
     return (
-      <Button
-        key={item.href}
-        variant={isActive ? 'default' : 'ghost'}
-        className="w-full justify-start gap-3"
-        asChild
-      >
-        <Link
-          href={item.href}
-          onClick={() => setMobileOpen(false)}
-          aria-current={isActive ? 'page' : undefined}
+      <div key={item.href} className="space-y-1">
+        <Button
+          variant={isActive ? 'default' : 'ghost'}
+          className="w-full justify-start gap-3"
+          asChild
         >
-          <item.icon className={cn('h-4 w-4 shrink-0')} />
-          <span>{item.label}</span>
-        </Link>
-      </Button>
+          <Link
+            href={item.href}
+            onClick={() => setMobileOpen(false)}
+            aria-current={isActive ? 'page' : undefined}
+          >
+            <item.icon className={cn('h-4 w-4 shrink-0')} />
+            <span>{item.label}</span>
+          </Link>
+        </Button>
+
+        {visibleChildren && (
+          <div className="ml-7 flex flex-col gap-1">
+            {visibleChildren.map((child) => {
+              const childActive = isNavItemActive(child.href, currentPath)
+
+              return (
+                <Button
+                  key={child.href}
+                  variant={childActive ? 'default' : 'ghost'}
+                  className="h-8 w-full justify-start px-3 text-xs"
+                  asChild
+                >
+                  <Link
+                    href={child.href}
+                    onClick={() => setMobileOpen(false)}
+                    aria-current={childActive ? 'page' : undefined}
+                  >
+                    {child.label}
+                  </Link>
+                </Button>
+              )
+            })}
+          </div>
+        )}
+      </div>
     )
   }
 

@@ -49,4 +49,17 @@ describe("creative home static data", () => {
       assert.equal(serializedData.includes(copy), false);
     }
   });
+
+  it("uses theme token classes instead of hard-coded palette steps", () => {
+    const hardCodedPaletteStep =
+      /(cyan|rose|violet|emerald|fuchsia|slate|stone|sky|lime|amber|zinc|teal|pink|orange)-\d/;
+
+    for (const card of creativeEntryCards) {
+      assert.equal(hardCodedPaletteStep.test(card.accent), false);
+    }
+
+    for (const item of inspirationItems) {
+      assert.equal(hardCodedPaletteStep.test(item.toneClass), false);
+    }
+  });
 });
