@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,18 +12,22 @@ import { useGenerationStore } from '@/stores/generation-store'
 import { apiPatch, apiPost, ApiError } from '@/lib/api-client'
 import type { UserProfile } from '@aigc/types'
 import { toast } from 'sonner'
-import { Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle, LogOut } from 'lucide-react'
 
 export default function SettingsPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const updateUser = useAuthStore((s) => s.updateUser)
+  const clearAuth = useAuthStore((s) => s.clearAuth)
   const watermark = useGenerationStore((s) => s.watermark)
   const setWatermark = useGenerationStore((s) => s.setWatermark)
+  const resetGeneration = useGenerationStore((s) => s.reset)
   const [username, setUsername] = useState(user?.username ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url ?? '')
   const [loading, setLoading] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -57,6 +61,20 @@ export default function SettingsPage() {
       toast.error(err instanceof ApiError ? err.message : '保存失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleLogout() {
+    if (logoutLoading) return
+    setLogoutLoading(true)
+    try {
+      await apiPost('/auth/logout', {})
+    } catch {
+      // 即使服务端登出失败，也清理本地会话，避免用户被困在当前账号。
+    } finally {
+      resetGeneration()
+      clearAuth()
+      router.replace('/login')
     }
   }
 
@@ -107,6 +125,35 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-semibold">个人设置</h1>
         <p className="text-muted-foreground">管理您的个人信息</p>
       </div>
+
+      <Card className="border-destructive/25 bg-destructive/[0.03]">
+        <CardHeader>
+          <CardTitle>账户会话</CardTitle>
+          <CardDescription>退出当前账号并返回登录页</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">{user?.username ?? '当前用户'}</p>
+              <p className="text-xs text-muted-foreground">{user?.email ?? user?.phone ?? '已登录账号'}</p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleLogout}
+              disabled={logoutLoading}
+              className="w-full sm:w-auto"
+            >
+              {logoutLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="mr-2 h-4 w-4" />
+              )}
+              退出登录
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Password change card - show first if required */}
       {showPasswordWarning && (
