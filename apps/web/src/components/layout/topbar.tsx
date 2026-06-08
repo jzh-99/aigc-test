@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation'
 import { MobileSidebar } from './mobile-sidebar'
 import { useTheme } from '@/context/theme-provider'
 import Link from 'next/link'
+import { CreativeTopNav } from './creative-top-nav'
 
 interface TopbarProps {
   title?: string
@@ -59,8 +60,10 @@ export function Topbar({ title }: TopbarProps) {
         <span className="sr-only">菜单</span>
       </Button>
 
-      {title && (
+      {title ? (
         <h1 className="text-lg font-semibold">{title}</h1>
+      ) : (
+        <CreativeTopNav />
       )}
 
       <div className="ml-auto flex items-center gap-2">
