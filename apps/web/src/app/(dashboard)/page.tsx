@@ -1,22 +1,12 @@
 import Link from 'next/link'
 import {
-  Bell,
-  Gem,
-  Menu,
   Search,
   Sparkles,
-  UserRound,
 } from 'lucide-react'
 import {
   creativeEntryCards,
   inspirationItems,
 } from '@/components/dashboard/creative-home-data'
-import { creativeNavItems } from '@/components/layout/nav-config'
-
-const navLabelMap: Record<string, string> = {
-  'Toby Studio': 'Toby',
-  灵动画布: '画布',
-}
 
 const tabItems = ['发现', 'MJ 美学', '视频', '短片']
 
@@ -37,59 +27,7 @@ export default function DashboardPage() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_22%,rgba(255,236,194,0.18),transparent_22%),linear-gradient(90deg,rgba(4,36,51,0.52)_0%,rgba(4,36,51,0.12)_44%,rgba(4,36,51,0.45)_100%)]" />
       <div className="absolute left-[20%] top-[21%] h-[35rem] w-[58rem] -rotate-12 rounded-full border border-white/10 opacity-40 blur-[1px]" />
 
-      <aside className="absolute inset-y-0 left-0 z-20 hidden w-24 flex-col items-center border-r border-white/10 bg-[#082c3d]/70 px-3 py-7 backdrop-blur-xl lg:flex">
-        <Link href="/" className="mb-16 grid h-10 w-10 place-items-center text-white">
-          <svg viewBox="0 0 40 40" className="h-9 w-9" aria-hidden="true">
-            <path d="M14 6h12l6 10-6 10H14L8 16 14 6Z" fill="currentColor" opacity="0.96" />
-            <path d="M14 18h12l6 10-6 6H14l-6-6 6-10Z" fill="currentColor" opacity="0.78" />
-          </svg>
-          <span className="sr-only">Toby.AI</span>
-        </Link>
-
-        <nav className="flex flex-1 flex-col items-center gap-7">
-          {creativeNavItems.map((item) => {
-            const Icon = item.icon
-            const isActive = item.href === '/'
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`group flex flex-col items-center gap-2 text-[11px] font-medium transition ${
-                  isActive ? 'text-white' : 'text-white/50 hover:text-white/80'
-                }`}
-              >
-                <span
-                  className={`grid h-6 w-6 place-items-center rounded-full transition ${
-                    isActive ? 'bg-white text-primary shadow-[0_0_22px_rgba(255,255,255,0.45)]' : ''
-                  }`}
-                >
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <span>{navLabelMap[item.label] ?? item.label}</span>
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="flex flex-col items-center gap-6 text-white/60">
-          <Link
-            href="/credits"
-            className="rounded-lg border border-white/20 bg-white/5 px-2 py-1.5 text-center text-xs leading-5 text-white/90"
-          >
-            <span className="flex items-center justify-center gap-1">
-              <Gem className="h-3.5 w-3.5 text-primary" />
-              100
-            </span>
-            开通会员
-          </Link>
-          <UserRound className="h-6 w-6 rounded-full bg-white/80 p-1 text-[#173d4b]" />
-          <Bell className="h-5 w-5" />
-          <Menu className="h-5 w-5" />
-        </div>
-      </aside>
-
-      <section className="relative z-10 h-full overflow-y-auto pl-0 lg:pl-24">
+      <section className="relative z-10 h-full overflow-y-auto">
         <div className="mx-auto flex min-h-screen w-full max-w-[1660px] flex-col px-5 pb-16 pt-16 sm:px-8 lg:px-12 lg:pt-20">
           <div className="flex justify-end lg:hidden">
             <Link
@@ -178,7 +116,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <div className="pointer-events-none absolute bottom-0 left-24 right-0 z-20 hidden border-t border-white/10 bg-[#041724]/40 px-4 py-2 text-center text-[12px] text-white/30 backdrop-blur-md lg:block">
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 hidden border-t border-white/10 bg-[#041724]/40 px-4 py-2 text-center text-[12px] text-white/30 backdrop-blur-md lg:block">
         所有创作内容均由 AI 生成，可能存在不准确之处，请自行甄别其真实性
       </div>
     </main>
