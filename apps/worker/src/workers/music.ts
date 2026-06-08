@@ -187,7 +187,7 @@ async function generateCover(track: {
       operation: 'cover.generate',
       method: 'POST',
       endpoint: '/images/generations',
-      requestPayload: coverRequest,
+      requestPayload: result.requestPayload ?? coverRequest,
       responsePayload: result,
       durationMs: Date.now() - startedAt,
       status: result.success ? 'success' : 'failed',

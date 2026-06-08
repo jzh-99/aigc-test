@@ -219,6 +219,14 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
       }
     }
 
+    // 脱敏：base64 图片数据替换为摘要信息，避免日志中存储大量二进制数据
+    const logPayload: Record<string, unknown> = { ...body }
+    if (typeof logPayload.image === 'string') {
+      logPayload.image = `[data URI, ${(logPayload.image.length / 1024).toFixed(0)} KB]`
+    } else if (Array.isArray(logPayload.image)) {
+      logPayload.image = `[${logPayload.image.length} data URIs]`
+    }
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
 
@@ -234,11 +242,13 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
         signal: controller.signal,
       })
       console.log(`[volcengine-image] 收到响应 status=${res.status}`)
-      return await this.parseResponse(res, model)
+      const result = await this.parseResponse(res, model)
+      result.requestPayload = logPayload
+      return result
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`[volcengine-image] 请求异常: ${msg}`)
-      return { success: false, errorMessage: msg }
+      return { success: false, errorMessage: msg, requestPayload: logPayload }
     } finally {
       clearTimeout(timeout)
     }

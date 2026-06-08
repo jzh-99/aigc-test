@@ -107,7 +107,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
       return result
     }
 
-    return { success: false, errorMessage: 'Exhausted retries' }
+    return { success: false, errorMessage: 'Exhausted retries', requestPayload: { model } }
   }
 
   private async callGenerations(
@@ -125,6 +125,13 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
       console.log(`[nano-banana] callGenerations 参考图片准备完毕`)
     }
 
+    // 脱敏：base64 图片数据替换为摘要信息
+    const logPayload: Record<string, unknown> = { ...body }
+    if (Array.isArray(logPayload.image)) {
+      const totalKb = (logPayload.image as string[]).reduce((sum, s) => sum + s.length / 1024, 0)
+      logPayload.image = `[${(logPayload.image as string[]).length} data URIs, ${(totalKb).toFixed(0)} KB total]`
+    }
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
     console.log(`[nano-banana] callGenerations 发起 HTTP 请求 model=${model}`)
@@ -136,10 +143,12 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
         signal: controller.signal,
       })
       console.log(`[nano-banana] callGenerations 收到响应 status=${res.status}`)
-      return await this.parseResponse(res)
+      const result = await this.parseResponse(res)
+      result.requestPayload = logPayload
+      return result
     } catch (err) {
       console.error(`[nano-banana] callGenerations 请求异常: ${err instanceof Error ? err.message : String(err)}`)
-      return { success: false, errorMessage: err instanceof Error ? err.message : String(err) }
+      return { success: false, errorMessage: err instanceof Error ? err.message : String(err), requestPayload: logPayload }
     } finally {
       clearTimeout(timeout)
     }
@@ -207,6 +216,15 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
       form.append('image', blob, filename)
     }
 
+    // FormData 无法直接序列化，构造可读的日志摘要
+    const logPayload: Record<string, unknown> = {
+      model,
+      prompt,
+      response_format: 'url',
+      image: `[${imageBlobs.length} binary files]`,
+    }
+    if (extraParams.aspect_ratio) logPayload.aspect_ratio = String(extraParams.aspect_ratio)
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
     console.log(`[nano-banana] callEdits 发起 HTTP 请求 model=${model}`)
@@ -218,10 +236,12 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
         signal: controller.signal,
       })
       console.log(`[nano-banana] callEdits 收到响应 status=${res.status}`)
-      return await this.parseResponse(res)
+      const result = await this.parseResponse(res)
+      result.requestPayload = logPayload
+      return result
     } catch (err) {
       console.error(`[nano-banana] callEdits 请求异常: ${err instanceof Error ? err.message : String(err)}`)
-      return { success: false, errorMessage: err instanceof Error ? err.message : String(err) }
+      return { success: false, errorMessage: err instanceof Error ? err.message : String(err), requestPayload: logPayload }
     } finally {
       clearTimeout(timeout)
     }
