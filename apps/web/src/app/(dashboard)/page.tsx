@@ -102,7 +102,7 @@ export default function DashboardPage() {
 
           <div className="pointer-events-none mt-8 flex justify-center lg:mt-0">
             <h1 className="creative-home-title select-none text-center font-serif text-[3.25rem] font-normal leading-[1.12] tracking-[0.18em] sm:text-[4.5rem] lg:text-[5.75rem]">
-              用想象，造点不同
+              让美好被看见
             </h1>
           </div>
 
