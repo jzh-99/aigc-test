@@ -293,36 +293,40 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
           </>
         )}
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <Label>我的音色</Label>
-            <Button type="button" variant="outline" size="sm" onClick={onOpenVoiceDialog}>
-              <Upload className="mr-2 h-4 w-4" />
-              上传我的音色
-            </Button>
-          </div>
-          <Select value={voiceCloneId} onValueChange={selectVoiceClone}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">不使用我的音色</SelectItem>
-              {readyVoices.map((voice) => <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">选择具体音色后，音色性别将自动重置为“自动”。</p>
-        </div>
+        {!instrumental && (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>我的音色</Label>
+                <Button type="button" variant="outline" size="sm" onClick={onOpenVoiceDialog}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  上传我的音色
+                </Button>
+              </div>
+              <Select value={voiceCloneId} onValueChange={selectVoiceClone}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">不使用我的音色</SelectItem>
+                  {readyVoices.map((voice) => <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">选择具体音色后，音色性别将自动重置为"自动"。</p>
+            </div>
 
-        <div className="space-y-2">
-          <Label>音色性别</Label>
-          <Select value={voiceGender} onValueChange={(value) => selectVoiceGender(value as MusicVoiceGender)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">自动</SelectItem>
-              <SelectItem value="male">男声</SelectItem>
-              <SelectItem value="female">女声</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">选择男声或女声后，将不再使用我的音色。</p>
-        </div>
+            <div className="space-y-2">
+              <Label>音色性别</Label>
+              <Select value={voiceGender} onValueChange={(value) => selectVoiceGender(value as MusicVoiceGender)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">自动</SelectItem>
+                  <SelectItem value="male">男声</SelectItem>
+                  <SelectItem value="female">女声</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">选择男声或女声后，将不再使用我的音色。</p>
+            </div>
+          </>
+        )}
 
         <div className="space-y-3">
           <Label>生成模型</Label>
