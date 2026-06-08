@@ -19,7 +19,7 @@ export function CreativeTopNav() {
   const currentPath = query ? `${pathname}?${query}` : pathname
 
   return (
-    <nav className="hidden min-w-0 items-center gap-1 md:flex" aria-label="创作主导航">
+    <nav className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="创作主导航">
       {creativeNavItems.map((item) => {
         const Icon = item.icon
         const active = item.children
