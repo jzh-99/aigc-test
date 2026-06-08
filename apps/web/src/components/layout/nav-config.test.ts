@@ -11,24 +11,24 @@ describe('creativeNavItems', () => {
   test('使用项目内命名映射参考页主导航', () => {
     assert.deepEqual(
       creativeNavItems.map((item) => item.label),
-      ['灵感', 'AI 生图', 'AI 视频', 'Toby Studio', '灵动画布', '资产']
+      ['灵感', '创作', 'Toby Studio', '灵动画布', '资产']
     )
+    assert.equal(creativeNavItems.find((item) => item.label === '创作')?.href, '/generation?mode=image')
     assert.equal(creativeNavItems.find((item) => item.label === 'Toby Studio')?.href, '/toby-studio')
     assert.equal(creativeNavItems.find((item) => item.label === '灵动画布')?.href, '/canvas')
     assert.equal(creativeNavItems.find((item) => item.label === '资产')?.href, '/assets')
   })
 
-  test('AI 视频提供快速生成和视频工坊两个子入口', () => {
-    const video = creativeNavItems.find((item) => item.label === 'AI 视频')
-    assert.equal(video?.href, '/generation?mode=video')
+  test('创作入口合并 AI 生图和 AI 视频', () => {
+    const creation = creativeNavItems.find((item) => item.label === '创作')
+    assert.equal(creation?.description, 'AI生图、生视频')
     assert.deepEqual(
-      video?.children?.map((item) => [item.label, item.href]),
+      creation?.children?.map((item) => [item.label, item.href]),
       [
-        ['快速生成', '/generation?mode=video'],
-        ['视频工坊', '/video-studio'],
+        ['AI 生图', '/generation?mode=image'],
+        ['AI 视频', '/generation?mode=video'],
       ]
     )
-    assert.equal(video?.children?.find((item) => item.label === '视频工坊')?.feature, 'videoStudio')
   })
 })
 

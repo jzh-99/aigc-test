@@ -1,5 +1,4 @@
 import {
-  Brush,
   Clapperboard,
   ImageIcon,
   type LucideIcon,
@@ -48,14 +47,6 @@ export const creativeEntryCards: CreativeEntryCard[] = [
       { label: "快速生成", href: "/generation?mode=video" },
       { label: "视频工坊", href: "/video-studio" },
     ],
-  },
-  {
-    title: "灵动画布",
-    kicker: "WorkFlow 灵动画布全新上线",
-    description: "随意组合 · 自由创作",
-    icon: Brush,
-    accent: "from-primary/50 via-secondary/25 to-primary/20",
-    actions: [{ label: "打开画布", href: "/canvas" }],
   },
 ];
 

@@ -18,19 +18,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('dark')
 
   useEffect(() => {
-    const stored = localStorage.getItem('theme') as Theme | null
-    const initial = stored ?? 'dark'
-    setTheme(initial)
-    document.documentElement.classList.toggle('dark', initial === 'dark')
+    localStorage.setItem('theme', 'dark')
+    setTheme('dark')
+    document.documentElement.classList.add('dark')
   }, [])
 
   function toggleTheme() {
-    setTheme((prev) => {
-      const next = prev === 'dark' ? 'light' : 'dark'
-      localStorage.setItem('theme', next)
-      document.documentElement.classList.toggle('dark', next === 'dark')
-      return next
-    })
+    localStorage.setItem('theme', 'dark')
+    setTheme('dark')
+    document.documentElement.classList.add('dark')
   }
 
   return (

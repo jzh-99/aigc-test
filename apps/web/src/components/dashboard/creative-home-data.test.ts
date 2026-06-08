@@ -7,7 +7,7 @@ describe("creative home static data", () => {
   it("keeps the main creative entries in the required order", () => {
     assert.deepEqual(
       creativeEntryCards.map((card) => card.title),
-      ["AI 生图", "AI 视频", "灵动画布"],
+      ["AI 生图", "AI 视频"],
     );
   });
 
@@ -21,10 +21,10 @@ describe("creative home static data", () => {
     ]);
   });
 
-  it("configures canvas as the workflow-style destination", () => {
+  it("does not expose canvas as a home entry", () => {
     assert.equal(
-      creativeEntryCards.find((card) => card.title === "灵动画布")?.actions[0]?.href,
-      "/canvas",
+      creativeEntryCards.some((card) => card.title === "灵动画布"),
+      false,
     );
   });
 

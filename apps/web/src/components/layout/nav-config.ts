@@ -8,7 +8,6 @@ import {
   Shield,
   Sparkles,
   Users,
-  Video,
   WandSparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -30,15 +29,14 @@ export interface NavItem {
 
 export const creativeNavItems: NavItem[] = [
   { href: '/', label: '灵感', icon: LayoutDashboard, description: '精选创作灵感' },
-  { href: '/generation?mode=image', label: 'AI 生图', icon: Sparkles, description: '快速生成图片' },
   {
-    href: '/generation?mode=video',
-    label: 'AI 视频',
-    icon: Video,
-    description: '视频生成与项目创作',
+    href: '/generation?mode=image',
+    label: '创作',
+    icon: Sparkles,
+    description: 'AI生图、生视频',
     children: [
-      { href: '/generation?mode=video', label: '快速生成', description: '单次 AI 视频生成' },
-      { href: '/video-studio', label: '视频工坊', description: '项目式视频创作', feature: 'videoStudio' },
+      { href: '/generation?mode=image', label: 'AI 生图', description: '快速生成图片' },
+      { href: '/generation?mode=video', label: 'AI 视频', description: '单次 AI 视频生成' },
     ],
   },
   { href: '/toby-studio', label: 'Toby Studio', icon: WandSparkles, description: '剧情与内容工作室' },

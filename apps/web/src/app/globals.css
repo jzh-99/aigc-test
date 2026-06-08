@@ -1145,25 +1145,78 @@ html {
    ========================================================================== */
 
 .creative-home-title {
-  color: rgba(240, 249, 255, 0.54);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.1em;
+  color: rgba(235, 238, 255, 0.56);
   text-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.18),
-    0 18px 48px rgba(2, 18, 28, 0.42);
+    0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 42px rgba(157, 132, 255, 0.16),
+    0 18px 52px rgba(3, 5, 22, 0.58);
+  perspective: 900px;
+}
+
+.creative-home-title-char {
+  display: inline-block;
+  position: relative;
+  padding-inline: 0.015em;
+  transform: translateY(var(--char-lift)) rotate(var(--char-tilt));
+  transform-origin: 50% 78%;
+  transition:
+    color 0.28s ease,
+    text-shadow 0.28s ease,
+    transform 0.34s cubic-bezier(0.2, 1.4, 0.34, 1);
+}
+
+.creative-home-title-char::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: attr(data-char);
+  color: rgba(164, 204, 255, 0.2);
+  filter: blur(8px);
+  opacity: 0;
+  transform: translateX(-0.06em) scaleX(1.15);
+  transition: opacity 0.3s ease;
+}
+
+.creative-home-title-char:hover {
+  color: rgba(250, 248, 255, 0.92);
+  text-shadow:
+    0 0 14px rgba(185, 168, 255, 0.64),
+    0 0 32px rgba(83, 160, 255, 0.34),
+    0 14px 34px rgba(6, 8, 30, 0.7);
+  transform: translateY(-0.18em) rotate(var(--char-hover-tilt)) scale(1.08);
+}
+
+.creative-home-title-char:hover::after {
+  opacity: 1;
+}
+
+.creative-home-video-slide {
+  opacity: 0;
+  animation: creative-home-video-cycle 18s ease-in-out infinite;
+}
+
+.creative-home-video-slide:first-child {
+  opacity: 1;
 }
 
 .creative-glass-card {
   isolation: isolate;
   background:
-    linear-gradient(112deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08) 42%, rgba(9, 66, 86, 0.28)),
-    rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(214, 241, 255, 0.36);
+    linear-gradient(118deg, rgba(255, 255, 255, 0.11), rgba(181, 193, 255, 0.025) 38%, rgba(16, 26, 72, 0.09)),
+    rgba(255, 255, 255, 0.026);
+  border: 1px solid rgba(236, 233, 255, 0.22);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.45),
-    inset 0 -24px 60px rgba(4, 38, 50, 0.34),
-    0 0 0 1px rgba(107, 163, 245, 0.16),
-    0 24px 70px rgba(0, 17, 27, 0.34);
-  backdrop-filter: blur(22px) saturate(1.35) brightness(1.08);
-  -webkit-backdrop-filter: blur(22px) saturate(1.35) brightness(1.08);
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(130, 157, 255, 0.14),
+    inset 18px 0 42px rgba(255, 255, 255, 0.045),
+    inset -24px -10px 62px rgba(63, 82, 180, 0.16),
+    0 0 0 1px rgba(132, 105, 255, 0.1),
+    0 26px 78px rgba(3, 5, 22, 0.42);
+  backdrop-filter: blur(14px) saturate(1.45) brightness(1.08) contrast(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.45) brightness(1.08) contrast(1.06);
 }
 
 .creative-glass-card::before {
@@ -1171,13 +1224,16 @@ html {
   inset: 1px;
   z-index: -1;
   content: "";
-  border-radius: 27px;
+  border-radius: 23px;
   background:
-    radial-gradient(circle at 12% 18%, rgba(255, 184, 166, 0.5), transparent 18rem),
-    radial-gradient(circle at 78% 34%, rgba(145, 216, 255, 0.22), transparent 18rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 58%);
-  opacity: 0.82;
-  transition: opacity 0.3s ease;
+    radial-gradient(ellipse at 10% 18%, rgba(255, 255, 255, 0.34), transparent 9rem),
+    radial-gradient(ellipse at 92% 24%, rgba(119, 177, 255, 0.2), transparent 15rem),
+    linear-gradient(115deg, rgba(255, 255, 255, 0.22), transparent 24%, rgba(142, 123, 255, 0.12) 74%, transparent);
+  opacity: 0.48;
+  mix-blend-mode: screen;
+  transition:
+    opacity 0.3s ease,
+    transform 0.42s ease;
 }
 
 .creative-glass-card::after {
@@ -1187,27 +1243,33 @@ html {
   content: "";
   border-radius: inherit;
   background:
-    linear-gradient(130deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.08) 14%, transparent 36%),
-    linear-gradient(270deg, rgba(255, 255, 255, 0.22), transparent 26%),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.22), transparent 18%);
+    linear-gradient(128deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.04) 12%, transparent 32%),
+    linear-gradient(270deg, rgba(132, 105, 255, 0.12), transparent 28%),
+    linear-gradient(15deg, transparent 38%, rgba(124, 184, 255, 0.14) 52%, transparent 62%);
   mix-blend-mode: screen;
-  opacity: 0.64;
-  transition: opacity 0.3s ease;
+  opacity: 0.46;
+  transition:
+    opacity 0.3s ease,
+    transform 0.42s ease;
 }
 
 .creative-glass-card:hover {
-  border-color: rgba(231, 249, 255, 0.6);
+  border-color: rgba(229, 224, 255, 0.48);
+  transform: translateY(-0.25rem) scale(1.018);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.58),
-    inset 0 -28px 70px rgba(4, 38, 50, 0.28),
-    0 0 0 1px rgba(200, 155, 236, 0.28),
-    0 22px 80px rgba(0, 20, 34, 0.42),
-    0 0 46px rgba(107, 163, 245, 0.18);
+    inset 0 1px 0 rgba(255, 255, 255, 0.46),
+    inset 0 -1px 0 rgba(130, 157, 255, 0.2),
+    inset 24px 0 54px rgba(255, 255, 255, 0.055),
+    inset -30px -12px 70px rgba(92, 108, 220, 0.22),
+    0 0 0 1px rgba(168, 139, 255, 0.24),
+    0 26px 92px rgba(3, 5, 22, 0.52),
+    0 0 58px rgba(116, 87, 255, 0.18);
 }
 
 .creative-glass-card:hover::before,
 .creative-glass-card:hover::after {
-  opacity: 1;
+  opacity: 0.9;
+  transform: scale(1.04);
 }
 
 .creative-glass-sheen {
@@ -1217,9 +1279,9 @@ html {
   width: 46%;
   height: 150%;
   pointer-events: none;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.28), transparent);
-  filter: blur(12px);
-  opacity: 0.38;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.36), rgba(158, 199, 255, 0.14), transparent);
+  filter: blur(10px);
+  opacity: 0.3;
   transform: rotate(8deg);
   transition:
     left 0.55s ease,
@@ -1228,20 +1290,45 @@ html {
 
 .creative-glass-card:hover .creative-glass-sheen {
   left: 78%;
-  opacity: 0.58;
+  opacity: 0.68;
 }
 
 .creative-glass-icon {
   background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.34), transparent 42%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
-  border: 1px solid rgba(232, 249, 255, 0.26);
+    radial-gradient(circle at 30% 20%, rgba(246, 244, 255, 0.34), transparent 42%),
+    linear-gradient(145deg, rgba(235, 230, 255, 0.22), rgba(118, 126, 219, 0.08));
+  border: 1px solid rgba(232, 228, 255, 0.26);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.42),
-    inset 0 -18px 36px rgba(10, 58, 72, 0.26),
-    0 18px 34px rgba(0, 23, 35, 0.2);
+    inset 0 1px 1px rgba(255, 255, 255, 0.36),
+    inset 0 -18px 38px rgba(14, 18, 56, 0.28),
+    0 18px 34px rgba(3, 5, 22, 0.28);
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
+}
+
+.creative-home-content-panel {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(8, 11, 34, 0) 0%, rgba(8, 11, 34, 0.78) 5.5rem, #080b22 12rem),
+    radial-gradient(ellipse at 52% 0%, rgba(82, 112, 255, 0.12), transparent 34rem),
+    #080b22;
+}
+
+.creative-home-content-panel::before {
+  position: absolute;
+  inset: -2rem 0 auto;
+  z-index: 0;
+  height: 8rem;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(180deg, rgba(8, 11, 34, 0), rgba(8, 11, 34, 0.5) 42%, rgba(8, 11, 34, 0.94)),
+    radial-gradient(ellipse at 50% 8%, rgba(184, 166, 255, 0.13), transparent 34rem);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  mask-image: linear-gradient(180deg, transparent 0%, black 24%, black 72%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 24%, black 72%, transparent 100%);
 }
 
 /* ==========================================================================
@@ -1307,5 +1394,21 @@ html {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes creative-home-video-cycle {
+  0%,
+  28% {
+    opacity: 1;
+  }
+
+  36%,
+  92% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
   }
 }
