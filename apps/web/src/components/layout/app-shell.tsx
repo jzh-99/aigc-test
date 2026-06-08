@@ -4,6 +4,7 @@ import { Sidebar } from './sidebar'
 import { Topbar } from './topbar'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AiAssistant } from '@/components/ai-assistant/ai-assistant'
+import { usePathname } from 'next/navigation'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -12,6 +13,20 @@ interface AppShellProps {
 }
 
 export function AppShell({ children, title, mainClassName }: AppShellProps) {
+  const pathname = usePathname()
+  const isCreativeHome = pathname === '/'
+
+  if (isCreativeHome && !title) {
+    return (
+      <TooltipProvider>
+        <div className="h-screen overflow-hidden bg-[#062236]">
+          {children}
+        </div>
+        <AiAssistant />
+      </TooltipProvider>
+    )
+  }
+
   return (
     <TooltipProvider>
       <div className="flex h-screen overflow-hidden">

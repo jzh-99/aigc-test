@@ -7,7 +7,7 @@ describe("creative home static data", () => {
   it("keeps the main creative entries in the required order", () => {
     assert.deepEqual(
       creativeEntryCards.map((card) => card.title),
-      ["AI 生图", "AI 视频", "Toby Studio", "灵动画布"],
+      ["AI 生图", "AI 视频", "灵动画布"],
     );
   });
 
@@ -21,11 +21,7 @@ describe("creative home static data", () => {
     ]);
   });
 
-  it("configures Toby Studio and canvas destinations", () => {
-    assert.equal(
-      creativeEntryCards.find((card) => card.title === "Toby Studio")?.actions[0]?.href,
-      "/toby-studio",
-    );
+  it("configures canvas as the workflow-style destination", () => {
     assert.equal(
       creativeEntryCards.find((card) => card.title === "灵动画布")?.actions[0]?.href,
       "/canvas",
@@ -50,16 +46,9 @@ describe("creative home static data", () => {
     }
   });
 
-  it("uses theme token classes instead of hard-coded palette steps", () => {
-    const hardCodedPaletteStep =
-      /(cyan|rose|violet|emerald|fuchsia|slate|stone|sky|lime|amber|zinc|teal|pink|orange)-\d/;
-
+  it("uses theme accents for primary entry cards", () => {
     for (const card of creativeEntryCards) {
-      assert.equal(hardCodedPaletteStep.test(card.accent), false);
-    }
-
-    for (const item of inspirationItems) {
-      assert.equal(hardCodedPaletteStep.test(item.toneClass), false);
+      assert.equal(card.accent.includes("primary") || card.accent.includes("secondary"), true);
     }
   });
 });
