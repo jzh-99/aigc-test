@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { buildUserProfile } from '../../services/user-profile.js'
+import { extractStorageKey, deleteTosObject } from '../../lib/storage.js'
 
 const route: FastifyPluginAsync = async (app) => {
   // PATCH /users/me — 更新当前用户的用户名或头像
@@ -23,6 +24,17 @@ const route: FastifyPluginAsync = async (app) => {
 
     const db = getDb()
     const updates: Record<string, unknown> = {}
+
+    // 记录旧头像 URL，用于后续清理 TOS 文件
+    let oldAvatarUrl: string | null | undefined
+    if (avatar_url !== undefined) {
+      const user = await db
+        .selectFrom('users')
+        .select('avatar_url')
+        .where('id', '=', request.user.id)
+        .executeTakeFirst()
+      oldAvatarUrl = user?.avatar_url ?? null
+    }
 
     if (username) {
       const sanitized = username.trim().slice(0, 50)
@@ -52,6 +64,19 @@ const route: FastifyPluginAsync = async (app) => {
       .set(updates)
       .where('id', '=', request.user.id)
       .execute()
+
+    // 异步清理旧头像文件（不阻塞主流程，失败只记日志）
+    if (avatar_url !== undefined && oldAvatarUrl) {
+      const newUrl = updates.avatar_url as string | null
+      if (oldAvatarUrl !== newUrl) {
+        const oldKey = extractStorageKey(oldAvatarUrl)
+        if (oldKey) {
+          deleteTosObject(oldKey).catch((err) => {
+            request.log.error({ err, oldKey, userId: request.user.id }, '旧头像文件删除失败')
+          })
+        }
+      }
+    }
 
     return buildUserProfile(db, request.user.id)
   })
