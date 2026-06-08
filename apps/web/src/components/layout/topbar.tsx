@@ -33,6 +33,7 @@ export function Topbar({ title }: TopbarProps) {
   const resetGeneration = useGenerationStore((s) => s.reset)
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
+  const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
 
   const canViewCredits = useMemo(() => {
     if (!activeTeam) return true
@@ -97,7 +98,7 @@ export function Topbar({ title }: TopbarProps) {
           <DropdownMenuContent align="end" className="w-48">
             <div className="px-2 py-1.5">
               <p className="text-sm font-medium">{user?.username}</p>
-              <p className="text-xs text-muted-foreground">{user?.email}</p>
+              <p className="text-xs text-muted-foreground">{accountDisplay}</p>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
