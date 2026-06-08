@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,10 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Switch } from '@/components/ui/switch'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
-import { apiPatch, apiPost, ApiError } from '@/lib/api-client'
+import { apiPatch, apiPost, fetchWithAuth, ApiError } from '@/lib/api-client'
 import type { UserProfile } from '@aigc/types'
 import { toast } from 'sonner'
-import { Loader2, AlertCircle, LogOut } from 'lucide-react'
+import { Loader2, AlertCircle, LogOut, ImagePlus } from 'lucide-react'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -28,6 +28,8 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url ?? '')
   const [loading, setLoading] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -38,6 +40,7 @@ export default function SettingsPage() {
     activeTeam?.role === 'owner' || activeTeam?.role === 'admin' || user?.role === 'admin'
 
   const showPasswordWarning = user?.password_change_required || searchParams.get('change_password') === 'true'
+  const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
 
   // Auto-focus password change section when required
   useEffect(() => {
@@ -46,6 +49,11 @@ export default function SettingsPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }, [showPasswordWarning])
+
+  useEffect(() => {
+    setUsername(user?.username ?? '')
+    setAvatarUrl(user?.avatar_url ?? '')
+  }, [user?.avatar_url, user?.username])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -61,6 +69,35 @@ export default function SettingsPage() {
       toast.error(err instanceof ApiError ? err.message : '保存失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('请上传图片文件')
+      e.target.value = ''
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('头像图片不能超过 10 MB')
+      e.target.value = ''
+      return
+    }
+
+    setAvatarUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetchWithAuth<{ url: string }>('/avatar/upload', { method: 'POST', body: form })
+      setAvatarUrl(res.url)
+      toast.success('头像已上传，请保存修改')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '头像上传失败')
+    } finally {
+      setAvatarUploading(false)
+      e.target.value = ''
     }
   }
 
@@ -135,7 +172,7 @@ export default function SettingsPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
               <p className="text-sm font-medium">{user?.username ?? '当前用户'}</p>
-              <p className="text-xs text-muted-foreground">{user?.email ?? user?.phone ?? '已登录账号'}</p>
+              <p className="text-xs text-muted-foreground">{accountDisplay}</p>
             </div>
             <Button
               type="button"
@@ -223,7 +260,7 @@ export default function SettingsPage() {
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
               <Label>账户</Label>
-              <Input value={user?.email ?? user?.phone ?? ''} disabled className="bg-muted" />
+              <Input value={accountDisplay} disabled className="bg-muted" />
               <p className="text-xs text-muted-foreground">账户不可修改</p>
             </div>
             <div className="space-y-2">
@@ -237,16 +274,45 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="avatar">头像 URL</Label>
-              <Input
-                id="avatar"
-                value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
-                placeholder="https://example.com/avatar.jpg"
+              <Label>头像</Label>
+              <div className="flex items-center gap-4 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border border-border bg-muted text-muted-foreground">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <ImagePlus className="h-6 w-6" aria-hidden="true" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={avatarUploading}
+                    >
+                      {avatarUploading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <ImagePlus className="mr-2 h-4 w-4" />
+                      )}
+                      上传头像
+                    </Button>
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {avatarUrl ? avatarUrl : '支持 JPG、PNG、WebP，上传后点击保存修改生效'}
+                  </p>
+                </div>
+              </div>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleAvatarUpload}
               />
-              <p className="text-xs text-muted-foreground">输入头像图片链接（文件上传功能后续开放）</p>
             </div>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || avatarUploading}>
               {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               保存修改
             </Button>

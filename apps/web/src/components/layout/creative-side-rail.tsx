@@ -56,6 +56,7 @@ export function CreativeSideRail() {
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const resetGeneration = useGenerationStore((s) => s.reset)
   const { showVideoStudioTab } = useTeamFeatures()
+  const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
   const visibleManagementItems = managementNavItems.filter((item) => {
     if (item.label === '操作手册') return false
     if (item.requireUserRole && user?.role !== item.requireUserRole) return false
@@ -172,7 +173,7 @@ export function CreativeSideRail() {
               </span>
               <div className="min-w-0">
                 <p className="truncate text-xs font-semibold text-white">{user?.username ?? '当前用户'}</p>
-                <p className="truncate text-[11px] text-white/50">{user?.email ?? user?.phone ?? '已登录账号'}</p>
+                <p className="truncate text-[11px] text-white/50">{accountDisplay}</p>
               </div>
             </div>
             <DropdownMenuSeparator className="bg-white/10" />
