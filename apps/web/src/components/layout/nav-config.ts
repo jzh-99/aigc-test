@@ -53,8 +53,23 @@ export const managementNavItems: NavItem[] = [
   { href: '/docs', label: '操作手册', icon: BookOpen },
 ]
 
-export function isNavItemActive(href: string, pathname: string) {
-  const pathOnly = href.split('?')[0]
+export function isNavItemActive(href: string, currentPath: string) {
+  const [pathOnly, queryString = ''] = href.split('?')
+  const [pathname, currentQueryString = ''] = currentPath.split('?')
+
+  if (queryString) {
+    if (pathname !== pathOnly) return false
+
+    const hrefParams = new URLSearchParams(queryString)
+    const currentParams = new URLSearchParams(currentQueryString)
+
+    for (const [key, value] of hrefParams) {
+      if (currentParams.get(key) !== value) return false
+    }
+
+    return true
+  }
+
   if (pathOnly === '/') return pathname === '/'
-  return pathname.startsWith(pathOnly)
+  return pathname === pathOnly || pathname.startsWith(`${pathOnly}/`)
 }

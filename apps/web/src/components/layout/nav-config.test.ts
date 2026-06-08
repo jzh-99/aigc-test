@@ -46,8 +46,15 @@ describe('isNavItemActive', () => {
     assert.equal(isNavItemActive('/', '/assets'), false)
   })
 
-  test('忽略 query 后匹配生成页', () => {
-    assert.equal(isNavItemActive('/generation?mode=image', '/generation'), true)
-    assert.equal(isNavItemActive('/generation?mode=video', '/generation'), true)
+  test('带 query 的生成页只匹配相同 mode', () => {
+    assert.equal(isNavItemActive('/generation?mode=image', '/generation?mode=image'), true)
+    assert.equal(isNavItemActive('/generation?mode=image', '/generation?mode=video'), false)
+    assert.equal(isNavItemActive('/generation?mode=video', '/generation?mode=video'), true)
+    assert.equal(isNavItemActive('/generation?mode=video', '/generation?mode=image'), false)
+  })
+
+  test('无 query 的路径按路径段边界匹配', () => {
+    assert.equal(isNavItemActive('/assets', '/assets-old'), false)
+    assert.equal(isNavItemActive('/assets', '/assets/library'), true)
   })
 })
