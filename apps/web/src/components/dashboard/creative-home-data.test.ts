@@ -32,11 +32,12 @@ describe("creative home static data", () => {
     );
   });
 
-  it("provides static inspiration items without links", () => {
+  it("provides static inspiration items without links or images", () => {
     assert.ok(inspirationItems.length >= 8);
 
     for (const item of inspirationItems) {
       assert.equal(Object.hasOwn(item, "href"), false);
+      assert.equal(Object.hasOwn(item, "image"), false);
     }
   });
 

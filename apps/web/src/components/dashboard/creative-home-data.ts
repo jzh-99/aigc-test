@@ -24,7 +24,8 @@ export interface InspirationItem {
   title: string;
   category: string;
   description: string;
-  image: string;
+  heightClass: string;
+  toneClass: string;
   tags: string[];
 }
 
@@ -68,7 +69,8 @@ export const inspirationItems: InspirationItem[] = [
     title: "霓虹雨巷",
     category: "场景概念",
     description: "湿润街面反射粉蓝灯牌，人物背影穿过细雨。",
-    image: "/images/inspirations/city-neon-rain.jpg",
+    heightClass: "h-72",
+    toneClass: "from-cyan-400 via-fuchsia-500 to-slate-950",
     tags: ["赛博", "夜景", "电影感"],
   },
   {
@@ -76,7 +78,8 @@ export const inspirationItems: InspirationItem[] = [
     title: "柔光新品海报",
     category: "商业视觉",
     description: "玻璃质感台面、低饱和背景与精致产品主光。",
-    image: "/images/inspirations/soft-product-poster.jpg",
+    heightClass: "h-64",
+    toneClass: "from-rose-100 via-stone-200 to-sky-200",
     tags: ["产品", "海报", "柔光"],
   },
   {
@@ -84,7 +87,8 @@ export const inspirationItems: InspirationItem[] = [
     title: "奇想温室",
     category: "插画灵感",
     description: "巨型叶片包围透明穹顶，暖色灯串穿过植物。",
-    image: "/images/inspirations/fantasy-greenhouse.jpg",
+    heightClass: "h-80",
+    toneClass: "from-emerald-300 via-lime-200 to-amber-200",
     tags: ["插画", "自然", "奇幻"],
   },
   {
@@ -92,7 +96,8 @@ export const inspirationItems: InspirationItem[] = [
     title: "数字人近景",
     category: "角色影像",
     description: "干净棚拍布光，面部细节清晰，适合作为口播封面。",
-    image: "/images/inspirations/avatar-closeup.jpg",
+    heightClass: "h-72",
+    toneClass: "from-violet-300 via-indigo-300 to-slate-900",
     tags: ["数字人", "封面", "棚拍"],
   },
   {
@@ -100,7 +105,8 @@ export const inspirationItems: InspirationItem[] = [
     title: "旅行短片定帧",
     category: "视频灵感",
     description: "清晨海岸线与远处车灯，适合生成舒展转场镜头。",
-    image: "/images/inspirations/travel-reel-frame.jpg",
+    heightClass: "h-64",
+    toneClass: "from-sky-300 via-orange-200 to-teal-500",
     tags: ["旅行", "短片", "转场"],
   },
   {
@@ -108,7 +114,8 @@ export const inspirationItems: InspirationItem[] = [
     title: "时装大片",
     category: "人像摄影",
     description: "强轮廓光搭配金属背景，呈现杂志封面质感。",
-    image: "/images/inspirations/fashion-editorial.jpg",
+    heightClass: "h-80",
+    toneClass: "from-zinc-900 via-stone-500 to-amber-300",
     tags: ["人像", "时装", "封面"],
   },
   {
@@ -116,7 +123,8 @@ export const inspirationItems: InspirationItem[] = [
     title: "品牌情绪板",
     category: "画布素材",
     description: "色卡、字体样张与产品草图组合成统一视觉方向。",
-    image: "/images/inspirations/canvas-moodboard.jpg",
+    heightClass: "h-72",
+    toneClass: "from-teal-200 via-slate-100 to-rose-200",
     tags: ["品牌", "排版", "素材"],
   },
   {
@@ -124,7 +132,8 @@ export const inspirationItems: InspirationItem[] = [
     title: "微缩料理世界",
     category: "创意摄影",
     description: "小比例人物在甜点表面布景，形成有趣空间错觉。",
-    image: "/images/inspirations/miniature-food.jpg",
+    heightClass: "h-64",
+    toneClass: "from-amber-200 via-pink-200 to-emerald-200",
     tags: ["微缩", "美食", "趣味"],
   },
 ];
