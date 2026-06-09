@@ -9,7 +9,6 @@ import { apiPost, ApiError } from '@/lib/api-client'
 import type { AuthResponse, LoginRequest } from '@aigc/types'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import Link from 'next/link'
 
 function KickedMessage() {
   const searchParams = useSearchParams()
@@ -150,11 +149,11 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="login-form">
             <div className="login-field">
-              <label htmlFor="identifier" className="login-label">邮箱 / 手机号</label>
+              <label htmlFor="identifier" className="login-label">手机号</label>
               <Input
                 id="identifier"
                 type="text"
-                placeholder="请输入邮箱或手机号"
+                placeholder="请输入手机号"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 required
@@ -193,9 +192,10 @@ export default function LoginPage() {
           </form>
 
           <div className="login-footer-links">
-            <Link href="/accept-invite" className="login-link">接受邀请</Link>
-            <span className="login-link-divider">·</span>
-            <Link href="/docs" className="login-link">使用手册</Link>
+            <span>登录即代表同意</span>
+            <span className="login-link">《用户协议》</span>
+            <span>和</span>
+            <span className="login-link">《隐私政策》</span>
           </div>
         </div>
       </div>
