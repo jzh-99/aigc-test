@@ -8,34 +8,16 @@ import {
   creativeEntryCards,
   inspirationItems,
 } from '@/components/dashboard/creative-home-data'
+import { HeroVideoCarousel } from '@/components/dashboard/hero-video-carousel'
 
 const tabItems = ['发现', 'MJ 美学', '视频', '短片']
-const heroVideoSlides = [
-  '/videos/creative-home-bg.mp4',
-  '/videos/creative-home-bg2.mp4',
-  '/videos/creative-home-bg3.mp4',
-  '/videos/creative-home-bg4.mp4',
-]
 const heroTitleChars = Array.from('让美好被看见')
 
 export default function DashboardPage() {
   return (
     <main className="relative h-screen overflow-hidden bg-[#080b22] text-white">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[31rem] overflow-hidden lg:h-[32rem]">
-        {heroVideoSlides.map((src, index) => (
-          <video
-            key={src}
-            className="creative-home-video-slide absolute inset-0 h-full w-full scale-105 object-cover"
-            src={src}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload={index === 0 ? 'metadata' : 'none'}
-            aria-hidden="true"
-            style={{ animationDelay: `${index * 6}s` }}
-          />
-        ))}
+        <HeroVideoCarousel />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,8,31,0.18)_0%,rgba(10,15,48,0.46)_56%,rgba(8,11,34,0.96)_100%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(173,144,255,0.2),transparent_24%),radial-gradient(circle_at_80%_18%,rgba(77,160,255,0.14),transparent_30%),linear-gradient(90deg,rgba(5,10,30,0.68)_0%,rgba(21,18,54,0.18)_45%,rgba(7,12,34,0.64)_100%)]" />
         <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-b from-transparent to-[#080b22]" />
