@@ -157,7 +157,7 @@ export default function ImagePage() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-full">
+    <div className="generation-dream-page -m-4 flex h-[calc(100%+2rem)] flex-col gap-6 p-5 md:-m-6 md:h-[calc(100%+3rem)] md:p-7 lg:flex-row">
       {/* 为每个活跃 batch 挂载 SSE 订阅，组件不渲染任何 DOM */}
       {Array.from(activeBatchIds).map((id) => (
         <BatchSSEWatcher
@@ -169,7 +169,7 @@ export default function ImagePage() {
       ))}
 
       {/* Left column — Generation Panel */}
-      <div className="w-full lg:w-[400px] shrink-0 flex flex-col">
+      <div className="generation-dream-left w-full shrink-0 flex flex-col lg:w-[400px]">
         {noWorkspace && (
           <Alert variant="destructive" className="mb-4">
             <FolderX className="h-4 w-4" />
@@ -200,15 +200,15 @@ export default function ImagePage() {
       </div>
 
       {/* Right column — History */}
-      <div className="flex-1 min-h-[400px] flex flex-col min-w-0 max-w-full">
-        <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardHeader className="pb-3 shrink-0">
+      <div className="generation-dream-right flex-1 min-h-[400px] flex flex-col min-w-0 max-w-full">
+        <Card className="generation-dream-stage flex-1 flex flex-col overflow-hidden">
+          <CardHeader className="shrink-0 px-6 pb-4 pt-6">
             <CardTitle className="text-base flex items-center gap-2">
-              <div className="flex rounded-lg border p-1">
+              <div className="generation-dream-segmented flex rounded-full border p-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={cn('h-7 px-3 text-xs', rightTab === 'history' ? 'nav-item-active' : 'hover:bg-accent')}
+                  className={cn('h-8 rounded-full px-4 text-xs', rightTab === 'history' ? 'generation-dream-pill-active' : 'generation-dream-pill')}
                   onClick={() => setRightTab('history')}
                 >
                   历史记录
@@ -216,7 +216,7 @@ export default function ImagePage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={cn('h-7 px-3 text-xs', rightTab === 'assets' ? 'nav-item-active' : 'hover:bg-accent')}
+                  className={cn('h-8 rounded-full px-4 text-xs', rightTab === 'assets' ? 'generation-dream-pill-active' : 'generation-dream-pill')}
                   onClick={() => setRightTab('assets')}
                 >
                   资产库
@@ -238,14 +238,19 @@ export default function ImagePage() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 overflow-y-auto min-w-0">
+          <CardContent className="generation-dream-stage-content flex-1 overflow-y-auto min-w-0 px-6 pb-6">
             {rightTab === 'history' ? (
               <BatchList
                 ref={batchListRef}
                 onSelect={(batch) => { setSelectedBatchId(batch.id); setDetailOpen(true) }}
               />
             ) : (
-              <AssetsLibraryTab />
+              <AssetsLibraryTab
+                onSelectBatch={(batchId) => {
+                  setSelectedBatchId(batchId)
+                  setDetailOpen(true)
+                }}
+              />
             )}
           </CardContent>
         </Card>

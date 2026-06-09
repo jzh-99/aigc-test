@@ -1085,13 +1085,13 @@ html {
     0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
-.dark aside,
+/* .dark aside,
 .dark [data-sidebar] {
   background: linear-gradient(180deg, hsl(222 47% 6%) 0%, hsl(222 40% 8%) 100%);
-}
+} */
 
 .dark header {
-  background: rgba(8, 13, 26, 0.85);
+  /* background: rgba(8, 13, 26, 0.85); */
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -1142,8 +1142,468 @@ html {
 }
 
 /* ==========================================================================
+   生成页：灵感同源的雾面梦幻工作台
+   ========================================================================== */
+
+.generation-dream-page {
+  --dream-ink: rgba(239, 243, 255, 0.92);
+  --dream-soft: rgba(206, 216, 244, 0.62);
+  --dream-faint: rgba(170, 187, 224, 0.42);
+  --dream-line: rgba(222, 216, 255, 0.15);
+  --dream-line-strong: rgba(227, 218, 255, 0.35);
+  --dream-panel: rgba(12, 18, 45, 0.58);
+  --dream-deep: rgba(6, 10, 29, 0.82);
+  --dream-violet: rgba(169, 119, 255, 0.5);
+  --dream-blue: rgba(89, 169, 255, 0.26);
+  --dream-warm: rgba(255, 194, 154, 0.11);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--dream-ink);
+  font-family: var(--font-inter), "Noto Sans SC", sans-serif;
+  background:
+    linear-gradient(180deg, rgba(7, 9, 31, 0.86) 0%, rgba(8, 13, 34, 0.98) 52%, rgba(5, 8, 24, 1) 100%),
+    radial-gradient(ellipse at 48% -18%, rgba(202, 184, 255, 0.18), transparent 42rem),
+    radial-gradient(ellipse at 88% 18%, rgba(82, 161, 255, 0.14), transparent 38rem),
+    radial-gradient(ellipse at 24% 84%, rgba(255, 187, 143, 0.08), transparent 34rem);
+}
+
+.generation-dream-page::before,
+.generation-dream-page::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+}
+
+.generation-dream-page::before {
+  z-index: 0;
+  background:
+    linear-gradient(115deg, transparent 2%, rgba(255, 255, 255, 0.05) 36%, transparent 58%),
+    linear-gradient(90deg, rgba(10, 15, 43, 0.22), transparent 38%, rgba(5, 9, 28, 0.28));
+  opacity: 0.72;
+  mix-blend-mode: screen;
+}
+
+.generation-dream-page::after {
+  z-index: 0;
+  opacity: 0.26;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, transparent 0%, black 18%, black 78%, transparent 100%);
+}
+
+.generation-dream-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.generation-dream-left,
+.generation-dream-right {
+  min-height: 0;
+}
+
+.generation-dream-mode-tabs,
+.generation-dream-segmented {
+  border: 1px solid var(--dream-line);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(140, 159, 255, 0.026)),
+    rgba(5, 9, 27, 0.46);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 14px 34px rgba(3, 6, 22, 0.2);
+  backdrop-filter: blur(16px) saturate(1.28);
+  -webkit-backdrop-filter: blur(16px) saturate(1.28);
+}
+
+.generation-dream-mode-tab,
+.generation-dream-pill,
+.generation-dream-pill-active {
+  color: var(--dream-soft) !important;
+}
+
+.generation-dream-mode-tab svg,
+.generation-dream-pill svg,
+.generation-dream-pill-active svg {
+  filter: drop-shadow(0 0 10px rgba(163, 132, 255, 0.22));
+}
+
+.generation-dream-mode-tab-active,
+.generation-dream-pill-active {
+  color: rgba(255, 255, 255, 0.96) !important;
+  background:
+    radial-gradient(ellipse at 28% 14%, rgba(255, 255, 255, 0.28), transparent 42%),
+    linear-gradient(135deg, rgba(132, 88, 255, 0.84), rgba(190, 99, 255, 0.58) 52%, rgba(111, 164, 255, 0.34)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 0 26px rgba(163, 107, 255, 0.32),
+    0 10px 24px rgba(4, 8, 28, 0.22);
+}
+
+.generation-dream-mode-tab-idle:hover,
+.generation-dream-pill:hover {
+  color: rgba(247, 249, 255, 0.9) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+}
+
+.generation-dream-stage,
+.generation-dream-history-card {
+  position: relative;
+  border-color: var(--dream-line) !important;
+  background:
+    linear-gradient(128deg, rgba(255, 255, 255, 0.095), rgba(185, 198, 255, 0.028) 38%, rgba(84, 103, 202, 0.07)),
+    var(--dream-panel) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(100, 148, 255, 0.08),
+    0 24px 68px rgba(2, 5, 20, 0.38),
+    0 0 0 1px rgba(151, 123, 255, 0.05) !important;
+  backdrop-filter: blur(20px) saturate(1.38);
+  -webkit-backdrop-filter: blur(20px) saturate(1.38);
+}
+
+.generation-dream-stage,
+.generation-dream-history-card {
+  overflow: hidden;
+}
+
+.generation-dream-stage::before,
+.generation-dream-history-card::before {
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 18% 8%, rgba(255, 255, 255, 0.16), transparent 10rem),
+    radial-gradient(ellipse at 92% 0%, var(--dream-blue), transparent 18rem),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.11), transparent 28%, rgba(174, 136, 255, 0.075) 74%, transparent);
+  opacity: 0.64;
+  mix-blend-mode: screen;
+}
+
+.generation-dream-stage > *,
+.generation-dream-history-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.generation-dream-page button[role="combobox"] {
+  border-color: rgba(220, 220, 255, 0.12) !important;
+  color: rgba(242, 245, 255, 0.92) !important;
+  background:
+    linear-gradient(180deg, rgba(19, 29, 58, 0.82), rgba(14, 22, 48, 0.88)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 44px rgba(124, 151, 255, 0.045);
+}
+
+.generation-dream-page label,
+.generation-dream-page .text-muted-foreground {
+  color: var(--dream-soft) !important;
+}
+
+.generation-dream-stage-content {
+  scrollbar-color: rgba(169, 144, 255, 0.44) rgba(255, 255, 255, 0.035);
+}
+
+.generation-dream-history-card {
+  border-radius: 1.5rem !important;
+}
+
+.generation-dream-history-card:hover {
+  border-color: var(--dream-line-strong) !important;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 28px 76px rgba(2, 5, 18, 0.44),
+    0 0 42px rgba(133, 106, 255, 0.14) !important;
+}
+
+.generation-dream-media-frame,
+.generation-dream-asset-card {
+  border-color: rgba(222, 216, 255, 0.1) !important;
+  background:
+    linear-gradient(180deg, rgba(24, 42, 79, 0.58), rgba(10, 17, 40, 0.74)),
+    rgba(10, 17, 38, 0.72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.generation-dream-asset-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 14px 28px rgba(2, 5, 18, 0.2);
+}
+
+.generation-dream-asset-card:hover {
+  border-color: rgba(222, 216, 255, 0.34) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 18px 42px rgba(2, 5, 18, 0.32),
+    0 0 34px rgba(143, 105, 255, 0.17);
+}
+
+.generation-detail-dialog {
+  position: fixed;
+  isolation: isolate;
+  background:
+    linear-gradient(135deg, rgba(10, 13, 31, 0.98), rgba(7, 18, 38, 0.96) 44%, rgba(16, 12, 42, 0.97)),
+    radial-gradient(ellipse at 23% 18%, rgba(154, 119, 255, 0.24), transparent 34%),
+    radial-gradient(ellipse at 82% 32%, rgba(55, 187, 255, 0.22), transparent 36%),
+    radial-gradient(ellipse at 50% 100%, rgba(102, 66, 255, 0.24), transparent 44%) !important;
+  border-color: rgba(215, 207, 255, 0.28) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(122, 164, 255, 0.1),
+    0 34px 120px rgba(0, 0, 0, 0.78),
+    0 0 68px rgba(101, 74, 255, 0.28);
+}
+
+.generation-detail-dialog::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 28% 22%, rgba(255, 255, 255, 0.16), transparent 28%),
+    radial-gradient(ellipse at 78% 18%, rgba(70, 168, 255, 0.12), transparent 32%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 18%, transparent 82%, rgba(175, 150, 255, 0.08));
+  filter: blur(20px);
+  opacity: 0.82;
+}
+
+.generation-detail-dialog::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at center, black 0%, transparent 76%);
+  opacity: 0.28;
+}
+
+.generation-detail-header {
+  border-bottom: 1px solid rgba(213, 204, 255, 0.14);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.075), rgba(100, 129, 255, 0.05) 46%, rgba(255, 255, 255, 0.025)),
+    rgba(5, 7, 18, 0.14);
+}
+
+.generation-detail-content {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 30%),
+    radial-gradient(ellipse at 55% 48%, rgba(53, 153, 255, 0.12), transparent 42%);
+}
+
+.generation-detail-meta,
+.generation-detail-results {
+  border: 1px solid rgba(201, 216, 255, 0.18);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(50, 76, 145, 0.1) 42%, rgba(5, 10, 24, 0.22)),
+    rgba(8, 18, 42, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 22px 56px rgba(0, 0, 0, 0.28),
+    0 0 42px rgba(92, 126, 255, 0.12);
+}
+
+.generation-detail-meta {
+  min-height: 0;
+}
+
+.generation-detail-label {
+  margin-bottom: 0.32rem;
+  color: rgba(199, 214, 255, 0.56);
+  font-size: 0.78rem;
+  line-height: 1.1rem;
+}
+
+.generation-detail-value {
+  color: rgba(248, 250, 255, 0.92);
+  font-size: 0.94rem;
+  font-weight: 650;
+  line-height: 1.35rem;
+}
+
+.generation-detail-image-list {
+  min-height: 0;
+  flex: 1;
+}
+
+.generation-detail-image-list-single {
+  display: flex;
+}
+
+.generation-detail-image-list-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.generation-detail-image-tile,
+.generation-detail-video-card,
+.generation-detail-audio-card {
+  border: 1px solid rgba(220, 214, 255, 0.22);
+  background:
+    linear-gradient(145deg, rgba(2, 7, 19, 0.72), rgba(19, 36, 78, 0.48)),
+    rgba(4, 7, 18, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 18px 52px rgba(0, 0, 0, 0.34),
+    0 0 42px rgba(96, 101, 255, 0.12);
+}
+
+.generation-detail-image-tile {
+  border-radius: 1.35rem;
+}
+
+.generation-detail-image-tile-single {
+  width: 100%;
+  min-height: 320px;
+  max-height: 100%;
+}
+
+.generation-detail-image-tile-single img {
+  padding: 0.25rem !important;
+}
+
+.generation-detail-video-card {
+  display: flex;
+  min-height: 320px;
+  max-height: 100%;
+  flex: 1;
+  flex-direction: column;
+}
+
+.generation-detail-video-card video {
+  min-height: 0;
+  flex: 1;
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.generation-detail-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(221, 214, 255, 0.22);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(74, 92, 176, 0.11)),
+    rgba(4, 8, 20, 0.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 20px 54px rgba(0, 0, 0, 0.3),
+    0 0 36px rgba(139, 100, 255, 0.16);
+  backdrop-filter: blur(18px);
+}
+
+.generation-detail-action {
+  min-width: 8.25rem;
+  border: 0 !important;
+  border-radius: 999px !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: none !important;
+}
+
+.generation-detail-action-muted {
+  background: rgba(255, 255, 255, 0.07) !important;
+}
+
+.generation-detail-action-muted:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+
+.generation-detail-action-primary {
+  background: linear-gradient(135deg, rgba(225, 169, 255, 0.94), rgba(150, 116, 255, 0.9)) !important;
+  color: #140d2b !important;
+}
+
+.generation-detail-action-primary:hover {
+  background: linear-gradient(135deg, rgba(239, 195, 255, 0.98), rgba(169, 137, 255, 0.96)) !important;
+}
+
+.generation-detail-action-video {
+  background: linear-gradient(135deg, rgba(102, 226, 255, 0.9), rgba(119, 80, 255, 0.96)) !important;
+  color: white !important;
+}
+
+.generation-detail-action-video:hover {
+  background: linear-gradient(135deg, rgba(127, 235, 255, 0.96), rgba(139, 102, 255, 0.98)) !important;
+}
+
+.generation-detail-action:disabled {
+  opacity: 0.38 !important;
+}
+
+.generation-detail-dialog > button {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.generation-detail-dialog > button:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (max-width: 1023px) {
+  .generation-dream-page {
+    overflow-y: auto;
+  }
+}
+
+/* ==========================================================================
    创作首页：AI Studio 玻璃态首屏
    ========================================================================== */
+
+.creative-home-video-backdrop {
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.creative-home-video-backdrop::before,
+.creative-home-video-backdrop::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  content: "";
+}
+
+.creative-home-video-backdrop::before {
+  background:
+    linear-gradient(90deg, rgba(4, 7, 21, 0.04) 0%, rgba(6, 9, 28, 0.04) 16%, rgba(7, 9, 31, 0.05) 46%, rgba(5, 8, 25, 0.22) 100%),
+    linear-gradient(180deg, rgba(4, 6, 20, 0.04) 0%, rgba(8, 10, 31, 0.2) 52%, rgba(6, 8, 25, 0.56) 100%);
+}
+
+.creative-home-video-backdrop::after {
+  background:
+    radial-gradient(ellipse at 52% 19%, rgba(236, 229, 255, 0.16), transparent 22rem),
+    radial-gradient(ellipse at 78% 18%, rgba(96, 174, 255, 0.12), transparent 28rem),
+    radial-gradient(ellipse at 18% 62%, rgba(151, 123, 255, 0.18), transparent 31rem),
+    linear-gradient(180deg, transparent 0%, rgba(4, 6, 20, 0.18) 58%, rgba(5, 7, 22, 0.6) 100%);
+  backdrop-filter: blur(0.6px) saturate(1.08);
+  -webkit-backdrop-filter: blur(0.6px) saturate(1.08);
+  mix-blend-mode: screen;
+  opacity: 0.72;
+}
+
+.creative-home-video-backdrop video {
+  filter: saturate(1.02) contrast(0.98) brightness(0.86);
+}
 
 .creative-home-title {
   display: inline-flex;
@@ -1303,25 +1763,61 @@ html {
   position: relative;
   isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(8, 11, 34, 0) 0%, rgba(8, 11, 34, 0.78) 5.5rem, #080b22 12rem),
-    radial-gradient(ellipse at 52% 0%, rgba(82, 112, 255, 0.12), transparent 34rem),
-    #080b22;
+    linear-gradient(180deg, rgba(8, 11, 34, 0) 0%, rgba(6, 8, 25, 0.3) 8rem, rgba(6, 8, 25, 0.55) 16rem, rgba(6, 8, 25, 0.72) 100%),
+    radial-gradient(ellipse at 52% 0%, rgba(82, 112, 255, 0.1), transparent 34rem);
 }
 
-.creative-home-content-panel::before {
-  position: absolute;
-  inset: -2rem 0 auto;
-  z-index: 0;
-  height: 8rem;
+/* 灵感页分界线 — 模糊虚化效果 */
+/* .inspiration-divider {
+  position: relative;
+  height: 5rem;
   pointer-events: none;
-  content: "";
   background:
-    linear-gradient(180deg, rgba(8, 11, 34, 0), rgba(8, 11, 34, 0.5) 42%, rgba(8, 11, 34, 0.94)),
-    radial-gradient(ellipse at 50% 8%, rgba(184, 166, 255, 0.13), transparent 34rem);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  mask-image: linear-gradient(180deg, transparent 0%, black 24%, black 72%, transparent 100%);
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 24%, black 72%, transparent 100%);
+    linear-gradient(180deg, transparent 0%, rgba(6, 8, 25, 0.15) 30%, rgba(8, 11, 34, 0.45) 100%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(180deg, transparent 0%, black 18%, black 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 18%, black 82%, transparent 100%);
+} */
+
+/* 分界线底部发光线 */
+/* .inspiration-divider::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(184, 166, 255, 0.28), rgba(116, 87, 255, 0.16), rgba(184, 166, 255, 0.28), transparent);
+  filter: blur(0.5px);
+} */
+
+/* 吸顶标签栏 — 透明态 */
+.inspiration-sticky-tabs {
+  transition: background 0.4s ease, backdrop-filter 0.4s ease, box-shadow 0.4s ease;
+}
+
+/* 吸顶标签栏 — 吸附态 */
+.inspiration-sticky-tabs.is-stuck {
+  background: rgba(6, 8, 25, 0.92);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow:
+    0 1px 0 rgba(169, 156, 255, 0.12),
+    0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* 视频背景 — 吸附态（加深遮罩） */
+.creative-home-video-backdrop.is-stuck::before {
+  background:
+    linear-gradient(90deg, rgba(4, 7, 21, 0.18) 0%, rgba(6, 9, 28, 0.18) 16%, rgba(7, 9, 31, 0.22) 46%, rgba(5, 8, 25, 0.5) 100%),
+    linear-gradient(180deg, rgba(4, 6, 20, 0.18) 0%, rgba(8, 10, 31, 0.48) 52%, rgba(6, 8, 25, 0.82) 100%);
+  transition: background 0.5s ease;
+}
+
+.creative-home-video-backdrop.is-stuck::after {
+  opacity: 0.32;
+  transition: opacity 0.5s ease;
 }
 
 /* ==========================================================================
@@ -1388,5 +1884,240 @@ html {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ==========================================================================
+   Toby Studio 页面专属样式
+   ========================================================================== */
+
+/* 流动氛围光晕 */
+.toby-orb {
+  filter: blur(100px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.toby-orb--violet {
+  background: radial-gradient(circle, rgba(116, 87, 255, 0.14) 0%, transparent 70%);
+  animation: toby-orb-drift-1 22s ease-in-out infinite;
+}
+
+.toby-orb--sky {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.10) 0%, transparent 70%);
+  animation: toby-orb-drift-2 26s ease-in-out infinite;
+}
+
+.toby-orb--amber {
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.07) 0%, transparent 70%);
+  animation: toby-orb-drift-3 30s ease-in-out infinite;
+}
+
+@keyframes toby-orb-drift-1 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(40px, -30px) scale(1.08);
+  }
+  66% {
+    transform: translate(-25px, 20px) scale(0.94);
+  }
+}
+
+@keyframes toby-orb-drift-2 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  40% {
+    transform: translate(-35px, 25px) scale(1.06);
+  }
+  70% {
+    transform: translate(30px, -15px) scale(0.92);
+  }
+}
+
+@keyframes toby-orb-drift-3 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  35% {
+    transform: translate(20px, -20px) scale(1.1);
+  }
+  65% {
+    transform: translate(-30px, 15px) scale(0.9);
+  }
+}
+
+/* Toby Studio 标题字符基础样式 */
+.toby-title-char {
+  display: inline-block;
+  will-change: transform;
+}
+
+/* 灵感首页标题字符 —— 手写反美学基础样式 */
+.creative-title-char {
+  display: inline-block;
+  will-change: transform;
+  /* 模拟墨迹不均匀的透明度微变 */
+  filter: brightness(0.92);
+}
+
+.creative-title-char:nth-child(odd) {
+  filter: brightness(0.96);
+}
+
+.creative-title-char:nth-child(3n) {
+  filter: brightness(0.88);
+}
+
+/* ==========================================================================
+   资产库页面 — 与灵感首页同源的设计语言
+   ========================================================================== */
+
+/* ---- 卡片：同源 glass 语言 ---- */
+.asset-glass-card {
+  position: relative;
+  isolation: isolate;
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.06), rgba(181, 193, 255, 0.015) 38%, rgba(16, 26, 72, 0.05)),
+    rgba(255, 255, 255, 0.018);
+  border: 1px solid rgba(236, 233, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 4px 18px rgba(3, 5, 22, 0.35);
+  backdrop-filter: blur(14px) saturate(1.35);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+  transition:
+    border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 顶部柔光 */
+.asset-glass-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% -30%, rgba(169, 156, 255, 0.1), transparent 55%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* 光线扫过 */
+.asset-glass-card::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -65%;
+  width: 38%;
+  height: 200%;
+  pointer-events: none;
+  z-index: 4;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  transform: skewX(-15deg);
+  opacity: 0;
+  transition: left 0.55s ease, opacity 0.25s ease;
+}
+
+.asset-glass-card:hover {
+  border-color: rgba(236, 233, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 0 36px rgba(116, 87, 255, 0.08),
+    0 14px 44px rgba(3, 5, 22, 0.48);
+  transform: translateY(-3px);
+}
+
+.asset-glass-card:hover::before {
+  opacity: 1;
+}
+
+.asset-glass-card:hover::after {
+  left: 125%;
+  opacity: 1;
+}
+
+/* ---- 悬停操作层 ---- */
+.asset-hover-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: linear-gradient(
+    180deg,
+    rgba(5, 7, 22, 0) 0%,
+    rgba(5, 7, 22, 0.15) 25%,
+    rgba(5, 7, 22, 0.65) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.asset-glass-card:hover .asset-hover-layer {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ---- 操作小按钮（同源 inset shadow） ---- */
+.asset-action-btn {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid rgba(236, 233, 255, 0.15);
+  background: rgba(5, 7, 22, 0.5);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.asset-action-btn:hover {
+  border-color: rgba(236, 233, 255, 0.35);
+  background: rgba(116, 87, 255, 0.18);
+  color: white;
+  box-shadow: 0 0 18px rgba(116, 87, 255, 0.15);
+  transform: scale(1.08);
+}
+
+.asset-action-btn.danger:hover {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.12);
+}
+
+/* ---- 日期分割线 ---- */
+.asset-date-heading {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding-left: 0;
+  margin-bottom: 0.875rem;
+}
+
+.asset-date-heading::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(236, 233, 255, 0.1), rgba(236, 233, 255, 0.02) 60%, transparent);
+}
+
+/* ---- 页面大气层 ---- */
+.assets-page-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 32% 8%, rgba(116, 87, 255, 0.08), transparent 28rem),
+    radial-gradient(ellipse at 72% 4%, rgba(59, 130, 246, 0.05), transparent 24rem),
+    radial-gradient(ellipse at 50% 100%, rgba(6, 8, 25, 0.5), transparent 50%);
 }
 

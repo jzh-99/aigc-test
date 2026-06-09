@@ -7,7 +7,7 @@ describe("creative home static data", () => {
   it("keeps the main creative entries in the required order", () => {
     assert.deepEqual(
       creativeEntryCards.map((card) => card.title),
-      ["AI 生图", "AI 视频"],
+      ["AI 生图", "AI 视频", "灵动画布"],
     );
   });
 
@@ -21,11 +21,13 @@ describe("creative home static data", () => {
     ]);
   });
 
-  it("does not expose canvas as a home entry", () => {
-    assert.equal(
-      creativeEntryCards.some((card) => card.title === "灵动画布"),
-      false,
-    );
+  it("configures canvas as a home entry", () => {
+    const canvasCard = creativeEntryCards.find((card) => card.title === "灵动画布");
+
+    assert.ok(canvasCard);
+    assert.deepEqual(canvasCard.actions, [
+      { label: "进入画布", href: "/canvas" },
+    ]);
   });
 
   it("provides static inspiration items without links or images", () => {

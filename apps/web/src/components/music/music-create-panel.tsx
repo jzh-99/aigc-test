@@ -15,12 +15,6 @@ import { createMusicTrack } from '@/lib/music/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { resolveMusicPricingKey, type MusicModel, type MusicMode, type MusicSseEvent, type MusicTrackResponse, type MusicTrackType, type MusicVoiceCloneResponse, type MusicVoiceGender } from '@aigc/types'
 
-const PROMPT_EXAMPLES = [
-  '一首关于星空与思念的中文流行歌曲，旋律舒缓，充满情感',
-  'An upbeat electronic dance track with futuristic synths',
-  '轻快的儿童歌曲，关于春天和小动物，欢快可爱',
-]
-
 const STYLE_OPTIONS = ['流行音乐', '摇滚音乐', '古典音乐', '电子音乐', '乡村音乐', '爵士', '嘻哈', '民谣', '节奏布鲁斯', '迪斯科']
 const MAX_STYLE_COUNT = 10
 const MODEL_OPTIONS: { value: MusicModel; label: string; description: string }[] = [
@@ -207,20 +201,6 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
                 rows={7}
               />
               <div className="text-right text-xs text-muted-foreground">{count(prompt)} / 1024</div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {PROMPT_EXAMPLES.map((item) => (
-                <Button
-                  key={item}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-auto whitespace-normal rounded-lg border-primary/25 bg-primary/8 px-3.5 py-2 text-left leading-5 text-foreground shadow-sm hover:border-primary/45 hover:bg-primary/14 dark:border-primary/35 dark:bg-primary/15 dark:hover:bg-primary/25"
-                  onClick={() => setPrompt(item)}
-                >
-                  {item}
-                </Button>
-              ))}
             </div>
           </>
         ) : (

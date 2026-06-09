@@ -115,7 +115,7 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
   // 横图模式
   if (!isPortrait) {
     return (
-      <div className="group relative w-full rounded-md overflow-hidden bg-muted flex justify-center">
+      <div className="generation-dream-media-frame group relative w-full rounded-2xl overflow-hidden bg-muted flex justify-center">
         <div className="relative" style={{ height: 400, aspectRatio }}>
           <Image
             src={urls[index]}
@@ -199,7 +199,7 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
 
   // 竖图模式：瀑布流 + 左下角页签
   return (
-    <div className="relative w-full rounded-md overflow-hidden bg-muted">
+    <div className="generation-dream-media-frame relative w-full rounded-2xl overflow-hidden bg-muted">
       <div
         ref={containerRef}
         className="columns-2 gap-1.5"
@@ -348,7 +348,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
 
   return (
     <Card
-      className={cn('cursor-pointer transition-shadow hover:shadow-md w-full', onClick && 'hover:border-primary/50')}
+      className={cn('generation-dream-history-card cursor-pointer transition-shadow hover:shadow-md w-full', onClick && 'hover:border-primary/50')}
       onClick={onClick}
     >
       <CardContent className="p-4 space-y-3 max-w-full overflow-hidden">
@@ -393,7 +393,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
           videoUrl ? (
             <VideoPreview url={videoUrl} />
           ) : (batch.status === 'pending' || batch.status === 'processing') ? (
-            <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
+            <div className="generation-dream-media-frame flex h-16 w-16 items-center justify-center rounded-xl bg-muted gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : (batch.status === 'failed' || batch.status === 'partial_complete') && firstError ? (
@@ -404,7 +404,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               </p>
             </div>
           ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
+            <div className="generation-dream-media-frame flex h-16 w-16 items-center justify-center rounded-xl bg-muted gap-2">
               <Video className="h-4 w-4 text-muted-foreground" />
             </div>
           )
@@ -417,7 +417,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
 
             {/* Loading animation for pending/processing */}
             {thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing') && (
-              <div className="flex h-16 items-center justify-center rounded-md bg-muted">
+              <div className="generation-dream-media-frame flex h-16 items-center justify-center rounded-xl bg-muted">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             )}
@@ -431,7 +431,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
                   </p>
                 </div>
               ) : (
-                <div className="flex h-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                <div className="generation-dream-media-frame flex h-16 items-center justify-center rounded-xl bg-muted text-xs text-muted-foreground">
                   暂无图片
                 </div>
               )

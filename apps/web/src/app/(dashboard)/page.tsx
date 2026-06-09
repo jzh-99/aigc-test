@@ -1,31 +1,30 @@
 import Link from 'next/link'
-import type { CSSProperties } from 'react'
-import {
-  Search,
-  Sparkles,
-} from 'lucide-react'
-import {
-  creativeEntryCards,
-  inspirationItems,
-} from '@/components/dashboard/creative-home-data'
-import { HeroVideoCarousel } from '@/components/dashboard/hero-video-carousel'
+import { Sparkles } from 'lucide-react'
+import { creativeEntryCards } from '@/components/dashboard/creative-home-data'
+import { CursorRepelTitle, type CharVariant } from '@/components/dashboard/cursor-repel-title'
+import { InspirationContent } from '@/components/dashboard/inspiration-content'
 
-const tabItems = ['发现', 'MJ 美学', '视频', '短片']
-const heroTitleChars = Array.from('让美好被看见')
+/** 「让美好被看见」逐字手写反美学变换 */
+const heroCharVariants: CharVariant[] = [
+  { rotate: -9.5, offsetY: 14, scale: 1.13 },  // 让
+  { rotate: 6.8, offsetY: -11, scale: 0.91 },  // 美
+  { rotate: -5.6, offsetY: 12, scale: 1.1 },   // 好
+  { rotate: 0, offsetY: -6, scale: 0.72 },     // 空格
+  { rotate: 0, offsetY: 8, scale: 0.8 },       // 空格
+  { rotate: 10.2, offsetY: -16, scale: 0.88 }, // 被
+  { rotate: -7.8, offsetY: 9, scale: 1.12 },   // 看
+  { rotate: 5.4, offsetY: -12, scale: 0.93 },  // 见
+]
 
 export default function DashboardPage() {
   return (
-    <main className="relative h-screen overflow-hidden bg-[#080b22] text-white">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[31rem] overflow-hidden lg:h-[32rem]">
-        <HeroVideoCarousel />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,8,31,0.18)_0%,rgba(10,15,48,0.46)_56%,rgba(8,11,34,0.96)_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(173,144,255,0.2),transparent_24%),radial-gradient(circle_at_80%_18%,rgba(77,160,255,0.14),transparent_30%),linear-gradient(90deg,rgba(5,10,30,0.68)_0%,rgba(21,18,54,0.18)_45%,rgba(7,12,34,0.64)_100%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-b from-transparent to-[#080b22]" />
-      </div>
+    <main className="relative h-screen overflow-hidden bg-transparent text-white">
+      <div className="pointer-events-none absolute inset-x-0 top-0 " />
+      {/* <div className="pointer-events-none absolute inset-x-0 top-0 h-[62vh] bg-[linear-gradient(180deg,rgba(5,7,22,0.04)_0%,rgba(5,7,22,0.12)_62%,rgba(5,7,22,0.5)_100%)]" /> */}
       <div className="pointer-events-none absolute left-[20%] top-[21%] h-[24rem] w-[58rem] -rotate-12 rounded-full border border-violet-200/10 opacity-25 blur-[1px]" />
 
       <section className="relative z-10 h-full overflow-y-auto">
-        <div className="mx-auto flex min-h-screen w-full max-w-[1660px] flex-col px-5 pb-16 pt-16 sm:px-8 lg:px-12 lg:pt-20">
+        <div className="mx-auto flex min-h-screen w-full max-w-[1660px] flex-col px-5 pb-16 pt-16 sm:px-8 lg:px-12 lg:pt-24">
           <div className="flex justify-end lg:hidden">
             <Link
               href="/generation?mode=image"
@@ -36,29 +35,16 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-8 flex justify-center lg:mt-0">
-            <h1
-              className="creative-home-title select-none text-center font-serif text-[3.25rem] font-normal leading-[1.12] sm:text-[4.5rem] lg:text-[5.75rem]"
-              aria-label="让美好被看见"
-            >
-              {heroTitleChars.map((char, index) => (
-                <span
-                  key={`${char}-${index}`}
-                  className="creative-home-title-char"
-                  data-char={char}
-                  style={{
-                    '--char-lift': index % 2 === 0 ? '0em' : '-0.035em',
-                    '--char-tilt': `${(index - 3) * -0.7}deg`,
-                    '--char-hover-tilt': `${(index - 3) * 1.6}deg`,
-                  } as CSSProperties}
-                  aria-hidden="true"
-                >
-                  {char}
-                </span>
-              ))}
-            </h1>
+            <CursorRepelTitle
+              text="让美好  被看见"
+              className="select-none text-center font-serif text-[3.25rem] font-normal leading-[1.12] sm:text-[4.5rem] lg:text-[5.75rem]"
+              charClassName="creative-title-char"
+              charVariants={heroCharVariants}
+              glowColor="rgba(173, 144, 255, "
+            />
           </div>
 
-          <div className="mt-16 grid gap-5 lg:mt-24 lg:grid-cols-2">
+          <div className="mt-[24vh] grid gap-5 lg:mt-[28vh] lg:grid-cols-3">
             {creativeEntryCards.map((card) => {
               const Icon = card.icon
               const primaryAction = card.actions[0]
@@ -89,52 +75,13 @@ export default function DashboardPage() {
             })}
           </div>
 
-          <div className="creative-home-content-panel -mx-5 mt-8 px-5 pb-16 pt-14 sm:-mx-8 sm:px-8 lg:-mx-12 lg:mt-10 lg:px-12">
-            <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-4 overflow-x-auto">
-                {tabItems.map((tab, index) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    className={`h-11 shrink-0 rounded-full px-6 text-base font-semibold transition ${
-                      index === 0
-                        ? 'bg-violet-200/10 text-white shadow-[inset_0_1px_0_rgba(226,214,255,0.24),0_0_28px_rgba(116,87,255,0.14)]'
-                        : 'text-white/50 hover:bg-violet-200/10 hover:text-violet-50'
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-
-              <label className="flex h-11 w-full max-w-[14rem] items-center gap-3 rounded-full border border-violet-200/10 bg-[#151a3f]/35 px-4 text-violet-100/55 shadow-[inset_0_1px_0_rgba(226,214,255,0.1)] backdrop-blur lg:mr-3">
-                <Search className="h-5 w-5" aria-hidden="true" />
-                <span className="text-sm">搜索</span>
-              </label>
-            </div>
-
-            <div className="relative z-10 mt-7 grid auto-rows-[12rem] grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
-              {inspirationItems.map((item) => (
-                <article
-                  key={item.id}
-                  className={`group relative row-span-2 overflow-hidden rounded-lg bg-gradient-to-br ${item.toneClass}`}
-                >
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_24%,rgba(255,255,255,0.32),transparent_19%),radial-gradient(circle_at_70%_64%,rgba(255,255,255,0.18),transparent_23%)] opacity-70" />
-                  <div className="absolute inset-x-0 bottom-0 translate-y-8 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-5 opacity-0 transition duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                    <p className="text-xs font-semibold text-primary">{item.category}</p>
-                    <h3 className="mt-1 text-lg font-semibold text-white">{item.title}</h3>
-                    <p className="mt-2 line-clamp-2 text-sm leading-5 text-white/70">{item.description}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
+          <InspirationContent />
         </div>
       </section>
 
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 hidden border-t border-violet-200/10 bg-[#07091d]/55 px-4 py-2 text-center text-[12px] text-violet-100/28 backdrop-blur-md lg:block">
+      {/* <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 hidden border-t border-violet-200/10 bg-[#050719]/42 px-4 py-2 text-center text-[12px] text-violet-100/34 backdrop-blur-md lg:block">
         所有创作内容均由 AI 生成，可能存在不准确之处，请自行甄别其真实性
-      </div>
+      </div> */}
     </main>
   )
 }

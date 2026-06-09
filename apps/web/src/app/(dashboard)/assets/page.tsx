@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { Loader2, Download, Trash2, ImageIcon, VideoIcon, CalendarSearch, X, RotateCcw } from 'lucide-react'
 import { useAssets, deleteAsset } from '@/hooks/use-assets'
@@ -162,93 +161,116 @@ export default function AssetsPage() {
   const lightboxAsset = lightboxIndex !== null ? viewableAssets[lightboxIndex] : null
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-xl font-semibold">资产库</h2>
-        <div className="flex items-center gap-2">
-          {/* Date filter */}
-          <div className="relative flex items-center">
-            <CalendarSearch className="absolute left-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="pl-8 w-[160px] h-8 text-sm"
-            />
-            {dateFilter && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="absolute right-0 h-8 w-8"
-                onClick={() => setDateFilter('')}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
-          {/* Type toggle — hidden for company_a teams */}
-          {showVideoTab && (
-          <div className="flex items-center gap-1 rounded-lg border p-1">
-            <Button
-              size="sm"
-              variant={assetType === 'image' ? 'default' : 'ghost'}
-              className="h-7 gap-1.5 text-xs"
-              onClick={() => setAssetType('image')}
-            >
-              <ImageIcon className="h-3.5 w-3.5" />
-              图片
-            </Button>
-            <Button
-              size="sm"
-              variant={assetType === 'video' ? 'default' : 'ghost'}
-              className="h-7 gap-1.5 text-xs"
-              onClick={() => setAssetType('video')}
-            >
-              <VideoIcon className="h-3.5 w-3.5" />
-              视频
-            </Button>
-          </div>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs text-muted-foreground"
-            onClick={() => setTrashOpen(true)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            回收站
-          </Button>
-        </div>
+    <main className="assets-page relative min-h-full bg-[#060918] text-white px-10 py-8">
+      {/* 大气层 */}
+      <div className="assets-page-atmosphere" />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="toby-orb toby-orb--violet absolute -left-[8%] -top-[8%] h-[36rem] w-[36rem] rounded-full" />
+        <div className="toby-orb toby-orb--sky absolute -right-[5%] top-[20%] h-[28rem] w-[28rem] rounded-full" />
       </div>
+      {/* 噪点纹理 */}
+      <div className="pointer-events-none absolute inset-0 opacity-[0.018]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.85\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat' }} />
+
+      <div className="relative z-10 space-y-8">
+        {/* 页面标题区 */}
+        <header className="flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="font-serif text-2xl font-normal tracking-wide text-white/90" style={{ textShadow: '0 0 40px rgba(169,156,255,0.15)' }}>资产库</h2>
+            <p className="mt-1 text-xs text-white/40 tracking-wide">管理你的创作作品与灵感收藏</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* 日期筛选 — 同源搜索框样式 */}
+            <div className="relative flex items-center">
+              <CalendarSearch className="pointer-events-none absolute left-3 h-4 w-4 text-violet-100/40" />
+              <Input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="h-9 w-[152px] rounded-full border border-violet-200/10 bg-[#151a3f]/35 pl-9 pr-3 text-xs text-violet-100/55 shadow-[inset_0_1px_0_rgba(226,214,255,0.1)] backdrop-blur focus:border-violet-400/30 focus:ring-violet-400/15"
+              />
+              {dateFilter && (
+                <button
+                  type="button"
+                  className="absolute right-2 grid h-5 w-5 place-items-center rounded-full text-violet-100/40 hover:text-white/70 hover:bg-white/10 transition"
+                  onClick={() => setDateFilter('')}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {/* 类型切换 — 同源标签 pill 样式 */}
+            {showVideoTab && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={`h-9 shrink-0 rounded-full px-4 text-sm font-semibold transition flex items-center gap-1.5 ${
+                    assetType === 'image'
+                      ? 'bg-violet-200/10 text-white shadow-[inset_0_1px_0_rgba(226,214,255,0.24),0_0_28px_rgba(116,87,255,0.14)]'
+                      : 'text-white/50 hover:bg-violet-200/10 hover:text-violet-50'
+                  }`}
+                  onClick={() => setAssetType('image')}
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  图片
+                </button>
+                <button
+                  type="button"
+                  className={`h-9 shrink-0 rounded-full px-4 text-sm font-semibold transition flex items-center gap-1.5 ${
+                    assetType === 'video'
+                      ? 'bg-violet-200/10 text-white shadow-[inset_0_1px_0_rgba(226,214,255,0.24),0_0_28px_rgba(116,87,255,0.14)]'
+                      : 'text-white/50 hover:bg-violet-200/10 hover:text-violet-50'
+                  }`}
+                  onClick={() => setAssetType('video')}
+                >
+                  <VideoIcon className="h-4 w-4" />
+                  视频
+                </button>
+              </div>
+            )}
+            {/* 回收站 — 同源搜索框样式 */}
+            <button
+              type="button"
+              className="flex h-9 items-center gap-2 rounded-full border border-violet-200/10 bg-[#151a3f]/35 px-4 text-sm text-violet-100/55 shadow-[inset_0_1px_0_rgba(226,214,255,0.1)] backdrop-blur transition hover:text-white/80 hover:border-violet-200/20"
+              onClick={() => setTrashOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              回收站
+            </button>
+          </div>
+        </header>
 
       {isLoadingInitial && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 12 }).map((_, i) => (
-            <Skeleton key={i} className={assetType === 'video' ? 'aspect-video rounded-[10px]' : 'aspect-[4/3] rounded-[10px]'} />
+            <div key={i} className={`${assetType === 'video' ? 'aspect-video' : 'aspect-[4/3]'} rounded-[14px] bg-white/[0.03] border border-white/[0.06] animate-pulse`} />
           ))}
         </div>
       )}
 
       {error && (
-        <div className="py-12 text-center text-sm text-destructive">加载失败: {error.message}</div>
+        <div className="py-16 text-center">
+          <p className="text-sm text-red-300/60">加载失败: {error.message}</p>
+        </div>
       )}
 
       {!isLoadingInitial && !error && assets.length === 0 && (
-        <div className="py-20 text-center text-muted-foreground">
-          {assetType === 'video' ? (
-            <VideoIcon className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          ) : (
-            <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          )}
+        <div className="py-24 text-center">
+          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl border border-white/[0.08] bg-white/[0.03]">
+            {assetType === 'video' ? (
+              <VideoIcon className="h-7 w-7 text-white/15" />
+            ) : (
+              <ImageIcon className="h-7 w-7 text-white/15" />
+            )}
+          </div>
           {dateFilter ? (
             <>
-              <p>该日期暂无资产</p>
-              <p className="text-xs mt-1">{new Date(dateFilter + 'T12:00:00').toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p className="text-sm text-white/35">该日期暂无资产</p>
+              <p className="mt-1 text-xs text-white/20">{new Date(dateFilter + 'T12:00:00').toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </>
           ) : (
             <>
-              <p>暂无{assetType === 'video' ? '视频' : '图片'}资产</p>
-              <p className="text-xs mt-1">前往{assetType === 'video' ? '视频' : '图片'}生成开始创作</p>
+              <p className="text-sm text-white/35">暂无{assetType === 'video' ? '视频' : '图片'}资产</p>
+              <p className="mt-1 text-xs text-white/20">前往{assetType === 'video' ? '视频' : '图片'}生成开始创作</p>
             </>
           )}
         </div>
@@ -258,11 +280,11 @@ export default function AssetsPage() {
         const batchGroups = assetType === 'image' ? groupByBatch(items) : null
         return (
         <section key={date}>
-          <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-            <span>{date}</span>
-            <span className="text-xs opacity-60">({items.length} 个)</span>
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+          <div className="asset-date-heading">
+            <h3 className="text-[13px] font-medium tracking-wide text-white/35 whitespace-nowrap">{date}</h3>
+            <span className="text-[11px] text-white/18">{items.length} 个</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {assetType === 'image' && batchGroups
               ? batchGroups.map((group) => (
                   <ImageCarouselCard
@@ -298,9 +320,9 @@ export default function AssetsPage() {
 
       {/* Skeleton placeholders shown while next page loads */}
       {isLoadingMore && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className={assetType === 'video' ? 'aspect-video rounded-[10px]' : 'aspect-[4/3] rounded-[10px]'} />
+            <div key={i} className={`${assetType === 'video' ? 'aspect-video' : 'aspect-[4/3]'} rounded-[14px] bg-white/[0.03] border border-white/[0.06] animate-pulse`} />
           ))}
         </div>
       )}
@@ -424,6 +446,7 @@ export default function AssetsPage() {
         onOpenChange={setTrashOpen}
         onRestored={() => mutate()}
       />
-    </div>
+      </div>
+    </main>
   )
 }

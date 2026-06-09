@@ -88,6 +88,19 @@ async function refreshAccessToken(): Promise<{ token: string | null; rateLimited
   }
 }
 
+/**
+ * 去重 refresh：全局同一时刻只有一个 refresh 请求在飞，
+ * 其他调用者 await 同一个 Promise，避免并发 refresh 导致 token 轮换竞态。
+ */
+export function dedupedRefresh(): Promise<{ token: string | null; rateLimited: boolean }> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null
+    })
+  }
+  return refreshPromise
+}
+
 export async function fetchWithAuth<T>(path: string, init: RequestInit = {}): Promise<T> {
   // auth 路径（登录/注册/SSO 等）不依赖已有认证状态，跳过初始化等待
   if (!path.startsWith('/auth/')) {
@@ -144,12 +157,7 @@ export async function fetchWithAuth<T>(path: string, init: RequestInit = {}): Pr
       return handleResponse<T>(res)
     }
 
-    if (!refreshPromise) {
-      refreshPromise = refreshAccessToken().finally(() => {
-        refreshPromise = null
-      })
-    }
-    const refreshResult = await refreshPromise
+    const refreshResult = await dedupedRefresh()
     if (refreshResult.rateLimited) {
       throw new ApiError(429, 'RATE_LIMITED', '请求过于频繁，请稍后再试')
     }

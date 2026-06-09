@@ -58,6 +58,7 @@ interface GenerationState {
 
   // Video generation state
   videoParams: VideoParams | null
+  pendingVideoReferenceImages: ReferenceImage[]
 
   // Pending module — set by applyBatch so the panel can switch to the right tab
   pendingModule: string | null
@@ -87,6 +88,8 @@ interface GenerationState {
 
   // Video generation actions
   setVideoParams: (params: VideoParams | null) => void
+  sendImagesToVideoReference: (imgs: ReferenceImage[]) => void
+  clearPendingVideoReferenceImages: () => void
 
   // Common actions
   applyBatch: (batch: BatchResponse) => void
@@ -106,6 +109,7 @@ const defaults = {
   activeBatchId: null,
   imageModels: [] as ModelItem[],
   videoParams: null as VideoParams | null,
+  pendingVideoReferenceImages: [] as ReferenceImage[],
   pendingModule: null as string | null,
   userDefaults: null as UserDefaults | null,
   videoDefaults: null as VideoDefaults | null,
@@ -154,6 +158,11 @@ export const useGenerationStore = create<GenerationState>()(
     avatarDefaults: avatarDefaults ?? s.avatarDefaults,
   })),
   setVideoParams: (videoParams) => set({ videoParams }),
+  sendImagesToVideoReference: (imgs) => set((s) => ({
+    pendingModule: 'video',
+    pendingVideoReferenceImages: [...s.pendingVideoReferenceImages, ...imgs],
+  })),
+  clearPendingVideoReferenceImages: () => set({ pendingVideoReferenceImages: [] }),
   applyBatch: (batch) => {
     const module = (batch as any).module as string
     const isVideo = module === 'video'

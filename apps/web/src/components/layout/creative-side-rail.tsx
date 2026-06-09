@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { apiPost } from '@/lib/api-client'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
+import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { useTeamFeatures } from '@/hooks/use-team-features'
 import {
   creativeNavItems,
@@ -51,6 +52,10 @@ export function CreativeSideRail() {
   const searchParams = useSearchParams()
   const query = searchParams.toString()
   const currentPath = query ? `${pathname}?${query}` : pathname
+  const isCreativeHome = pathname === '/'
+  const isTabSticky = useHomeScrollStore((s) => s.isTabSticky)
+  /* 首页且未吸顶时保持透明，其余情况使用实色轨道主题 */
+  const isTransparent = isCreativeHome && !isTabSticky
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const clearAuth = useAuthStore((s) => s.clearAuth)
@@ -79,16 +84,62 @@ export function CreativeSideRail() {
   return (
     <aside
       className={cn(
-        'relative hidden h-screen w-20 shrink-0 flex-col items-center overflow-hidden border-r px-2 py-5 text-white backdrop-blur-2xl transition-colors duration-500 lg:flex',
-        railTheme.rail
+        'relative hidden h-screen w-20 shrink-0 flex-col items-center overflow-hidden border-r px-2 py-5 text-white transition-colors duration-500 lg:flex',
+        isTransparent
+          ? 'z-20 border-r-0 bg-transparent'
+          : `${railTheme.rail}`
       )}
     >
-      <div className={cn('pointer-events-none absolute inset-0 opacity-100 transition duration-500', railTheme.glow)} />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-white/0 via-white/25 to-white/0" />
+      <div
+        className={cn(
+          'pointer-events-none absolute inset-0 opacity-100 transition duration-500',
+          isTransparent
+            ? 'bg-[linear-gradient(180deg,rgba(5,7,22,0.02),rgba(5,7,22,0.06)),radial-gradient(circle_at_48%_14%,rgba(255,255,255,0.1),transparent_18%)]'
+            : railTheme.glow
+        )}
+      />
+      <div className={cn(
+        'pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-white/0 via-white/28 to-white/0 transition-opacity duration-500',
+        isTransparent && 'opacity-0'
+      )} />
       <Link href="/" className={cn('relative z-10 mb-12 grid h-9 w-9 place-items-center transition', railTheme.logo)}>
-        <svg viewBox="0 0 40 40" className="h-8 w-8" aria-hidden="true">
-          <path d="M14 6h12l6 10-6 10H14L8 16 14 6Z" fill="currentColor" opacity="0.96" />
-          <path d="M14 18h12l6 10-6 6H14l-6-6 6-10Z" fill="currentColor" opacity="0.78" />
+        <svg viewBox="0 0 40 40" className="h-8 w-8 overflow-visible" aria-hidden="true">
+          <defs>
+            <linearGradient id="toby-logo-fill" x1="9" y1="6" x2="31" y2="34" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#F8F4FF" />
+              <stop offset="0.45" stopColor="#A8DCFF" />
+              <stop offset="1" stopColor="#B98CFF" />
+            </linearGradient>
+            <linearGradient id="toby-logo-stroke" x1="8" y1="8" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#FFFFFF" />
+              <stop offset="0.52" stopColor="#8EE7FF" />
+              <stop offset="1" stopColor="#C08BFF" />
+            </linearGradient>
+            <filter id="toby-logo-glow" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
+              <feDropShadow dx="0" dy="0" stdDeviation="2.4" floodColor="#A88BFF" floodOpacity="0.78" />
+              <feDropShadow dx="0" dy="2" stdDeviation="5" floodColor="#55D6FF" floodOpacity="0.26" />
+            </filter>
+          </defs>
+          <path
+            d="M11 7.5C12.7 6.4 15.8 6 20 6s7.3.4 9 1.5c.7.5 1.1 1.4.9 2.2l-.9 4.7c-.2 1.1-1.3 1.8-2.4 1.5-1-.2-2.2-.4-3.7-.5v15.2c0 1.3-1 2.4-2.3 2.5l-3.2.3c-1.5.1-2.7-1.1-2.7-2.5V15.4c-1.5.1-2.7.3-3.7.5-1.1.3-2.2-.4-2.4-1.5l-.9-4.7c-.2-.8.2-1.7.9-2.2Z"
+            fill="url(#toby-logo-fill)"
+            filter="url(#toby-logo-glow)"
+          />
+          <path
+            d="M20 6c4.2 0 7.3.4 9 1.5.7.5 1.1 1.4.9 2.2l-.9 4.7c-.2 1.1-1.3 1.8-2.4 1.5-1-.2-2.2-.4-3.7-.5v15.2c0 1.3-1 2.4-2.3 2.5l-3.2.3c-1.5.1-2.7-1.1-2.7-2.5V15.4c-1.5.1-2.7.3-3.7.5-1.1.3-2.2-.4-2.4-1.5l-.9-4.7c-.2-.8.2-1.7.9-2.2C12.7 6.4 15.8 6 20 6Z"
+            fill="none"
+            stroke="url(#toby-logo-stroke)"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M16.3 10.4c2.2-.4 5.3-.4 7.5 0M18.7 15v14.2"
+            fill="none"
+            stroke="white"
+            strokeLinecap="round"
+            strokeWidth="1.4"
+            opacity="0.42"
+          />
         </svg>
         <span className="sr-only">Toby.AI</span>
       </Link>

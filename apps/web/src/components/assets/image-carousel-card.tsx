@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { AssetCardActions } from './asset-card-actions'
 import { downloadImage } from '@/lib/download'
 import type { AssetItem } from '@/hooks/use-assets'
@@ -35,8 +34,8 @@ export function ImageCarouselCard({
   // 当前图片正在删除中，显示 loading 占位
   if (deletingId === current.id) {
     return (
-      <div className="w-full aspect-[4/3] rounded-[10px] border bg-muted flex items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="w-full aspect-[4/3] rounded-[14px] bg-white/[0.03] border border-white/[0.08] flex items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-white/20" />
       </div>
     )
   }
@@ -55,11 +54,11 @@ export function ImageCarouselCard({
 
   return (
     <div
-      className="group relative w-full rounded-[10px] overflow-hidden border border-border bg-muted cursor-pointer flex items-center justify-center"
+      className="asset-glass-card group relative w-full cursor-pointer flex items-center justify-center"
       style={{ height: '300px' }}
       onClick={() => onImageClick(current.id)}
     >
-      {/* 图片：宽度填满，高度按比例自适应 */}
+      {/* 图片 */}
       <img
         src={thumbUrl!}
         alt={current.batch.prompt}
@@ -70,32 +69,30 @@ export function ImageCarouselCard({
       {/* 多图：左右翻页箭头 */}
       {isMulti && (
         <>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="absolute left-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-primary/80 hover:bg-primary text-white border-0 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+          <button
+            type="button"
+            className="asset-action-btn absolute left-2 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={handlePrev}
             disabled={currentIndex === 0}
           >
             <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-primary/80 hover:bg-primary text-white border-0 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+          </button>
+          <button
+            type="button"
+            className="asset-action-btn absolute right-2 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={handleNext}
             disabled={currentIndex === images.length - 1}
           >
             <ChevronRight className="h-4 w-4" />
-          </Button>
+          </button>
 
           {/* 底部指示点 */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+          <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex gap-1 z-10">
             {images.map((_, i) => (
               <span
                 key={i}
                 className={`block h-1.5 w-1.5 rounded-full transition-colors ${
-                  i === currentIndex ? 'bg-primary' : 'bg-white/50'
+                  i === currentIndex ? 'bg-white/80' : 'bg-white/25'
                 }`}
               />
             ))}

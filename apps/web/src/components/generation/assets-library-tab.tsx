@@ -12,7 +12,11 @@ import { downloadImage } from '@/lib/download'
 
 type AssetType = 'image' | 'video'
 
-export function AssetsLibraryTab() {
+interface AssetsLibraryTabProps {
+  onSelectBatch?: (batchId: string) => void
+}
+
+export function AssetsLibraryTab({ onSelectBatch }: AssetsLibraryTabProps) {
   const [assetType, setAssetType] = useState<AssetType>('image')
   const { assets, isLoadingInitial, isLoadingMore, hasMore, loadMore, error } = useAssets(assetType)
   const { showVideoTab } = useTeamFeatures()
@@ -22,6 +26,10 @@ export function AssetsLibraryTab() {
   const lightboxAsset = lightboxIndex !== null ? viewableAssets[lightboxIndex] : null
 
   const handleOpenPreview = (asset: AssetItem) => {
+    if (onSelectBatch) {
+      onSelectBatch(asset.batch.id)
+      return
+    }
     if (asset.type === 'video') {
       setVideoDialogAsset(asset)
       return
@@ -33,11 +41,11 @@ export function AssetsLibraryTab() {
   return (
     <div className="space-y-3">
       {showVideoTab && (
-        <div className="flex rounded-lg border p-1 w-fit">
+        <div className="generation-dream-segmented flex w-fit rounded-full border p-1">
           <Button
             variant={assetType === 'image' ? 'default' : 'ghost'}
             size="sm"
-            className="h-7 px-3 text-xs"
+            className="generation-dream-pill h-8 rounded-full px-4 text-xs"
             onClick={() => setAssetType('image')}
           >
             图片
@@ -45,7 +53,7 @@ export function AssetsLibraryTab() {
           <Button
             variant={assetType === 'video' ? 'default' : 'ghost'}
             size="sm"
-            className="h-7 px-3 text-xs"
+            className="generation-dream-pill h-8 rounded-full px-4 text-xs"
             onClick={() => setAssetType('video')}
           >
             视频
@@ -166,7 +174,7 @@ function AssetLibraryCard({ asset, onOpenPreview }: { asset: AssetItem; onOpenPr
         e.dataTransfer.setData('text/plain', url)
         e.dataTransfer.effectAllowed = 'copy'
       }}
-      className="group relative aspect-square rounded-lg overflow-hidden border bg-muted cursor-grab active:cursor-grabbing"
+      className="generation-dream-asset-card group relative aspect-square rounded-2xl overflow-hidden border bg-muted cursor-grab active:cursor-grabbing"
       title="拖拽到左侧支持的参考区域"
     >
       {isVideo ? (

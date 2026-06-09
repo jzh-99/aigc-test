@@ -36,7 +36,7 @@ interface VideoPanelProps {
 }
 
 export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPanelProps) {
-  const { watermark, avatarDefaults, userDefaults } = useGenerationStore()
+  const { watermark, avatarDefaults, userDefaults, pendingVideoReferenceImages, clearPendingVideoReferenceImages } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { save: saveDefaults } = useGenerationDefaults()
   const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
@@ -127,6 +127,21 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   }, [videoModelsReady, videoModels, videoModel])
 
   const isSeedance = videoModel.startsWith('seedance-')
+
+  useEffect(() => {
+    if (pendingVideoReferenceImages.length === 0) return
+    setVideoMode('multimodal')
+    setMultimodalImages((currentImages) => [
+      ...currentImages,
+      ...pendingVideoReferenceImages.map((img) => ({
+        id: img.id,
+        previewUrl: img.previewUrl,
+        dataUrl: img.dataUrl ?? img.previewUrl,
+        file: img.file,
+      })),
+    ])
+    clearPendingVideoReferenceImages()
+  }, [pendingVideoReferenceImages, clearPendingVideoReferenceImages])
 
   const handleFrameDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()

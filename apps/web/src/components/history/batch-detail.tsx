@@ -5,14 +5,14 @@ import Image from 'next/image'
 import type { BatchResponse } from '@aigc/types'
 
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from '@/components/ui/sheet'
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Download, RotateCcw, Check, ImagePlus, Loader2, Music } from 'lucide-react'
+import { Download, RotateCcw, Check, ImagePlus, Loader2, Music, Clapperboard } from 'lucide-react'
 import { useBatch, cancelSeedanceBatch } from '@/hooks/use-batches'
 import { downloadImage } from '@/lib/download'
 import { translateTaskError } from '@/lib/error-messages'
@@ -55,17 +55,17 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied, onReferenc
   const { data: batch, isLoading, mutate } = useBatch(open ? batchId : null)
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>批次详情</SheetTitle>
-          <SheetDescription className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-left">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="generation-detail-dialog h-[88vh] w-[min(1240px,calc(100vw-40px))] max-w-none overflow-hidden rounded-[28px] border border-violet-200/25 bg-[#070914]/95 p-0 text-white shadow-[0_36px_140px_rgba(1,3,16,0.78)] backdrop-blur-2xl">
+        <DialogHeader className="generation-detail-header px-8 pb-5 pt-7 text-left">
+          <DialogTitle className="text-2xl font-semibold text-white">批次详情</DialogTitle>
+          <DialogDescription className="mt-3 line-clamp-2 max-w-[980px] whitespace-pre-wrap break-words pr-10 text-left text-sm leading-6 text-[#c8d7ff]/70">
             {((batch as any)?.module === 'action_imitation' && !batch?.prompt) ? '动作模仿任务' : (batch?.prompt ?? '加载中...')}
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
         {isLoading || !batch ? (
-          <div className="mt-6 space-y-4">
+          <div className="space-y-4 p-7">
             <div className="grid grid-cols-2 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-6 w-full" />
@@ -81,14 +81,15 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied, onReferenc
         ) : (
           <BatchDetailContent batch={batch} onClose={() => onOpenChange(false)} onApplied={onApplied} onReferenceAdded={onReferenceAdded} onCancelled={() => mutate()} />
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCancelled }: { batch: BatchResponse; onClose: () => void; onApplied?: () => void; onReferenceAdded?: () => void; onCancelled?: () => void }) {
   const applyBatch = useGenerationStore((s) => s.applyBatch)
   const addReferenceImage = useGenerationStore((s) => s.addReferenceImage)
+  const sendImagesToVideoReference = useGenerationStore((s) => s.sendImagesToVideoReference)
   const referenceCount = useGenerationStore((s) => s.referenceImages.length)
   const status = statusConfig[batch.status] ?? statusConfig.pending
   const time = new Date(batch.created_at)
@@ -163,6 +164,20 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
     }
   }
 
+  function handleTurnIntoVideo() {
+    if (completedImageUrls.length === 0) return
+    sendImagesToVideoReference(
+      completedImageUrls.slice(0, 10).map((url) => ({
+        id: generateUUID(),
+        previewUrl: url,
+        dataUrl: url,
+      }))
+    )
+    toast.success('已切换到视频页签，并添加到参考素材')
+    onReferenceAdded?.()
+    onClose()
+  }
+
   const completedAssetItems = batch.tasks
     .filter((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))
     .map((t) => ({
@@ -191,91 +206,66 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
   const thumbnailAspect = parseAspectRatio((batch as any).params?.aspect_ratio)
 
   return (
-    <div className="mt-6 space-y-4">
-      {/* Meta info */}
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <p className="text-muted-foreground">状态</p>
-          <Badge variant={status.variant}>{status.label}</Badge>
-        </div>
-        <div>
-          <p className="text-muted-foreground">进度</p>
-          <p className="font-medium">{batch.completed_count}/{batch.quantity}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">模型</p>
-          <p className="font-medium">{MODEL_DISPLAY_NAMES[batch.model] ?? batch.model}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">A豆</p>
-          <p className="font-medium">{batch.actual_credits || batch.estimated_credits}</p>
-        </div>
-        {batch.user && (
-          <div>
-            <p className="text-muted-foreground">操作人</p>
-            <p className="font-medium">{batch.user.username}</p>
+    <div className="generation-detail-content flex h-[calc(88vh-132px)] min-h-0 flex-col">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden px-8 pb-5 pt-2 lg:grid-cols-[270px_minmax(0,1fr)]">
+        {/* Meta info */}
+        <aside className="generation-detail-meta space-y-5 overflow-hidden rounded-[22px] p-5 text-sm">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+            <div>
+              <p className="generation-detail-label">状态</p>
+              <Badge variant={status.variant}>{status.label}</Badge>
+            </div>
+            <div>
+              <p className="generation-detail-label">进度</p>
+              <p className="generation-detail-value">{batch.completed_count}/{batch.quantity}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="generation-detail-label">模型</p>
+              <p className="generation-detail-value">{MODEL_DISPLAY_NAMES[batch.model] ?? batch.model}</p>
+            </div>
+            <div>
+              <p className="generation-detail-label">A豆</p>
+              <p className="generation-detail-value">{batch.actual_credits || batch.estimated_credits}</p>
+            </div>
+            {batch.user && (
+              <div>
+                <p className="generation-detail-label">操作人</p>
+                <p className="generation-detail-value">{batch.user.username}</p>
+              </div>
+            )}
+            <div className={batch.user ? '' : 'col-span-2'}>
+              <p className="generation-detail-label">创建时间</p>
+              <p className="generation-detail-value">{time.toLocaleString('zh-CN')}</p>
+            </div>
           </div>
-        )}
-        <div className={batch.user ? '' : 'col-span-2'}>
-          <p className="text-muted-foreground">创建时间</p>
-          <p className="font-medium">{time.toLocaleString('zh-CN')}</p>
-        </div>
-      </div>
 
-      {canCancelSeedance && (
-        <Button
-          variant="destructive"
-          size="sm"
-          className="w-full gap-2"
-          onClick={handleCancel}
-          disabled={cancelling}
-        >
-          {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
-          取消任务
-        </Button>
-      )}
+          {canCancelSeedance && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-full gap-2"
+              onClick={handleCancel}
+              disabled={cancelling}
+            >
+              {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
+              取消任务
+            </Button>
+          )}
+        </aside>
 
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full"
-        onClick={handleApply}
-        disabled={applied}
-      >
-        {applied ? (
-          <><Check className="h-4 w-4 mr-2 text-green-500" />已填入</>
-        ) : (
-          <><RotateCcw className="h-4 w-4 mr-2" />复用此配置</>
-        )}
-      </Button>
-
-      {!isVideo && !isAudio && completedImageUrls.length > 0 && (
-        <Button
-          size="sm"
-          className="w-full gap-2"
-          onClick={handleSendAllToReference}
-          disabled={sendingAll || referenceCount >= 10}
-        >
-          {sendingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-          发送至参考
-        </Button>
-      )}
-
-      <Separator />
-
-      {/* Task results */}
-      <div>
-        <p className="text-sm font-medium mb-3">生成结果</p>
+        {/* Task results */}
+        <section className="generation-detail-results flex min-h-0 flex-col overflow-hidden rounded-[24px] p-5">
+        <p className="mb-4 shrink-0 text-sm font-medium text-white/85">生成结果</p>
         {batch.tasks.length === 0 ? (
           <p className="text-sm text-muted-foreground">无任务数据</p>
         ) : isAudio ? (
           /* Audio tasks */
-          <div className="space-y-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {batch.tasks.map((task) => {
               const url = task.asset?.storage_url ?? task.asset?.original_url
               if (task.status === 'completed' && url) {
                 return (
-                  <div key={task.id} className="rounded-lg border border-border/70 bg-muted/20 p-3">
+                  <div key={task.id} className="generation-detail-audio-card rounded-2xl p-4">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                         <Music className="h-3.5 w-3.5 shrink-0" />
@@ -306,19 +296,19 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
           </div>
         ) : isVideo ? (
           /* Video tasks */
-          <div className="space-y-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {batch.tasks.map((task) => {
               const url = task.asset?.storage_url ?? task.asset?.original_url
               if (task.status === 'completed' && url) {
                 return (
-                  <div key={task.id} className="rounded-lg overflow-hidden border bg-black">
+                  <div key={task.id} className="generation-detail-video-card overflow-hidden rounded-3xl">
                     <video
                       src={url}
                       controls
-                      className="w-full max-h-[400px] object-contain"
+                      className="max-h-full w-full object-contain"
                       preload="metadata"
                     />
-                    <div className="flex justify-end p-2">
+                    <div className="flex justify-end px-4 py-3">
                       <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={() => downloadImage(url, 'video')}>
                         <Download className="h-3.5 w-3.5" />
                         下载
@@ -343,7 +333,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
           </div>
         ) : (
           /* Image tasks */
-          <div className="grid grid-cols-2 gap-3">
+          <div className={completedImageUrls.length <= 1 ? 'generation-detail-image-list generation-detail-image-list-single' : 'generation-detail-image-list generation-detail-image-list-grid'}>
             {batch.tasks.map((task) => {
               const url = task.asset?.storage_url ?? task.asset?.original_url
 
@@ -352,24 +342,24 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
                 return (
                   <div
                     key={task.id}
-                    className="group relative aspect-square rounded-lg overflow-hidden border cursor-pointer"
-                    style={{ aspectRatio: thumbnailAspect }}
+                    className={completedImageUrls.length <= 1 ? 'generation-detail-image-tile generation-detail-image-tile-single group relative cursor-pointer overflow-hidden' : 'generation-detail-image-tile group relative cursor-pointer overflow-hidden'}
+                    style={completedImageUrls.length <= 1 ? undefined : { aspectRatio: thumbnailAspect }}
                     onClick={() => setLightboxIndex(urlIndex)}
                   >
                     <Image
                       src={url}
                       alt=""
                       fill
-                      className="object-cover"
-                      sizes="200px"
+                      className="object-contain"
+                      sizes={completedImageUrls.length <= 1 ? '900px' : '360px'}
                       unoptimized
                     />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-end p-2 opacity-0 group-hover:opacity-100">
+                    <div className="absolute inset-0 flex items-end justify-end bg-black/0 p-3 opacity-0 transition-colors group-hover:bg-black/30 group-hover:opacity-100">
                       <div className="flex gap-1">
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-7 w-7 bg-background/80 hover:bg-background"
+                          className="h-8 w-8 rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-white/20 hover:text-white"
                           onClick={(e) => { e.stopPropagation(); handleSendToReference(url) }}
                           disabled={sendingUrl === url}
                           title="发送至参考"
@@ -379,7 +369,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-7 w-7 bg-background/80 hover:bg-background"
+                          className="h-8 w-8 rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-white/20 hover:text-white"
                           onClick={(e) => { e.stopPropagation(); downloadImage(url, task.asset?.type) }}
                         >
                           <Download className="h-3.5 w-3.5" />
@@ -405,6 +395,43 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
             })}
           </div>
         )}
+        </section>
+      </div>
+
+      <div className="generation-detail-action-bar flex shrink-0 items-center justify-center px-8 pb-6 pt-2">
+        <div className="generation-detail-actions">
+          <Button
+            variant="outline"
+            size="lg"
+            className="generation-detail-action generation-detail-action-muted gap-2"
+            onClick={handleApply}
+            disabled={applied}
+          >
+            {applied ? <Check className="h-4 w-4 text-green-400" /> : <RotateCcw className="h-4 w-4" />}
+            复用
+          </Button>
+
+          <Button
+            size="lg"
+            className="generation-detail-action generation-detail-action-primary gap-2"
+            onClick={handleSendAllToReference}
+            disabled={isVideo || isAudio || completedImageUrls.length === 0 || sendingAll || referenceCount >= 10}
+          >
+            {sendingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+            参考
+          </Button>
+
+          {!isVideo && !isAudio && completedImageUrls.length > 0 && (
+            <Button
+              size="lg"
+              className="generation-detail-action generation-detail-action-video gap-2"
+              onClick={handleTurnIntoVideo}
+            >
+              <Clapperboard className="h-4 w-4" />
+              变视频
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Lightbox (images only) */}

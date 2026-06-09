@@ -43,7 +43,7 @@ export function VideoCard({ asset, onPlay, onDelete, onReuse, isReusing }: Video
 
   return (
     <div
-      className="group relative w-full aspect-video rounded-[10px] overflow-hidden border border-border bg-black cursor-pointer"
+      className="asset-glass-card group relative w-full aspect-video cursor-pointer bg-black"
       onClick={() => onPlay(asset)}
     >
       <video
@@ -56,8 +56,10 @@ export function VideoCard({ asset, onPlay, onDelete, onReuse, isReusing }: Video
         className="absolute inset-0 w-full h-full object-cover"
       />
       {/* 播放图标，hover 时隐藏（操作层接管） */}
-      <div className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity pointer-events-none">
-        <Play className="h-8 w-8 text-white drop-shadow-lg" />
+      <div className="absolute inset-0 z-[2] flex items-center justify-center group-hover:opacity-0 transition-opacity pointer-events-none">
+        <div className="grid h-10 w-10 place-items-center rounded-full bg-black/40 backdrop-blur-sm border border-white/15">
+          <Play className="h-4.5 w-4.5 text-white drop-shadow-lg ml-0.5" />
+        </div>
       </div>
 
       {/* hover 操作层 */}

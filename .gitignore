@@ -7,7 +7,7 @@ dist/
 !.env.example
 !.env.*.example
 .worktrees/
-
+.playwright-mcp
 .vscode/
 .superpowers/
 

@@ -1,6 +1,7 @@
 import {
   Clapperboard,
   ImageIcon,
+  Palette,
   type LucideIcon,
 } from "lucide-react";
 
@@ -47,6 +48,14 @@ export const creativeEntryCards: CreativeEntryCard[] = [
       { label: "快速生成", href: "/generation?mode=video" },
       { label: "视频工坊", href: "/video-studio" },
     ],
+  },
+  {
+    title: "灵动画布",
+    kicker: "自由编排创作节点",
+    description: "图像视频 · 灵感串联",
+    icon: Palette,
+    accent: "from-primary/55 via-secondary/20 to-primary/35",
+    actions: [{ label: "进入画布", href: "/canvas" }],
   },
 ];
 

@@ -21,12 +21,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isInitialized) return
 
+    // AbortController 防止 StrictMode 双重挂载导致两次并发 refresh 请求
+    // （两次请求会导致 token 轮换竞态：第二个请求看到已撤销的旧 token → 触发重用检测 → 全部 token 被撤销）
+    const controller = new AbortController()
+
     async function tryRefresh() {
       try {
         setIsRefreshing(true)
         const res = await fetch('/api/v1/auth/refresh', {
           method: 'POST',
           credentials: 'include',
+          signal: controller.signal,
         })
         if (res.ok) {
           const data = await res.json()
@@ -39,13 +44,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearAuth()
         }
       } catch (err) {
+        // AbortError 说明组件已卸载，忽略即可，新挂载的 effect 会重新请求
+        if ((err as DOMException).name === 'AbortError') return
         clearAuth()
       } finally {
-        setIsRefreshing(false)
+        if (!controller.signal.aborted) {
+          setIsRefreshing(false)
+        }
       }
     }
 
     tryRefresh()
+    return () => controller.abort()
   }, [isInitialized, setAuth, clearAuth, setIsRefreshing])
 
   useEffect(() => {
