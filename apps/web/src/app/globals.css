@@ -1610,17 +1610,19 @@ tbody tr:hover {
 }
 
 .creative-home-video-backdrop::before {
-  background:
-    linear-gradient(90deg, rgba(4, 7, 21, 0.04) 0%, rgba(6, 9, 28, 0.04) 16%, rgba(7, 9, 31, 0.05) 46%, rgba(5, 8, 25, 0.22) 100%),
-    linear-gradient(180deg, rgba(4, 6, 20, 0.04) 0%, rgba(8, 10, 31, 0.2) 52%, rgba(6, 8, 25, 0.56) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(4, 6, 20, 0.02) 0%,
+    rgba(6, 8, 25, 0.08) 64%,
+    rgba(6, 8, 25, 0.28) 100%
+  );
 }
 
 .creative-home-video-backdrop::after {
   background:
     radial-gradient(ellipse at 52% 19%, rgba(236, 229, 255, 0.16), transparent 22rem),
     radial-gradient(ellipse at 78% 18%, rgba(96, 174, 255, 0.12), transparent 28rem),
-    radial-gradient(ellipse at 18% 62%, rgba(151, 123, 255, 0.18), transparent 31rem),
-    linear-gradient(180deg, transparent 0%, rgba(4, 6, 20, 0.18) 58%, rgba(5, 7, 22, 0.6) 100%);
+    radial-gradient(ellipse at 18% 62%, rgba(151, 123, 255, 0.14), transparent 31rem);
   backdrop-filter: blur(0.6px) saturate(1.08);
   -webkit-backdrop-filter: blur(0.6px) saturate(1.08);
   mix-blend-mode: screen;
@@ -1790,28 +1792,63 @@ tbody tr:hover {
    ========================================================================== */
 
 .ai-glass-panel {
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(118deg, rgba(255, 255, 255, 0.08), rgba(181, 193, 255, 0.02) 38%, rgba(16, 26, 72, 0.07)),
-    rgba(8, 11, 34, 0.88);
-  border: 1px solid rgba(236, 233, 255, 0.18);
-  backdrop-filter: blur(24px) saturate(1.3);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+    linear-gradient(118deg, rgba(255, 255, 255, 0.1), rgba(181, 193, 255, 0.03) 38%, rgba(16, 26, 72, 0.1)),
+    rgba(8, 11, 34, 0.72);
+  border: 1px solid rgba(236, 233, 255, 0.22);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 60px rgba(116, 87, 255, 0.12),
     0 24px 80px rgba(3, 5, 22, 0.55);
 }
 
+/* 面板顶部柔光 */
+.ai-glass-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% -10%, rgba(169, 156, 255, 0.14), transparent 55%);
+  opacity: 0.8;
+}
+
 .ai-glass-header {
-  background: rgba(82, 70, 180, 0.22);
-  border-bottom: 1px solid rgba(236, 233, 255, 0.12);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  position: relative;
+  background: linear-gradient(135deg, rgba(82, 70, 180, 0.35), rgba(116, 87, 255, 0.2));
+  border-bottom: 1px solid rgba(236, 233, 255, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* 标题栏底部发光线 */
+.ai-glass-header::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(168, 85, 247, 0.5),
+    rgba(200, 155, 236, 0.6),
+    rgba(168, 85, 247, 0.5),
+    transparent
+  );
+  filter: blur(0.5px);
 }
 
 .ai-glass-msg-bot {
-  background: rgba(20, 24, 60, 0.6);
-  border: 1px solid rgba(236, 233, 255, 0.08);
+  background: rgba(20, 24, 60, 0.55);
+  border: 1px solid rgba(236, 233, 255, 0.1);
   color: rgba(235, 238, 255, 0.92);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .ai-glass-border-subtle {
@@ -1842,8 +1879,8 @@ tbody tr:hover {
   position: relative;
   isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(8, 11, 34, 0) 0%, rgba(6, 8, 25, 0.3) 8rem, rgba(6, 8, 25, 0.55) 16rem, rgba(6, 8, 25, 0.72) 100%),
-    radial-gradient(ellipse at 52% 0%, rgba(82, 112, 255, 0.1), transparent 34rem);
+    linear-gradient(180deg, rgba(8, 11, 34, 0) 0%, rgba(6, 8, 25, 0.04) 14rem, rgba(6, 8, 25, 0.18) 100%),
+    radial-gradient(ellipse at 52% 0%, rgba(82, 112, 255, 0.04), transparent 34rem);
 }
 
 /* 灵感页分界线 — 模糊虚化效果 */
@@ -1888,9 +1925,12 @@ tbody tr:hover {
 
 /* 视频背景 — 吸附态（加深遮罩） */
 .creative-home-video-backdrop.is-stuck::before {
-  background:
-    linear-gradient(90deg, rgba(4, 7, 21, 0.18) 0%, rgba(6, 9, 28, 0.18) 16%, rgba(7, 9, 31, 0.22) 46%, rgba(5, 8, 25, 0.5) 100%),
-    linear-gradient(180deg, rgba(4, 6, 20, 0.18) 0%, rgba(8, 10, 31, 0.48) 52%, rgba(6, 8, 25, 0.82) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(4, 6, 20, 0.14) 0%,
+    rgba(6, 8, 25, 0.28) 64%,
+    rgba(6, 8, 25, 0.68) 100%
+  );
   transition: background 0.5s ease;
 }
 
