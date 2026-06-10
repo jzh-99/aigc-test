@@ -85,9 +85,9 @@ function LyricLineText({
         <span
           key={`${word.text}-${index}`}
           className={active && index <= activeWordIndex
-            ? 'text-foreground drop-shadow-[0_0_16px_rgba(107,163,245,0.22)] dark:text-white dark:drop-shadow-[0_0_16px_rgba(22,200,230,0.34)]'
+            ? 'text-white drop-shadow-[0_0_16px_rgba(22,200,230,0.34)]'
             : active
-              ? 'text-primary/60 dark:text-[#b8aaff]/52'
+              ? 'text-[#b8aaff]/52'
               : 'text-current'
           }
         >
@@ -153,9 +153,9 @@ export default function MusicDetailPage() {
   }
 
   return (
-    <div className="-mx-4 -mt-4 min-h-[calc(100vh-5.25rem)] bg-background text-foreground md:-mx-6 md:-mt-6 dark:bg-[#070615] dark:text-[#eeeaf8]">
-      <div className="sticky top-[-1rem] z-30 flex h-16 items-center border-b bg-card/95 px-5 backdrop-blur md:top-[-1.5rem] md:px-8 dark:border-[#201b49] dark:bg-[#0d1938]">
-        <Link href="/toby-studio/music" className="inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-foreground dark:text-[#b8aaff] dark:hover:text-white">
+    <div className="-mx-4 -mt-4 min-h-[calc(100vh-5.25rem)] bg-[#070615] text-[#eeeaf8] md:-mx-6 md:-mt-6">
+      <div className="sticky top-[-1rem] z-30 flex h-16 items-center border-b border-[#201b49] bg-[#0d1938] px-5 backdrop-blur md:top-[-1.5rem] md:px-8">
+        <Link href="/toby-studio/music" className="inline-flex items-center gap-2 text-sm font-medium text-[#b8aaff] transition-colors hover:text-white">
           <ArrowLeft className="h-4 w-4" />
           返回列表
         </Link>
@@ -170,21 +170,21 @@ export default function MusicDetailPage() {
             onPlaybackChange={handlePlaybackChange}
           />
 
-          <section className="mt-4 rounded-xl border bg-card p-5 shadow-sm dark:border-[#201b49] dark:bg-[#090817]">
-            <p className="text-sm leading-7 text-muted-foreground dark:text-[#9c94c4]">{track.data.prompt ?? '由 Toby AI 创作生成'}</p>
+          <section className="mt-4 rounded-xl border border-[#201b49] bg-[#090817] p-5 shadow-sm">
+            <p className="text-sm leading-7 text-[#9c94c4]">{track.data.prompt ?? '由 Toby AI 创作生成'}</p>
           </section>
         </div>
 
-        <aside className="border-t bg-card lg:border-l lg:border-t-0 dark:border-[#201b49] dark:bg-[#090817]">
-          <div className="sticky top-0 flex max-h-[calc(100vh-5.25rem)] min-h-[calc(100vh-5.25rem)] flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_18%,rgba(107,163,245,0.16),transparent_28%),radial-gradient(circle_at_18%_8%,rgba(200,155,236,0.20),transparent_30%),linear-gradient(180deg,#fff7ef_0%,#ffffff_48%,#f8fbff_100%)] dark:bg-[radial-gradient(circle_at_50%_18%,rgba(22,200,230,0.12),transparent_28%),radial-gradient(circle_at_18%_8%,rgba(106,92,255,0.22),transparent_30%),linear-gradient(180deg,#151133_0%,#090817_48%,#05040d_100%)]">
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-40 bg-gradient-to-b from-[#fff7ef] via-[#fff7ef]/82 to-transparent dark:from-[#151133] dark:via-[#151133]/82" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-44 bg-gradient-to-t from-[#f8fbff] via-[#f8fbff]/82 to-transparent dark:from-[#05040d] dark:via-[#05040d]/82" />
+        <aside className="border-t border-[#201b49] bg-[#090817] lg:border-l lg:border-t-0">
+          <div className="sticky top-0 flex max-h-[calc(100vh-5.25rem)] min-h-[calc(100vh-5.25rem)] flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_18%,rgba(22,200,230,0.12),transparent_28%),radial-gradient(circle_at_18%_8%,rgba(106,92,255,0.22),transparent_30%),linear-gradient(180deg,#151133_0%,#090817_48%,#05040d_100%)]">
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-40 bg-gradient-to-b from-[#151133] via-[#151133]/82 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-44 bg-gradient-to-t from-[#05040d] via-[#05040d]/82 to-transparent" />
             <div className="relative z-20 px-8 pt-16 text-center">
-              <h2 className="truncate text-2xl font-semibold tracking-normal text-foreground dark:text-[#f5f2ff]">{track.data.title ?? '未命名音乐'}</h2>
-              <p className="mt-2 truncate text-base font-medium text-muted-foreground dark:text-[#9c94c4]">{track.data.voice_name ?? 'Toby AI'}</p>
+              <h2 className="truncate text-2xl font-semibold tracking-normal text-[#f5f2ff]">{track.data.title ?? '未命名音乐'}</h2>
+              <p className="mt-2 truncate text-base font-medium text-[#9c94c4]">{track.data.voice_name ?? 'Toby AI'}</p>
             </div>
             <div ref={lyricScrollRef} className="relative z-0 mt-8 flex-1 overflow-y-auto scroll-smooth px-5 pb-32 pt-24 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="mx-auto flex max-w-[32rem] flex-col items-center gap-9 text-center text-[22px] font-semibold leading-[1.45] tracking-normal text-muted-foreground dark:text-[#8f88b8]">
+              <div className="mx-auto flex max-w-[32rem] flex-col items-center gap-9 text-center text-[22px] font-semibold leading-[1.45] tracking-normal text-[#8f88b8]">
               {lyricLines.map((line, index) => {
                 const text = typeof line === 'string' ? line : line.text
                 const active = index === currentLyricIndex
@@ -196,10 +196,10 @@ export default function MusicDetailPage() {
                     lyricLineRefs.current[index] = node
                   }}
                   className={active
-                    ? 'max-w-full scale-110 px-2 text-[30px] font-bold leading-[1.35] text-foreground drop-shadow-[0_0_24px_rgba(107,163,245,0.18)] transition-all duration-500 dark:text-[#f7f4ff] dark:drop-shadow-[0_0_24px_rgba(22,200,230,0.18)]'
+                    ? 'max-w-full scale-110 px-2 text-[30px] font-bold leading-[1.35] text-[#f7f4ff] drop-shadow-[0_0_24px_rgba(22,200,230,0.18)] transition-all duration-500'
                     : distance === 1
-                      ? 'max-w-full px-2 text-foreground/55 transition-all duration-500 dark:text-[#b8aaff]/68'
-                      : 'max-w-full px-2 text-muted-foreground/35 transition-all duration-500 dark:text-[#8178aa]/36'
+                      ? 'max-w-full px-2 text-[#b8aaff]/68 transition-all duration-500'
+                      : 'max-w-full px-2 text-[#8178aa]/36 transition-all duration-500'
                   }
                 >
                   <LyricLineText line={line} active={active} activeWordIndex={currentWordIndex} />

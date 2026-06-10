@@ -52,7 +52,7 @@ function AssetImagePreview({
       aria-label={loadState === 'loaded' ? `放大查看${asset.name}` : `${asset.name}图片加载中`}
     >
       {loadState !== 'loaded' && (
-        <span className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-muted/55 text-xs text-muted-foreground dark:bg-slate-900/75">
+        <span className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-slate-900/75 text-xs text-muted-foreground">
           {loadState === 'loading' ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin text-primary/70" />
@@ -485,7 +485,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
             return (
             <div key={asset.id} className="overflow-hidden rounded-xl border bg-card shadow-sm transition-colors hover:border-primary/30">
-              <div className={`${isCharacter ? 'aspect-[9/16]' : 'aspect-video'} flex items-center justify-center overflow-hidden bg-muted/40 dark:bg-slate-900/70`}>
+              <div className={`${isCharacter ? 'aspect-[9/16]' : 'aspect-video'} flex items-center justify-center overflow-hidden bg-slate-900/70`}>
                 {shouldShowImage ? (
                   <AssetImagePreview
                     asset={asset}

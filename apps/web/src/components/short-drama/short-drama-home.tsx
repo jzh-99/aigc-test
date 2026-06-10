@@ -178,25 +178,25 @@ export function ShortDramaHome() {
       <StudioReturnBar />
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
         <div className="space-y-6">
-          <section className="overflow-hidden rounded-lg border bg-card shadow-[0_24px_70px_rgba(36,31,58,0.08)] dark:border-[#201b49] dark:bg-[#090817] dark:shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
-            <div className="border-b bg-[linear-gradient(135deg,#fbfbff_0%,#f6f1ff_55%,#edf8ff_100%)] p-5 md:p-6 dark:border-[#201b49] dark:bg-[linear-gradient(135deg,#151133_0%,#111a38_55%,#071d27_100%)]">
+          <section className="overflow-hidden rounded-lg border border-[#201b49] bg-[#090817] shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
+            <div className="border-b border-[#201b49] bg-[linear-gradient(135deg,#151133_0%,#111a38_55%,#071d27_100%)] p-5 md:p-6">
               <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">
-                  <div className="mb-3 inline-flex items-center gap-2 rounded-full border bg-background/75 px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm dark:border-[#302858] dark:bg-white/5">
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#302858] bg-white/5 px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm">
                     <Film className="h-3.5 w-3.5 text-violet-500" />
                     TOBY SHORT DRAMA
                   </div>
                   <h1 className="text-3xl font-semibold tracking-normal text-foreground md:text-4xl">AI 短剧</h1>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">短剧Agent，一站式智能创作专属剧组！</p>
                 </div>
-                <div className="shrink-0 rounded-full border bg-background/75 px-4 py-2 text-xs font-medium text-muted-foreground shadow-sm dark:border-[#302858] dark:bg-white/5">
+                <div className="shrink-0 rounded-full border border-[#302858] bg-white/5 px-4 py-2 text-xs font-medium text-muted-foreground shadow-sm">
                   创意 → 大纲 → 素材 → 分集
                 </div>
               </div>
             </div>
 
             <div className="space-y-5 p-5 md:p-6">
-              <div className="-mx-5 -mt-5 border-b bg-background/70 px-5 pt-4 dark:border-[#201b49] dark:bg-[#090817]/85 md:-mx-6 md:-mt-6 md:px-6">
+              <div className="-mx-5 -mt-5 border-b border-[#201b49] bg-[#090817]/85 px-5 pt-4 md:-mx-6 md:-mt-6 md:px-6">
                 <div className="flex items-end gap-1">
                   <button
                     type="button"
@@ -228,11 +228,11 @@ export function ShortDramaHome() {
                   placeholder="描述你的短剧创意，例如：一个普通外卖员意外获得超能力，在都市中行侠仗义的故事..."
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
-                  className="min-h-[168px] resize-none rounded-lg border-border bg-muted/35 p-4 text-sm shadow-inner focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#070615]"
+                  className="min-h-[168px] resize-none rounded-lg border-[#201b49] bg-[#070615] p-4 text-sm shadow-inner focus-visible:ring-primary/25"
                   maxLength={2000}
                 />
               ) : (
-                <div className="relative overflow-hidden rounded-lg border border-border bg-muted/30 shadow-inner transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/15 dark:border-[#201b49] dark:bg-[#070615]">
+                <div className="relative overflow-hidden rounded-lg border border-[#201b49] bg-[#070615] shadow-inner transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/15">
                   <div className="relative">
                     <Textarea
                       value={originalScript}
@@ -250,7 +250,7 @@ export function ShortDramaHome() {
                             <p className="mt-1 text-xs text-muted-foreground">支持 txt/docx，最多 10 万字</p>
                           </div>
                           <div className="flex flex-wrap items-center justify-center gap-2">
-                            <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary dark:border-[#302858] dark:bg-[#0d0b1d]">
+                            <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#302858] bg-[#0d0b1d] px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary">
                               {parsingScript ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                               上传文件
                               <input
@@ -268,7 +268,7 @@ export function ShortDramaHome() {
                             <button
                               type="button"
                               onClick={handleOpenPasteDialog}
-                              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary dark:border-[#302858] dark:bg-[#0d0b1d]"
+                              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#302858] bg-[#0d0b1d] px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary"
                             >
                               <ClipboardPaste className="h-4 w-4" />
                               粘贴文本
@@ -278,7 +278,7 @@ export function ShortDramaHome() {
                       </div>
                     )}
                     {originalScript && (
-                      <label className="absolute right-3 top-3 inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background/90 px-3 text-xs font-semibold text-foreground shadow-sm backdrop-blur transition-colors hover:border-primary/40 hover:text-primary dark:border-[#302858] dark:bg-[#0d0b1d]/90">
+                      <label className="absolute right-3 top-3 inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-[#302858] bg-[#0d0b1d]/90 px-3 text-xs font-semibold text-foreground shadow-sm backdrop-blur transition-colors hover:border-primary/40 hover:text-primary">
                         {parsingScript ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                         上传文件
                         <input
@@ -295,7 +295,7 @@ export function ShortDramaHome() {
                       </label>
                     )}
                   </div>
-                  <div className="flex h-9 items-center justify-between gap-3 border-t bg-background/75 px-3 text-xs backdrop-blur dark:border-[#201b49] dark:bg-[#090817]/85">
+                  <div className="flex h-9 items-center justify-between gap-3 border-t border-[#201b49] bg-[#090817]/85 px-3 text-xs backdrop-blur">
                     <span className="min-w-0 truncate text-muted-foreground">
                       {scriptFileName || '原始剧本'}
                     </span>
@@ -303,11 +303,11 @@ export function ShortDramaHome() {
                       {normalizedOriginalScript.length.toLocaleString()} / {SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS.toLocaleString()} 字
                     </span>
                   </div>
-                  <div className="border-t bg-muted/40 px-3 py-2 text-xs text-muted-foreground dark:border-[#201b49] dark:bg-[#090817]/70">
+                  <div className="border-t border-[#201b49] bg-[#090817]/70 px-3 py-2 text-xs text-muted-foreground">
                     系统按每集约 2 分钟节奏生成，过长内容会自动压缩归并
                   </div>
                   {isOriginalScriptTooLong && (
-                    <div className="border-t border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-950/60 dark:bg-red-950/20">
+                    <div className="border-t border-red-950/60 bg-red-950/20 px-3 py-2 text-xs text-red-600">
                       请精简后再确认剧本
                     </div>
                   )}
@@ -327,7 +327,7 @@ export function ShortDramaHome() {
                       value={pasteDraft}
                       onChange={event => setPasteDraft(event.target.value)}
                       placeholder="在这里粘贴原始剧本文本..."
-                      className="min-h-[320px] resize-none rounded-lg border-border bg-muted/35 p-4 text-sm focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#070615]"
+                      className="min-h-[320px] resize-none rounded-lg border-[#201b49] bg-[#070615] p-4 text-sm focus-visible:ring-primary/25"
                       autoFocus
                     />
                     <div className="flex items-center justify-between gap-3 text-xs">
@@ -359,7 +359,7 @@ export function ShortDramaHome() {
                   <ShortDramaStyleDialog value={style} onChange={setStyle}>
                     <button
                       type="button"
-                      className="group flex h-12 w-full items-center justify-between rounded-lg border bg-background px-4 text-left text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#0d0b1d]"
+                      className="group flex h-12 w-full items-center justify-between rounded-lg border border-[#201b49] bg-[#0d0b1d] px-4 text-left text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                     >
                       <span className="truncate">{style || '选择风格'}</span>
                       <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:-rotate-180" />
@@ -415,13 +415,13 @@ export function ShortDramaHome() {
             </div>
           </section>
 
-          <section className="rounded-lg border bg-muted/25 p-4 shadow-[0_24px_70px_rgba(36,31,58,0.06)] dark:border-[#201b49] dark:bg-[#090817] dark:shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
+          <section className="rounded-lg border border-[#201b49] bg-[#090817] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-foreground">最近项目</h2>
                 <p className="mt-1 text-xs text-muted-foreground">展示最近 4 个短剧项目</p>
               </div>
-              <Link href="/toby-studio/short-drama/projects" className="inline-flex h-9 items-center gap-1.5 rounded-full border bg-background px-3 text-xs font-semibold text-foreground shadow-sm transition-colors hover:border-primary/50 hover:text-primary dark:border-[#302858] dark:bg-white/5">
+              <Link href="/toby-studio/short-drama/projects" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#302858] bg-white/5 px-3 text-xs font-semibold text-foreground shadow-sm transition-colors hover:border-primary/50 hover:text-primary">
                 全部
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
@@ -430,11 +430,11 @@ export function ShortDramaHome() {
             {loadingProjects ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, index) => (
-                  <div key={index} className="h-[148px] animate-pulse rounded-lg border bg-card dark:border-[#201b49] dark:bg-[#0d0b1d]" />
+                  <div key={index} className="h-[148px] animate-pulse rounded-lg border border-[#201b49] bg-[#0d0b1d]" />
                 ))}
               </div>
             ) : !recentProjects || recentProjects.length === 0 ? (
-              <div className="flex min-h-[320px] items-center justify-center rounded-lg border border-dashed bg-card p-8 text-center text-sm text-muted-foreground dark:border-[#302858] dark:bg-[#0d0b1d]">
+              <div className="flex min-h-[320px] items-center justify-center rounded-lg border border-dashed border-[#302858] bg-[#0d0b1d] p-8 text-center text-sm text-muted-foreground">
                 还没有短剧项目，开始你的第一个创作吧
               </div>
             ) : (
@@ -468,7 +468,7 @@ function DramaPillSelect<T extends string | number>({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="group flex h-11 w-full items-center justify-between rounded-lg border bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 data-[state=open]:border-primary/35 dark:border-[#201b49] dark:bg-[#0d0b1d]"
+          className="group flex h-11 w-full items-center justify-between rounded-lg border border-[#201b49] bg-[#0d0b1d] px-4 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 data-[state=open]:border-primary/35"
         >
           <span>{selected?.label ?? value}</span>
           <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:-rotate-180" />
@@ -477,7 +477,7 @@ function DramaPillSelect<T extends string | number>({
       <PopoverContent
         align="center"
         sideOffset={8}
-        className="w-32 rounded-lg border bg-popover/95 p-1.5 text-popover-foreground shadow-[0_18px_42px_rgba(35,31,51,0.16)] backdrop-blur dark:border-[#302858] dark:shadow-[0_18px_42px_rgba(0,0,0,0.36)]"
+        className="w-32 rounded-lg border border-[#302858] bg-popover/95 p-1.5 text-popover-foreground shadow-[0_18px_42px_rgba(0,0,0,0.36)] backdrop-blur"
       >
         <div className="space-y-0.5">
           {options.map(option => (
@@ -521,7 +521,7 @@ function EpisodeCountSelect({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`group inline-flex h-11 w-full items-center justify-between rounded-lg border bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 data-[state=open]:border-primary/35 dark:border-[#201b49] dark:bg-[#0d0b1d] ${
+          className={`group inline-flex h-11 w-full items-center justify-between rounded-lg border border-[#201b49] bg-[#0d0b1d] px-4 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 data-[state=open]:border-primary/35 ${
             valid ? 'focus-visible:ring-primary/25' : 'ring-2 ring-destructive/20 focus-visible:ring-destructive/30'
           }`}
         >
@@ -532,7 +532,7 @@ function EpisodeCountSelect({
       <PopoverContent
         align="center"
         sideOffset={8}
-        className="w-36 rounded-lg border bg-popover/95 p-1.5 text-popover-foreground shadow-[0_18px_42px_rgba(36,34,46,0.16)] backdrop-blur dark:border-[#302858] dark:shadow-[0_18px_42px_rgba(0,0,0,0.36)]"
+        className="w-36 rounded-lg border border-[#302858] bg-popover/95 p-1.5 text-popover-foreground shadow-[0_18px_42px_rgba(0,0,0,0.36)] backdrop-blur"
       >
         <div className="space-y-0.5">
           {SHORT_DRAMA_EPISODE_COUNTS.map(count => (
@@ -550,7 +550,7 @@ function EpisodeCountSelect({
           ))}
 
           <div className="px-1 pt-1">
-            <div className="flex h-8 min-w-0 items-center rounded-md bg-muted px-2 dark:bg-white/5">
+            <div className="flex h-8 min-w-0 items-center rounded-md bg-white/5 px-2">
               <input
                 type="text"
                 inputMode="numeric"
@@ -586,7 +586,7 @@ function DramaMenuItem({
       type="button"
       onClick={onClick}
       className={`relative flex h-8 w-full items-center justify-center rounded-md px-6 text-sm transition-colors ${
-        selected ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted dark:hover:bg-white/5'
+        selected ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-white/5'
       }`}
     >
       <span className="absolute left-2 flex justify-center">

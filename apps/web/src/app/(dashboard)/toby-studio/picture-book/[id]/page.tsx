@@ -366,17 +366,17 @@ export default function PictureBookEditorPage() {
           if (!hasPending) return null
 
           return (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
+            <div className="rounded-lg border border-blue-800 bg-blue-950/30 p-4">
               <div className="flex items-start gap-3">
-                <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+                <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-blue-400" />
                 <div className="flex-1 space-y-1">
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">后台任务处理中</p>
-                  <div className="space-y-0.5 text-xs text-blue-700 dark:text-blue-300">
+                  <p className="text-sm font-medium text-blue-100">后台任务处理中</p>
+                  <div className="space-y-0.5 text-xs text-blue-300">
                     {pendingAssets.length > 0 && <p>• 角色/背景图片生成中：{pendingAssets.length} 个</p>}
                     {pendingStoryboardImages.length > 0 && <p>• 分镜图片生成中：{pendingStoryboardImages.length} 页</p>}
                     {generatingStoryboardAudioIds.length > 0 && <p>• 语音生成中：{generatingStoryboardAudioIds.length} 页</p>}
                   </div>
-                  <p className="text-xs text-blue-600 dark:text-blue-400">页面会自动刷新最新状态，请稍候...</p>
+                  <p className="text-xs text-blue-400">页面会自动刷新最新状态，请稍候...</p>
                 </div>
               </div>
             </div>
@@ -401,15 +401,15 @@ export default function PictureBookEditorPage() {
           <>
             {/* 资产为空时的兜底方案 */}
             {state.assets.characters.length === 0 && state.assets.backgrounds.length === 0 ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-950/30">
+              <div className="rounded-lg border border-amber-800 bg-amber-950/30 p-6">
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/50">
-                      <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-900/50">
+                      <Sparkles className="h-5 w-5 text-amber-400" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-amber-900 dark:text-amber-100">角色/背景提示词为空</h3>
-                      <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      <h3 className="font-semibold text-amber-100">角色/背景提示词为空</h3>
+                      <p className="mt-1 text-sm text-amber-300">
                         看起来上一步生成角色/背景提示词失败了，或者数据未正确保存。您可以重新生成提示词，或者手动添加角色/背景。
                       </p>
                     </div>
@@ -435,7 +435,7 @@ export default function PictureBookEditorPage() {
                         }
                       }}
                       disabled={loadingAction === 'regenerate-asset-prompts'}
-                      className="bg-amber-600 hover:bg-amber-700 dark:bg-amber-700 dark:hover:bg-amber-600"
+                      className="bg-amber-700 hover:bg-amber-600"
                     >
                       {loadingAction === 'regenerate-asset-prompts' ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -483,15 +483,15 @@ export default function PictureBookEditorPage() {
           <>
             {/* 分镜提示词生成失败时的兜底方案 */}
             {showStoryboardPromptRegenerateCard ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-950/30">
+              <div className="rounded-lg border border-amber-800 bg-amber-950/30 p-6">
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/50">
-                      <BookOpenCheck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-900/50">
+                      <BookOpenCheck className="h-5 w-5 text-amber-400" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-amber-900 dark:text-amber-100">分镜提示词生成失败</h3>
-                      <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      <h3 className="font-semibold text-amber-100">分镜提示词生成失败</h3>
+                      <p className="mt-1 text-sm text-amber-300">
                         上一步生成分镜提示词失败。您可以重新生成分镜提示词。
                       </p>
                     </div>
@@ -520,7 +520,7 @@ export default function PictureBookEditorPage() {
                       }
                     }}
                     disabled={loadingAction === 'regenerate-storyboard-prompts'}
-                    className="bg-amber-600 hover:bg-amber-700 dark:bg-amber-700 dark:hover:bg-amber-600"
+                    className="bg-amber-700 hover:bg-amber-600"
                   >
                     {loadingAction === 'regenerate-storyboard-prompts' ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

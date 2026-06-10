@@ -1,6 +1,6 @@
 'use client'
 
-import { Menu, Settings, LogOut, Coins, Sun, Moon } from 'lucide-react'
+import { Menu, Settings, LogOut, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import {
@@ -17,7 +17,6 @@ import { useMemo } from 'react'
 import { apiPost } from '@/lib/api-client'
 import { useRouter } from 'next/navigation'
 import { MobileSidebar } from './mobile-sidebar'
-import { useTheme } from '@/context/theme-provider'
 import Link from 'next/link'
 import { CreativeTopNav } from './creative-top-nav'
 
@@ -32,7 +31,6 @@ export function Topbar({ title }: TopbarProps) {
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const resetGeneration = useGenerationStore((s) => s.reset)
   const router = useRouter()
-  const { theme, toggleTheme } = useTheme()
   const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
 
   const canViewCredits = useMemo(() => {
@@ -68,21 +66,6 @@ export function Topbar({ title }: TopbarProps) {
       )}
 
       <div className="ml-auto flex items-center gap-2">
-        {/* 主题切换按钮 */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleTheme}
-          className="rounded-full text-muted-foreground hover:text-foreground"
-          aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
-        >
-          {theme === 'dark' ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Moon className="h-4 w-4" />
-          )}
-        </Button>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">

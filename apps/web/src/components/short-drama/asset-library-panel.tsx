@@ -193,13 +193,13 @@ export function AssetLibraryPanel({ assets, episodeNumber, projectId, episodeMen
               }`}
               aria-label={asset.imageUrl ? `放大查看${asset.name}` : asset.name}
             >
-              <div className={`group relative block w-full shrink-0 overflow-hidden bg-muted/40 text-left dark:bg-slate-900/70 ${
+              <div className={`group relative block w-full shrink-0 overflow-hidden bg-slate-900/70 text-left ${
                 activeKind === 'character' ? 'h-36' : 'aspect-video h-auto'
               }`}>
                 {/* <span className={`absolute left-1.5 top-1.5 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm ${
                   asset.imageUrl
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200'
-                    : 'bg-muted text-muted-foreground dark:bg-slate-800 dark:text-slate-300'
+                    ? 'bg-emerald-500/15 text-emerald-200'
+                    : 'bg-slate-800 text-slate-300'
                 }`}>
                   {asset.imageUrl ? '已出图' : '未出图'}
                 </span> */}

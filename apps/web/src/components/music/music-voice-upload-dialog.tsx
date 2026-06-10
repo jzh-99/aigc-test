@@ -88,7 +88,7 @@ export function MusicVoiceUploadDialog({ open, workspaceId, onOpenChange, onCrea
               id="voice-name"
               value={name}
               maxLength={40}
-              className="bg-background/70 dark:bg-background/45 dark:border-primary/20 dark:focus-visible:ring-primary/40"
+              className="bg-background/45 border-primary/20 focus-visible:ring-primary/40"
               onChange={(event) => setName(event.target.value)}
             />
           </div>
@@ -96,7 +96,7 @@ export function MusicVoiceUploadDialog({ open, workspaceId, onOpenChange, onCrea
             <Label htmlFor="voice-file">音频文件</Label>
             <label
               htmlFor="voice-file"
-              className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/8 px-4 py-4 text-sm transition-colors hover:border-primary/55 hover:bg-primary/14 dark:bg-primary/12 dark:hover:bg-primary/20"
+              className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/12 px-4 py-4 text-sm transition-colors hover:border-primary/55 hover:bg-primary/20"
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                 <UploadCloud className="h-5 w-5" />
@@ -124,7 +124,7 @@ export function MusicVoiceUploadDialog({ open, workspaceId, onOpenChange, onCrea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="可选，1024 字以内"
-              className="bg-background/70 placeholder:text-muted-foreground/65 dark:bg-background/45 dark:border-primary/20 dark:placeholder:text-muted-foreground/55 dark:focus-visible:ring-primary/40"
+              className="bg-background/45 border-primary/20 placeholder:text-muted-foreground/55 focus-visible:ring-primary/40"
               rows={4}
             />
             <div className={descriptionTooLong ? 'text-xs text-destructive text-right' : 'text-xs text-muted-foreground text-right'}>

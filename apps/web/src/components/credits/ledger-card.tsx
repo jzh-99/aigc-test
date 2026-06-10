@@ -30,11 +30,11 @@ const TYPE_COLOR: Record<string, string> = {
 }
 
 const TYPE_BADGE_CLASS: Record<string, string> = {
-  topup: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300',
-  subscription: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300',
-  bonus: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300',
-  refund: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300',
-  confirm: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300',
+  topup: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+  subscription: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+  bonus: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+  refund: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+  confirm: 'border-rose-500/20 bg-rose-500/10 text-rose-300',
   expire: 'border-border bg-muted/50 text-muted-foreground',
 }
 

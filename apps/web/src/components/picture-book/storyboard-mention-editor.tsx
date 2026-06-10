@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils'
 
 const PROMPT_MAX_LENGTH = 1200
 const CHARACTER_TOKEN_CLASS = 'border-primary/35 bg-primary/10 text-primary'
-const BACKGROUND_TOKEN_CLASS = 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300'
-const REQUISITE_TOKEN_CLASS = 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300'
+const BACKGROUND_TOKEN_CLASS = 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+const REQUISITE_TOKEN_CLASS = 'border-amber-500/30 bg-amber-500/15 text-amber-300'
 
 export interface StoryboardMentionResource {
   id: string

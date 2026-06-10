@@ -2,8 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Sun, Moon } from 'lucide-react'
-import { useTheme } from '@/context/theme-provider'
 
 const navSections = [
   {
@@ -34,7 +32,6 @@ const navSections = [
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { theme, toggleTheme } = useTheme()
 
   return (
     <div className="docs-layout">
@@ -90,13 +87,6 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
               </svg>
               返回创作平台
             </Link>
-            <button
-              onClick={toggleTheme}
-              className="docs-theme-toggle"
-              aria-label={theme === 'dark' ? '切换到亮色' : '切换到暗色'}
-            >
-              {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-            </button>
           </div>
         </div>
       </aside>

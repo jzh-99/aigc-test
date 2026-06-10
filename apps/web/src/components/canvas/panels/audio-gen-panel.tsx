@@ -404,8 +404,8 @@ function renderAudioEditorContent(editor: HTMLElement, value: string) {
     token.className = cn(
       'mx-0.5 inline-flex items-center rounded-md border px-2 py-0.5 font-semibold align-baseline shadow-sm',
       segment.type === 'pause'
-        ? 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200'
-        : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200',
+        ? 'border-cyan-500/30 bg-cyan-500/15 text-cyan-200'
+        : 'border-violet-500/30 bg-violet-500/15 text-violet-200',
     )
     token.textContent = segment.type === 'pause' ? `<#${segment.label}#>` : segment.label
     editor.appendChild(token)

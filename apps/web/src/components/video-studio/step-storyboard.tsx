@@ -163,12 +163,12 @@ export function StepStoryboard({ describeData, script, characters, scenes, initi
                     {((shot.characters && shot.characters.length > 0) || shot.scene) && (
                       <div className="flex items-center gap-2 flex-wrap">
                         {shot.characters?.map((c) => (
-                          <span key={c} className="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                          <span key={c} className="inline-flex items-center gap-1 text-[11px] bg-blue-950 text-blue-300 px-1.5 py-0.5 rounded">
                             <User className="w-2.5 h-2.5" />{c}
                           </span>
                         ))}
                         {shot.scene && (
-                          <span className="inline-flex items-center gap-1 text-[11px] bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded">
+                          <span className="inline-flex items-center gap-1 text-[11px] bg-amber-950 text-amber-300 px-1.5 py-0.5 rounded">
                             <MapPin className="w-2.5 h-2.5" />{shot.scene}
                           </span>
                         )}

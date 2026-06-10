@@ -1,6 +1,5 @@
 import { Inter, Syne } from 'next/font/google'
 import { Toaster } from 'sonner'
-import { ThemeProvider } from '@/context/theme-provider'
 import { ConfirmProvider } from '@/hooks/use-confirm'
 import './globals.css'
 
@@ -31,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* 防止暗黑主题闪烁（FOUC） */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){document.documentElement.classList.add('dark');try{localStorage.setItem('theme','dark')}catch(e){}})()`,
+            __html: `(function(){document.documentElement.classList.add('dark')})()`,
           }}
         />
       </head>
@@ -39,11 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className={`${inter.variable} ${syne.variable} font-sans antialiased`}
         style={{ fontFamily: 'var(--font-inter), "Noto Sans SC", sans-serif' }}
       >
-        <ThemeProvider>
-          <ConfirmProvider>
-            {children}
-          </ConfirmProvider>
-        </ThemeProvider>
+        <ConfirmProvider>
+          {children}
+        </ConfirmProvider>
         <Toaster position="top-center" richColors duration={4000} />
       </body>
     </html>

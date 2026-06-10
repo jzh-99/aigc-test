@@ -19,12 +19,12 @@ function timeAgo(iso: string): string {
 }
 
 const STATUS_LABELS: Record<string, { text: string; className: string }> = {
-  draft: { text: '草稿', className: 'border-border bg-muted text-muted-foreground dark:bg-white/5' },
-  summary_ready: { text: '摘要就绪', className: 'border-sky-400/20 bg-sky-400/10 text-sky-700 dark:text-sky-200' },
-  outline_ready: { text: '大纲就绪', className: 'border-blue-400/20 bg-blue-400/10 text-blue-700 dark:text-blue-200' },
-  assets_ready: { text: '素材就绪', className: 'border-violet-400/20 bg-violet-400/10 text-violet-700 dark:text-violet-200' },
-  episodes_ready: { text: '分集就绪', className: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200' },
-  completed: { text: '已完成', className: 'border-green-400/20 bg-green-400/10 text-green-700 dark:text-green-200' },
+  draft: { text: '草稿', className: 'border-border bg-white/5 text-muted-foreground' },
+  summary_ready: { text: '摘要就绪', className: 'border-sky-400/20 bg-sky-400/10 text-sky-200' },
+  outline_ready: { text: '大纲就绪', className: 'border-blue-400/20 bg-blue-400/10 text-blue-200' },
+  assets_ready: { text: '素材就绪', className: 'border-violet-400/20 bg-violet-400/10 text-violet-200' },
+  episodes_ready: { text: '分集就绪', className: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' },
+  completed: { text: '已完成', className: 'border-green-400/20 bg-green-400/10 text-green-200' },
   failed: { text: '失败', className: 'border-destructive/25 bg-destructive/10 text-destructive' },
 }
 
@@ -34,7 +34,7 @@ export function ShortDramaProjectCard({ project }: ShortDramaProjectCardProps) {
   return (
     <Link
       href={`/toby-studio/short-drama/${project.id}`}
-      className="group relative flex min-h-[148px] overflow-hidden rounded-lg border bg-card shadow-[0_18px_45px_rgba(34,26,63,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_22px_55px_rgba(34,26,63,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#0d0b1d] dark:shadow-[0_18px_45px_rgba(0,0,0,0.28)]"
+      className="group relative flex min-h-[148px] overflow-hidden rounded-lg border border-[#201b49] bg-[#0d0b1d] shadow-[0_18px_45px_rgba(0,0,0,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_22px_55px_rgba(34,26,63,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
     >
       <div className="w-1.5 shrink-0 bg-gradient-to-b from-[#6f7cff] via-[#a86af5] to-[#21c4d6]" />
       <div className="flex min-w-0 flex-1 flex-col justify-between p-4">
@@ -52,7 +52,7 @@ export function ShortDramaProjectCard({ project }: ShortDramaProjectCardProps) {
               </p>
             </div>
           </div>
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-muted-foreground transition-colors group-hover:border-primary/50 group-hover:text-primary dark:border-[#302858]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#302858] text-muted-foreground transition-colors group-hover:border-primary/50 group-hover:text-primary">
             <ArrowUpRight className="h-4 w-4" />
           </span>
         </div>

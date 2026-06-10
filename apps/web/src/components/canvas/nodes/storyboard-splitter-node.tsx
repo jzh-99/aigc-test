@@ -39,8 +39,8 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
         className={cn(
           'group relative flex flex-col rounded-xl border shadow-md transition-shadow duration-150',
           'border-border bg-card hover:border-border/60 hover:shadow-lg',
-          isGenerating && 'ring-1 ring-violet-400/80 shadow-violet-100 dark:shadow-none',
-          isUpstream && !isGenerating && 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100 dark:shadow-none',
+          isGenerating && 'ring-1 ring-violet-400/80',
+          isUpstream && !isGenerating && 'border-violet-400 ring-1 ring-violet-300',
           '[transform:translateZ(0)] [backface-visibility:hidden]',
           '[contain:layout_style] [will-change:transform]',
         )}

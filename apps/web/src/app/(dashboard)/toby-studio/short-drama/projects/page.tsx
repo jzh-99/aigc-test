@@ -38,7 +38,7 @@ export default function ShortDramaProjectsPage() {
         {projects.isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 9 }).map((_, index) => (
-              <div key={index} className="h-[148px] animate-pulse rounded-lg border bg-card dark:border-[#201b49] dark:bg-[#0d0b1d]" />
+              <div key={index} className="h-[148px] animate-pulse rounded-lg border border-[#201b49] bg-[#0d0b1d]" />
             ))}
           </div>
         ) : projects.error ? (
@@ -52,7 +52,7 @@ export default function ShortDramaProjectsPage() {
             ))}
           </div>
         ) : (
-          <div className="flex min-h-[320px] items-center justify-center rounded-lg border border-dashed bg-card p-10 text-center text-sm text-muted-foreground dark:border-[#302858] dark:bg-[#0d0b1d]">
+          <div className="flex min-h-[320px] items-center justify-center rounded-lg border border-dashed border-[#302858] bg-[#0d0b1d] p-10 text-center text-sm text-muted-foreground">
             还没有短剧项目。
           </div>
         )}

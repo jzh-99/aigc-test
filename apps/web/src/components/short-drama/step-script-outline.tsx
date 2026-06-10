@@ -358,7 +358,7 @@ function SummaryEditActions({
         variant="outline"
         onClick={onCancel}
         disabled={saving}
-        className="border-border/80 bg-background/90 text-foreground shadow-sm hover:bg-muted dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
+        className="border-slate-600 bg-slate-900 text-slate-100 shadow-sm hover:border-slate-500 hover:bg-slate-800"
       >
         <X className="mr-1 h-3.5 w-3.5" />
         取消
@@ -400,7 +400,7 @@ function SummaryTextBlock({
   if (!editing && !children) return null
 
   return (
-    <section className="rounded-xl border border-border/70 bg-card/70 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/45 dark:shadow-none">
+    <section className="rounded-xl border border-slate-800 bg-slate-950/45 p-5 shadow-none">
       <div className="flex items-center justify-between gap-3">
         <h4 className="text-xs font-semibold tracking-wide text-muted-foreground">{title}</h4>
         {canEdit && !editing && onEdit && (
@@ -412,7 +412,7 @@ function SummaryTextBlock({
           <textarea
             value={draftValue ?? ''}
             onChange={event => onChange?.(heading, event.target.value)}
-            className="min-h-[132px] w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 dark:bg-slate-950"
+            className="min-h-[132px] w-full resize-y rounded-xl border bg-slate-950 px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
           />
           <SummaryEditActions
             saving={Boolean(saving)}
@@ -455,7 +455,7 @@ function SummaryTopCard({
   onCancel: () => void
 }) {
   return (
-    <div className="min-h-[118px] rounded-xl border border-transparent bg-muted/35 px-4 py-4 dark:bg-slate-900/65">
+    <div className="min-h-[118px] rounded-xl border border-transparent bg-slate-900/65 px-4 py-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs font-semibold tracking-wide text-muted-foreground">{label}</div>
         {canEdit && !editing && (
@@ -467,7 +467,7 @@ function SummaryTopCard({
           <input
             value={draftValue}
             onChange={event => onChange(heading, event.target.value)}
-            className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 dark:bg-slate-950"
+            className="h-10 w-full rounded-xl border bg-slate-950 px-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
           />
           <SummaryEditActions
             saving={saving}
@@ -526,7 +526,7 @@ function CharacterBioDialog({
                 maxLength={CHARACTER_NAME_MAX_LENGTH}
                 onChange={event => onChange({ ...value, name: event.target.value })}
                 placeholder="例如：林辰、赵晓雨、王总"
-                className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 dark:bg-slate-950"
+                className="h-10 w-full rounded-xl border bg-slate-950 px-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
             </label>
 
@@ -562,7 +562,7 @@ function CharacterBioDialog({
                           },
                         })}
                         placeholder={`${field}，留空则不写入整体摘要`}
-                        className="min-h-[104px] w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 dark:bg-slate-950"
+                        className="min-h-[104px] w-full resize-y rounded-xl border bg-slate-950 px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
                       />
                     </label>
                   )
@@ -630,14 +630,14 @@ function EpisodeOutlineDialog({
                 value={value.value}
                 maxLength={maxLength}
                 onChange={event => onChange({ ...value, value: event.target.value })}
-                className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 dark:bg-slate-950"
+                className="h-10 w-full rounded-xl border bg-slate-950 px-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
             ) : (
               <textarea
                 value={value.value}
                 maxLength={maxLength}
                 onChange={event => onChange({ ...value, value: event.target.value })}
-                className="min-h-[320px] w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 dark:bg-slate-950"
+                className="min-h-[320px] w-full resize-y rounded-xl border bg-slate-950 px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
             )}
           </label>
@@ -696,7 +696,7 @@ function ScriptSummaryView({
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:shadow-none">
+    <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 shadow-none">
       <div className="grid gap-3 md:grid-cols-3">
         {[
           { label: '集数', value: sections.集数 },
@@ -724,7 +724,7 @@ function ScriptSummaryView({
       <SummaryTextBlock title="一句话故事" heading="一句话故事" value={sections.一句话故事} canEdit={canStartEdit} editing={editingHeading === '一句话故事'} saving={savingHeading === '一句话故事'} draftValue={draft.一句话故事} onEdit={onEditHeading} onChange={onChangeHeading} onSave={onSaveHeading} onCancel={onCancelEdit} />
 
       {displayCharacterBios.length > 0 ? (
-        <section id="short-drama-character-bios" className="scroll-mt-24 rounded-xl border border-border/70 bg-card/70 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/45 dark:shadow-none">
+        <section id="short-drama-character-bios" className="scroll-mt-24 rounded-xl border border-slate-800 bg-slate-950/45 p-5 shadow-none">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h4 className="text-xs font-semibold tracking-wide text-muted-foreground">人物小传</h4>
@@ -751,7 +751,7 @@ function ScriptSummaryView({
               <textarea
                 value={draft.人物小传}
                 onChange={event => onChangeHeading('人物小传', event.target.value)}
-                className="min-h-[180px] w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 dark:bg-slate-950"
+                className="min-h-[180px] w-full resize-y rounded-xl border bg-slate-950 px-3 py-2 text-sm leading-6 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               <SummaryEditActions
                 saving={savingHeading === '人物小传'}
@@ -763,7 +763,7 @@ function ScriptSummaryView({
           <div className="mt-4 grid gap-3">
             {displayCharacterBios.map(bio => {
               return (
-              <div key={bio.name} className="rounded-xl border border-border/60 bg-muted/30 p-4 dark:bg-slate-900/60">
+              <div key={bio.name} className="rounded-xl border border-border/60 bg-slate-900/60 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold text-foreground">{bio.name}</div>
                   {canStartEdit && editingHeading !== '人物小传' && (
@@ -812,7 +812,7 @@ function EpisodeOutlineList({
           {group.outlines.map(outline => {
             const scenes = parseEpisodeSceneBlocks(outline.summary)
             return (
-              <section key={outline.episodeNumber} className="rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:shadow-none">
+              <section key={outline.episodeNumber} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 shadow-none">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-xs font-medium text-muted-foreground">第 {outline.episodeNumber} 集</div>
@@ -1435,7 +1435,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
         )}
 
         {isOutlinesGenerating && (
-          <div className="flex items-center gap-2 rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/20 dark:text-violet-200">
+          <div className="flex items-center gap-2 rounded-lg border border-violet-900/60 bg-violet-950/20 p-3 text-sm text-violet-200">
             <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
             <span>{getCurrentOutlineProgressMessage(state, outlineProgressMessage)}</span>
           </div>
@@ -1495,7 +1495,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
               value={sourceEditDraft}
               onChange={event => setSourceEditDraft(event.target.value)}
               placeholder={isUploadSource ? '在这里粘贴或编辑原始剧本...' : '在这里编辑原始创意...'}
-              className={`${isUploadSource ? 'min-h-[320px]' : 'min-h-[180px]'} resize-none rounded-lg border-border bg-muted/35 p-4 text-sm focus-visible:ring-primary/25 dark:border-[#201b49] dark:bg-[#070615]`}
+              className={`${isUploadSource ? 'min-h-[320px]' : 'min-h-[180px]'} resize-none rounded-lg border-[#201b49] bg-[#070615] p-4 text-sm focus-visible:ring-primary/25`}
               autoFocus
             />
             <div className="flex items-center justify-between gap-3 text-xs">
@@ -1524,7 +1524,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
       </div>
 
       <aside className="-mr-8 hidden xl:block">
-        <nav className="sticky top-10 space-y-2 rounded-lg border border-border/70 bg-card/80 p-2 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-950/60">
+        <nav className="sticky top-10 space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-xs shadow-sm">
           <div className="px-1.5 font-medium text-muted-foreground">导航</div>
           <div className="space-y-0.5">
             <div className="px-1.5 pt-1 text-[11px] font-medium text-foreground">剧本</div>

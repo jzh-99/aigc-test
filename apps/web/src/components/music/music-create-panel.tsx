@@ -159,7 +159,7 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
 
   return (
     <section className="rounded-xl border bg-card p-5 shadow-sm">
-      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-[radial-gradient(circle_at_16%_12%,rgba(168,85,247,0.22),transparent_34%),linear-gradient(135deg,rgba(14,165,233,0.12),rgba(168,85,247,0.14)_45%,rgba(15,23,42,0.04))] p-5 shadow-[0_18px_60px_rgba(79,70,229,0.12)] dark:border-primary/35 dark:bg-[radial-gradient(circle_at_16%_12%,rgba(168,85,247,0.32),transparent_34%),linear-gradient(135deg,rgba(14,165,233,0.14),rgba(168,85,247,0.18)_48%,rgba(2,6,23,0.55))] dark:shadow-[0_22px_70px_rgba(124,58,237,0.22)]">
+      <div className="relative overflow-hidden rounded-xl border border-primary/35 bg-[radial-gradient(circle_at_16%_12%,rgba(168,85,247,0.32),transparent_34%),linear-gradient(135deg,rgba(14,165,233,0.14),rgba(168,85,247,0.18)_48%,rgba(2,6,23,0.55))] p-5 shadow-[0_22px_70px_rgba(124,58,237,0.22)]">
         <div className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full border border-primary/20 bg-primary/10 blur-sm" />
         <div className="pointer-events-none absolute bottom-3 right-5 hidden h-14 items-end gap-1 opacity-30 sm:flex">
           {Array.from({ length: 18 }).map((_, index) => (
@@ -167,7 +167,7 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
           ))}
         </div>
         <div className="relative space-y-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-background/45 px-3 py-1 text-primary shadow-sm backdrop-blur dark:bg-background/20">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-background/20 px-3 py-1 text-primary shadow-sm backdrop-blur">
             <Radio className="h-3.5 w-3.5" />
             <span className="text-xs font-semibold uppercase tracking-[0.18em]">Toby AI Music</span>
           </div>
@@ -239,20 +239,20 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
             </div>
             <div className="space-y-3">
               <Label>风格标签（可选，最多 10 个）</Label>
-              <div className="rounded-xl border bg-card p-3 shadow-sm dark:border-[#4a3d91] dark:bg-[#0d0b24] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <div className="rounded-xl border border-[#4a3d91] bg-[#0d0b24] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                 <div className="mb-3 flex min-h-8 flex-wrap gap-2">
                   {styles.length ? styles.map((style) => (
                     <button
                       key={style}
                       type="button"
                       onClick={() => removeStyle(style)}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-primary/50 bg-primary/10 px-3 text-sm text-foreground shadow-sm transition-colors hover:border-primary hover:bg-primary/15 dark:border-[#6f5bff]/70 dark:bg-[#2a2360] dark:text-[#d9d3ff] dark:hover:border-[#9d8cff] dark:hover:bg-[#332a75]"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#6f5bff]/70 bg-[#2a2360] px-3 text-sm text-[#d9d3ff] shadow-sm transition-colors hover:border-[#9d8cff] hover:bg-[#332a75]"
                     >
                       {style}
                       <X className="h-3.5 w-3.5 opacity-70" />
                     </button>
                   )) : (
-                    <span className="flex h-9 items-center text-sm text-muted-foreground dark:text-[#8d86b9]">暂未选择风格标签</span>
+                    <span className="flex h-9 items-center text-sm text-[#8d86b9]">暂未选择风格标签</span>
                   )}
                 </div>
                 <Input
@@ -260,7 +260,7 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
                   placeholder="支持自定义提示词标签后，按 Enter 添加"
                   onChange={(event) => setCustomStyle(event.target.value)}
                   onKeyDown={(event) => event.key === 'Enter' && (event.preventDefault(), addCustomStyle())}
-                  className="h-14 rounded-xl px-5 text-base dark:border-[#463a8a] dark:bg-[#151331] dark:text-[#f4f1ff] dark:placeholder:text-[#9f98c5] dark:focus-visible:ring-[#7565ff]"
+                  className="h-14 rounded-xl border-[#463a8a] bg-[#151331] px-5 text-base text-[#f4f1ff] placeholder:text-[#9f98c5] focus-visible:ring-[#7565ff]"
                 />
                 <div className="mt-4 flex flex-wrap gap-2">
                   {STYLE_OPTIONS.map((style) => {
@@ -271,8 +271,8 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
                         type="button"
                         onClick={() => toggleStyle(style)}
                         className={selected
-                          ? 'h-9 rounded-full border border-primary bg-primary/12 px-4 text-sm text-foreground shadow-sm dark:border-[#7565ff] dark:bg-[#2a2360] dark:text-[#f4f1ff]'
-                          : 'h-9 rounded-full border bg-background px-4 text-sm text-foreground transition-colors hover:border-primary hover:bg-accent dark:border-[#332c68] dark:bg-[#080719] dark:text-[#f4f1ff] dark:hover:border-[#7565ff] dark:hover:bg-[#171331]'
+                          ? 'h-9 rounded-full border border-[#7565ff] bg-[#2a2360] px-4 text-sm text-[#f4f1ff] shadow-sm'
+                          : 'h-9 rounded-full border border-[#332c68] bg-[#080719] px-4 text-sm text-[#f4f1ff] transition-colors hover:border-[#7565ff] hover:bg-[#171331]'
                         }
                       >
                         {style}

@@ -90,7 +90,7 @@ function SceneTagsCell({ tags }: { tags: string[] }) {
       {tags.map((tag) => (
         <span
           key={tag}
-          className="inline-flex items-center rounded-full border border-violet-200/70 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 shadow-sm shadow-violet-100/50 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-300 dark:shadow-none whitespace-nowrap"
+          className="inline-flex items-center rounded-full border border-violet-800/70 bg-violet-950/40 px-2 py-0.5 text-[10px] font-medium text-violet-300 whitespace-nowrap"
         >
           {tag}
         </span>
@@ -109,7 +109,7 @@ function CellContent({ shot, column }: { shot: ShotItem; column: ColumnDef }) {
 
   if (column.key === 'shotNumber') {
     return (
-      <span className="inline-flex h-6 min-w-8 items-center justify-center rounded-md border border-violet-200/80 bg-violet-50 px-2 font-semibold text-violet-700 shadow-sm shadow-violet-100/60 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-300 dark:shadow-none">
+      <span className="inline-flex h-6 min-w-8 items-center justify-center rounded-md border border-violet-800/70 bg-violet-950/40 px-2 font-semibold text-violet-300">
         {value}
       </span>
     )
@@ -121,7 +121,7 @@ function CellContent({ shot, column }: { shot: ShotItem; column: ColumnDef }) {
 
   if (column.key === 'shotType') {
     return (
-      <span className="inline-flex items-center rounded-full border border-violet-200/70 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-300 whitespace-nowrap">
+      <span className="inline-flex items-center rounded-full border border-violet-800/70 bg-violet-950/40 px-2 py-0.5 text-[10px] font-medium text-violet-300 whitespace-nowrap">
         {String(value)}
       </span>
     )
@@ -156,7 +156,7 @@ export function StoryboardTableDialog({ open, onOpenChange, shots, title = '分�
       <DialogContent
         onOpenAutoFocus={(event) => event.preventDefault()}
         className={cn(
-          'z-[70] flex flex-col gap-0 overflow-hidden border-violet-200/60 bg-background p-0 shadow-2xl shadow-violet-950/10 dark:border-violet-900/60',
+          'z-[70] flex flex-col gap-0 overflow-hidden border-violet-900/60 bg-background p-0 shadow-2xl shadow-violet-950/10',
           '[&>button:last-child]:hidden',
           isFullscreen
             ? 'w-screen h-screen max-w-none max-h-none rounded-none'
@@ -164,10 +164,10 @@ export function StoryboardTableDialog({ open, onOpenChange, shots, title = '分�
         )}
       >
         {/* 顶部标题栏 */}
-        <DialogHeader className="relative shrink-0 flex-row items-center justify-between space-y-0 border-b border-violet-200/70 bg-violet-50/70 px-4 py-3 dark:border-violet-900/70 dark:bg-violet-950/20">
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-violet-300/70 to-transparent dark:via-violet-700/60" />
+        <DialogHeader className="relative shrink-0 flex-row items-center justify-between space-y-0 border-b border-violet-900/70 bg-violet-950/20 px-4 py-3">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-violet-700/60 to-transparent" />
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-200 bg-white text-violet-600 shadow-sm dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-800 bg-violet-950/50 text-violet-300">
               <Clapperboard size={16} />
             </span>
             <div className="min-w-0">
@@ -234,7 +234,7 @@ export function StoryboardTableDialog({ open, onOpenChange, shots, title = '分�
         <div className="flex-1 overflow-auto bg-gradient-to-b from-background to-muted/20">
           {shots.length === 0 ? (
             <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 px-6 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-violet-300 bg-violet-50 text-violet-500 dark:border-violet-800 dark:bg-violet-950/30">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-violet-800 bg-violet-950/30 text-violet-500">
                 <Clapperboard size={22} />
               </span>
               <div>
@@ -251,7 +251,7 @@ export function StoryboardTableDialog({ open, onOpenChange, shots, title = '分�
                       key={col.key}
                       className={cn(
                         col.width,
-                        'border-b border-violet-100/80 px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground whitespace-nowrap dark:border-violet-900/50',
+                        'border-b border-violet-900/50 px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground whitespace-nowrap',
                       )}
                     >
                       {col.label}
@@ -265,8 +265,8 @@ export function StoryboardTableDialog({ open, onOpenChange, shots, title = '分�
                     key={shot.shotNumber}
                     className={cn(
                       'group transition-colors',
-                      idx % 2 === 0 ? 'bg-background/90' : 'bg-violet-50/30 dark:bg-violet-950/10',
-                      'hover:bg-violet-50/80 dark:hover:bg-violet-950/25',
+                      idx % 2 === 0 ? 'bg-background/90' : 'bg-violet-950/10',
+                      'hover:bg-violet-950/25',
                     )}
                   >
                     {visibleColumns.map((col) => (

@@ -7,6 +7,7 @@ import { loadAiChatHistory, saveAiChatHistory, clearAiChatHistory } from '@/hook
 import type { AiChatMessage } from '@/hooks/use-ai-chat-history'
 import { cn, generateUUID } from '@/lib/utils'
 import { fetchWithAuth } from '@/lib/fetch-with-auth'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import {
   Bot, X, Send, ImageIcon, Video, Trash2, Loader2, Upload, MessageSquare, GripVertical, Copy, Check,
 } from 'lucide-react'
@@ -538,7 +539,7 @@ export function AiAssistant() {
 
   const handleCopy = useCallback(async (content: string, id: string) => {
     try {
-      await navigator.clipboard.writeText(content)
+      await copyTextToClipboard(content)
       setCopiedId(id)
       toast.success('已复制到剪贴板')
       setTimeout(() => setCopiedId(null), 2000)
@@ -687,7 +688,7 @@ export function AiAssistant() {
                     : msg.role === 'assistant'
                     ? (
                       <>
-                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-4 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                        <div className="prose prose-sm prose-invert max-w-full break-words overflow-hidden pb-4 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
                         {msg.content && (
                           <button
                             onClick={() => handleCopy(msg.content, msg.id)}

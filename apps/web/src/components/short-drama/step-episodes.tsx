@@ -380,7 +380,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
               已选择的集里包含已经生成过片段脚本的内容。确认后会重新生成并覆盖这些集的片段脚本，原有片段脚本和相关视频状态可能不再保留。
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 p-3 text-sm text-amber-300">
             将生成第 {confirmGenerateEpisodes?.join('、')} 集，共 {confirmGenerateEpisodes?.length ?? 0} 集。
           </div>
           <DialogFooter>
