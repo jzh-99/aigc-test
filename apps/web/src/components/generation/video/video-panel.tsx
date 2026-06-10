@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVideoGenerate } from '@/hooks/use-video-generate'
@@ -10,7 +9,6 @@ import { useConfirm } from '@/hooks/use-confirm'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { Film, ChevronDown, Coins } from 'lucide-react'
 import {
   getVideoCategoryKeys,
   parseCategoryReferences,
@@ -26,8 +24,7 @@ import type { VideoParams } from '@/stores/generation-store'
 import { VideoFramesZone } from './video-frames-zone'
 import { VideoMultimodalZone } from './video-multimodal-zone'
 import type { MultimodalVideo, MultimodalAudio } from './video-multimodal-zone'
-import { VideoParamsBar, VideoSettingsContent } from './video-params'
-import { GenerationSettingsSheet } from '../generation-settings-sheet'
+import { VideoParams as VideoParamsPanel } from './video-params'
 import type { FrameImage } from '../shared/types'
 import { readFrameFile, isValidImageFile, fetchAssetFile, getDraggedAsset } from '../shared/file-utils'
 import { useModels } from '@/hooks/use-models'
@@ -56,7 +53,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const [videoGenerateAudio, setVideoGenerateAudio] = useState(initialParams?.videoGenerateAudio ?? true)
   const [videoCameraFixed, setVideoCameraFixed] = useState(initialParams?.videoCameraFixed ?? false)
   const [isVideoUploading, setIsVideoUploading] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // 从历史记录恢复时，将 prompt 写入 store
   useEffect(() => {
@@ -102,7 +98,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     return result.valid
   }, [currentCategoryReferences, getResourceCounts])
 
-  // 模型列表加载后自动修正无效模型
   useEffect(() => {
     if (!videoModelsReady || videoModels.length === 0) return
     const nextModel = videoModels.find((m) => getVideoCategoryKeys(parseCategoryReferences(m.category_references)).length > 0)
@@ -110,13 +105,11 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     if (!isValid && nextModel) setVideoModel(nextModel.code)
   }, [videoModelsReady, videoModels, videoModel])
 
-  // 模式不在可用列表中时自动修正
   useEffect(() => {
     if (!videoModelsReady || availableVideoModes.length === 0) return
     if (!availableVideoModes.includes(videoMode)) setVideoMode(availableVideoModes[0])
   }, [availableVideoModes, videoMode, videoModelsReady])
 
-  // 时长不在可用选项中时自动修正
   useEffect(() => {
     if (!videoModelsReady || videoModels.length === 0) return
     const currentModel = videoModels.find((m) => m.code === videoModel)
@@ -129,7 +122,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     }
   }, [videoModelsReady, videoModels, videoModel])
 
-  // 分辨率不在可用选项中时自动修正
   useEffect(() => {
     if (!videoModelsReady || videoModels.length === 0) return
     const currentModel = videoModels.find((m) => m.code === videoModel)
@@ -152,7 +144,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     return isSeedance ? billableDuration * unitPrice : unitPrice
   }, [videoModels, videoModel, videoResolution, videoDuration, multimodalVideos, isSeedance])
 
-  // 待上传的参考图片
   useEffect(() => {
     if (pendingVideoReferenceImages.length === 0) return
     setVideoMode('multimodal')
@@ -303,72 +294,22 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     setVideoMode(mode)
   }
 
-  // 层1 模型选择下拉框中可用的模型列表（按当前模式过滤）
-  const availableModelsForSelect = (videoModels ?? []).filter((m) => {
-    const categories = parseCategoryReferences(m.category_references)
-    return Boolean(categories[videoMode])
-  })
+  const modeBtnCls = (active: boolean) => cn(
+    'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
+    active ? 'nav-item-active text-primary-foreground' : 'hover:bg-accent text-muted-foreground hover:text-foreground hover:bg-muted/80'
+  )
 
   return (
     <>
-      <div className="flex flex-col gap-2.5 flex-1 min-h-0">
-        {/* 层1: 模式切换 pill 组 + 模型选择 Chip — 同一行 */}
-        <div className="flex items-center gap-2">
-          {/* 模式切换 pill 组 */}
-          <div className="flex bg-white/[0.05] rounded-lg p-[3px]">
-            {availableVideoModes.map((mode) => (
-              <button key={mode}
-                className={cn(
-                  'text-[11px] px-3 py-1 rounded-md font-medium transition-colors',
-                  videoMode === mode ? 'bg-[#6366f1]/20 text-[#a5b4fc]' : 'text-white/35 hover:text-white/50',
-                )}
-                onClick={() => switchMode(mode)}
-              >
-                {currentCategoryReferences[mode]?.label ?? mode}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1" />
-          {/* 模型选择 Chip */}
-          <Select value={videoModel} onValueChange={setVideoModel} disabled={isVideoGenerating || disabled}>
-            <SelectTrigger className="bg-white/[0.05] px-2.5 py-1.5 rounded-lg border-0 h-auto w-auto hover:bg-white/[0.08] transition-colors [&>svg]:hidden">
-              <div className="flex items-center gap-1.5">
-                <div className="w-[22px] h-[22px] rounded-md bg-gradient-to-br from-primary to-secondary flex items-center justify-center shrink-0">
-                  <Film className="h-3 w-3 text-white" />
-                </div>
-                <span className="text-[11px] font-medium text-white/60">{currentVideoModel?.name ?? videoModel}</span>
-                <ChevronDown className="h-3 w-3 text-white/20" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              {availableModelsForSelect.map((m) => {
-                const minPrice = m.params_pricing.length > 0
-                  ? Math.min(...m.params_pricing.map((r) => r.unit_price))
-                  : 0
-                const isModelSeedance = m.code.startsWith('seedance-')
-                return (
-                  <SelectItem key={m.code} value={m.code} className="py-2">
-                    <div className="flex items-start gap-3">
-                      <Film className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm mb-0.5">{m.name}</div>
-                        {m.description && (
-                          <div className="text-xs text-muted-foreground leading-snug">{m.description}</div>
-                        )}
-                        <div className="flex items-center gap-1 text-xs font-medium text-primary mt-0.5">
-                          <Coins className="h-3 w-3" />
-                          {isModelSeedance ? `${minPrice} A豆/秒` : `${minPrice} A豆/次`}
-                        </div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                )
-              })}
-            </SelectContent>
-          </Select>
+      <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
+        <div className="flex gap-2 shrink-0">
+          {availableVideoModes.map((mode) => (
+            <button key={mode} onClick={() => switchMode(mode)} className={modeBtnCls(videoMode === mode)}>
+              {currentCategoryReferences[mode]?.label ?? mode}
+            </button>
+          ))}
         </div>
 
-        {/* 层2: 上传区 — frames 模式或 multimodal 模式的素材上传区 */}
         {videoMode === 'frames' && (
           <VideoFramesZone
             firstFrame={firstFrame}
@@ -394,72 +335,41 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
           />
         )}
 
-        {/* 层3: 输入框 */}
         <div className="flex-1 min-h-0">
           <Textarea
             placeholder="描述你想要生成的视频内容..."
             value={videoPrompt}
             onChange={(e) => setVideoPrompt(e.target.value)}
-            className="h-full resize-none bg-white/[0.03] border-white/[0.06] text-white placeholder:text-white/25 focus-visible:ring-white/[0.1]"
+            className="h-full resize-none"
             disabled={isVideoGenerating || disabled}
           />
         </div>
-
-        {/* 层4: 底部参数栏 + 生成按钮 */}
-        <VideoParamsBar
-          models={videoModels}
-          videoMode={videoMode}
-          videoModel={videoModel}
-          videoAspectRatio={videoAspectRatio}
-          videoResolution={videoResolution}
-          videoDuration={videoDuration}
-          referenceVideoDurations={multimodalVideos.map((video) => video.duration)}
-          videoGenerateAudio={videoGenerateAudio}
-          videoCameraFixed={videoCameraFixed}
-          isSeedance={isSeedance}
-          isGenerating={isVideoGenerating}
-          isUploading={isVideoUploading}
-          disabled={disabled}
-          promptEmpty={!videoPrompt.trim()}
-          onModelChange={setVideoModel}
-          onAspectRatioChange={setVideoAspectRatio}
-          onResolutionChange={setVideoResolution}
-          onDurationChange={setVideoDuration}
-          onGenerateAudioChange={setVideoGenerateAudio}
-          onCameraFixedChange={setVideoCameraFixed}
-          onGenerate={handleVideoGenerate}
-          onSaveDefaults={handleSaveDefaults}
-          onSettingsOpen={() => setSettingsOpen(true)}
-        />
       </div>
 
-      {/* 设置弹窗 */}
-      <GenerationSettingsSheet open={settingsOpen} onOpenChange={setSettingsOpen} title="视频生成设置">
-        <VideoSettingsContent
-          models={videoModels}
-          videoMode={videoMode}
-          videoModel={videoModel}
-          videoAspectRatio={videoAspectRatio}
-          videoResolution={videoResolution}
-          videoDuration={videoDuration}
-          referenceVideoDurations={multimodalVideos.map((video) => video.duration)}
-          videoGenerateAudio={videoGenerateAudio}
-          videoCameraFixed={videoCameraFixed}
-          isSeedance={isSeedance}
-          isGenerating={isVideoGenerating}
-          isUploading={isVideoUploading}
-          disabled={disabled}
-          promptEmpty={!videoPrompt.trim()}
-          onModelChange={setVideoModel}
-          onAspectRatioChange={setVideoAspectRatio}
-          onResolutionChange={setVideoResolution}
-          onDurationChange={setVideoDuration}
-          onGenerateAudioChange={setVideoGenerateAudio}
-          onCameraFixedChange={setVideoCameraFixed}
-          onGenerate={handleVideoGenerate}
-          onSaveDefaults={handleSaveDefaults}
-        />
-      </GenerationSettingsSheet>
+      <VideoParamsPanel
+        models={videoModels}
+        videoMode={videoMode}
+        videoModel={videoModel}
+        videoAspectRatio={videoAspectRatio}
+        videoResolution={videoResolution}
+        videoDuration={videoDuration}
+        referenceVideoDurations={multimodalVideos.map((video) => video.duration)}
+        videoGenerateAudio={videoGenerateAudio}
+        videoCameraFixed={videoCameraFixed}
+        isSeedance={isSeedance}
+        isGenerating={isVideoGenerating}
+        isUploading={isVideoUploading}
+        disabled={disabled}
+        promptEmpty={!videoPrompt.trim()}
+        onModelChange={setVideoModel}
+        onAspectRatioChange={setVideoAspectRatio}
+        onResolutionChange={setVideoResolution}
+        onDurationChange={setVideoDuration}
+        onGenerateAudioChange={setVideoGenerateAudio}
+        onCameraFixedChange={setVideoCameraFixed}
+        onGenerate={handleVideoGenerate}
+        onSaveDefaults={handleSaveDefaults}
+      />
     </>
   )
 }

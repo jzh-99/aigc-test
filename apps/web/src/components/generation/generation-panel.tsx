@@ -87,10 +87,10 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   }, [mode, showAvatarTab, showActionImitationTab])
 
   const tabBtnCls = (active: boolean) => cn(
-    'flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium transition-all border-b-2',
+    'generation-dream-mode-tab flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all',
     active
-      ? 'text-white border-white'
-      : 'text-white/35 border-transparent hover:text-white/60'
+      ? 'generation-dream-mode-tab-active'
+      : 'generation-dream-mode-tab-idle'
   )
 
   return (
@@ -98,13 +98,13 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
       <div className="flex flex-col flex-1 min-h-0">
         {/* 书签标签（公司A只有图片模式，隐藏标签） */}
         {!isCompanyA && (
-          <div className="flex items-center gap-5 border-b border-white/[0.06] pb-0">
+          <div className="generation-dream-mode-tabs flex items-center gap-1.5 rounded-full p-1.5">
             <button onClick={() => setMode('image')} className={tabBtnCls(mode === 'image')}>
-              <ImageIcon className="h-3.5 w-3.5" />图片生成
+              <ImageIcon className="h-3.5 w-3.5" />图片
             </button>
             {showVideoTab && (
               <button onClick={() => setMode('video')} className={tabBtnCls(mode === 'video')}>
-                <Video className="h-3.5 w-3.5" />视频生成
+                <Video className="h-3.5 w-3.5" />视频
               </button>
             )}
             {showAvatarTab && (
