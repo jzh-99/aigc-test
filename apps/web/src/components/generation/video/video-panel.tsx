@@ -36,7 +36,7 @@ interface VideoPanelProps {
 }
 
 export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPanelProps) {
-  const { watermark, avatarDefaults, userDefaults, pendingVideoReferenceImages, clearPendingVideoReferenceImages } = useGenerationStore()
+  const { watermark, avatarDefaults, userDefaults, pendingVideoReferenceImages, clearPendingVideoReferenceImages, videoPrompt, setVideoPrompt } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { save: saveDefaults } = useGenerationDefaults()
   const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
@@ -49,8 +49,12 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const [videoDuration, setVideoDuration] = useState(initialParams?.videoDuration ?? -1)
   const [videoGenerateAudio, setVideoGenerateAudio] = useState(initialParams?.videoGenerateAudio ?? true)
   const [videoCameraFixed, setVideoCameraFixed] = useState(initialParams?.videoCameraFixed ?? false)
-  const [videoPrompt, setVideoPrompt] = useState(initialParams?.videoPrompt ?? '')
   const [isVideoUploading, setIsVideoUploading] = useState(false)
+
+  // 从历史记录恢复时，将 prompt 写入 store
+  useEffect(() => {
+    if (initialParams?.videoPrompt) setVideoPrompt(initialParams.videoPrompt)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [firstFrame, setFirstFrame] = useState<FrameImage | null>(null)
   const [lastFrame, setLastFrame] = useState<FrameImage | null>(null)

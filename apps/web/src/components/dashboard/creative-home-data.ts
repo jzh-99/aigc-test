@@ -30,16 +30,16 @@ export interface InspirationItem {
 export const creativeEntryCards: CreativeEntryCard[] = [
   {
     title: "AI 生图",
-    kicker: "Wan 2.7-Image Pro 全新上线",
-    description: "专业画质 · 组图生成",
+    kicker: "超能图片 全新上线",
+    description: "专业画质 · 秒级生成",
     icon: ImageIcon,
     accent: "from-primary/70 via-primary/25 to-secondary/30",
     actions: [{ label: "开始生图", href: "/generation?mode=image" }],
   },
   {
     title: "AI 视频",
-    kicker: "快乐小马 即刻出发",
-    description: "视听合一 · 极致细节",
+    kicker: " Seedance 2.0 限时折扣",
+    description: "视听合一 · 专业细节",
     icon: Clapperboard,
     accent: "from-secondary/60 via-primary/20 to-primary/50",
     actions: [
