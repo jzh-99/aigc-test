@@ -44,6 +44,10 @@ interface AvatarDefaults {
 interface GenerationState {
   // Image generation state
   prompt: string
+
+  // Video / Avatar prompt — persisted in store so they survive tab switches
+  videoPrompt: string
+  avatarPrompt: string
   modelType: string
   resolution: '1k' | '2k' | '3k' | '4k'
   quantity: number
@@ -70,6 +74,8 @@ interface GenerationState {
 
   // Image generation actions
   setPrompt: (prompt: string) => void
+  setVideoPrompt: (prompt: string) => void
+  setAvatarPrompt: (prompt: string) => void
   setModelType: (modelType: string) => void
   setResolution: (resolution: '1k' | '2k' | '3k' | '4k') => void
   setQuantity: (quantity: number) => void
@@ -99,6 +105,8 @@ interface GenerationState {
 
 const defaults = {
   prompt: '',
+  videoPrompt: '',
+  avatarPrompt: '',
   modelType: 'gemini-3.1-flash-image-preview' as string,
   resolution: '2k' as const,
   quantity: 1,
@@ -121,6 +129,8 @@ export const useGenerationStore = create<GenerationState>()(
     (set) => ({
   ...defaults,
   setPrompt: (prompt) => set({ prompt }),
+  setVideoPrompt: (videoPrompt) => set({ videoPrompt }),
+  setAvatarPrompt: (avatarPrompt) => set({ avatarPrompt }),
   setModelType: (modelType) => set({ modelType }),
   setResolution: (resolution) => set({ resolution }),
   setQuantity: (quantity) => set({ quantity }),
@@ -185,8 +195,8 @@ export const useGenerationStore = create<GenerationState>()(
         },
       })
     } else if (isAvatar || isActionImitation) {
-      // Avatar / action imitation — signal module and carry the prompt; no image params
-      set({ pendingModule: module, prompt: batch.prompt ?? '', videoParams: null })
+      // Avatar / action imitation — signal module and carry the prompt
+      set({ pendingModule: module, avatarPrompt: batch.prompt ?? '', videoParams: null })
     } else {
       // 图片任务：直接用 batch.model（DB code）还原模型和分辨率，无需硬编码映射
       const params = batch.params as Record<string, unknown> | null

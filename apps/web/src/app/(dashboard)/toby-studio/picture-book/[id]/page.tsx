@@ -207,18 +207,10 @@ export default function PictureBookEditorPage() {
     }
     const pendingSet = new Set(pendingItems.map(item => item.id))
     setGeneratingAssetIds(prev => [...new Set([...prev, ...pendingSet])])
-
-    const markPending = (item: typeof allAssets[0]) =>
-      pendingSet.has(item.id) ? { ...item, status: 'pending' as const } : item
-
-    const nextState = {
-      ...state,
-      assets: {
-        characters: state.assets.characters.map(markPending),
-        backgrounds: state.assets.backgrounds.map(markPending),
-      },
-    }
-    project.updateState(nextState)
+    // 注意：不在 API 调用前将 status:'pending' 写入 project state
+    // 原因：flushDraft 会将 state 持久化到服务器，而 generate-assets 后端逐个创建批次有 6.2s 间隔
+    // 如果期间自动轮询触发 sync-batches，markOrphanAssetsAsFailed 会因 DB 无记录将资产误判为 failed
+    // generatingAssetIds（纯前端状态）已足够驱动 UI 显示"生成中"
     await runAction('assets-images', async () => {
       const targets = target ? [{ kind: target.kind, ref_id: target.refId }] : undefined
       const result = await generatePictureBookAssets(projectId, targets)
@@ -232,12 +224,7 @@ export default function PictureBookEditorPage() {
   const generateOneStoryboardImage = async (refId: string) => {
     if (!state) return
     setGeneratingStoryboardImageIds(prev => [...new Set([...prev, refId])])
-    project.updateState({
-      ...state,
-      storyboard: state.storyboard.map(page => `page_${page.page}` === refId
-        ? { ...page, status: 'pending' as const, imageUrl: null }
-        : page),
-    })
+    // 同 generateAssetImages：不在 API 调用前持久化 status:'pending'，避免 sync-batches 孤儿检测误判
     await runAction('storyboard-images', async () => {
       const result = await generatePictureBookStoryboardImages(projectId, [{ kind: 'page_image', ref_id: refId }])
       if (result.failures.length > 0) {
