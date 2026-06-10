@@ -713,9 +713,9 @@ export function AiAssistant() {
           </ScrollArea>
 
           {/* Input area */}
-          <div className="border-t border-border bg-background">
+          <div className="border-t border-[rgba(236,233,255,0.1)] bg-[rgba(8,11,34,0.6)]">
             {/* Tab bar */}
-            <div className="flex border-b border-border">
+            <div className="flex border-b border-[rgba(236,233,255,0.08)]">
               {TAB_CONFIG.map((t) => (
                 <button
                   key={t.id}
@@ -723,8 +723,8 @@ export function AiAssistant() {
                   className={cn(
                     'flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors',
                     tab === t.id
-                      ? 'border-b-2 border-primary text-primary'
-                      : 'text-muted-foreground hover:text-foreground'
+                      ? 'border-b-2 border-violet-400 text-violet-300'
+                      : 'text-white/40 hover:text-white/70'
                   )}
                 >
                   {t.icon}
@@ -738,12 +738,12 @@ export function AiAssistant() {
               <div className="p-3 space-y-2">
                 {/* Attachment preview */}
                 {chatImage && ( // || chatVideo || chatVideoUploading
-                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 rounded-lg bg-[rgba(15,18,50,0.5)] px-3 py-1.5 text-xs text-white/50">
                     {chatImage && (
                       <>
                         <img src={chatImage.preview} alt="" className="h-8 w-8 rounded object-cover" />
                         <span className="flex-1 truncate">{chatImage.name}</span>
-                        <button onClick={() => setChatImage(null)} className="hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => setChatImage(null)} className="hover:text-white/80"><X className="h-3.5 w-3.5" /></button>
                       </>
                     )}
                     {/* {chatVideoUploading && <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span>上传中...</span></>}
@@ -762,15 +762,15 @@ export function AiAssistant() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleChatSend() } }}
                     placeholder="描述需求，或上传图片... (Shift+Enter 发送)"
-                    className="min-h-[60px] max-h-[120px] resize-none text-sm"
+                    className="min-h-[60px] max-h-[120px] resize-none text-sm bg-[rgba(15,18,50,0.5)] border-[rgba(236,233,255,0.1)] text-white/90 placeholder:text-white/30 focus-visible:ring-violet-400/30"
                     disabled={loading}
                   />
                   <div className="flex flex-col gap-1">
                     <input ref={chatImageRef} type="file" accept="image/*" className="hidden" onChange={handleChatImagePick} />
                     {/* <input ref={chatVideoRef} type="file" accept="video/*" className="hidden" onChange={handleChatVideoPick} /> */}
                     <button onClick={() => chatImageRef.current?.click()} title="附加图片"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors">
-                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[rgba(236,233,255,0.12)] hover:bg-[rgba(82,70,180,0.15)] transition-colors">
+                      <ImageIcon className="h-4 w-4 text-white/50" />
                     </button>
                     {/* <button onClick={() => chatVideoRef.current?.click()} title="附加视频"
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors">
