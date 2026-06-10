@@ -1,7 +1,6 @@
 'use client'
 
-import Image from 'next/image'
-import { Loader2, ImageIcon, Play, ChevronDown, Film, Download } from 'lucide-react'
+import { Loader2, ChevronDown, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAssets, type AssetItem } from '@/hooks/use-assets'
 import { useTeamFeatures } from '@/hooks/use-team-features'
@@ -9,6 +8,7 @@ import { useState } from 'react'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { downloadImage } from '@/lib/download'
+import { AssetCard } from '@/components/assets/asset-card'
 
 type AssetType = 'image' | 'video'
 
@@ -81,7 +81,12 @@ export function AssetsLibraryTab({ onSelectBatch }: AssetsLibraryTabProps) {
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
             {assets.map((asset) => (
-              <AssetLibraryCard key={asset.id} asset={asset} onOpenPreview={handleOpenPreview} />
+              <AssetCard
+                key={asset.id}
+                asset={asset}
+                draggable
+                onClick={handleOpenPreview}
+              />
             ))}
           </div>
           {hasMore && (
@@ -153,60 +158,6 @@ export function AssetsLibraryTab({ onSelectBatch }: AssetsLibraryTabProps) {
           </Dialog>
         )
       })()}
-    </div>
-  )
-}
-
-function AssetLibraryCard({ asset, onOpenPreview }: { asset: AssetItem; onOpenPreview: (asset: AssetItem) => void }) {
-  const url = asset.storage_url ?? asset.original_url
-  if (!url) return null
-  const thumbUrl = asset.thumbnail_url ?? url
-  const isVideo = asset.type === 'video'
-
-  return (
-    <div
-      draggable
-      onClick={() => onOpenPreview(asset)}
-      onDragStart={(e) => {
-        e.dataTransfer.setData('application/x-aigc-asset-url', url)
-        e.dataTransfer.setData('application/x-aigc-asset-type', asset.type)
-        e.dataTransfer.setData('text/uri-list', url)
-        e.dataTransfer.setData('text/plain', url)
-        e.dataTransfer.effectAllowed = 'copy'
-      }}
-      className="generation-dream-asset-card group relative aspect-square rounded-2xl overflow-hidden border bg-muted cursor-grab active:cursor-grabbing"
-      title="拖拽到左侧支持的参考区域"
-    >
-      {isVideo ? (
-        <div className="absolute inset-0 bg-black flex items-center justify-center">
-          <video src={url} className="absolute inset-0 w-full h-full object-cover opacity-60" muted preload="metadata" />
-          <Play className="relative z-10 h-8 w-8 text-white drop-shadow-lg" />
-        </div>
-      ) : (
-        <Image src={thumbUrl} alt={asset.batch.prompt} fill className="object-cover" sizes="160px" unoptimized />
-      )}
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors">
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
-          <p className="text-[11px] text-white line-clamp-2 leading-snug drop-shadow pr-8">
-            {asset.batch.prompt || (isVideo ? '视频资产' : '图片资产')}
-          </p>
-          <div className="mt-1 flex items-center gap-1 text-[10px] text-white/70 pr-8">
-            {isVideo ? <Film className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
-            <span>拖拽作为参考</span>
-          </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="absolute bottom-2 right-2 h-7 w-7 bg-black/50 hover:bg-black/70 text-white border-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              downloadImage(url, isVideo ? 'video' : 'image')
-            }}
-          >
-            <Download className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
     </div>
   )
 }
