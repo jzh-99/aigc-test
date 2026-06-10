@@ -143,6 +143,29 @@ function replaceEditorContent(
   placeCaretAtEnd(editor)
 }
 
+/**
+ * 获取光标相对于指定容器的像素位置（用于下拉框定位）
+ */
+function getCaretPixelPosition(editor: HTMLElement | null, wrapper: HTMLElement | null): { top: number; left: number } | null {
+  if (!editor || !wrapper) return null
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return null
+    const range = selection.getRangeAt(0).cloneRange()
+    range.collapse(true)
+    const caretRect = range.getBoundingClientRect()
+    if (caretRect.top === 0 && caretRect.left === 0 && caretRect.bottom === 0) return null
+    const wrapperRect = wrapper.getBoundingClientRect()
+    const lineBottom = caretRect.bottom > caretRect.top ? caretRect.bottom : caretRect.top + 16
+    return {
+      top: lineBottom - wrapperRect.top + 4,
+      left: Math.max(0, caretRect.left - wrapperRect.left),
+    }
+  } catch {
+    return null
+  }
+}
+
 export function ResourceMentionTextarea({
   value,
   placeholder,
@@ -152,8 +175,10 @@ export function ResourceMentionTextarea({
   onBlur,
 }: ResourceMentionTextareaProps) {
   const editorRef = useRef<HTMLDivElement | null>(null)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
   const isComposingRef = useRef(false)
   const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null)
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null)
   const [isFocused, setIsFocused] = useState(false)
 
   useEffect(() => {
@@ -174,8 +199,14 @@ export function ResourceMentionTextarea({
 
     const caretIndex = getCaretOffset(editor)
     const beforeCaret = nextValue.slice(0, caretIndex)
-    const matched = beforeCaret.match(/(^|\s)@$/)
-    setMentionStartIndex(matched ? caretIndex - 1 : null)
+    const matched = beforeCaret.match(/(^|[^@])@$/)
+    if (matched) {
+      setPickerPos(getCaretPixelPosition(editor, wrapperRef.current))
+      setMentionStartIndex(caretIndex - 1)
+    } else {
+      setPickerPos(null)
+      setMentionStartIndex(null)
+    }
   }
 
   const handleSelectResource = (resource: CanvasReferenceMentionResource) => {
@@ -189,6 +220,7 @@ export function ResourceMentionTextarea({
 
     onChange(nextValue)
     setMentionStartIndex(null)
+    setPickerPos(null)
 
     window.requestAnimationFrame(() => {
       replaceEditorContent(editor, nextValue, resources)
@@ -199,6 +231,12 @@ export function ResourceMentionTextarea({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (isComposingRef.current) return
+    if (event.key === 'Escape' && mentionStartIndex != null) {
+      event.preventDefault()
+      setMentionStartIndex(null)
+      setPickerPos(null)
+      return
+    }
     if (event.key !== 'Backspace' && event.key !== 'Delete') return
 
     const selection = window.getSelection()
@@ -238,7 +276,7 @@ export function ResourceMentionTextarea({
   const isEmpty = value.length === 0
 
   return (
-    <div className="relative">
+    <div ref={wrapperRef} className="relative">
       <div
         ref={editorRef}
         data-testid="resource-mention-editor"
@@ -253,7 +291,10 @@ export function ResourceMentionTextarea({
         onFocus={() => setIsFocused(true)}
         onBlur={() => {
           setIsFocused(false)
-          window.setTimeout(() => setMentionStartIndex(null), 120)
+          window.setTimeout(() => {
+            setMentionStartIndex(null)
+            setPickerPos(null)
+          }, 120)
           syncValueFromEditor()
           onBlur()
         }}
@@ -282,7 +323,13 @@ export function ResourceMentionTextarea({
       </div>
 
       {showPicker && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-44 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-xl">
+        <div
+          className={cn(
+            'absolute z-50 w-60 max-h-44 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-xl',
+            !pickerPos && 'left-0 right-0 top-full mt-1',
+          )}
+          style={pickerPos ? { top: pickerPos.top, left: pickerPos.left } : undefined}
+        >
           {resources.length === 0 ? (
             <div className="px-2 py-2 text-[11px] text-muted-foreground">暂无可引用资源</div>
           ) : (
