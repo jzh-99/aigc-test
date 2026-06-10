@@ -8,43 +8,43 @@
 
 @layer base {
   :root {
-    /* 全站深色主题「深渊黑域」变量 */
-    --background: 222 47% 5%; /* #080D1A */
-    --foreground: 210 30% 90%; /* #D8E4F0 */
+    /* 全站深色主题「深渊紫影」变量 */
+    --background: 275 50% 4%; /* #06040C */
+    --foreground: 270 20% 88%; /* #DED8EC */
 
-    --card: 222 40% 8%; /* #0D1525 */
-    --card-foreground: 210 30% 90%;
+    --card: 275 40% 6%; /* #0B0914 */
+    --card-foreground: 270 20% 88%;
 
-    --popover: 222 40% 8%;
-    --popover-foreground: 210 30% 90%;
+    --popover: 275 40% 6%;
+    --popover-foreground: 270 20% 88%;
 
     --primary: 273 68% 77%; /* #C89CEC */
-    --primary-foreground: 222 47% 5%;
+    --primary-foreground: 275 50% 4%;
 
     --secondary: 30 70% 55%; /* #E0924A */
-    --secondary-foreground: 210 30% 90%;
+    --secondary-foreground: 270 20% 88%;
 
-    --muted: 222 35% 11%; /* #111B2E */
-    --muted-foreground: 215 20% 55%; /* #7A90A8 */
+    --muted: 275 30% 9%; /* #100E1C */
+    --muted-foreground: 270 15% 50%; /* #7A6F8E */
 
     --lavender: 265 40% 16%;
     --lavender-foreground: 265 60% 85%;
 
-    --accent: 222 35% 13%;
-    --accent-foreground: 210 30% 90%;
+    --accent: 275 25% 10%;
+    --accent-foreground: 270 20% 88%;
 
     --destructive: 355 70% 60%;
-    --destructive-foreground: 210 30% 90%;
+    --destructive-foreground: 270 20% 88%;
 
-    --border: 220 25% 16%; /* #1C2A3E */
-    --input: 220 25% 14%;
-    --ring: 216 88% 65%;
+    --border: 275 20% 13%; /* #1A1628 */
+    --input: 275 18% 10%;
+    --ring: 273 68% 65%;
 
     --radius: 0.625rem;
 
     /* 品牌语义 Token */
-    --surface-warm: 222 40% 8%;
-    --accent-gradient: linear-gradient(135deg, #f5a962, #c89bec, #6ba3f5);
+    --surface-warm: 275 40% 6%;
+    --accent-gradient: linear-gradient(135deg, #6BA3F5, #C89BEC, #06040C);
     --accent-dark-gradient: linear-gradient(90deg, #5a41f5, #a855f7);
 
     /* 登录页「暗夜紫晶」变量 */
@@ -62,8 +62,8 @@
     --login-text-muted: rgba(255, 255, 255, 0.25);
 
     --scrollbar-size: 10px;
-    --scrollbar-track: 222 40% 8%;
-    --scrollbar-thumb: 220 16% 32%;
+    --scrollbar-track: 275 40% 6%;
+    --scrollbar-thumb: 275 16% 24%;
     --scrollbar-thumb-hover: 273 58% 64%;
     --scrollbar-thumb-active: 273 68% 72%;
   }
@@ -979,7 +979,7 @@ html {
 [class*="card"],
 .bg-card {
   box-shadow:
-    0 0 0 1px rgba(107, 163, 245, 0.06),
+    0 0 0 1px rgba(200, 155, 236, 0.06),
     0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
@@ -997,7 +997,7 @@ select {
 }
 
 tbody tr:hover {
-  background: rgba(107, 163, 245, 0.04);
+  background: rgba(200, 155, 236, 0.04);
 }
 
 .bg-muted {
@@ -1014,10 +1014,10 @@ tbody tr:hover {
   --dream-faint: rgba(170, 187, 224, 0.42);
   --dream-line: rgba(222, 216, 255, 0.15);
   --dream-line-strong: rgba(227, 218, 255, 0.35);
-  --dream-panel: rgba(12, 18, 45, 0.58);
-  --dream-deep: rgba(6, 10, 29, 0.82);
+  --dream-panel: rgba(11, 9, 20, 0.58);
+  --dream-deep: rgba(6, 4, 12, 0.82);
   --dream-violet: rgba(169, 119, 255, 0.5);
-  --dream-blue: rgba(89, 169, 255, 0.26);
+  --dream-blue: rgba(89, 169, 255, 0.15);
   --dream-warm: rgba(255, 194, 154, 0.11);
   position: relative;
   isolation: isolate;
@@ -1025,9 +1025,9 @@ tbody tr:hover {
   color: var(--dream-ink);
   font-family: var(--font-inter), "Noto Sans SC", sans-serif;
   background:
-    linear-gradient(180deg, rgba(7, 9, 31, 0.86) 0%, rgba(8, 13, 34, 0.98) 52%, rgba(5, 8, 24, 1) 100%),
+    linear-gradient(180deg, rgba(6, 4, 12, 0.86) 0%, rgba(8, 6, 16, 0.98) 52%, rgba(5, 4, 14, 1) 100%),
     radial-gradient(ellipse at 48% -18%, rgba(202, 184, 255, 0.18), transparent 42rem),
-    radial-gradient(ellipse at 88% 18%, rgba(82, 161, 255, 0.14), transparent 38rem),
+    radial-gradient(ellipse at 88% 18%, rgba(82, 161, 255, 0.08), transparent 38rem),
     radial-gradient(ellipse at 24% 84%, rgba(255, 187, 143, 0.08), transparent 34rem);
 }
 
@@ -1043,7 +1043,7 @@ tbody tr:hover {
   z-index: 0;
   background:
     linear-gradient(115deg, transparent 2%, rgba(255, 255, 255, 0.05) 36%, transparent 58%),
-    linear-gradient(90deg, rgba(10, 15, 43, 0.22), transparent 38%, rgba(5, 9, 28, 0.28));
+    linear-gradient(90deg, rgba(10, 8, 22, 0.22), transparent 38%, rgba(5, 4, 16, 0.28));
   opacity: 0.72;
   mix-blend-mode: screen;
 }
@@ -1072,11 +1072,11 @@ tbody tr:hover {
 .generation-dream-segmented {
   border: 1px solid var(--dream-line);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(140, 159, 255, 0.026)),
-    rgba(5, 9, 27, 0.46);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(160, 140, 236, 0.026)),
+    rgba(6, 4, 12, 0.46);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.11),
-    0 14px 34px rgba(3, 6, 22, 0.2);
+    0 14px 34px rgba(3, 4, 14, 0.2);
   backdrop-filter: blur(16px) saturate(1.28);
   -webkit-backdrop-filter: blur(16px) saturate(1.28);
 }
@@ -1116,7 +1116,7 @@ tbody tr:hover {
   position: relative;
   border-color: var(--dream-line) !important;
   background:
-    linear-gradient(128deg, rgba(255, 255, 255, 0.095), rgba(185, 198, 255, 0.028) 38%, rgba(84, 103, 202, 0.07)),
+    linear-gradient(128deg, rgba(255, 255, 255, 0.095), rgba(200, 185, 236, 0.028) 38%, rgba(100, 80, 180, 0.07)),
     var(--dream-panel) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
@@ -1190,8 +1190,8 @@ tbody tr:hover {
 .generation-dream-asset-card {
   border-color: rgba(222, 216, 255, 0.1) !important;
   background:
-    linear-gradient(180deg, rgba(24, 42, 79, 0.58), rgba(10, 17, 40, 0.74)),
-    rgba(10, 17, 38, 0.72) !important;
+    linear-gradient(180deg, rgba(20, 16, 42, 0.58), rgba(12, 9, 28, 0.74)),
+    rgba(11, 9, 22, 0.72) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -1217,16 +1217,16 @@ tbody tr:hover {
   --detail-faint: rgba(170, 187, 224, 0.42);
   --detail-line: rgba(222, 216, 255, 0.14);
   --detail-line-strong: rgba(227, 218, 255, 0.32);
-  --detail-panel: rgba(12, 18, 45, 0.5);
-  --detail-deep: rgba(6, 10, 29, 0.84);
+  --detail-panel: rgba(11, 9, 20, 0.5);
+  --detail-deep: rgba(6, 4, 12, 0.84);
   --detail-violet: rgba(169, 119, 255, 0.42);
-  --detail-blue: rgba(89, 169, 255, 0.2);
+  --detail-blue: rgba(89, 169, 255, 0.1);
   --detail-warm: rgba(255, 194, 154, 0.09);
   background:
     radial-gradient(ellipse at 42% -8%, rgba(202, 184, 255, 0.2), transparent 34rem),
-    radial-gradient(ellipse at 92% 24%, rgba(82, 161, 255, 0.11), transparent 34rem),
+    radial-gradient(ellipse at 92% 24%, rgba(82, 161, 255, 0.06), transparent 34rem),
     radial-gradient(ellipse at 22% 88%, rgba(255, 187, 143, 0.08), transparent 30rem),
-    linear-gradient(180deg, rgba(7, 9, 31, 0.9) 0%, rgba(8, 13, 34, 0.97) 56%, rgba(5, 8, 24, 0.99) 100%) !important;
+    linear-gradient(180deg, rgba(6, 4, 12, 0.9) 0%, rgba(8, 6, 16, 0.97) 56%, rgba(5, 4, 14, 0.99) 100%) !important;
   border-color: var(--detail-line) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.13),
@@ -1279,6 +1279,7 @@ tbody tr:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--dream-soft) !important;
 }
 
 .generation-detail-prompt-copy {
@@ -1299,7 +1300,7 @@ tbody tr:hover {
   border-radius: 999px;
   background:
     radial-gradient(ellipse at 30% 12%, rgba(255, 255, 255, 0.18), transparent 48%),
-    rgba(5, 9, 27, 0.72);
+    rgba(6, 4, 12, 0.72);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(16px);
   transition:
@@ -1317,8 +1318,8 @@ tbody tr:hover {
   border: 1px solid var(--detail-line);
   border-radius: 0.75rem;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(140, 159, 255, 0.026)),
-    rgba(5, 9, 27, 0.82);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(160, 140, 236, 0.026)),
+    rgba(6, 4, 12, 0.82);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.11),
     0 18px 52px rgba(2, 5, 20, 0.42);
@@ -1343,7 +1344,7 @@ tbody tr:hover {
 }
 
 .generation-detail-content {
-  background: transparent;
+  background: #000;
 }
 
 .generation-detail-results {
@@ -1366,10 +1367,7 @@ tbody tr:hover {
   overflow: hidden;
   cursor: zoom-in;
   border-radius: 0.75rem;
-  background:
-    radial-gradient(ellipse at 50% 45%, rgba(169, 119, 255, 0.09), transparent 38%),
-    linear-gradient(90deg, rgba(8, 12, 32, 0.2), rgba(10, 17, 40, 0.38) 20%, rgba(10, 17, 40, 0.38) 80%, rgba(8, 12, 32, 0.2)),
-    rgba(3, 6, 19, 0.34);
+  background: #000;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.045),
     inset 32px 0 80px rgba(169, 119, 255, 0.035),
@@ -1396,8 +1394,8 @@ tbody tr:hover {
 .generation-detail-audio-card {
   border: 1px solid var(--detail-line);
   background:
-    linear-gradient(180deg, rgba(24, 42, 79, 0.5), rgba(10, 17, 40, 0.68)),
-    rgba(10, 17, 38, 0.72);
+    linear-gradient(180deg, rgba(20, 16, 42, 0.5), rgba(12, 9, 28, 0.68)),
+    rgba(11, 9, 22, 0.72);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 18px 52px rgba(2, 5, 18, 0.32);
@@ -1413,7 +1411,7 @@ tbody tr:hover {
   border: 1px solid var(--detail-line) !important;
   border-radius: 999px !important;
   color: var(--detail-soft) !important;
-  background: rgba(5, 9, 27, 0.42) !important;
+  background: rgba(6, 4, 12, 0.42) !important;
   opacity: 0.55;
   backdrop-filter: blur(14px);
 }
@@ -1435,7 +1433,7 @@ tbody tr:hover {
   line-height: 1rem;
   border: 1px solid rgba(222, 216, 255, 0.1);
   border-radius: 999px;
-  background: rgba(5, 9, 27, 0.42);
+  background: rgba(6, 4, 12, 0.42);
   backdrop-filter: blur(12px);
 }
 
@@ -1496,8 +1494,8 @@ tbody tr:hover {
   border: 1px solid var(--detail-line);
   border-radius: 999px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(140, 159, 255, 0.026)),
-    rgba(5, 9, 27, 0.58);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(160, 140, 236, 0.026)),
+    rgba(6, 4, 12, 0.58);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 16px 44px rgba(3, 6, 22, 0.28);
@@ -1621,7 +1619,7 @@ tbody tr:hover {
 .creative-home-video-backdrop::after {
   background:
     radial-gradient(ellipse at 52% 19%, rgba(236, 229, 255, 0.16), transparent 22rem),
-    radial-gradient(ellipse at 78% 18%, rgba(96, 174, 255, 0.12), transparent 28rem),
+    radial-gradient(ellipse at 78% 18%, rgba(96, 174, 255, 0.06), transparent 28rem),
     radial-gradient(ellipse at 18% 62%, rgba(151, 123, 255, 0.14), transparent 31rem);
   backdrop-filter: blur(0.6px) saturate(1.08);
   -webkit-backdrop-filter: blur(0.6px) saturate(1.08);
@@ -1686,14 +1684,14 @@ tbody tr:hover {
 .creative-glass-card {
   isolation: isolate;
   background:
-    linear-gradient(118deg, rgba(255, 255, 255, 0.11), rgba(181, 193, 255, 0.025) 38%, rgba(16, 26, 72, 0.09)),
+    linear-gradient(118deg, rgba(255, 255, 255, 0.11), rgba(200, 185, 236, 0.025) 38%, rgba(24, 16, 60, 0.09)),
     rgba(255, 255, 255, 0.026);
   border: 1px solid rgba(236, 233, 255, 0.22);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.34),
     inset 0 -1px 0 rgba(130, 157, 255, 0.14),
     inset 18px 0 42px rgba(255, 255, 255, 0.045),
-    inset -24px -10px 62px rgba(63, 82, 180, 0.16),
+    inset -24px -10px 62px rgba(82, 60, 160, 0.16),
     0 0 0 1px rgba(132, 105, 255, 0.1),
     0 26px 78px rgba(3, 5, 22, 0.42);
   backdrop-filter: blur(14px) saturate(1.45) brightness(1.08) contrast(1.06);
@@ -1708,7 +1706,7 @@ tbody tr:hover {
   border-radius: 23px;
   background:
     radial-gradient(ellipse at 10% 18%, rgba(255, 255, 255, 0.34), transparent 9rem),
-    radial-gradient(ellipse at 92% 24%, rgba(119, 177, 255, 0.2), transparent 15rem),
+    radial-gradient(ellipse at 92% 24%, rgba(200, 155, 236, 0.2), transparent 15rem),
     linear-gradient(115deg, rgba(255, 255, 255, 0.22), transparent 24%, rgba(142, 123, 255, 0.12) 74%, transparent);
   opacity: 0.48;
   mix-blend-mode: screen;
@@ -1726,7 +1724,7 @@ tbody tr:hover {
   background:
     linear-gradient(128deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.04) 12%, transparent 32%),
     linear-gradient(270deg, rgba(132, 105, 255, 0.12), transparent 28%),
-    linear-gradient(15deg, transparent 38%, rgba(124, 184, 255, 0.14) 52%, transparent 62%);
+    linear-gradient(15deg, transparent 38%, rgba(168, 130, 236, 0.14) 52%, transparent 62%);
   mix-blend-mode: screen;
   opacity: 0.46;
   transition:
@@ -1741,7 +1739,7 @@ tbody tr:hover {
     inset 0 1px 0 rgba(255, 255, 255, 0.46),
     inset 0 -1px 0 rgba(130, 157, 255, 0.2),
     inset 24px 0 54px rgba(255, 255, 255, 0.055),
-    inset -30px -12px 70px rgba(92, 108, 220, 0.22),
+    inset -30px -12px 70px rgba(82, 60, 160, 0.22),
     0 0 0 1px rgba(168, 139, 255, 0.24),
     0 26px 92px rgba(3, 5, 22, 0.52),
     0 0 58px rgba(116, 87, 255, 0.18);
@@ -1793,8 +1791,8 @@ tbody tr:hover {
 
 .ai-glass-panel {
   background:
-    linear-gradient(118deg, rgba(255, 255, 255, 0.1), rgba(181, 193, 255, 0.03) 38%, rgba(16, 26, 72, 0.1)),
-    rgba(8, 11, 34, 0.72);
+    linear-gradient(118deg, rgba(255, 255, 255, 0.1), rgba(200, 185, 236, 0.03) 38%, rgba(24, 16, 60, 0.1)),
+    rgba(6, 4, 12, 0.72);
   border: 1px solid rgba(236, 233, 255, 0.22);
   backdrop-filter: blur(28px) saturate(1.4);
   -webkit-backdrop-filter: blur(28px) saturate(1.4);
@@ -1832,7 +1830,7 @@ tbody tr:hover {
 }
 
 .ai-glass-msg-bot {
-  background: rgba(20, 24, 60, 0.55);
+  background: rgba(14, 10, 28, 0.55);
   border: 1px solid rgba(236, 233, 255, 0.1);
   color: rgba(235, 238, 255, 0.92);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -1847,27 +1845,27 @@ tbody tr:hover {
 }
 
 .ai-glass-bg-deep {
-  background: rgba(8, 11, 34, 0.6);
+  background: rgba(6, 4, 12, 0.6);
 }
 
 .ai-glass-bg-surface {
-  background: rgba(15, 18, 50, 0.5);
+  background: rgba(12, 8, 28, 0.5);
 }
 
 .ai-glass-bg-copy {
-  background: rgba(8, 11, 34, 0.8);
+  background: rgba(6, 4, 12, 0.8);
 }
 
 .ai-glass-bg-copy:hover {
-  background: rgba(15, 18, 50, 0.9);
+  background: rgba(12, 8, 28, 0.9);
 }
 
 .creative-home-content-panel {
   position: relative;
   isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(8, 11, 34, 0) 0%, rgba(6, 8, 25, 0.04) 14rem, rgba(6, 8, 25, 0.18) 100%),
-    radial-gradient(ellipse at 52% 0%, rgba(82, 112, 255, 0.04), transparent 34rem);
+    linear-gradient(180deg, rgba(6, 4, 12, 0) 0%, rgba(6, 4, 12, 0.04) 14rem, rgba(6, 4, 12, 0.18) 100%),
+    radial-gradient(ellipse at 52% 0%, rgba(116, 87, 255, 0.04), transparent 34rem);
 }
 
 /* 灵感页分界线 — 模糊虚化效果 */
@@ -1902,7 +1900,7 @@ tbody tr:hover {
 
 /* 吸顶标签栏 — 吸附态 */
 .inspiration-sticky-tabs.is-stuck {
-  background: rgba(6, 8, 25, 0.92);
+  background: rgba(6, 4, 12, 0.92);
   backdrop-filter: blur(24px) saturate(1.2);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
   box-shadow:
@@ -1914,9 +1912,9 @@ tbody tr:hover {
 .creative-home-video-backdrop.is-stuck::before {
   background: linear-gradient(
     180deg,
-    rgba(4, 6, 20, 0.14) 0%,
-    rgba(6, 8, 25, 0.28) 64%,
-    rgba(6, 8, 25, 0.68) 100%
+    rgba(4, 4, 12, 0.14) 0%,
+    rgba(6, 4, 12, 0.28) 64%,
+    rgba(6, 4, 12, 0.68) 100%
   );
   transition: background 0.5s ease;
 }
@@ -2009,7 +2007,7 @@ tbody tr:hover {
 }
 
 .toby-orb--sky {
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.10) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.05) 0%, transparent 70%);
   animation: toby-orb-drift-2 26s ease-in-out infinite;
 }
 
@@ -2087,7 +2085,7 @@ tbody tr:hover {
   border-radius: 16px;
   overflow: hidden;
   background:
-    linear-gradient(118deg, rgba(255, 255, 255, 0.06), rgba(181, 193, 255, 0.015) 38%, rgba(16, 26, 72, 0.05)),
+    linear-gradient(118deg, rgba(255, 255, 255, 0.06), rgba(200, 185, 236, 0.015) 38%, rgba(24, 16, 60, 0.05)),
     rgba(255, 255, 255, 0.018);
   border: 1px solid rgba(236, 233, 255, 0.14);
   box-shadow:
@@ -2154,9 +2152,9 @@ tbody tr:hover {
   z-index: 5;
   background: linear-gradient(
     180deg,
-    rgba(5, 7, 22, 0) 0%,
-    rgba(5, 7, 22, 0.15) 25%,
-    rgba(5, 7, 22, 0.65) 100%
+    rgba(6, 4, 12, 0) 0%,
+    rgba(6, 4, 12, 0.15) 25%,
+    rgba(6, 4, 12, 0.65) 100%
   );
   opacity: 0;
   transition: opacity 0.35s ease;
@@ -2176,7 +2174,7 @@ tbody tr:hover {
   place-items: center;
   border-radius: 9px;
   border: 1px solid rgba(236, 233, 255, 0.15);
-  background: rgba(5, 7, 22, 0.5);
+  background: rgba(6, 4, 12, 0.5);
   color: rgba(255, 255, 255, 0.75);
   cursor: pointer;
   backdrop-filter: blur(12px);
@@ -2223,7 +2221,7 @@ tbody tr:hover {
   pointer-events: none;
   background:
     radial-gradient(ellipse at 32% 8%, rgba(116, 87, 255, 0.08), transparent 28rem),
-    radial-gradient(ellipse at 72% 4%, rgba(59, 130, 246, 0.05), transparent 24rem),
-    radial-gradient(ellipse at 50% 100%, rgba(6, 8, 25, 0.5), transparent 50%);
+    radial-gradient(ellipse at 72% 4%, rgba(59, 130, 246, 0.025), transparent 24rem),
+    radial-gradient(ellipse at 50% 100%, rgba(6, 4, 12, 0.5), transparent 50%);
 }
 

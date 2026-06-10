@@ -13,7 +13,7 @@ import { CursorRepelTitle } from '@/components/dashboard/cursor-repel-title'
 /** 每个模块的渐变色配置 */
 const moduleAccents: Record<string, string> = {
   'AI 音乐': 'from-violet-500/70 via-fuchsia-500/25 to-pink-500/30',
-  'AI 短剧': 'from-sky-500/60 via-blue-500/20 to-indigo-500/40',
+  'AI 短剧': 'from-purple-600/30 via-purple-900/10 to-indigo-900/20',
   'AI 绘本': 'from-amber-500/60 via-orange-400/20 to-rose-400/30',
   'AI 海报': 'from-emerald-500/60 via-teal-400/20 to-cyan-400/30',
   'AI PPT': 'from-rose-500/60 via-pink-400/20 to-fuchsia-400/30',
