@@ -792,17 +792,17 @@ export function AiAssistant() {
                 <input ref={imageTabRef} type="file" accept="image/*" className="hidden" onChange={handleImageTabPick} />
                 {!imageFile ? (
                   <button onClick={() => imageTabRef.current?.click()}
-                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-6 text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[rgba(236,233,255,0.12)] py-6 text-white/40 hover:border-violet-400/40 hover:text-violet-300 transition-colors">
                     <Upload className="h-8 w-8" />
                     <span className="text-sm font-medium">点击上传图片</span>
                     <span className="text-xs opacity-60">JPG / PNG / WEBP</span>
                   </button>
                 ) : (
                   <div className="space-y-2">
-                    <div className="relative rounded-xl overflow-hidden bg-muted">
+                    <div className="relative rounded-xl overflow-hidden bg-[rgba(15,18,50,0.5)]">
                       <img src={imageFile.preview} alt="预览" className="w-full max-h-40 object-contain" />
                       <button onClick={() => setImageFile(null)}
-                        className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
+                        className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white/70 hover:bg-black/80 hover:text-white">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
