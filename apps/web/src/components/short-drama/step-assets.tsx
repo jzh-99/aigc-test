@@ -5,6 +5,7 @@ import { ImageIcon, Loader2, Sparkles, Check, Upload, ZoomIn, Coins } from 'luci
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
+import { useConfirm } from '@/hooks/use-confirm'
 import type { ShortDramaState, ShortDramaAsset, ShortDramaAssetKind } from '@aigc/types'
 import { areShortDramaAssetsReady } from '@aigc/types'
 import {
@@ -90,6 +91,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   const [generatingAssetId, setGeneratingAssetId] = useState<string | null>(null)
   const [submittedAssetIds, setSubmittedAssetIds] = useState<Set<string>>(() => new Set())
   const [confirming, setConfirming] = useState(false)
+  const confirmDialog = useConfirm()
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null)
   const [assetPromptStreamText, setAssetPromptStreamText] = useState('')
   const [assetPromptProgressMessage, setAssetPromptProgressMessage] = useState('')
@@ -142,6 +144,16 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
 
   const handleGeneratePrompts = async () => {
     if (generatingPrompts || isAssetPromptGenerating) return
+    const remaining = totalOutlineCount - processedOutlineCount
+    const batches = Math.ceil(remaining / 5)
+    const promptsCredits = batches * 25
+    const ok = await confirmDialog({
+      title: '确认生成',
+      description: `本次操作预计消耗约 ${promptsCredits} A豆（生成 ${batches} 批素材描述），确认是否继续？`,
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
 
     setGeneratingPrompts(true)
     setAssetPromptStreamText('')
@@ -173,6 +185,13 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       toast.warning('请先补充素材描述')
       return
     }
+    const ok = await confirmDialog({
+      title: '确认生成',
+      description: `本次操作预计消耗 A豆（素材生图），确认是否继续？`,
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
 
     setGeneratingAssetId(assetId)
     try {
@@ -283,6 +302,14 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       toast.info('没有需要生成的素材')
       return
     }
+
+    const ok = await confirmDialog({
+      title: '确认批量生成',
+      description: `本次操作将批量生成 ${pendingAssets.length} 张素材图片，预计消耗较多 A豆，确认是否继续？`,
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
 
     // 验证 assetIds 是否有效
     const assetIds = pendingAssets.map(a => a.id).filter(id => typeof id === 'string' && id.length > 0)

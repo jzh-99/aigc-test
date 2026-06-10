@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerate } from '@/hooks/use-generate'
+import { useConfirm } from '@/hooks/use-confirm'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { ImagePlus, Image as ImageIcon, Search, Trash2 } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
@@ -18,7 +19,7 @@ import Image from 'next/image'
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
 import { MAX_REF_IMAGES } from '../shared/constants'
-import { getModelResolutions } from '../shared/schema-utils'
+import { getModelResolutions, getPriceByResolution } from '../shared/schema-utils'
 import { useModels } from '@/hooks/use-models'
 import { getMaxImageReferenceCount } from '@/lib/image-categories'
 
@@ -43,10 +44,12 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
 
   const { save: saveDefaults } = useGenerationDefaults()
   const { generate } = useGenerate()
+  const confirm = useConfirm()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
   const currentImageModel = imageModels.find((m) => m.code === modelType)
   const maxReferenceImages = currentImageModel ? getMaxImageReferenceCount(currentImageModel) : MAX_REF_IMAGES
+  const estimatedCredits = currentImageModel ? getPriceByResolution(currentImageModel, resolution) * quantity : 0
 
   // 模型列表加载完成后缓存到 store，供 use-generate 查 params_pricing
   useEffect(() => {
@@ -143,6 +146,13 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
 
   const handleGenerate = async () => {
     try {
+      const ok = await confirm({
+        title: '确认生成',
+        description: `本次操作预计消耗 ${estimatedCredits} A豆（图片生成），确认是否继续？`,
+        confirmText: '确认生成',
+        destructive: false,
+      })
+      if (!ok) return
       const batch = await generate()
       if (batch) onBatchCreated(batch)
     } catch (err) {

@@ -5,6 +5,7 @@ import { AudioWaveform, ChevronLeft, ChevronRight, ChevronsUpDown, Cpu, Loader2,
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { apiFetcher } from '@/lib/api-client'
+import { useConfirm } from '@/hooks/use-confirm'
 import { getPriceByResolution } from '@/components/generation/shared/schema-utils'
 import { PopoverSelect, ExecuteButton, RangePopover, PanelToolbar } from './panel-shared'
 import type { ModelItem, SystemVoiceDemoResponse, SystemVoiceItem } from '@aigc/types'
@@ -59,6 +60,7 @@ export function AudioGenPanel({
   onUpdateCfg,
   onExecute,
 }: AudioGenPanelProps) {
+  const confirm = useConfirm()
   const [pauseOpen, setPauseOpen] = useState(false)
   const [interjectionOpen, setInterjectionOpen] = useState(false)
   const [voiceDialogOpen, setVoiceDialogOpen] = useState(false)
@@ -226,7 +228,16 @@ export function AudioGenPanel({
           credits={estimatedCredits}
           executing={executing}
           disabled={characterCount === 0 || characterCount > TTS_MAX_TEXT_LENGTH || !voiceId}
-          onClick={onExecute}
+          onClick={async () => {
+            const ok = await confirm({
+              title: '确认生成',
+              description: `本次操作预计消耗 ${estimatedCredits} A豆（画布音频生成），确认是否继续？`,
+              confirmText: '确认生成',
+              destructive: false,
+            })
+            if (!ok) return
+            onExecute()
+          }}
         />
       </div>
 

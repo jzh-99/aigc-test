@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVideoGenerate } from '@/hooks/use-video-generate'
+import { useConfirm } from '@/hooks/use-confirm'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -12,10 +13,11 @@ import {
   getVideoCategoryKeys,
   parseCategoryReferences,
   validateCategoryReferenceLimits,
+  calculateReferenceVideoDurationSeconds,
   type VideoCategory,
   type VideoReferenceCounts,
 } from '@aigc/types'
-import { extractSchemaEnums } from '../shared/schema-utils'
+import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
 import { fetchWithAuth, ApiError, getRequestErrorMessage, reportClientSubmissionError, classifyRequestError } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
 import type { VideoParams } from '@/stores/generation-store'
@@ -40,6 +42,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { save: saveDefaults } = useGenerationDefaults()
   const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
+  const confirm = useConfirm()
   const { models: videoModels, isReady: videoModelsReady } = useModels('video', activeWorkspaceId)
 
   const [videoMode, setVideoMode] = useState<VideoMode>((initialParams?.videoMode as VideoMode) ?? 'multimodal')
@@ -132,6 +135,15 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
 
   const isSeedance = videoModel.startsWith('seedance-')
 
+  // 预估 A 豆消耗（用于确认弹窗）
+  const videoEstimatedCredits = useMemo(() => {
+    const model = videoModels.find((m) => m.code === videoModel)
+    if (!model) return 0
+    const unitPrice = getPriceByResolution(model, videoResolution)
+    const billableDuration = (videoDuration === -1 ? 15 : videoDuration) + calculateReferenceVideoDurationSeconds(multimodalVideos.map((v) => v.duration))
+    return isSeedance ? billableDuration * unitPrice : unitPrice
+  }, [videoModels, videoModel, videoResolution, videoDuration, multimodalVideos, isSeedance])
+
   useEffect(() => {
     if (pendingVideoReferenceImages.length === 0) return
     setVideoMode('multimodal')
@@ -197,6 +209,13 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const handleVideoGenerate = async () => {
     if (!videoPrompt.trim()) return
     if (!validateModeResources(videoMode)) return
+    const ok = await confirm({
+      title: '确认生成',
+      description: `本次操作预计消耗 ${videoEstimatedCredits} A豆（视频生成），确认是否继续？`,
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
     setIsVideoUploading(true)
     try {
       let imagesParam: string[] | undefined

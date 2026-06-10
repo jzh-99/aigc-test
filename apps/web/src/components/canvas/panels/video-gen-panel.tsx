@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { Check, ChevronDown, Clock, Cpu, Film, ImageIcon, Music, Play, Ratio, Volume2, Video, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useConfirm } from '@/hooks/use-confirm'
 import type { VideoMode } from '@/lib/canvas/types'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
 import { calculateReferenceVideoDurationSeconds, getVideoCategoryKeys, parseCategoryReferences, type ModelItem, type VideoCategory } from '@aigc/types'
@@ -365,6 +366,7 @@ export function VideoGenPanel({
   onRemoveReference,
   onExecute,
 }: VideoGenPanelProps) {
+  const confirm = useConfirm()
   const currentDbModel = models?.find((m) => m.code === videoModel)
   const isSeedance = currentDbModel ? currentDbModel.code.startsWith('seedance-') : false
 
@@ -566,7 +568,16 @@ export function VideoGenPanel({
           credits={videoCredits}
           executing={executing}
           disabled={!hasPrompt}
-          onClick={onExecute}
+          onClick={async () => {
+            const ok = await confirm({
+              title: '确认生成',
+              description: `本次操作预计消耗 ${videoCredits} A豆（画布视频生成），确认是否继续？`,
+              confirmText: '确认生成',
+              destructive: false,
+            })
+            if (!ok) return
+            onExecute()
+          }}
         />
       </div>
     </div>

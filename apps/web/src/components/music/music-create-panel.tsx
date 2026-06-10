@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Radio, Sparkles, Upload, Wand2, X } from 'lucide-react'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -53,6 +54,7 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
   const [model, setModel] = useState<MusicModel>('mureka-9')
   const [submitting, setSubmitting] = useState(false)
   const [generatingTrackId, setGeneratingTrackId] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const submittingRef = useRef(false)
   const isBusy = submitting || Boolean(generatingTrackId)
 
@@ -105,7 +107,8 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
     if (value !== 'auto') setVoiceCloneId('none')
   }
 
-  async function submit() {
+  /** 校验表单后弹出确认框 */
+  function submit() {
     if (!workspaceId || isBusy || submittingRef.current) return
     if (mode === 'inspiration' && !prompt.trim()) {
       toast.error('请输入灵感提示词')
@@ -116,6 +119,15 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
       if (count(title.trim()) > 20) return toast.error('标题不能超过 20 字')
       if (!lyrics.trim()) return toast.error('请输入歌词')
     }
+    // 价格未加载完或未配置时不允许提交（按钮本身也会禁用，这里做兜底）
+    if (musicModelsLoading || musicPricingPreview == null) return
+    setConfirmOpen(true)
+  }
+
+  /** 确认后执行真正的提交 */
+  async function doSubmit() {
+    setConfirmOpen(false)
+    if (!workspaceId || submittingRef.current) return
     submittingRef.current = true
     setSubmitting(true)
     try {
@@ -327,17 +339,6 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
           </p>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm dark:border-primary/30 dark:bg-primary/10">
-          <span className="text-muted-foreground">预计消耗</span>
-          <span className="font-semibold text-foreground">
-            {musicModelsLoading
-              ? '价格加载中'
-              : musicPricingPreview == null
-                ? `${MUSIC_PRICING_LABELS[pricingKey]}价格未配置`
-                : `${musicPricingPreview} A豆 · ${MUSIC_PRICING_LABELS[pricingKey]}`}
-          </span>
-        </div>
-
         <Button
           className="w-full"
           size="lg"
@@ -348,6 +349,24 @@ export function MusicCreatePanel({ voices, onOpenVoiceDialog, onCreated }: Props
           {isBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
           {submitting ? '正在提交任务...' : generatingTrackId ? '正在生成音乐...' : mode === 'inspiration' && instrumental ? '生成纯音乐' : '生成歌曲'}
         </Button>
+
+        {/* 生成确认弹窗 */}
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>确认生成</AlertDialogTitle>
+              <AlertDialogDescription>
+                本次操作预计消耗
+                <span className="mx-1 font-semibold text-foreground">{musicPricingPreview} A豆</span>
+                （{MUSIC_PRICING_LABELS[pricingKey]}），确认是否继续？
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction onClick={doSubmit}>确认生成</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </section>
   )

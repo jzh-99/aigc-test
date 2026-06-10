@@ -10,6 +10,7 @@ import type { Fragment } from '@/lib/video-studio-api'
 import type { DescribeData } from '@/hooks/video-studio/use-wizard-state'
 import { usePendingBatchWatcher } from '@/hooks/video-studio/use-pending-batch-watcher'
 import { useModels } from '@/hooks/use-models'
+import { useConfirm } from '@/hooks/use-confirm'
 
 type VideoModel = string
 type VideoResolution = '720p' | '1080p'
@@ -144,6 +145,9 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
   const [confirmed, setConfirmed] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const confirm = useConfirm()
+
+  const singleCredits = calcVideoCost(fragment, videoParams, videoModels, durationOverride)
 
   const extractTailFrame = useCallback((): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -318,12 +322,21 @@ function FragmentVideoCard({ fragment, referenceImages, labelMap, voiceMap, vide
             </div>
           ) : (
             <button
-              onClick={generate}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: '确认生成',
+                  description: `本次操作预计消耗 ${singleCredits} A豆（视频生成），确认是否继续？`,
+                  confirmText: '确认生成',
+                  destructive: false,
+                })
+                if (!ok) return
+                generate()
+              }}
               disabled={loading || isPending}
               className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {(loading || isPending) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {loading || isPending ? '生成中…' : `生成视频 · ${calcVideoCost(fragment, videoParams, videoModels, durationOverride)}A豆`}
+              {loading || isPending ? '生成中…' : `生成视频 · ${singleCredits}A豆`}
             </button>
           )}
 
@@ -501,6 +514,7 @@ interface Props {
 export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory, describeData, characters, characterImages, sceneImages, projectId, projectName, pendingVideoBatches, onAddPendingVideoBatch, onClearPendingVideoBatch, onVideoReady, refreshFromServer, onComplete }: Props) {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const { models: videoModels } = useModels('video', workspaceId || undefined)
+  const confirm = useConfirm()
   const [showParams, setShowParams] = useState(false)
   const [videoParams, setVideoParams] = useState<VideoParams>(() => ({ ...DEFAULT_VIDEO_PARAMS, model: '', style: describeData.style }))
   const [fragmentPrompts, setFragmentPrompts] = useState<Record<string, string>>({})
@@ -576,13 +590,21 @@ export function StepVideo({ fragments, shotImages, shotVideos, shotVideoHistory,
       return !shotVideos[fragment.id] && !pendingFragmentIds.has(fragment.id) && !tailFrameOn
     })
     if (pending.length === 0) return
+    const batchTotalCredits = pending.reduce((sum, fragment) => sum + calcVideoCost(fragment, videoParams, videoModels, fragmentDurations[fragment.id]), 0)
+    const ok = await confirm({
+      title: '确认批量生成',
+      description: `本次操作预计消耗 ${batchTotalCredits} A豆（批量生成 ${pending.length} 个视频片段），确认是否继续？`,
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
     setBatchRunning(true)
     const fns = pending.map((fragment) => generateFnsRef.current[fragment.id]).filter(Boolean)
     const results = await Promise.allSettled(fns.map((fn) => fn()))
     setBatchRunning(false)
     const success = results.filter((r) => r.status === 'fulfilled').length
     if (success > 0) toast.success(`批量生成完成，${success}/${fns.length} 成功`)
-  }, [fragments, shotVideos, pendingFragmentIds, tailFrameEnabled])
+  }, [fragments, shotVideos, pendingFragmentIds, tailFrameEnabled, videoParams, videoModels, fragmentDurations, confirm])
 
   const [batchRunning, setBatchRunning] = useState(false)
   const completedCount = fragments.filter((fragment) => shotVideos[fragment.id]).length

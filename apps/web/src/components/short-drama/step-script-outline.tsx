@@ -5,6 +5,7 @@ import { Loader2, Sparkles, Check, Pencil, Save, X, Plus, Coins } from 'lucide-r
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { useConfirm } from '@/hooks/use-confirm'
 import {
   Dialog,
   DialogContent,
@@ -916,6 +917,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   const [generatingSummary, setGeneratingSummary] = useState(false)
   const [generatingOutlines, setGeneratingOutlines] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const confirmDialog = useConfirm()
   const [summaryStreamText, setSummaryStreamText] = useState('')
   const [outlineStreamText, setOutlineStreamText] = useState('')
   const [outlineProgressMessage, setOutlineProgressMessage] = useState('')
@@ -970,6 +972,13 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
 
   const handleGenerateSummary = async (triggeredBy: 'manual' = 'manual') => {
     if (generatingSummaryRef.current || state.script.status === 'generating' || state.script.refinedPrompt) return
+    const ok = await confirmDialog({
+      title: '确认生成',
+      description: '本次操作预计消耗约 35 A豆（生成剧本摘要），确认是否继续？',
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
     generatingSummaryRef.current = true
     setGeneratingSummary(true)
     setSummaryStreamText('')
@@ -998,6 +1007,16 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
       !state.script.refinedPrompt ||
       state.script.outlines.length >= state.settings.episodeCount
     ) return
+    const remaining = state.settings.episodeCount - state.script.outlines.length
+    const batches = Math.ceil(remaining / 5)
+    const outlineCredits = batches * 70
+    const ok = await confirmDialog({
+      title: '确认生成',
+      description: `本次操作预计消耗约 ${outlineCredits} A豆（生成 ${batches} 批分集剧本），确认是否继续？`,
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
     generatingOutlinesRef.current = true
     setGeneratingOutlines(true)
     setOutlineStreamText('')

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
+import { useConfirm } from '@/hooks/use-confirm'
 import type { ShortDramaState, ShortDramaEpisode, ShortDramaSegment } from '@aigc/types'
 import { SegmentList } from './segment-list'
 import { AssetLibraryPanel } from './asset-library-panel'
@@ -33,6 +34,7 @@ export function EpisodeEditor({
   const [batchGeneratingVideos, setBatchGeneratingVideos] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(0)
+  const confirmDialog = useConfirm()
 
   // 收集当前集所有分镜中引用的素材 ID，用于"本集"过滤
   const episodeMentionedAssetIds = useMemo(() => {
@@ -170,6 +172,13 @@ export function EpisodeEditor({
   }, [projectId, episode, state, onStateChange])
 
   const handleGenerateVideo = useCallback(async (segmentId: string) => {
+    const ok = await confirmDialog({
+      title: '确认生成',
+      description: '本次操作预计消耗 A豆（分镜视频生成），确认是否继续？',
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
     setGeneratingSegmentId(segmentId)
     await Promise.resolve(onStateChange(buildStateWithSegmentStatuses([segmentId], 'generating')))
     try {
@@ -185,7 +194,7 @@ export function EpisodeEditor({
     } finally {
       setGeneratingSegmentId(null)
     }
-  }, [projectId, episode.episodeNumber, videoModel, videoResolution, buildStateWithSegmentStatuses, onStateChange])
+  }, [projectId, episode.episodeNumber, videoModel, videoResolution, buildStateWithSegmentStatuses, onStateChange, confirmDialog])
 
   const handleBatchGenerateVideos = useCallback(async () => {
     const targets = episode.segments.filter(segment =>
@@ -198,6 +207,14 @@ export function EpisodeEditor({
       toast.info('没有需要生成的视频')
       return
     }
+
+    const ok = await confirmDialog({
+      title: '确认批量生成',
+      description: `本次操作将批量生成 ${targets.length} 个分镜视频，预计消耗较多 A豆，确认是否继续？`,
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
 
     setBatchGeneratingVideos(true)
     await Promise.resolve(onStateChange(buildStateWithSegmentStatuses(targets.map(segment => segment.id), 'pending')))
@@ -231,7 +248,7 @@ export function EpisodeEditor({
       setGeneratingSegmentId(null)
       setBatchGeneratingVideos(false)
     }
-  }, [projectId, episode.episodeNumber, episode.segments, videoModel, videoResolution, buildStateWithSegmentStatuses, onStateChange])
+  }, [projectId, episode.episodeNumber, episode.segments, videoModel, videoResolution, buildStateWithSegmentStatuses, onStateChange, confirmDialog])
 
   const handleExport = useCallback(async () => {
     setExporting(true)

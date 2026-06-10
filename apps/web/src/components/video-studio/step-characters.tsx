@@ -11,6 +11,7 @@ import type { BatchResponse, ModelItem } from '@aigc/types'
 import { usePendingBatchWatcher } from '@/hooks/video-studio/use-pending-batch-watcher'
 import type { PendingImageBatchTarget } from '@/hooks/video-studio/use-wizard-state'
 import { useModels } from '@/hooks/use-models'
+import { useConfirm } from '@/hooks/use-confirm'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
 
 type ImageResolution = string
@@ -73,6 +74,14 @@ function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isP
   const [showDetail, setShowDetail] = useState(false)
   const [editedPrompt, setEditedPrompt] = useState(item.prompt)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const confirm = useConfirm()
+
+  // 当前项的单价和总价
+  const modelCode = item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel
+  const model = imageModels.find((m) => m.code === modelCode)
+  const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
+  const price = model ? getPriceByResolution(model, resolution) : 10
+  const totalCredits = price * imageParams.quantity
 
   const generate = useCallback(async (promptOverride?: string): Promise<boolean> => {
     setLoading(true)
@@ -209,18 +218,23 @@ function ImageCard({ item, workspaceId, projectId, imageParams, activeStyle, isP
       {!item.shared && (
         <div className="flex gap-2">
           <button
-            onClick={() => generate()}
+            onClick={async () => {
+              const ok = await confirm({
+                title: '确认生成',
+                description: `本次操作预计消耗 ${totalCredits} A豆（${item.type === 'character' ? '角色' : '场景'}参考图生成），确认是否继续？`,
+                confirmText: '确认生成',
+                destructive: false,
+              })
+              if (!ok) return
+              generate()
+            }}
             disabled={loading || isPending}
             className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-primary text-primary-foreground py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {loading || isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           {loading || isPending ? '生成中…' : (() => {
-              const modelCode = item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel
-              const model = imageModels.find((m) => m.code === modelCode)
-              const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
-              const price = model ? getPriceByResolution(model, resolution) : 10
               const label = item.urls.length > 0 ? '重新生成' : '生成参考图'
-              return `${label} · ${price * imageParams.quantity}A豆`
+              return `${label} · ${totalCredits}A豆`
             })()}
           </button>
           <label className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1.5 border rounded-lg transition-colors">
@@ -361,6 +375,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
   const token = useAuthStore((s) => s.accessToken)
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId) ?? ''
   const { models: imageModels } = useModels('image', workspaceId || undefined)
+  const confirm = useConfirm()
   const [loadingPrompts, setLoadingPrompts] = useState(false)
   const [batchRunning, setBatchRunning] = useState(false)
   const [showParams, setShowParams] = useState(false)
@@ -447,7 +462,22 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
     }
   }, [items, activeStyle, token])
 
+  const localItems = items.filter((item) => !item.shared)
+  const batchTotalCredits = localItems.reduce((sum, item) => {
+    const modelCode = item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel
+    const model = imageModels.find((m) => m.code === modelCode)
+    const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
+    return sum + (model ? getPriceByResolution(model, resolution) : 10) * imageParams.quantity
+  }, 0)
+
   const batchGenerate = useCallback(async () => {
+    const ok = await confirm({
+      title: '确认批量生成',
+      description: `本次操作预计消耗 ${batchTotalCredits} A豆（批量生成 ${localItems.length} 张参考图），确认是否继续？`,
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
     setBatchRunning(true)
     const fns = items
       .filter((item) => !item.shared && !pendingImageKeys.has(`${item.type}:${item.name}`))
@@ -457,9 +487,8 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
     setBatchRunning(false)
     const submittedCount = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
     if (submittedCount > 0) toast.success(`任务已提交，${submittedCount}/${fns.length} 个`)
-  }, [items, pendingImageKeys])
+  }, [items, pendingImageKeys, batchTotalCredits, localItems.length, confirm])
 
-  const localItems = items.filter((item) => !item.shared)
   const allSelected = items.every((item) => item.selectedUrl)
   const selectedLocalCount = localItems.filter((item) => item.selectedUrl).length
   const characters = items.filter((i) => i.type === 'character')
@@ -624,15 +653,7 @@ export function StepCharacters({ projectId, scriptData, style: initialStyle, ass
           className="w-full flex items-center justify-center gap-2 text-xs bg-primary text-primary-foreground py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           {batchRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-          {batchRunning ? '批量生成中…' : (() => {
-            const total = localItems.reduce((sum, item) => {
-              const modelCode = item.type === 'character' ? imageParams.characterModel : imageParams.sceneModel
-              const model = imageModels.find((m) => m.code === modelCode)
-              const resolution = item.type === 'character' ? imageParams.characterResolution : imageParams.sceneResolution
-              return sum + (model ? getPriceByResolution(model, resolution) : 10) * imageParams.quantity
-            }, 0)
-            return `批量生成全部 (${localItems.length}) · ${total}A豆`
-          })()}
+          {batchRunning ? '批量生成中…' : `批量生成全部 (${localItems.length}) · ${batchTotalCredits}A豆`}
         </button>
 
         <div className="text-xs text-muted-foreground space-y-1">
