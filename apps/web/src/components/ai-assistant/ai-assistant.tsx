@@ -663,10 +663,10 @@ export function AiAssistant() {
           {/* Messages */}
           <ScrollArea className="flex-1 px-3 py-3 overflow-x-hidden">
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-12 gap-2">
-                <Bot className="h-10 w-10 opacity-20" />
-                <p className="text-sm">你好！我是 Toby.AI 创作助手</p>
-                <p className="text-xs opacity-60">可以帮你设计提示词、解析图片/视频</p>
+              <div className="flex flex-col items-center justify-center h-full text-center py-12 gap-2">
+                <Bot className="h-10 w-10 text-white/20" />
+                <p className="text-sm text-white/60">你好！我是 Toby.AI 创作助手</p>
+                <p className="text-xs text-white/40">可以帮你设计提示词、解析图片/视频</p>
               </div>
             )}
             {messages.map((msg) => (
@@ -678,7 +678,7 @@ export function AiAssistant() {
                   'max-w-full min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words overflow-hidden relative group',
                   msg.role === 'user'
                     ? 'gradient-accent text-white rounded-br-sm'
-                    : 'bg-muted text-foreground rounded-bl-sm'
+                    : 'ai-glass-msg-bot rounded-bl-sm'
                 )}>
                   {msg.imagePreview && (
                     <img src={msg.imagePreview} alt="附件" className="mb-1.5 max-h-32 rounded-lg object-cover" />
@@ -688,11 +688,11 @@ export function AiAssistant() {
                     : msg.role === 'assistant'
                     ? (
                       <>
-                        <div className="prose prose-sm prose-invert max-w-full break-words overflow-hidden pb-4 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                        <div className="prose prose-sm prose-invert max-w-full break-words overflow-hidden pb-4 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words [&_a]:text-violet-300 [&_a:hover]:text-violet-200"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
                         {msg.content && (
                           <button
                             onClick={() => handleCopy(msg.content, msg.id)}
-                            className="absolute bottom-2 right-2 p-1.5 rounded-md bg-background/80 hover:bg-background border border-border opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute bottom-2 right-2 p-1.5 rounded-md bg-[rgba(8,11,34,0.8)] hover:bg-[rgba(15,18,50,0.9)] border border-[rgba(236,233,255,0.12)] opacity-0 group-hover:opacity-100 transition-opacity"
                             title="复制"
                           >
                             {copiedId === msg.id ? (
