@@ -1792,8 +1792,6 @@ tbody tr:hover {
    ========================================================================== */
 
 .ai-glass-panel {
-  position: relative;
-  isolation: isolate;
   background:
     linear-gradient(118deg, rgba(255, 255, 255, 0.1), rgba(181, 193, 255, 0.03) 38%, rgba(16, 26, 72, 0.1)),
     rgba(8, 11, 34, 0.72);
@@ -1804,17 +1802,6 @@ tbody tr:hover {
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 0 60px rgba(116, 87, 255, 0.12),
     0 24px 80px rgba(3, 5, 22, 0.55);
-}
-
-/* 面板顶部柔光 */
-.ai-glass-panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(ellipse at 50% -10%, rgba(169, 156, 255, 0.14), transparent 55%);
-  opacity: 0.8;
 }
 
 .ai-glass-header {
