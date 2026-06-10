@@ -121,9 +121,9 @@ export function StepStoryboard({
           const audioGenerating = generatingAudioIds.includes(refId)
 
           return (
-            <article key={page.page} className="overflow-hidden rounded-lg border bg-card">
+            <article key={page.page} className="rounded-lg border bg-card">
               <div className="grid gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
-                <div className="bg-muted/30">
+                <div className="overflow-hidden bg-muted/30 rounded-l-lg">
                   <div className={`relative bg-muted ${aspectClass}`}>
                     <div className="absolute left-2 top-2 z-10 rounded bg-black/60 px-2 py-0.5 text-xs font-semibold text-white">
                       {String(page.page).padStart(2, '0')}

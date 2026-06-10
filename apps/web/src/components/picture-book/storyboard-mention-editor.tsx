@@ -265,7 +265,7 @@ export function StoryboardMentionEditor({
 
     const caretIndex = getCaretOffset(editor)
     const beforeCaret = nextValue.slice(0, caretIndex)
-    const matched = beforeCaret.match(/(^|\s)@$/)
+    const matched = beforeCaret.match(/(^|[^@])@$/)
     if (matched) {
       setPickerPos(getCaretPixelPosition(editor, wrapperRef.current))
       setMentionStartIndex(caretIndex - 1)
@@ -297,6 +297,13 @@ export function StoryboardMentionEditor({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (isComposingRef.current) return
+    // Escape 关闭资产选择框
+    if (event.key === 'Escape' && mentionStartIndex != null) {
+      event.preventDefault()
+      setMentionStartIndex(null)
+      setPickerPos(null)
+      return
+    }
     if (event.key !== 'Backspace' && event.key !== 'Delete') return
 
     const selection = window.getSelection()
