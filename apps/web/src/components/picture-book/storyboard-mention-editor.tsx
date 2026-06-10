@@ -206,6 +206,31 @@ function ResourcePickerGroup({
   )
 }
 
+/**
+ * 获取光标相对于指定容器的像素位置（用于下拉框定位）
+ * 通过 Selection API 获取光标的视口坐标，再减去容器的偏移量
+ */
+function getCaretPixelPosition(editor: HTMLElement | null, wrapper: HTMLElement | null): { top: number; left: number } | null {
+  if (!editor || !wrapper) return null
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return null
+    const range = selection.getRangeAt(0).cloneRange()
+    range.collapse(true)
+    const caretRect = range.getBoundingClientRect()
+    // 折叠光标的 height 可能为 0，此时用 top + 估算行高作为兜底
+    if (caretRect.top === 0 && caretRect.left === 0 && caretRect.bottom === 0) return null
+    const wrapperRect = wrapper.getBoundingClientRect()
+    const lineBottom = caretRect.bottom > caretRect.top ? caretRect.bottom : caretRect.top + 20
+    return {
+      top: lineBottom - wrapperRect.top + 4,
+      left: Math.max(0, caretRect.left - wrapperRect.left),
+    }
+  } catch {
+    return null
+  }
+}
+
 export function StoryboardMentionEditor({
   value,
   resources,
@@ -215,8 +240,10 @@ export function StoryboardMentionEditor({
   disabled = false,
 }: StoryboardMentionEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
   const isComposingRef = useRef(false)
   const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null)
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null)
   const [isFocused, setIsFocused] = useState(false)
 
   useEffect(() => {
@@ -239,7 +266,13 @@ export function StoryboardMentionEditor({
     const caretIndex = getCaretOffset(editor)
     const beforeCaret = nextValue.slice(0, caretIndex)
     const matched = beforeCaret.match(/(^|\s)@$/)
-    setMentionStartIndex(matched ? caretIndex - 1 : null)
+    if (matched) {
+      setPickerPos(getCaretPixelPosition(editor, wrapperRef.current))
+      setMentionStartIndex(caretIndex - 1)
+    } else {
+      setPickerPos(null)
+      setMentionStartIndex(null)
+    }
   }
 
   const handleSelectResource = (resource: StoryboardMentionResource) => {
@@ -253,6 +286,7 @@ export function StoryboardMentionEditor({
 
     onChange(nextValue)
     setMentionStartIndex(null)
+    setPickerPos(null)
 
     window.requestAnimationFrame(() => {
       replaceEditorContent(editor, nextValue, resources)
@@ -305,7 +339,7 @@ export function StoryboardMentionEditor({
   const isEmpty = value.length === 0
 
   return (
-    <div className="relative">
+    <div ref={wrapperRef} className="relative">
       <div
         ref={editorRef}
         data-testid="storyboard-mention-editor"
@@ -320,7 +354,10 @@ export function StoryboardMentionEditor({
         onFocus={() => setIsFocused(true)}
         onBlur={() => {
           setIsFocused(false)
-          window.setTimeout(() => setMentionStartIndex(null), 120)
+          window.setTimeout(() => {
+            setMentionStartIndex(null)
+            setPickerPos(null)
+          }, 120)
           syncValueFromEditor()
           onBlur?.()
         }}
@@ -349,7 +386,13 @@ export function StoryboardMentionEditor({
       </div>
 
       {showPicker && !disabled ? (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border bg-popover p-1 shadow-xl">
+        <div
+          className={cn(
+            'absolute z-50 w-60 max-h-64 overflow-y-auto rounded-lg border bg-popover p-1 shadow-xl',
+            !pickerPos && 'left-0 right-0 top-full mt-1',
+          )}
+          style={pickerPos ? { top: pickerPos.top, left: pickerPos.left } : undefined}
+        >
           {resources.length === 0 ? (
             <div className="px-2 py-2 text-xs text-muted-foreground">暂无可引用角色、背景或道具</div>
           ) : (
