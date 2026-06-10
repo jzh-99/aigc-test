@@ -692,7 +692,7 @@ export function AiAssistant() {
                         {msg.content && (
                           <button
                             onClick={() => handleCopy(msg.content, msg.id)}
-                            className="absolute bottom-2 right-2 p-1.5 rounded-md bg-[rgba(8,11,34,0.8)] hover:bg-[rgba(15,18,50,0.9)] border border-[rgba(236,233,255,0.12)] opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute bottom-2 right-2 p-1.5 rounded-md ai-glass-bg-copy border ai-glass-border-faint opacity-0 group-hover:opacity-100 transition-opacity"
                             title="复制"
                           >
                             {copiedId === msg.id ? (
@@ -713,9 +713,9 @@ export function AiAssistant() {
           </ScrollArea>
 
           {/* Input area */}
-          <div className="border-t border-[rgba(236,233,255,0.1)] bg-[rgba(8,11,34,0.6)]">
+          <div className="border-t ai-glass-border-subtle ai-glass-bg-deep">
             {/* Tab bar */}
-            <div className="flex border-b border-[rgba(236,233,255,0.08)]">
+            <div className="flex border-b ai-glass-border-subtle">
               {TAB_CONFIG.map((t) => (
                 <button
                   key={t.id}
@@ -738,7 +738,7 @@ export function AiAssistant() {
               <div className="p-3 space-y-2">
                 {/* Attachment preview */}
                 {chatImage && ( // || chatVideo || chatVideoUploading
-                  <div className="flex items-center gap-2 rounded-lg bg-[rgba(15,18,50,0.5)] px-3 py-1.5 text-xs text-white/50">
+                  <div className="flex items-center gap-2 rounded-lg ai-glass-bg-surface px-3 py-1.5 text-xs text-white/50">
                     {chatImage && (
                       <>
                         <img src={chatImage.preview} alt="" className="h-8 w-8 rounded object-cover" />
@@ -762,14 +762,14 @@ export function AiAssistant() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleChatSend() } }}
                     placeholder="描述需求，或上传图片... (Shift+Enter 发送)"
-                    className="min-h-[60px] max-h-[120px] resize-none text-sm bg-[rgba(15,18,50,0.5)] border-[rgba(236,233,255,0.1)] text-white/90 placeholder:text-white/30 focus-visible:ring-violet-400/30"
+                    className="min-h-[60px] max-h-[120px] resize-none text-sm ai-glass-bg-surface border-[rgba(236,233,255,0.1)] text-white/90 placeholder:text-white/30 focus-visible:ring-violet-400/30"
                     disabled={loading}
                   />
                   <div className="flex flex-col gap-1">
                     <input ref={chatImageRef} type="file" accept="image/*" className="hidden" onChange={handleChatImagePick} />
                     {/* <input ref={chatVideoRef} type="file" accept="video/*" className="hidden" onChange={handleChatVideoPick} /> */}
                     <button onClick={() => chatImageRef.current?.click()} title="附加图片"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[rgba(236,233,255,0.12)] hover:bg-[rgba(82,70,180,0.15)] transition-colors">
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border ai-glass-border-faint hover:bg-[rgba(82,70,180,0.15)] transition-colors">
                       <ImageIcon className="h-4 w-4 text-white/50" />
                     </button>
                     {/* <button onClick={() => chatVideoRef.current?.click()} title="附加视频"
@@ -792,14 +792,14 @@ export function AiAssistant() {
                 <input ref={imageTabRef} type="file" accept="image/*" className="hidden" onChange={handleImageTabPick} />
                 {!imageFile ? (
                   <button onClick={() => imageTabRef.current?.click()}
-                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[rgba(236,233,255,0.12)] py-6 text-white/40 hover:border-violet-400/40 hover:text-violet-300 transition-colors">
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed ai-glass-border-faint py-6 text-white/40 hover:border-violet-400/40 hover:text-violet-300 transition-colors">
                     <Upload className="h-8 w-8" />
                     <span className="text-sm font-medium">点击上传图片</span>
                     <span className="text-xs opacity-60">JPG / PNG / WEBP</span>
                   </button>
                 ) : (
                   <div className="space-y-2">
-                    <div className="relative rounded-xl overflow-hidden bg-[rgba(15,18,50,0.5)]">
+                    <div className="relative rounded-xl overflow-hidden ai-glass-bg-surface">
                       <img src={imageFile.preview} alt="预览" className="w-full max-h-40 object-contain" />
                       <button onClick={() => setImageFile(null)}
                         className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white/70 hover:bg-black/80 hover:text-white">
