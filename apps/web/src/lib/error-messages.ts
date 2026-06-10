@@ -110,7 +110,7 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
 export function translateError(error: unknown): string {
   // 如果已经是中文，直接返回
   if (typeof error === 'string') {
-    if (/[\u4e00-\u9fa5]/.test(error)) {
+    if (/[一-龥]/.test(error)) {
       return error
     }
 
@@ -129,7 +129,7 @@ export function translateError(error: unknown): string {
     const message = error.message
 
     // 如果已经是中文
-    if (/[\u4e00-\u9fa5]/.test(message)) {
+    if (/[一-龥]/.test(message)) {
       return message
     }
 
@@ -156,6 +156,13 @@ export function getErrorMessage(code: string, fallback?: string): string {
   }
   return ERROR_CODE_MAP[code]
 }
+
+// 上游 API 通用中文错误映射（在中文检测之前执行，将上游原始中文替换为更友好的措辞）
+const UPSTREAM_CHINESE_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
+  { pattern: /系统繁忙.*请稍后再试/, message: '服务繁忙，请稍后重试' },
+  { pattern: /服务器内部错误/, message: '服务繁忙，请稍后重试' },
+  { pattern: /请求过于频繁/, message: '操作过于频繁，请稍后再试' },
+]
 
 // 视频生成 API 特定错误信息映射（精确匹配优先，在通用关键词匹配之前执行）
 const VIDEO_API_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
@@ -204,6 +211,18 @@ const VIDEO_API_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
 ]
 
 /**
+ * 清理上游 API 错误中的技术性信息（traceid、requestid 等），只保留用户可读的部分
+ */
+function stripTechnicalInfo(msg: string): string {
+  return msg
+    .replace(/（traceid[:\s][^）]*）/g, '')
+    .replace(/（requestid[:\s][^）]*）/g, '')
+    .replace(/\(traceid[:\s][^)]*\)/g, '')
+    .replace(/\(requestid[:\s][^)]*\)/g, '')
+    .trim()
+}
+
+/**
  * 翻译任务错误信息（用于显示在卡片上）
  */
 export function translateTaskError(errorMessage: string | null | undefined): string {
@@ -216,9 +235,13 @@ export function translateTaskError(errorMessage: string | null | undefined): str
     }
   }
 
-  // 如果已经是中文
-  if (/[\u4e00-\u9fa5]/.test(errorMessage)) {
-    return errorMessage
+  // 如果已经是中文，先清理技术信息再尝试友好映射
+  if (/[一-龥]/.test(errorMessage)) {
+    const cleaned = stripTechnicalInfo(errorMessage)
+    for (const { pattern, message } of UPSTREAM_CHINESE_ERROR_MAP) {
+      if (pattern.test(cleaned)) return message
+    }
+    return cleaned
   }
 
   // 特殊处理 Volcengine API 错误格式: "Volcengine API 400: {...}"
@@ -256,8 +279,14 @@ export function translateTaskError(errorMessage: string | null | undefined): str
       if (errMsg) {
         const translated = translateError(errMsg)
         if (translated !== errMsg) return translated
-        // 如果已是中文直接返回
-        if (/[\u4e00-\u9fa5]/.test(errMsg)) return errMsg
+        // 如果已是中文，清理技术信息后尝试友好映射
+        if (/[一-龥]/.test(errMsg)) {
+          const cleaned = stripTechnicalInfo(errMsg)
+          for (const { pattern, message } of UPSTREAM_CHINESE_ERROR_MAP) {
+            if (pattern.test(cleaned)) return message
+          }
+          return cleaned
+        }
       }
     } catch {
       // 不是 JSON，继续处理
