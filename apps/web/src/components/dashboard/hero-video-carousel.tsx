@@ -8,6 +8,7 @@ const heroVideoSlides = [
   '/videos/creative-home-bg2.mp4',
   '/videos/creative-home-bg3.mp4',
   '/videos/creative-home-bg4.mp4',
+  '/videos/creative-home-bg5.mp4',
 ]
 
 /** 淡入淡出过渡时长（ms） */
