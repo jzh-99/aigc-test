@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { CanvasTrashDrawer } from '@/components/canvas/canvas-trash-drawer'
+import { useConfirm } from '@/hooks/use-confirm'
 
 type Canvas = {
   id: string
@@ -18,6 +19,7 @@ type Canvas = {
 
 export default function CanvasGalleryPage() {
   const router = useRouter()
+  const confirm = useConfirm()
   const token = useAuthStore((s) => s.accessToken)
   const isInitialized = useAuthStore((s) => s.isInitialized)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -76,7 +78,7 @@ export default function CanvasGalleryPage() {
 
   async function deleteCanvas(id: string) {
     if (!token) return
-    if (!confirm('删除后画布会进入回收站，7 天内可恢复。确认删除？')) return
+    if (!await confirm({ title: '删除画布', description: '删除后画布会进入回收站，7 天内可恢复。确认删除？' })) return
     try {
       const res = await fetch(`/api/v1/canvases/${id}`, {
         method: 'DELETE',

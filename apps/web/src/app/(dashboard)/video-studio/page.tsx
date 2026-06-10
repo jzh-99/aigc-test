@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { VideoStudioTrashDrawer } from '@/components/video-studio/video-studio-trash-drawer'
 import { useAuthStore } from '@/stores/auth-store'
 import { fetchWithAuth } from '@/lib/api-client'
+import { useConfirm } from '@/hooks/use-confirm'
 
 interface Project {
   id: string
@@ -27,6 +28,7 @@ function timeAgo(iso: string) {
 }
 
 export default function VideoStudioPage() {
+  const confirm = useConfirm()
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const isInitialized = useAuthStore((s) => s.isInitialized)
   const [projects, setProjects] = useState<Project[]>([])
@@ -43,7 +45,7 @@ export default function VideoStudioPage() {
   }, [isInitialized, workspaceId])
 
   const deleteProject = async (id: string) => {
-    if (!confirm('删除后项目会进入回收站，7 天内可恢复。确认删除？')) return
+    if (!await confirm({ title: '删除项目', description: '删除后项目会进入回收站，7 天内可恢复。确认删除？' })) return
     try {
       await fetchWithAuth(`/video-studio/projects/${id}`, { method: 'DELETE' })
       setProjects((items) => items.filter((item) => item.id !== id))

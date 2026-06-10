@@ -12,6 +12,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { apiPost, apiDelete, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
+import { useConfirm } from '@/hooks/use-confirm'
 import { RotateCcw, Trash2, Loader2 } from 'lucide-react'
 
 interface DeletedTeam {
@@ -46,6 +47,7 @@ interface TrashDrawerProps {
 }
 
 export function TrashDrawer({ open, onOpenChange, onRestored }: TrashDrawerProps) {
+  const confirm = useConfirm()
   const { data, error, mutate } = useSWR<TrashData>(open ? '/admin/trash' : null)
   const [activeTab, setActiveTab] = useState<'teams' | 'workspaces'>('teams')
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -68,7 +70,7 @@ export function TrashDrawer({ open, onOpenChange, onRestored }: TrashDrawerProps
   }
 
   async function handlePermanentDelete(type: 'team' | 'workspace', id: string, name: string) {
-    if (!confirm(`确定要永久删除"${name}"吗？\n\n此操作不可恢复，所有数据将被彻底清除。`)) return
+    if (!await confirm({ title: '永久删除', description: `确定要永久删除"${name}"吗？\n\n此操作不可恢复，所有数据将被彻底清除。`, confirmText: '永久删除' })) return
     setLoadingId(id)
     try {
       if (type === 'team') {

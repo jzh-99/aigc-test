@@ -1,6 +1,7 @@
 import { Inter, Syne } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { ThemeProvider } from '@/context/theme-provider'
+import { ConfirmProvider } from '@/hooks/use-confirm'
 import './globals.css'
 
 const inter = Inter({
@@ -39,7 +40,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         style={{ fontFamily: 'var(--font-inter), "Noto Sans SC", sans-serif' }}
       >
         <ThemeProvider>
-          {children}
+          <ConfirmProvider>
+            {children}
+          </ConfirmProvider>
         </ThemeProvider>
         <Toaster position="top-center" richColors duration={4000} />
       </body>

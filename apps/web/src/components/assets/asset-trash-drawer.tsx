@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Loader2, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
+import { useConfirm } from '@/hooks/use-confirm'
 
 interface AssetTrashDrawerProps {
   open: boolean
@@ -23,6 +24,7 @@ function daysLeft(deletedAt: string): number {
 
 export function AssetTrashDrawer({ open, onOpenChange, onRestored }: AssetTrashDrawerProps) {
   const { assets, isLoading, mutate } = useTrashAssets(open)
+  const confirm = useConfirm()
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
   async function handleRestore(asset: TrashAssetItem) {
@@ -40,7 +42,7 @@ export function AssetTrashDrawer({ open, onOpenChange, onRestored }: AssetTrashD
   }
 
   async function handlePermanentDelete(asset: TrashAssetItem) {
-    if (!confirm(`确定要永久删除这个${asset.type === 'video' ? '视频' : '图片'}吗？\n此操作不可恢复。`)) return
+    if (!await confirm({ title: '永久删除', description: `确定要永久删除这个${asset.type === 'video' ? '视频' : '图片'}吗？\n此操作不可恢复。`, confirmText: '永久删除' })) return
     setLoadingId(asset.id)
     try {
       await permanentDeleteAsset(asset.id)

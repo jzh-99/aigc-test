@@ -29,6 +29,7 @@ import {
 import { cn } from '@/lib/utils'
 import { apiPatch, apiPost, apiDelete, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
+import { useConfirm } from '@/hooks/use-confirm'
 
 interface Team {
   id: string
@@ -91,6 +92,7 @@ const statusLabels: Record<string, { label: string; variant: 'default' | 'succes
 }
 
 export function TeamTable() {
+  const confirm = useConfirm()
   const { data, error, mutate } = useSWR<{ data: Team[] }>('/admin/teams')
   const [topupTeam, setTopupTeam] = useState<{ id: string; name: string; balance: number } | null>(null)
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null)
@@ -120,7 +122,7 @@ export function TeamTable() {
   }
 
   async function handleDeleteTeam(team: Team) {
-    if (!confirm(`确定要删除团队"${team.name}"吗？\n\n团队及其工作区将被移入回收站，7天内可恢复。`)) return
+    if (!await confirm({ title: '删除团队', description: `确定要删除团队"${team.name}"吗？\n\n团队及其工作区将被移入回收站，7天内可恢复。` })) return
     setDeletingTeamId(team.id)
     try {
       await apiDelete(`/admin/teams/${team.id}`)
@@ -371,7 +373,7 @@ function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordC
   }
 
   async function handleResetUsage(m: TeamMember) {
-    if (!confirm(`确定要将「${m.username}」的用量重置为 0 吗？`)) return
+    if (!await confirm({ title: '重置用量', description: `确定要将「${m.username}」的用量重置为 0 吗？`, confirmText: '重置' })) return
     setResettingId(m.id)
     try {
       await apiPost(`/admin/teams/${teamId}/members/${m.id}/reset-credits`, {})

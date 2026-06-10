@@ -19,6 +19,7 @@ import { translateTaskError } from '@/lib/error-messages'
 import { useGenerationStore } from '@/stores/generation-store'
 import { generateUUID } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useConfirm } from '@/hooks/use-confirm'
 import { parseAspectRatio } from './batch-list-card'
 
 interface BatchDetailProps {
@@ -52,6 +53,7 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
 }
 
 export function BatchDetail({ batchId, open, onOpenChange, onApplied, onReferenceAdded }: BatchDetailProps) {
+  const confirm = useConfirm()
   const { data: batch, isLoading, mutate } = useBatch(open ? batchId : null)
 
   return (
@@ -108,7 +110,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
   }
 
   async function handleCancel() {
-    if (!confirm('确认取消这个 Seedance 任务？')) return
+    if (!await confirm({ title: '取消任务', description: '确认取消这个 Seedance 任务？', confirmText: '取消任务' })) return
     setCancelling(true)
     try {
       await cancelSeedanceBatch(batch.id)

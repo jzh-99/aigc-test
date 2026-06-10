@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Loader2, RotateCcw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/hooks/use-confirm'
 
 interface TrashCanvas {
   id: string
@@ -35,6 +36,7 @@ async function request(path: string, token?: string | null, init?: RequestInit) 
 }
 
 export function CanvasTrashDrawer({ open, workspaceId, token, onClose, onChanged }: Props) {
+  const confirm = useConfirm()
   const [items, setItems] = useState<TrashCanvas[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -62,7 +64,7 @@ export function CanvasTrashDrawer({ open, workspaceId, token, onClose, onChanged
   }
 
   const purge = async (id: string) => {
-    if (!confirm('永久删除会同时清理画布资产，且无法恢复。确认继续？')) return
+    if (!await confirm({ title: '永久删除画布', description: '永久删除会同时清理画布资产，且无法恢复。确认继续？', confirmText: '永久删除' })) return
     await request(`/canvases/${id}/permanent`, token, { method: 'DELETE' })
     toast.success('画布已永久删除')
     await load()

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { apiPost, apiDelete, apiGet, ApiError } from '@/lib/api-client'
 import { useAuthStore } from '@/stores/auth-store'
+import { useConfirm } from '@/hooks/use-confirm'
 import type { UserProfile } from '@aigc/types'
 import { toast } from 'sonner'
 import { Plus, FolderOpen, Users, Trash2, RotateCcw, Loader2 } from 'lucide-react'
@@ -52,6 +53,7 @@ interface TeamWorkspace {
 }
 
 export function WorkspaceList({ teamId }: { teamId: string }) {
+  const confirm = useConfirm()
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [managingWs, setManagingWs] = useState<string | null>(null)
@@ -92,7 +94,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
   }
 
   async function handleDeleteWorkspace(ws: { id: string; name: string }) {
-    if (!confirm(`确定要删除工作区"${ws.name}"吗？\n\n工作区将被移入回收站，7天内可恢复。`)) return
+    if (!await confirm({ title: '删除工作区', description: `确定要删除工作区"${ws.name}"吗？\n\n工作区将被移入回收站，7天内可恢复。` })) return
     try {
       await apiDelete(`/teams/${teamId}/workspaces/${ws.id}`)
       toast.success(`工作区"${ws.name}"已删除`)
@@ -121,7 +123,7 @@ export function WorkspaceList({ teamId }: { teamId: string }) {
   }
 
   async function handlePermanentDeleteWorkspace(ws: DeletedWorkspace) {
-    if (!confirm(`确定要永久删除工作区"${ws.name}"吗？\n\n此操作不可恢复。`)) return
+    if (!await confirm({ title: '永久删除工作区', description: `确定要永久删除工作区"${ws.name}"吗？\n\n此操作不可恢复。`, confirmText: '永久删除' })) return
     setLoadingId(ws.id)
     try {
       await apiDelete(`/teams/${teamId}/trash/${ws.id}`)

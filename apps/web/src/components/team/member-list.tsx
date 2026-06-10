@@ -18,6 +18,7 @@ import {
 import { apiPatch, apiPost, apiDelete, ApiError } from '@/lib/api-client'
 import { InviteDialog } from './invite-dialog'
 import { BatchInviteDialog } from './batch-invite-dialog'
+import { useConfirm } from '@/hooks/use-confirm'
 import { toast } from 'sonner'
 import { UserPlus, Trash2, Edit2, RotateCcw, Users, Settings2 } from 'lucide-react'
 
@@ -61,6 +62,7 @@ const periodLabel: Record<string, string> = {
 }
 
 export function MemberList({ teamId }: { teamId: string }) {
+  const confirm = useConfirm()
   const { data, error, mutate } = useSWR<TeamData>(`/teams/${teamId}`, {
     // Skip retry on 429 (rate-limited) — prevent hammering the server when overloaded
     onErrorRetry: (err, _key, _config, revalidate, { retryCount }) => {
@@ -168,7 +170,7 @@ export function MemberList({ teamId }: { teamId: string }) {
   }
 
   async function handleResetCredits(member: Member) {
-    if (!confirm(`确定要重置 ${member.username} 的已用A豆吗？`)) return
+    if (!await confirm({ title: '重置已用A豆', description: `确定要重置 ${member.username} 的已用A豆吗？`, confirmText: '重置' })) return
     try {
       await apiPost(`/teams/${teamId}/members/${member.user_id}/reset-credits`, {})
       toast.success(`${member.username} 的已用A豆已重置为 0`)
@@ -179,7 +181,7 @@ export function MemberList({ teamId }: { teamId: string }) {
   }
 
   async function handleRemoveMember(member: Member) {
-    if (!confirm(`确定要移除 ${member.username} 吗？`)) return
+    if (!await confirm({ title: '移除成员', description: `确定要移除 ${member.username} 吗？`, confirmText: '移除' })) return
     try {
       await apiDelete(`/teams/${teamId}/members/${member.user_id}`)
       toast.success('成员已移除')
