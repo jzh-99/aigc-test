@@ -6,8 +6,6 @@ import { inspirationItems } from '@/components/dashboard/creative-home-data'
 import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { cn } from '@/lib/utils'
 
-const TAB_ITEMS = ['发现', 'MJ 美学', '视频', '短片']
-
 export function InspirationContent() {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const isTabSticky = useHomeScrollStore((s) => s.isTabSticky)
@@ -49,19 +47,12 @@ export function InspirationContent() {
       )}>
         <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4 overflow-x-auto">
-            {TAB_ITEMS.map((tab, index) => (
-              <button
-                key={tab}
-                type="button"
-                className={`h-9 shrink-0 rounded-full px-4 text-base font-semibold transition ${
-                  index === 0
-                    ? 'bg-violet-200/10 text-white shadow-[inset_0_1px_0_rgba(226,214,255,0.24),0_0_28px_rgba(116,87,255,0.14)]'
-                    : 'text-white/50 hover:bg-violet-200/10 hover:text-violet-50'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+            <button
+              type="button"
+              className="h-9 shrink-0 rounded-full bg-violet-200/10 px-4 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(226,214,255,0.24),0_0_28px_rgba(116,87,255,0.14)] transition"
+            >
+              发现
+            </button>
           </div>
 
           <label className="flex h-11 w-full max-w-[14rem] items-center gap-3 rounded-full border border-violet-200/10 bg-[#151a3f]/35 px-4 text-violet-100/55 shadow-[inset_0_1px_0_rgba(226,214,255,0.1)] backdrop-blur lg:mr-3">
@@ -76,11 +67,19 @@ export function InspirationContent() {
         {inspirationItems.map((item) => (
           <article
             key={item.id}
-            className={`group relative row-span-2 overflow-hidden rounded-lg bg-gradient-to-br ${item.toneClass}`}
+            className="group relative row-span-2 overflow-hidden rounded-lg bg-[#10142e]"
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_24%,rgba(255,255,255,0.32),transparent_19%),radial-gradient(circle_at_70%_64%,rgba(255,255,255,0.18),transparent_23%)] opacity-70" />
+            <img
+              src={item.imageUrl}
+              alt={item.title}
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,6,22,0.02)_0%,rgba(4,6,22,0.16)_46%,rgba(4,6,22,0.82)_100%)] opacity-75 transition duration-300 group-hover:opacity-95" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_24%,rgba(255,255,255,0.18),transparent_18%),radial-gradient(circle_at_72%_68%,rgba(137,116,255,0.16),transparent_30%)] opacity-50 mix-blend-screen" />
             <div className="absolute inset-x-0 bottom-0 translate-y-8 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-5 opacity-0 transition duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-              <p className="text-xs font-semibold text-primary">{item.category}</p>
+              <p className="text-xs font-semibold text-violet-100/78">{item.category}</p>
               <h3 className="mt-1 text-lg font-semibold text-white">{item.title}</h3>
               <p className="mt-2 line-clamp-2 text-sm leading-5 text-white/70">{item.description}</p>
             </div>

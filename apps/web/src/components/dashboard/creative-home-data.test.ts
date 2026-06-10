@@ -30,12 +30,16 @@ describe("creative home static data", () => {
     ]);
   });
 
-  it("provides static inspiration items without links or images", () => {
-    assert.ok(inspirationItems.length >= 8);
+  it("provides fourteen discovery inspiration images in order", () => {
+    assert.equal(inspirationItems.length, 14);
 
-    for (const item of inspirationItems) {
+    for (const [index, item] of inspirationItems.entries()) {
+      assert.equal(item.category, "发现");
       assert.equal(Object.hasOwn(item, "href"), false);
-      assert.equal(Object.hasOwn(item, "image"), false);
+      assert.equal(
+        item.imageUrl,
+        `https://toby-ai-dev.tos-cn-shanghai.volces.com/demos/images/${index + 1}.jpg`,
+      );
     }
   });
 
