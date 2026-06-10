@@ -1610,17 +1610,20 @@ tbody tr:hover {
 }
 
 .creative-home-video-backdrop::before {
-  background:
-    linear-gradient(90deg, rgba(4, 7, 21, 0.04) 0%, rgba(6, 9, 28, 0.04) 16%, rgba(7, 9, 31, 0.05) 46%, rgba(5, 8, 25, 0.22) 100%),
-    linear-gradient(180deg, rgba(4, 6, 20, 0.04) 0%, rgba(8, 10, 31, 0.2) 52%, rgba(6, 8, 25, 0.56) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(4, 6, 20, 0.03) 0%,
+    rgba(6, 8, 25, 0.08) 44%,
+    rgba(6, 8, 25, 0.24) 72%,
+    rgba(6, 8, 25, 0.5) 100%
+  );
 }
 
 .creative-home-video-backdrop::after {
   background:
     radial-gradient(ellipse at 52% 19%, rgba(236, 229, 255, 0.16), transparent 22rem),
     radial-gradient(ellipse at 78% 18%, rgba(96, 174, 255, 0.12), transparent 28rem),
-    radial-gradient(ellipse at 18% 62%, rgba(151, 123, 255, 0.18), transparent 31rem),
-    linear-gradient(180deg, transparent 0%, rgba(4, 6, 20, 0.18) 58%, rgba(5, 7, 22, 0.6) 100%);
+    radial-gradient(ellipse at 18% 62%, rgba(151, 123, 255, 0.14), transparent 31rem);
   backdrop-filter: blur(0.6px) saturate(1.08);
   -webkit-backdrop-filter: blur(0.6px) saturate(1.08);
   mix-blend-mode: screen;
@@ -1841,7 +1844,9 @@ tbody tr:hover {
 .creative-home-content-panel {
   position: relative;
   isolation: isolate;
-  background: transparent;
+  background:
+    linear-gradient(180deg, rgba(8, 11, 34, 0) 0%, rgba(6, 8, 25, 0.3) 8rem, rgba(6, 8, 25, 0.55) 16rem, rgba(6, 8, 25, 0.72) 100%),
+    radial-gradient(ellipse at 52% 0%, rgba(82, 112, 255, 0.1), transparent 34rem);
 }
 
 /* 灵感页分界线 — 模糊虚化效果 */
@@ -1886,9 +1891,12 @@ tbody tr:hover {
 
 /* 视频背景 — 吸附态（加深遮罩） */
 .creative-home-video-backdrop.is-stuck::before {
-  background:
-    linear-gradient(90deg, rgba(4, 7, 21, 0.18) 0%, rgba(6, 9, 28, 0.18) 16%, rgba(7, 9, 31, 0.22) 46%, rgba(5, 8, 25, 0.5) 100%),
-    linear-gradient(180deg, rgba(4, 6, 20, 0.18) 0%, rgba(8, 10, 31, 0.48) 52%, rgba(6, 8, 25, 0.82) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(4, 6, 20, 0.18) 0%,
+    rgba(8, 10, 31, 0.34) 56%,
+    rgba(6, 8, 25, 0.78) 100%
+  );
   transition: background 0.5s ease;
 }
 
