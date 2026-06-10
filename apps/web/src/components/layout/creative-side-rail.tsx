@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { LogOut, UserRound } from 'lucide-react'
+import { LogOut, UserRound, Building2, ArrowLeftRight, Check } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,7 +58,9 @@ export function CreativeSideRail() {
   const isTransparent = isCreativeHome && !isTabSticky
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
-  const clearAuth = useAuthStore((s) => s.clearAuth)
+  const activeTeamId = useAuthStore((s) => s.activeTeamId)
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const { setActiveTeam, setActiveWorkspace, clearAuth } = useAuthStore()
   const resetGeneration = useGenerationStore((s) => s.reset)
   const { showVideoStudioTab } = useTeamFeatures()
   const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
@@ -186,6 +188,65 @@ export function CreativeSideRail() {
       </nav>
 
       <div className="relative z-10 flex flex-col items-center gap-4 text-white/60">
+        {/* 工作区切换（仅多工作区时显示） */}
+        {user && user.teams.reduce((sum, t) => sum + t.workspaces.length, 0) > 1 && (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="grid h-8 w-8 place-items-center rounded-full border border-white/20 bg-white/10 text-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:border-white/35 hover:bg-white/20 hover:text-white hover:shadow-[0_0_22px_rgba(129,220,255,0.25)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                    aria-label="切换工作区"
+                  >
+                    <ArrowLeftRight className="h-[18px] w-[18px]" aria-hidden="true" />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="right">切换工作区</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent
+              side="right"
+              align="end"
+              sideOffset={12}
+              className="w-48 border-white/15 bg-[#121735]/95 p-1.5 text-white shadow-[0_18px_60px_rgba(5,8,30,0.48)] backdrop-blur-xl"
+            >
+              <div className="px-2 py-1.5 text-[11px] font-medium text-white/40">切换工作区</div>
+              {user.teams.map((team) => (
+                <div key={team.id}>
+                  {user.teams.length > 1 && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-white/35">
+                      <Building2 className="h-3 w-3" />
+                      <span className="truncate">{team.name}</span>
+                    </div>
+                  )}
+                  {team.workspaces.map((ws) => {
+                    const isActive = activeWorkspaceId === ws.id
+                    return (
+                      <DropdownMenuItem
+                        key={ws.id}
+                        className={cn(
+                          'cursor-pointer rounded-md px-2.5 py-2 text-xs text-white/70 focus:bg-white/10 focus:text-white',
+                          isActive && 'bg-white/[0.12] text-white'
+                        )}
+                        onClick={() => {
+                          if (activeTeamId !== team.id) setActiveTeam(team.id)
+                          setActiveWorkspace(ws.id)
+                        }}
+                      >
+                        <span className="truncate">{ws.name}</span>
+                        {isActive && <Check className="ml-auto h-3.5 w-3.5 text-accent-blue" />}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                  <DropdownMenuSeparator className="bg-white/10" />
+                </div>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* 用户头像菜单 */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
