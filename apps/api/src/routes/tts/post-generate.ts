@@ -92,7 +92,7 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     const speed = normalizeTtsNumber(request.body.speed, 1, 0.5, 2)
-    const volume = normalizeTtsNumber(request.body.volume, 5, 1, 10)
+    const volume = normalizeTtsNumber(request.body.volume, 1, 1, 10)
     const pitch = normalizeTtsNumber(request.body.pitch, 0, -12, 12)
     const stream = shouldUseMiniMaxStreaming(text)
     const params = {
