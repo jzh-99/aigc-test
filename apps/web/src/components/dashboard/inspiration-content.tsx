@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Search } from 'lucide-react'
-import { inspirationItems } from '@/components/dashboard/creative-home-data'
+import { inspirationItems, type InspirationItem } from '@/components/dashboard/creative-home-data'
+import { InspirationLightbox } from '@/components/dashboard/inspiration-lightbox'
 import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { cn } from '@/lib/utils'
 
@@ -10,6 +11,7 @@ export function InspirationContent() {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const isTabSticky = useHomeScrollStore((s) => s.isTabSticky)
   const setTabSticky = useHomeScrollStore((s) => s.setTabSticky)
+  const [selectedItem, setSelectedItem] = useState<InspirationItem | null>(null)
 
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -31,6 +33,10 @@ export function InspirationContent() {
       setTabSticky(false)
     }
   }, [setTabSticky])
+
+  const handleLightboxOpenChange = useCallback((open: boolean) => {
+    if (!open) setSelectedItem(null)
+  }, [])
 
   return (
     <div className="creative-home-content-panel -mx-5 mt-8 sm:-mx-8 lg:-mx-12 lg:mt-10">
@@ -67,7 +73,8 @@ export function InspirationContent() {
         {inspirationItems.map((item) => (
           <article
             key={item.id}
-            className="group relative row-span-2 overflow-hidden rounded-lg bg-[#10142e]"
+            className="group relative row-span-2 cursor-pointer overflow-hidden rounded-lg bg-[#10142e]"
+            onClick={() => setSelectedItem(item)}
           >
             <img
               src={item.imageUrl}
@@ -86,6 +93,13 @@ export function InspirationContent() {
           </article>
         ))}
       </div>
+
+      {/* 灵感图片大图弹窗 */}
+      <InspirationLightbox
+        item={selectedItem}
+        open={!!selectedItem}
+        onOpenChange={handleLightboxOpenChange}
+      />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,7 @@ import { GenerationPanel } from '@/components/generation/generation-panel'
 import { BatchList, type BatchListHandle } from '@/components/history/batch-list'
 import { BatchDetail } from '@/components/history/batch-detail'
 import { useAuthStore } from '@/stores/auth-store'
+import { useGenerationStore } from '@/stores/generation-store'
 import { AlertTriangle, FolderX, EyeOff } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 import type { BatchResponse } from '@aigc/types'
@@ -57,9 +58,23 @@ function BatchSSEWatcher({ batchId, onUpdate, onTerminal }: BatchSSEWatcherProps
 
 export default function ImagePage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const _mode = searchParams.get('mode')
   const initialMode = (_mode === 'video' ? 'video' : _mode === 'avatar' ? 'avatar' : _mode === 'action_imitation' ? 'action_imitation' : 'image') as 'image' | 'video' | 'avatar' | 'action_imitation'
   const batchListRef = useRef<BatchListHandle>(null)
+
+  // 从 URL 读取 prompt / model 参数，写入 generation store（灵感页「做同款」跳转场景）
+  const { setPrompt, setModelType } = useGenerationStore()
+  const promptParam = searchParams.get('prompt')
+  const modelParam = searchParams.get('model')
+  useEffect(() => {
+    if (promptParam) setPrompt(promptParam)
+    if (modelParam) setModelType(modelParam)
+    // 清除 URL 中的 prompt/model 参数，避免刷新时重复写入
+    if (promptParam || modelParam) {
+      router.replace('/generation?mode=image', { scroll: false })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 当前正在进行中的 batch ID 集合，用于挂载 SSE 订阅
   const [activeBatchIds, setActiveBatchIds] = useState<Set<string>>(new Set())
