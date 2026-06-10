@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { Music2 } from 'lucide-react'
+import { AlertCircle, Music2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Pagination } from '@/components/ui/pagination'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { MusicDownloadMenu } from './music-download-menu'
 import type { MusicTrackResponse } from '@aigc/types'
 
@@ -41,6 +42,44 @@ function trackTypeText(trackType: MusicTrackResponse['track_type']) {
 
 function creatorText(trackType: MusicTrackResponse['track_type']) {
   return trackType === 'instrumental' ? '作曲' : '作词作曲'
+}
+
+/** Mureka 官方错误码 → 用户友好中文提示 */
+function friendlyErrorMessage(message: string): string {
+  const msg = message.toLowerCase()
+  if (msg.includes('451') || msg.includes('legal') || msg.includes('安审')) {
+    return '内容未通过安全审核，请修改后重试'
+  }
+  if (msg.includes('429') && (msg.includes('quota') || msg.includes('billing'))) {
+    return 'API 配额已用尽，请联系管理员'
+  }
+  if (msg.includes('429') || msg.includes('rate limit')) {
+    return '请求过于频繁，请稍后重试'
+  }
+  if (msg.includes('400') || msg.includes('invalid request')) {
+    return '请求参数异常，请检查输入内容'
+  }
+  if (msg.includes('401') || msg.includes('authentication')) {
+    return 'API 认证失效，请联系管理员'
+  }
+  if (msg.includes('403') || msg.includes('forbidden')) {
+    return '地区访问受限，请联系管理员'
+  }
+  if (msg.includes('500') || msg.includes('server error')) {
+    return 'AI 服务暂时异常，请稍后重试'
+  }
+  if (msg.includes('503') || msg.includes('overloaded')) {
+    return 'AI 服务繁忙，请稍后重试'
+  }
+  // 轮询超时等内部错误
+  if (msg.includes('超时') || msg.includes('timeout')) {
+    return '生成超时，请稍后重试'
+  }
+  // 封面生成失败但音乐已生成
+  if (msg.includes('封面')) {
+    return '封面生成失败，音乐已保存'
+  }
+  return message
 }
 
 export function MusicTrackList({
@@ -84,6 +123,16 @@ export function MusicTrackList({
             </div>
           </Link>
           <div className="flex items-center gap-2">
+            {track.status === 'failed' && track.error_message && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertCircle className="h-4 w-4 shrink-0 cursor-help text-destructive" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p>{friendlyErrorMessage(track.error_message)}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
             <Badge variant={track.status === 'failed' ? 'destructive' : track.status === 'completed' ? 'default' : 'secondary'}>
               {statusText(track.status)}
             </Badge>
