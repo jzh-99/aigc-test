@@ -30,7 +30,6 @@ const navLabelMap: Record<string, string> = {
 
 type RailTheme = {
   rail: string
-  glow: string
   activeIcon: string
   activeText: string
   hoverText: string
@@ -38,8 +37,7 @@ type RailTheme = {
 }
 
 const railTheme: RailTheme = {
-  rail: 'border-[#a99cff]/20 bg-[linear-gradient(180deg,rgba(16,18,50,0.72)_0%,rgba(12,16,48,0.9)_48%,rgba(6,8,26,0.98)_100%)] shadow-[inset_-1px_0_0_rgba(169,156,255,0.16)]',
-  glow: 'bg-[radial-gradient(circle_at_54%_14%,rgba(151,125,255,0.28),transparent_30%),radial-gradient(circle_at_36%_44%,rgba(73,128,255,0.16),transparent_24%)]',
+  rail: 'bg-[linear-gradient(180deg,rgba(16,18,50,0.72)_0%,rgba(12,16,48,0.9)_48%,rgba(6,8,26,0.98)_100%)]',
   activeIcon: 'bg-[#f2efff] text-[#5e4fd7] shadow-[0_0_28px_rgba(168,139,255,0.66),0_0_72px_rgba(73,128,255,0.24)]',
   activeText: 'text-white drop-shadow-[0_0_14px_rgba(168,139,255,0.54)]',
   hoverText: 'hover:text-violet-100',
@@ -56,6 +54,8 @@ export function CreativeSideRail() {
   const isTabSticky = useHomeScrollStore((s) => s.isTabSticky)
   /* 首页且未吸顶时保持透明，其余情况使用实色轨道主题 */
   const isTransparent = isCreativeHome && !isTabSticky
+  /* 仅首页吸顶时使用主题渐变；非首页侧边栏保持透明让父容器渐变透出 */
+  const showRailTheme = isCreativeHome && isTabSticky
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
@@ -86,24 +86,14 @@ export function CreativeSideRail() {
   return (
     <aside
       className={cn(
-        'relative hidden h-screen w-20 shrink-0 flex-col items-center overflow-hidden border-r px-2 py-5 text-white transition-colors duration-500 lg:flex',
+        'relative hidden h-screen w-20 shrink-0 flex-col items-center overflow-hidden px-2 py-5 text-white transition-colors duration-500 lg:flex',
         isTransparent
-          ? 'z-20 border-r-0 bg-transparent'
-          : `${railTheme.rail}`
+          ? 'z-20 bg-transparent'
+          : showRailTheme
+            ? railTheme.rail
+            : 'bg-transparent'
       )}
     >
-      <div
-        className={cn(
-          'pointer-events-none absolute inset-0 opacity-100 transition duration-500',
-          isTransparent
-            ? 'bg-[linear-gradient(180deg,rgba(5,7,22,0.02),rgba(5,7,22,0.06)),radial-gradient(circle_at_48%_14%,rgba(255,255,255,0.1),transparent_18%)]'
-            : railTheme.glow
-        )}
-      />
-      <div className={cn(
-        'pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-white/0 via-white/28 to-white/0 transition-opacity duration-500',
-        isTransparent && 'opacity-0'
-      )} />
       <Link href="/" className={cn('relative z-10 mb-12 grid h-9 w-9 place-items-center transition', railTheme.logo)}>
         <svg viewBox="0 0 40 40" className="h-8 w-8 overflow-visible" aria-hidden="true">
           <defs>

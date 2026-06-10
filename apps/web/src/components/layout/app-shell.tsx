@@ -40,7 +40,10 @@ export function AppShell({ children, title, mainClassName }: AppShellProps) {
             <HeroVideoCarousel />
           </div>
           <CreativeSideRail />
-          <div className="relative z-10 min-w-0 flex-1 overflow-hidden">
+          <div className={cn(
+            'relative z-10 min-w-0 flex-1 overflow-hidden transition-colors duration-500',
+            isTabSticky && 'bg-black/90'
+          )}>
             {children}
           </div>
         </div>
@@ -51,12 +54,13 @@ export function AppShell({ children, title, mainClassName }: AppShellProps) {
 
   /** 暗色全屏页面的 main 样式：无浅色背景、无 padding */
   const darkMainClass = 'flex-1 overflow-y-auto'
-  /** 标准页面的 main 样式 */
-  const defaultMainClass = 'flex-1 overflow-y-auto bg-[hsl(var(--surface-warm))] p-4 md:p-6'
+  /** 标准页面的 main 样式：无独立背景，透出父容器的统一渐变 */
+  const defaultMainClass = 'flex-1 overflow-y-auto p-4 md:p-6'
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
+      {/* 父容器使用与侧边栏渐变等效的不透明纵向渐变，侧边栏和 main 均透明以共享同一层背景 */}
+      <div className="flex h-screen overflow-hidden bg-[linear-gradient(180deg,#0E112B_0%,#0C102E_48%,#06081A_100%)]">
         <CreativeSideRail />
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="lg:hidden">
