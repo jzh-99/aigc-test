@@ -21,20 +21,6 @@ import {
 import { AssetTrashDrawer } from '@/components/assets/asset-trash-drawer'
 import { AssetCard } from '@/components/assets/asset-card'
 
-const MODEL_DISPLAY_NAMES: Record<string, string> = {
-  'gemini-3.1-flash-image-preview':    '全能图片2 1K',
-  'gemini-3.1-flash-image-preview-2k': '全能图片2 2K',
-  'gemini-3.1-flash-image-preview-4k': '全能图片2 4K',
-  'gpt-image-2':                       '超能图片2',
-  'nano-banana-pro':                   '全能图片Pro 1K',
-  'nano-banana-pro-2k':                '全能图片Pro 2K',
-  'nano-banana-pro-4k':                '全能图片Pro 4K',
-  'veo3.1-fast':                       '全能视频3.1 Fast',
-  'veo3.1-components':                 '全能视频3.1',
-  'jimeng_realman_avatar_picture_omni_v15': 'OmniHuman 1.5 数字人',
-  'jimeng_dreamactor_m20_gen_video': '动作模仿2.0',
-}
-
 function groupByDate(assets: AssetItem[]): { date: string; items: AssetItem[] }[] {
   const map = new Map<string, AssetItem[]>()
   for (const asset of assets) {
@@ -302,8 +288,6 @@ export default function AssetsPage() {
                 <div className="min-w-0">
                   <p className="text-sm truncate">{lightboxAsset.batch.prompt}</p>
                   <p className="text-xs opacity-60 mt-0.5">
-                    {MODEL_DISPLAY_NAMES[lightboxAsset.batch.model] ?? lightboxAsset.batch.model}
-                    {' · '}
                     {new Date(lightboxAsset.created_at).toLocaleString('zh-CN')}
                     {viewableAssets.length > 1 && ` · ${lightboxIndex! + 1} / ${viewableAssets.length}`}
                   </p>
@@ -359,8 +343,6 @@ export default function AssetsPage() {
                 <div className="min-w-0">
                   <p className="text-sm text-white/90 truncate">{videoDialogAsset.batch.prompt}</p>
                   <p className="text-xs text-white/50 mt-0.5">
-                    {MODEL_DISPLAY_NAMES[videoDialogAsset.batch.model] ?? videoDialogAsset.batch.model}
-                    {' · '}
                     {new Date(videoDialogAsset.created_at).toLocaleString('zh-CN')}
                   </p>
                 </div>
