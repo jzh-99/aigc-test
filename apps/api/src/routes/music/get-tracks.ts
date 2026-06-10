@@ -52,6 +52,13 @@ const route: FastifyPluginAsync = async (app) => {
         ])
         .where('mt.workspace_id', '=', workspaceId)
 
+      // 查询总数（用于分页导航）
+      const [{ count: total }] = await db
+        .selectFrom('music_tracks')
+        .select((eb) => eb.fn.countAll<number>().as('count'))
+        .where('workspace_id', '=', workspaceId)
+        .execute()
+
       if (request.query.cursor) {
         let cursor: ReturnType<typeof decodeMusicTrackCursor>
         try {
@@ -88,6 +95,8 @@ const route: FastifyPluginAsync = async (app) => {
         data,
         page,
         page_size: limit,
+        total: Number(total),
+        total_pages: Math.ceil(Number(total) / limit),
         has_more: rows.length > limit,
         next_cursor: rows.length > limit && last ? encodeMusicTrackCursor(last) : null,
       })

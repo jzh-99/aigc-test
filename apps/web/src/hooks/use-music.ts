@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
 import useSWR from 'swr'
-import useSWRInfinite from 'swr/infinite'
 import type { MusicSseEvent, MusicTrackResponse } from '@aigc/types'
 import { apiFetcher } from '@/lib/api-client'
 import { useAuthStore } from '@/stores/auth-store'
@@ -19,21 +18,18 @@ export type MusicVoiceCloneSseEvent =
   | { event: 'ready'; voice_id?: string }
   | { event: 'failed'; error_message?: string }
 
-export function useMusicTracks(limit = 20) {
+export function useMusicTracks(page = 1, limit = 10) {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
-  const swr = useSWRInfinite<MusicTrackListResponse>(
-    (pageIndex, previousPage) => {
-      if (!workspaceId) return null
-      if (previousPage && !previousPage.cursor) return null
-      return buildMusicTracksUrl(workspaceId, pageIndex === 0 ? null : previousPage?.cursor, limit)
-    },
+  const swr = useSWR<MusicTrackListResponse>(
+    workspaceId ? buildMusicTracksUrl(workspaceId, page, limit) : null,
     apiFetcher,
   )
 
   return {
     ...swr,
-    tracks: swr.data?.flatMap((page) => page.data) ?? [],
-    cursor: swr.data?.[swr.data.length - 1]?.cursor ?? null,
+    tracks: swr.data?.data ?? [],
+    total: swr.data?.total ?? 0,
+    totalPages: swr.data?.total_pages ?? 0,
     isLoadingInitial: !swr.data && !swr.error,
   }
 }

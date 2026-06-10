@@ -3,15 +3,23 @@
 import Link from 'next/link'
 import { Music2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Pagination } from '@/components/ui/pagination'
 import { MusicDownloadMenu } from './music-download-menu'
 import type { MusicTrackResponse } from '@aigc/types'
 
 interface Props {
   tracks: MusicTrackResponse[]
   isLoading?: boolean
-  onLoadMore?: () => void
-  hasMore?: boolean
+  /** 当前页码 */
+  page: number
+  /** 总页数 */
+  totalPages: number
+  /** 每页数量 */
+  pageSize: number
+  /** 页码变化回调 */
+  onPageChange: (page: number) => void
+  /** 每页数量变化回调 */
+  onPageSizeChange: (pageSize: number) => void
 }
 
 function statusText(status: MusicTrackResponse['status']) {
@@ -35,7 +43,15 @@ function creatorText(trackType: MusicTrackResponse['track_type']) {
   return trackType === 'instrumental' ? '作曲' : '作词作曲'
 }
 
-export function MusicTrackList({ tracks, isLoading, onLoadMore, hasMore }: Props) {
+export function MusicTrackList({
+  tracks,
+  isLoading,
+  page,
+  totalPages,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: Props) {
   if (!isLoading && tracks.length === 0) {
     return (
       <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border bg-card text-center text-muted-foreground">
@@ -47,11 +63,12 @@ export function MusicTrackList({ tracks, isLoading, onLoadMore, hasMore }: Props
 
   return (
     <div className="space-y-3">
-      {tracks.map((track) => (
-        <div
-          key={track.id}
-          className="grid grid-cols-[76px_1fr_auto] items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/70"
-        >
+      <div className="max-h-[640px] space-y-3 overflow-y-auto pr-1">
+        {tracks.map((track) => (
+          <div
+            key={track.id}
+            className="grid grid-cols-[76px_1fr_auto] items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/70"
+          >
           <Link href={`/toby-studio/music/${track.id}`} className="aspect-square overflow-hidden rounded-lg bg-muted">
             {track.cover_url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -72,13 +89,17 @@ export function MusicTrackList({ tracks, isLoading, onLoadMore, hasMore }: Props
             </Badge>
             <MusicDownloadMenu track={track} variant="ghost" size="sm" compact className="h-8 w-8 p-0" />
           </div>
-        </div>
-      ))}
-      {hasMore && (
-        <Button type="button" variant="outline" className="w-full" onClick={onLoadMore} disabled={isLoading}>
-          {isLoading ? '加载中...' : '加载更多'}
-        </Button>
-      )}
+          </div>
+        ))}
+      </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />
     </div>
   )
 }

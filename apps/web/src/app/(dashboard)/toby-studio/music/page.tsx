@@ -12,6 +12,9 @@ import { useAuthStore } from '@/stores/auth-store'
 import type { MusicSseEvent, MusicTrackResponse } from '@aigc/types'
 import type { MusicTrackListResponse } from '@/lib/music/api'
 
+/** 默认每页数量 */
+const DEFAULT_PAGE_SIZE = 10
+
 interface VoiceCloneWatchItem {
   id: string
   name: string
@@ -22,24 +25,17 @@ interface MusicTrackWatchItem {
   title: string
 }
 
-function upsertTrackPages(
-  pages: MusicTrackListResponse[] | undefined,
+/** 更新当前页中指定 track，或将其插入到首页顶部 */
+function upsertTrackInPage(
+  data: MusicTrackListResponse | undefined,
   track: MusicTrackResponse,
-): MusicTrackListResponse[] | undefined {
-  if (!pages?.length) return pages
-  let found = false
-  const nextPages = pages.map((page, pageIndex) => {
-    const nextData = page.data.map((item) => {
-      if (item.id !== track.id) return item
-      found = true
-      return track
-    })
-    if (!found && pageIndex === 0) {
-      return { ...page, data: [track, ...nextData] }
-    }
-    return { ...page, data: nextData }
-  })
-  return nextPages
+): MusicTrackListResponse | undefined {
+  if (!data) return data
+  const exists = data.data.some((item) => item.id === track.id)
+  const nextData = exists
+    ? data.data.map((item) => (item.id === track.id ? track : item))
+    : [track, ...data.data]
+  return { ...data, data: nextData, total: data.total + (exists ? 0 : 1) }
 }
 
 function MusicTrackWatcher({
@@ -88,10 +84,15 @@ export default function MusicPage() {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const [voiceDialogOpen, setVoiceDialogOpen] = useState(false)
   const [watchedVoiceCloneIds, setWatchedVoiceCloneIds] = useState<string[]>([])
-  const tracks = useMusicTracks()
+
+  // 分页状态
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+
+  const tracks = useMusicTracks(page, pageSize)
   const voices = useMusicVoiceClones()
   const mutateVoices = voices.mutate
-  const lastPage = tracks.data?.[tracks.data.length - 1]
+
   const voiceCloneWatchItems = useMemo(() => {
     const voiceMap = new Map<string, VoiceCloneWatchItem>()
     for (const voice of voices.data?.data ?? []) {
@@ -104,6 +105,7 @@ export default function MusicPage() {
     }
     return [...voiceMap.values()]
   }, [voices.data?.data, watchedVoiceCloneIds])
+
   const activeTrackWatchItems = useMemo(() => {
     const terminal = new Set(['completed', 'failed'])
     return tracks.tracks
@@ -118,12 +120,26 @@ export default function MusicPage() {
 
   const handleTrackEvent = useCallback((event: MusicSseEvent) => {
     if (event.track) {
-      tracks.mutate((pages) => upsertTrackPages(pages, event.track as MusicTrackResponse), { revalidate: false })
+      tracks.mutate(
+        (data) => upsertTrackInPage(data, event.track as MusicTrackResponse),
+        { revalidate: false },
+      )
     }
     if (event.event === 'completed' || event.event === 'failed') {
       tracks.mutate()
     }
   }, [tracks])
+
+  /** 切换页码 */
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage)
+  }, [])
+
+  /** 切换每页数量时重置到第一页 */
+  const handlePageSizeChange = useCallback((newPageSize: number) => {
+    setPageSize(newPageSize)
+    setPage(1)
+  }, [])
 
   return (
     <div className="-mx-4 -mt-4 min-h-[calc(100vh-4.25rem)] bg-background md:-mx-6 md:-mt-6">
@@ -156,7 +172,10 @@ export default function MusicPage() {
           voices={voices.data?.data ?? []}
           onOpenVoiceDialog={() => setVoiceDialogOpen(true)}
           onCreated={(track) => {
-            tracks.mutate((pages) => upsertTrackPages(pages, track), { revalidate: false })
+            tracks.mutate(
+              (data) => upsertTrackInPage(data, track),
+              { revalidate: false },
+            )
           }}
         />
 
@@ -170,8 +189,11 @@ export default function MusicPage() {
           <MusicTrackList
             tracks={tracks.tracks}
             isLoading={tracks.isLoadingInitial || tracks.isValidating}
-            hasMore={Boolean(lastPage?.cursor)}
-            onLoadMore={() => tracks.setSize(tracks.size + 1)}
+            page={page}
+            totalPages={tracks.totalPages}
+            pageSize={pageSize}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
           />
         </section>
       </div>

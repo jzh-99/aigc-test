@@ -3,6 +3,10 @@ import { apiGet, apiPost, fetchWithAuth } from '@/lib/api-client'
 
 export interface MusicTrackListResponse {
   data: MusicTrackResponse[]
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
   cursor: string | null
   has_more?: boolean
 }
@@ -41,9 +45,12 @@ export async function createMusicVoiceClone(form: FormData): Promise<MusicVoiceC
   })
 }
 
-export function buildMusicTracksUrl(workspaceId: string, cursor?: string | null, limit = 20): string {
-  const params = new URLSearchParams({ workspace_id: workspaceId, limit: String(limit) })
-  if (cursor) params.set('cursor', cursor)
+export function buildMusicTracksUrl(workspaceId: string, page: number, limit: number): string {
+  const params = new URLSearchParams({
+    workspace_id: workspaceId,
+    page: String(page),
+    limit: String(limit),
+  })
   return `/music/tracks?${params.toString()}`
 }
 
