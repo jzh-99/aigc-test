@@ -2,24 +2,18 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ImageLightbox } from '@/components/ui/image-lightbox'
-import { Loader2, Download, Trash2, ImageIcon, VideoIcon, CalendarSearch, X, RotateCcw } from 'lucide-react'
+import { Loader2, Trash2, ImageIcon, VideoIcon, CalendarSearch, X } from 'lucide-react'
 import { useAssets, deleteAsset } from '@/hooks/use-assets'
 import type { AssetItem } from '@/hooks/use-assets'
 import { useTeamFeatures } from '@/hooks/use-team-features'
 import { useGenerationStore } from '@/stores/generation-store'
 import { apiGet } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
-import { downloadImage } from '@/lib/download'
 import { toast } from 'sonner'
-import {
-  Dialog,
-  DialogContent,
-} from '@/components/ui/dialog'
 import { AssetTrashDrawer } from '@/components/assets/asset-trash-drawer'
 import { AssetCard } from '@/components/assets/asset-card'
+import { BatchDetail } from '@/components/history/batch-detail'
 
 function groupByDate(assets: AssetItem[]): { date: string; items: AssetItem[] }[] {
   const map = new Map<string, AssetItem[]>()
@@ -41,8 +35,8 @@ export default function AssetsPage() {
   const [assetType, setAssetType] = useState<'image' | 'video'>('image')
   const [dateFilter, setDateFilter] = useState('')
   const { assets, isLoadingInitial, isLoadingMore, hasMore, loadMore, error, mutate } = useAssets(assetType, dateFilter || undefined)
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const [videoDialogAsset, setVideoDialogAsset] = useState<AssetItem | null>(null)
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [reusingId, setReusingId] = useState<string | null>(null)
   const [trashOpen, setTrashOpen] = useState(false)
@@ -65,9 +59,6 @@ export default function AssetsPage() {
     return () => observer.disconnect()
   }, [hasMore, isLoadingMore, loadMore])
 
-  // Flat list of assets with URLs (for lightbox navigation)
-  const viewableAssets = assets.filter((a) => a.storage_url ?? a.original_url)
-
   const handleDelete = async (id: string) => {
     setDeletingId(id)
     try {
@@ -81,13 +72,9 @@ export default function AssetsPage() {
     }
   }
 
-  const handleEnlarge = (asset: AssetItem) => {
-    if (asset.type === 'video') {
-      setVideoDialogAsset(asset)
-      return
-    }
-    const idx = viewableAssets.findIndex((a) => a.id === asset.id)
-    if (idx !== -1) setLightboxIndex(idx)
+  const handleOpenDetail = (asset: AssetItem) => {
+    setSelectedBatchId(asset.batch.id)
+    setDetailOpen(true)
   }
 
   const handleReuse = async (asset: AssetItem) => {
@@ -120,7 +107,6 @@ export default function AssetsPage() {
   }
 
   const grouped = groupByDate(assets)
-  const lightboxAsset = lightboxIndex !== null ? viewableAssets[lightboxIndex] : null
 
   return (
     <main className="assets-page relative min-h-full bg-[#060918] text-white px-10 py-8">
@@ -249,7 +235,7 @@ export default function AssetsPage() {
               <AssetCard
                 key={asset.id}
                 asset={asset}
-                onClick={handleEnlarge}
+                onClick={handleOpenDetail}
                 onDelete={() => handleDelete(asset.id)}
                 onReuse={() => handleReuse(asset)}
                 isReusing={reusingId === asset.id}
@@ -273,112 +259,17 @@ export default function AssetsPage() {
       <div ref={sentinelRef} />
       </div>
 
-      {/* Image Lightbox */}
-      {lightboxAsset && (() => {
-        const url = lightboxAsset.storage_url ?? lightboxAsset.original_url
-        return (
-          <ImageLightbox
-            url={url!}
-            alt={lightboxAsset.batch.prompt}
-            onClose={() => setLightboxIndex(null)}
-            onPrev={lightboxIndex! > 0 ? () => setLightboxIndex((i) => i! - 1) : undefined}
-            onNext={lightboxIndex! < viewableAssets.length - 1 ? () => setLightboxIndex((i) => i! + 1) : undefined}
-            footer={
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm truncate">{lightboxAsset.batch.prompt}</p>
-                  <p className="text-xs opacity-60 mt-0.5">
-                    {new Date(lightboxAsset.created_at).toLocaleString('zh-CN')}
-                    {viewableAssets.length > 1 && ` · ${lightboxIndex! + 1} / ${viewableAssets.length}`}
-                  </p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
-                    onClick={() => {
-                      handleReuse(lightboxAsset)
-                      setLightboxIndex(null)
-                    }}
-                    disabled={reusingId === lightboxAsset.id}
-                  >
-                    {reusingId === lightboxAsset.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    )}
-                    复用
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
-                    onClick={() => downloadImage(url!)}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    下载
-                  </Button>
-                </div>
-              </div>
-            }
-          />
-        )
-      })()}
-
-      {/* Video Dialog */}
-      {videoDialogAsset && (() => {
-        const url = videoDialogAsset.storage_url ?? videoDialogAsset.original_url
-        return (
-          <Dialog open onOpenChange={() => setVideoDialogAsset(null)}>
-            <DialogContent className="max-w-3xl p-0 overflow-hidden bg-black border-0">
-              <video
-                src={url!}
-                controls
-                autoPlay
-                className="w-full max-h-[80vh] object-contain"
-                preload="auto"
-              />
-              <div className="p-3 bg-black/80 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm text-white/90 truncate">{videoDialogAsset.batch.prompt}</p>
-                  <p className="text-xs text-white/50 mt-0.5">
-                    {new Date(videoDialogAsset.created_at).toLocaleString('zh-CN')}
-                  </p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
-                    onClick={() => {
-                      handleReuse(videoDialogAsset)
-                      setVideoDialogAsset(null)
-                    }}
-                    disabled={reusingId === videoDialogAsset.id}
-                  >
-                    {reusingId === videoDialogAsset.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    )}
-                    复用
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
-                    onClick={() => downloadImage(url!, 'video')}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    下载
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )
-      })()}
+      <BatchDetail
+        batchId={selectedBatchId}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onApplied={() => {
+          // 复用后导航到创作页
+          const asset = assets.find((a) => a.batch.id === selectedBatchId)
+          if (!asset) return
+          handleReuse(asset)
+        }}
+      />
 
       <AssetTrashDrawer
         open={trashOpen}
