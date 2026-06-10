@@ -623,7 +623,7 @@ export function AiAssistant() {
       {open && (
         <div
           ref={panelRef}
-          className="fixed z-50 flex flex-col border border-border bg-background shadow-2xl overflow-hidden rounded-2xl"
+          className="fixed z-50 flex flex-col overflow-hidden rounded-2xl ai-glass-panel"
           style={{
             left: positionRef.current !== null ? `${positionRef.current.x}px` : 'auto',
             right: positionRef.current !== null ? 'auto' : '104px',
@@ -634,7 +634,7 @@ export function AiAssistant() {
         >
           {/* Header - draggable */}
           <div
-            className="flex items-center justify-between px-4 py-3 gradient-accent cursor-move shrink-0"
+            className="flex items-center justify-between px-4 py-3 cursor-move shrink-0 ai-glass-header"
             onMouseDown={handleDragStart}>
             <div className="flex items-center gap-2">
               <GripVertical className="h-4 w-4 text-white/50" />
@@ -642,7 +642,7 @@ export function AiAssistant() {
               <span className="font-semibold text-white text-sm">Toby.AI 创作助手</span>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={handleClear} className="text-red-400 hover:text-red-300 transition-colors" title="清空对话">
+              <button onClick={handleClear} className="text-white/50 hover:text-white/80 transition-colors" title="清空对话">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -650,13 +650,13 @@ export function AiAssistant() {
 
           {/* Resize handle - left edge */}
           <div
-            className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/50 transition-colors z-10"
+            className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-violet-300/30 transition-colors z-10"
             onMouseDown={handleResizeStart('left')}
           />
 
           {/* Resize handle - right edge */}
           <div
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/50 transition-colors z-10"
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-violet-300/30 transition-colors z-10"
             onMouseDown={handleResizeStart('right')}
           />
 
