@@ -22,7 +22,7 @@ interface GenerationPanelProps {
 }
 
 export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image' }: GenerationPanelProps) {
-  const { applyServerDefaults, videoParams, pendingModule, clearPendingModule } = useGenerationStore()
+  const { applyServerDefaults, videoParams, pendingModule, clearPendingModule, pendingVideoReferenceImages } = useGenerationStore()
   const { load: loadDefaults } = useGenerationDefaults()
   const { isCompanyA, showVideoTab, showAvatarTab, showActionImitationTab } = useTeamFeatures()
 
@@ -62,8 +62,12 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   useEffect(() => {
     if (!pendingModule) return
     if (pendingModule === 'video') {
-      setVideoPanelInitialParams(videoParams ?? null)
-      setVideoPanelKey(k => k + 1)
+      // 有 pending 参考素材时（来自"变视频"操作），不要重建面板，
+      // 否则 VideoPanel 的 useEffect 刚将素材写入 multimodalImages 就被 key 变更销毁
+      if (pendingVideoReferenceImages.length === 0) {
+        setVideoPanelInitialParams(videoParams ?? null)
+        setVideoPanelKey(k => k + 1)
+      }
       setMode('video')
     } else if (pendingModule === 'avatar') {
       setAvatarPanelKey(k => k + 1)
