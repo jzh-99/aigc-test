@@ -19,8 +19,7 @@ import {
   DialogContent,
 } from '@/components/ui/dialog'
 import { AssetTrashDrawer } from '@/components/assets/asset-trash-drawer'
-import { ImageCarouselCard } from '@/components/assets/image-carousel-card'
-import { VideoCard } from '@/components/assets/video-card'
+import { AssetCard } from '@/components/assets/asset-card'
 
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'gemini-3.1-flash-image-preview':    '全能图片2 1K',
@@ -36,11 +35,6 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'jimeng_dreamactor_m20_gen_video': '动作模仿2.0',
 }
 
-interface BatchGroup {
-  batchId: string
-  images: AssetItem[]
-}
-
 function groupByDate(assets: AssetItem[]): { date: string; items: AssetItem[] }[] {
   const map = new Map<string, AssetItem[]>()
   for (const asset of assets) {
@@ -53,19 +47,6 @@ function groupByDate(assets: AssetItem[]): { date: string; items: AssetItem[] }[
     map.get(date)!.push(asset)
   }
   return Array.from(map.entries()).map(([date, items]) => ({ date, items }))
-}
-
-/** 将同一 batch 的图片聚合为轮播组，保持原始顺序 */
-function groupByBatch(items: AssetItem[]): BatchGroup[] {
-  const map = new Map<string, AssetItem[]>()
-  for (const item of items) {
-    if (!map.has(item.batch.id)) map.set(item.batch.id, [])
-    map.get(item.batch.id)!.push(item)
-  }
-  return Array.from(map.values()).map((images) => ({
-    batchId: images[0].batch.id,
-    images,
-  }))
 }
 
 export default function AssetsPage() {
@@ -121,11 +102,6 @@ export default function AssetsPage() {
     }
     const idx = viewableAssets.findIndex((a) => a.id === asset.id)
     if (idx !== -1) setLightboxIndex(idx)
-  }
-
-  const handleEnlargeById = (assetId: string) => {
-    const asset = viewableAssets.find((a) => a.id === assetId)
-    if (asset) handleEnlarge(asset)
   }
 
   const handleReuse = async (asset: AssetItem) => {
@@ -242,7 +218,7 @@ export default function AssetsPage() {
       {isLoadingInitial && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className={`${assetType === 'video' ? 'aspect-video' : 'aspect-[4/3]'} rounded-[14px] bg-white/[0.03] border border-white/[0.06] animate-pulse`} />
+            <div key={i} className="aspect-square rounded-2xl bg-white/[0.03] border border-white/[0.06] animate-pulse" />
           ))}
         </div>
       )}
@@ -276,53 +252,33 @@ export default function AssetsPage() {
         </div>
       )}
 
-      {grouped.map(({ date, items }) => {
-        const batchGroups = assetType === 'image' ? groupByBatch(items) : null
-        return (
+      {grouped.map(({ date, items }) => (
         <section key={date}>
           <div className="asset-date-heading">
             <h3 className="text-[13px] font-medium tracking-wide text-white/35 whitespace-nowrap">{date}</h3>
             <span className="text-[11px] text-white/18">{items.length} 个</span>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {assetType === 'image' && batchGroups
-              ? batchGroups.map((group) => (
-                  <ImageCarouselCard
-                    key={group.batchId}
-                    images={group.images}
-                    onImageClick={handleEnlargeById}
-                    onDelete={handleDelete}
-                    onReuse={handleReuse}
-                    isReusing={group.images.some((img) => reusingId === img.id)}
-                    deletingId={deletingId}
-                  />
-                ))
-              : items.map((asset) =>
-                  deletingId === asset.id ? (
-                    <div key={asset.id} className="aspect-video rounded-[10px] border bg-muted flex items-center justify-center">
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : (
-                    <VideoCard
-                      key={asset.id}
-                      asset={asset}
-                      onPlay={handleEnlarge}
-                      onDelete={handleDelete}
-                      onReuse={handleReuse}
-                      isReusing={reusingId === asset.id}
-                    />
-                  )
-                )}
+            {items.map((asset) => (
+              <AssetCard
+                key={asset.id}
+                asset={asset}
+                onClick={handleEnlarge}
+                onDelete={() => handleDelete(asset.id)}
+                onReuse={() => handleReuse(asset)}
+                isReusing={reusingId === asset.id}
+                deleting={deletingId === asset.id}
+              />
+            ))}
           </div>
         </section>
-        )
-      })}
+      ))}
 
       {/* Skeleton placeholders shown while next page loads */}
       {isLoadingMore && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className={`${assetType === 'video' ? 'aspect-video' : 'aspect-[4/3]'} rounded-[14px] bg-white/[0.03] border border-white/[0.06] animate-pulse`} />
+            <div key={i} className="aspect-square rounded-2xl bg-white/[0.03] border border-white/[0.06] animate-pulse" />
           ))}
         </div>
       )}
