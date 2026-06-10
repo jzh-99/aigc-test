@@ -49,10 +49,10 @@ export function VideoFramesZone({
               onClick={() => firstFrameRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={onFrameDrop}
-              className="h-[90px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1"
+              className="h-[90px] w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex flex-col items-center justify-center gap-1"
             >
-              <Film className="h-4 w-4 text-muted-foreground" />
-              <span className="text-[11px] text-muted-foreground">点击上传</span>
+              <Film className="h-4 w-4 text-primary" />
+              <span className="text-[11px] text-primary">点击上传</span>
             </button>
           )}
         </div>
@@ -76,11 +76,11 @@ export function VideoFramesZone({
               disabled={!firstFrame}
               className={cn(
                 'h-[90px] w-full rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1',
-                firstFrame ? 'border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 cursor-pointer' : 'border-muted-foreground/15 opacity-50 cursor-not-allowed'
+                firstFrame ? 'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 cursor-pointer' : 'border-muted-foreground/15 opacity-50 cursor-not-allowed'
               )}
             >
-              <Film className="h-4 w-4 text-muted-foreground" />
-              <span className="text-[11px] text-muted-foreground">点击上传</span>
+              <Film className="h-4 w-4 text-primary" />
+              <span className="text-[11px] text-primary">点击上传</span>
             </button>
           )}
         </div>
