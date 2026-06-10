@@ -329,6 +329,7 @@ export default function AssetsPage() {
 
       {/* Infinite scroll sentinel */}
       <div ref={sentinelRef} />
+      </div>
 
       {/* Image Lightbox */}
       {lightboxAsset && (() => {
@@ -446,7 +447,6 @@ export default function AssetsPage() {
         onOpenChange={setTrashOpen}
         onRestored={() => mutate()}
       />
-      </div>
     </main>
   )
 }
