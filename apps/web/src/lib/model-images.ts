@@ -1,31 +1,29 @@
 // apps/web/src/lib/model-images.ts
 
 /**
- * 模型供应商图标工具
- * 使用 @lobehub/icons 的 ProviderIcon 渲染供应商品牌图标
+ * 模型图标工具
+ * 使用 @lobehub/icons 渲染模型品牌图标
  *
- * 部分模型通过中转站（如 comfly）统一调用，数据库 provider_code 为中转站 code，
- * 但前端需要展示模型实际供应商的品牌图标。
- * 通过 MODEL_TO_ICON_PROVIDER 映射 model code → lobehub icon provider key。
+ * ModelIcon 按 model code 匹配（覆盖最全：gemini-3.1-flash-image-preview → Google 图标、
+ * nano-banana-2 → NanoBanana 图标、gpt-image-2 → OpenAI 图标）。
+ * ProviderIcon 按 provider_code 匹配（覆盖 volcengine 等）。
+ * ModelIcon 匹配不到时返回 null，需 ProviderIcon 兜底。
  */
 
+export { ModelIcon } from '@lobehub/icons'
 export { ProviderIcon } from '@lobehub/icons'
 
 /**
- * 模型 code → lobehub 图标 provider key 的映射
- * 未映射的模型回退使用数据库的 provider_code
+ * 获取模型对应的 lobehub 图标 provider key
+ * 用于 ModelIcon 未覆盖时的 ProviderIcon 兜底
  */
 const MODEL_TO_ICON_PROVIDER: Record<string, string> = {
   // 图片模型（comfly 中转）
-  'gemini-3.1-flash-image-preview': 'gemini',
+  'gemini-3.1-flash-image-preview': 'google',
   'gpt-image-2': 'openai',
-  'nano-banana-2': 'nano-banana',
+  'nano-banana-2': 'google', // NanoBanana 图标在 providerConfig 中不存在，用 Google 兜底
 }
 
-/**
- * 获取模型对应的图标 provider key
- * 优先使用映射表，未映射时回退到 providerCode
- */
 export function getModelIconProvider(modelCode: string, providerCode?: string): string {
   return MODEL_TO_ICON_PROVIDER[modelCode] ?? providerCode ?? 'volcengine'
 }

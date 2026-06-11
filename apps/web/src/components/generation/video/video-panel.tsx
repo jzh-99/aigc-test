@@ -11,8 +11,17 @@ import { useConfirm } from '@/hooks/use-confirm'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { ProviderIcon } from '@lobehub/icons'
+import { ModelIcon, ProviderIcon } from '@lobehub/icons'
 import { getModelIconProvider } from '@/lib/model-images'
+
+/** 模型图标：优先 ModelIcon（按 model code 匹配），兜底 ProviderIcon（按 provider_code） */
+function ModelBrandIcon({ modelCode, providerCode, size }: { modelCode: string; providerCode?: string; size: number }) {
+  return (
+    <ModelIcon model={modelCode} size={size} />
+  ) ?? (
+    <ProviderIcon provider={getModelIconProvider(modelCode, providerCode)} size={size} />
+  )
+}
 import {
   getVideoCategoryKeys,
   parseCategoryReferences,
@@ -445,7 +454,7 @@ function ModelSelectorRow({
           >
             {/* 供应商图标 */}
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 shrink-0">
-              <ProviderIcon provider={getModelIconProvider(currentModel?.code ?? videoModel, currentModel?.provider_code)} size={40} />
+              <ModelBrandIcon modelCode={currentModel?.code ?? videoModel} providerCode={currentModel?.provider_code} size={40} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">{currentModel?.name ?? videoModel}</div>
@@ -481,7 +490,7 @@ function ModelSelectorRow({
                   )}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/50 shrink-0">
-                    <ProviderIcon provider={getModelIconProvider(m.code, m.provider_code)} size={32} />
+                    <ModelBrandIcon modelCode={m.code} providerCode={m.provider_code} size={32} />
                   </div>
                   <span className="min-w-0 flex-1 truncate">{m.name}</span>
                   {isActive && <Check className="h-3 w-3 shrink-0" />}
