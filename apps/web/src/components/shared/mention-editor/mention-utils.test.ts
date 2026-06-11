@@ -3,6 +3,9 @@ import { describe, test } from 'node:test'
 import {
   parseSegments,
   resolveMentionPrompt,
+  restoreMentionPrompt,
+  removeMentionLabels,
+  syncMentionResourceLabels,
   limitPromptLength,
   escapeRegExp,
 } from './mention-utils'
@@ -101,6 +104,79 @@ describe('resolveMentionPrompt', () => {
     assert.equal(
       resolveMentionPrompt('画 @主角', aliasResources),
       '画 <角色A>',
+    )
+  })
+})
+
+describe('restoreMentionPrompt', () => {
+  test('将历史资源占位符恢复为 @ 标签', () => {
+    assert.equal(
+      restoreMentionPrompt('<图片1> 在捉蝴蝶，<图片2> 跑了过来'),
+      '@图片1 在捉蝴蝶，@图片2 跑了过来',
+    )
+  })
+
+  test('只恢复受支持的资源标签', () => {
+    assert.equal(
+      restoreMentionPrompt('<角色A> 和 <图片1>'),
+      '<角色A> 和 @图片1',
+    )
+  })
+})
+
+describe('removeMentionLabels', () => {
+  test('移除单个失效标签并保留其它引用', () => {
+    assert.equal(
+      removeMentionLabels('@图片1 @图片2 一起玩耍，@图片1 捉蝴蝶', ['图片1']),
+      '@图片2 一起玩耍，捉蝴蝶',
+    )
+  })
+
+  test('按完整标签匹配，避免误删相似编号', () => {
+    assert.equal(
+      removeMentionLabels('@图片1 @图片10 都保留后者', ['图片1']),
+      '@图片10 都保留后者',
+    )
+  })
+
+  test('无失效标签时原样返回', () => {
+    assert.equal(removeMentionLabels('生成一张森林海报', ['图片1']), '生成一张森林海报')
+  })
+})
+
+describe('syncMentionResourceLabels', () => {
+  test('删除失效资源，同时将保留资源同步为当前连续编号', () => {
+    assert.equal(
+      syncMentionResourceLabels(
+        '@图片1 @图片2 @图片3 一起玩耍',
+        [
+          { id: 'img-1', mentionLabel: '图片1' },
+          { id: 'img-2', mentionLabel: '图片2' },
+          { id: 'img-3', mentionLabel: '图片3' },
+        ],
+        [
+          { id: 'img-1', mentionLabel: '图片1' },
+          { id: 'img-3', mentionLabel: '图片2' },
+        ],
+      ),
+      '@图片1 @图片2 一起玩耍',
+    )
+  })
+
+  test('删除末尾资源后，新上传资源复用连续编号', () => {
+    assert.equal(
+      syncMentionResourceLabels(
+        '@图片1 @图片2 一起玩耍',
+        [
+          { id: 'img-1', mentionLabel: '图片1' },
+          { id: 'img-2', mentionLabel: '图片2' },
+        ],
+        [
+          { id: 'img-1', mentionLabel: '图片1' },
+          { id: 'img-3', mentionLabel: '图片2' },
+        ],
+      ),
+      '@图片1 一起玩耍',
     )
   })
 })

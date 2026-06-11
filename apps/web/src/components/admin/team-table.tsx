@@ -336,6 +336,7 @@ function TeamExpanded({ teamId, ownerId, onPasswordChange }: { teamId: string; o
 }
 
 function TeamMembers({ teamId, onPasswordChange }: { teamId: string; onPasswordChange: (uid: string) => void }) {
+  const confirm = useConfirm()
   const { data, error, mutate } = useSWR<{ data: TeamMember[] }>(`/admin/teams/${teamId}/members`)
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
   const [quotaValue, setQuotaValue] = useState('')

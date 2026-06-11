@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ZoomIn, ZoomOut, X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface ImageLightboxProps {
@@ -27,6 +28,7 @@ function samePoint(a: Point, b: Point) {
 }
 
 export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }: ImageLightboxProps) {
+  const [mounted, setMounted] = useState(false)
   const [scale, setScale] = useState(1)
   const [translate, setTranslate] = useState<Point>(ZERO_POINT)
   const [isDragging, setIsDragging] = useState(false)
@@ -37,6 +39,10 @@ export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }
   const pointerIdRef = useRef<number | null>(null)
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const getBounds = useCallback((targetScale: number) => {
     const container = containerRef.current
@@ -183,9 +189,9 @@ export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }
   const pct = Math.round(scale * 100)
   const cursor = scale <= 1 ? 'default' : (isDragging ? 'grabbing' : 'grab')
 
-  return (
+  const content = (
     <div
-      className="fixed inset-0 z-[200] flex flex-col bg-black/90"
+      className="fixed inset-0 z-[1000] flex flex-col bg-black/90"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       {/* Toolbar */}
@@ -285,4 +291,7 @@ export function ImageLightbox({ url, alt = '', onClose, onPrev, onNext, footer }
       )}
     </div>
   )
+
+  if (!mounted) return null
+  return createPortal(content, document.body)
 }

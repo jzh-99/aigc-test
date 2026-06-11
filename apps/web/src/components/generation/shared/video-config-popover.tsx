@@ -113,15 +113,15 @@ export interface VideoConfigPopoverProps {
   videoDuration: number
   durationOptions: Array<{ value: number; label: string }>
   isSeedance: boolean
-  generateAudio: boolean
-  cameraFixed: boolean
+  generateAudio?: boolean
+  cameraFixed?: boolean
   /** 是否显示镜头选项（仅 Seedance multimodal 模式） */
   showCameraFixed?: boolean
   onResolutionChange: (value: string) => void
   onAspectRatioChange: (value: string) => void
   onDurationChange: (value: number) => void
-  onGenerateAudioChange: (value: boolean) => void
-  onCameraFixedChange: (value: boolean) => void
+  onGenerateAudioChange?: (value: boolean) => void
+  onCameraFixedChange?: (value: boolean) => void
   disabled?: boolean
 }
 
@@ -134,14 +134,14 @@ export function VideoConfigPopover({
   videoDuration,
   durationOptions,
   isSeedance,
-  generateAudio,
-  cameraFixed,
+  generateAudio = false,
+  cameraFixed = false,
   showCameraFixed = true,
   onResolutionChange,
   onAspectRatioChange,
   onDurationChange,
-  onGenerateAudioChange,
-  onCameraFixedChange,
+  onGenerateAudioChange = () => {},
+  onCameraFixedChange = () => {},
   disabled,
 }: VideoConfigPopoverProps) {
   const [open, setOpen] = useState(false)

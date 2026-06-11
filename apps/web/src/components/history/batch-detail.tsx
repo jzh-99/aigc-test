@@ -91,6 +91,7 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied, onReferenc
 }
 
 function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCancelled }: { batch: BatchResponse; onClose: () => void; onApplied?: () => void; onReferenceAdded?: () => void; onCancelled?: () => void }) {
+  const confirm = useConfirm()
   const applyBatch = useGenerationStore((s) => s.applyBatch)
   const addReferenceImage = useGenerationStore((s) => s.addReferenceImage)
   const sendImagesToVideoReference = useGenerationStore((s) => s.sendImagesToVideoReference)

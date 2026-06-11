@@ -34,7 +34,7 @@ export function parseSegments(value: string, resources: MentionResource[]): Segm
     mentionPairs.map(({ label, resource }) => [`@${label}`, resource]),
   )
   const pattern = new RegExp(
-    `@(${mentionPairs.map(({ label }) => escapeRegExp(label)).join('|')})(?=\\s|$|[，。,.])`,
+    `(?<!@)@(${mentionPairs.map(({ label }) => escapeRegExp(label)).join('|')})(?=\\s|$|[，。,.])`,
     'g',
   )
   const segments: Segment[] = []
@@ -140,6 +140,7 @@ export function getCaretOffset(editor: HTMLElement): number {
 export function getCaretPixelPosition(
   editor: HTMLElement | null,
   wrapper: HTMLElement | null,
+  floatingWidth = 240,
 ): { top: number; left: number } | null {
   if (!editor || !wrapper) return null
   try {
@@ -151,9 +152,11 @@ export function getCaretPixelPosition(
     if (caretRect.top === 0 && caretRect.left === 0 && caretRect.bottom === 0) return null
     const wrapperRect = wrapper.getBoundingClientRect()
     const lineBottom = caretRect.bottom > caretRect.top ? caretRect.bottom : caretRect.top + 16
+    const inset = 8
+    const maxLeft = Math.max(inset, wrapperRect.width - floatingWidth - inset)
     return {
       top: lineBottom - wrapperRect.top + 4,
-      left: Math.max(0, caretRect.left - wrapperRect.left),
+      left: Math.min(maxLeft, Math.max(inset, caretRect.left - wrapperRect.left)),
     }
   } catch {
     return null
@@ -166,12 +169,87 @@ export function resolveMentionPrompt(
   resources: MentionResource[],
 ): string {
   if (resources.length === 0 || !prompt) return prompt
+  const labelToMentionLabel = new Map(
+    resources.flatMap((resource) =>
+      [resource.mentionLabel, ...(resource.aliases ?? [])].map((label) => [label, resource.mentionLabel] as const),
+    ),
+  )
   const labels = resources
     .flatMap((r) => [r.mentionLabel, ...(r.aliases ?? [])])
     .sort((a, b) => b.length - a.length)
   const pattern = new RegExp(
-    `@(${labels.map(escapeRegExp).join('|')})(?=\\s|$|[，。,.])`,
+    `(?<!@)@(${labels.map(escapeRegExp).join('|')})(?=\\s|$|[，。,.])`,
     'g',
   )
-  return prompt.replace(pattern, (_, label: string) => `<${label}>`)
+  return prompt.replace(pattern, (_, label: string) => `<${labelToMentionLabel.get(label) ?? label}>`)
+}
+
+/** 将历史 prompt 中的 <资源标签> 恢复为 @ 标签 */
+export function restoreMentionPrompt(prompt: string): string {
+  if (!prompt) return prompt
+  return prompt.replace(/<((?:图片|视频|音频)\d+)>/g, '@$1')
+}
+
+/** 从 prompt 中移除已经失效的 @ 标签 */
+export function removeMentionLabels(prompt: string, labels: string[]): string {
+  if (!prompt || labels.length === 0) return prompt
+  const uniqueLabels = Array.from(new Set(labels)).sort((a, b) => b.length - a.length)
+  const pattern = new RegExp(
+    `(?<!@)@(${uniqueLabels.map(escapeRegExp).join('|')})(?=\\s|$|[，。,.])\\s*`,
+    'g',
+  )
+  return prompt
+    .replace(pattern, '')
+    .replace(/[ \t]+([，。,.])/g, '$1')
+    .replace(/([，。])[ \t]+/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trimStart()
+}
+
+type MentionLabelSnapshot = Pick<MentionResource, 'id' | 'mentionLabel' | 'aliases'>
+
+/** 按资源 id 同步 prompt 中的 @ 标签：删除失效标签，并重命名仍存在资源的标签 */
+export function syncMentionResourceLabels(
+  prompt: string,
+  previousResources: MentionLabelSnapshot[],
+  currentResources: MentionLabelSnapshot[],
+): string {
+  if (!prompt || previousResources.length === 0) return prompt
+
+  const currentById = new Map(currentResources.map((resource) => [resource.id, resource]))
+  const labelActions = new Map<string, string | null>()
+
+  for (const previous of previousResources) {
+    const current = currentById.get(previous.id)
+    const previousLabels = [previous.mentionLabel, ...(previous.aliases ?? [])]
+    if (!current) {
+      for (const label of previousLabels) labelActions.set(label, null)
+      continue
+    }
+    if (previous.mentionLabel !== current.mentionLabel) {
+      for (const label of previousLabels) labelActions.set(label, current.mentionLabel)
+    }
+  }
+
+  if (labelActions.size === 0) return prompt
+  const labels = Array.from(labelActions.keys()).sort((a, b) => b.length - a.length)
+  const pattern = new RegExp(
+    `(?<!@)@(${labels.map(escapeRegExp).join('|')})(?=\\s|$|[，。,.])`,
+    'g',
+  )
+  const replacements: string[] = []
+  const nextPrompt = prompt.replace(pattern, (_, label: string) => {
+    const replacement = labelActions.get(label)
+    if (!replacement) return ''
+    const token = `__MENTION_REPLACEMENT_${replacements.length}__`
+    replacements.push(`@${replacement}`)
+    return token
+  })
+
+  return replacements
+    .reduce((value, replacement, index) => value.replace(`__MENTION_REPLACEMENT_${index}__`, replacement), nextPrompt)
+    .replace(/[ \t]+([，。,.])/g, '$1')
+    .replace(/([，。])[ \t]+/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trimStart()
 }

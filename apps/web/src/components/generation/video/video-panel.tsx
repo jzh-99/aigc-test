@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown } from 'lucide-react'
-import { Textarea } from '@/components/ui/textarea'
+import { Check, ChevronDown, Film, Music, ImagePlus, Image as ImageIcon } from 'lucide-react'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVideoGenerate } from '@/hooks/use-video-generate'
@@ -12,15 +11,22 @@ import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ModelIcon, ProviderIcon } from '@lobehub/icons'
-import { getModelIconProvider } from '@/lib/model-images'
+import { getModelDirectIcon, getModelIconProvider } from '@/lib/model-images'
 
-/** 模型图标：优先 ModelIcon（按 model code 匹配），兜底 ProviderIcon（按 provider_code） */
+/** 模型图标渲染：直接图标组件 > ProviderIcon 映射 > ModelIcon 自动匹配 */
 function ModelBrandIcon({ modelCode, providerCode, size }: { modelCode: string; providerCode?: string; size: number }) {
-  return (
-    <ModelIcon model={modelCode} size={size} />
-  ) ?? (
-    <ProviderIcon provider={getModelIconProvider(modelCode, providerCode)} size={size} />
-  )
+  // 优先级1：直接图标组件（ProviderIcon 未注册的品牌，如 Gemini）
+  const DirectIcon = getModelDirectIcon(modelCode)
+  if (DirectIcon) {
+    return <DirectIcon size={size} />
+  }
+  // 优先级2：ProviderIcon 映射
+  const mappedProvider = getModelIconProvider(modelCode, providerCode)
+  if (mappedProvider) {
+    return <ProviderIcon provider={mappedProvider} size={size} />
+  }
+  // 优先级3：ModelIcon 自动匹配
+  return <ModelIcon model={modelCode} size={size} />
 }
 import {
   getVideoCategoryKeys,
@@ -32,12 +38,15 @@ import {
   type ModelItem,
 } from '@aigc/types'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
+import { resolveMentionPrompt, syncMentionResourceLabels } from '@/components/shared/mention-editor'
+import type { MentionResource } from '@/components/shared/mention-editor'
 import { fetchWithAuth, ApiError, getRequestErrorMessage, reportClientSubmissionError, classifyRequestError } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
 import type { VideoParams } from '@/stores/generation-store'
-import { VideoFramesZone } from './video-frames-zone'
-import { VideoMultimodalZone } from './video-multimodal-zone'
 import type { MultimodalVideo, MultimodalAudio } from './video-multimodal-zone'
+import { useMultimodalUpload } from './use-multimodal-upload'
+import { ImmersiveEditor } from '../shared/immersive-editor'
+import type { MediaGridItem } from '../shared/media-grid-types'
 import { VideoParams as VideoParamsPanel } from './video-params'
 import type { FrameImage } from '../shared/types'
 import { readFrameFile, isValidImageFile, fetchAssetFile, getDraggedAsset } from '../shared/file-utils'
@@ -91,11 +100,84 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
 
   const [firstFrame, setFirstFrame] = useState<FrameImage | null>(() => referenceToFrameImage(initialParams?.videoFrameImages?.[0]))
   const [lastFrame, setLastFrame] = useState<FrameImage | null>(() => referenceToFrameImage(initialParams?.videoFrameImages?.[1]))
-  const [framePreviewIndex, setFramePreviewIndex] = useState<0 | 1 | null>(null)
 
   const [multimodalImages, setMultimodalImages] = useState<FrameImage[]>(() => referenceImagesToFrameImages(initialParams?.videoReferenceImages))
   const [multimodalVideos, setMultimodalVideos] = useState<MultimodalVideo[]>([])
   const [multimodalAudios, setMultimodalAudios] = useState<MultimodalAudio[]>([])
+  const previousMentionResourcesRef = useRef<MentionResource[] | null>(null)
+
+  /** Frames 模式专用文件 input */
+  const frameInputRef = useRef<HTMLInputElement>(null)
+
+  /** 将已上传的参考资源映射为 @ 提及资源 */
+  const mentionResources = useMemo<MentionResource[]>(() => {
+    const items: MentionResource[] = []
+    multimodalImages.forEach((img, i) => {
+      const id = img.id ?? img.previewUrl
+      items.push({ id, mentionLabel: `图片${i + 1}`, sourceLabel: '参考图', kind: 'image' })
+    })
+    multimodalVideos.forEach((vid, i) => {
+      items.push({ id: vid.id, mentionLabel: `视频${i + 1}`, sourceLabel: vid.name, kind: 'video' })
+    })
+    multimodalAudios.forEach((aud, i) => {
+      items.push({ id: aud.id, mentionLabel: `音频${i + 1}`, sourceLabel: aud.name, kind: 'audio' })
+    })
+    return items
+  }, [multimodalImages, multimodalVideos, multimodalAudios])
+
+  useEffect(() => {
+    const previousResources = previousMentionResourcesRef.current
+    previousMentionResourcesRef.current = mentionResources
+    if (!previousResources) return
+    const nextPrompt = syncMentionResourceLabels(videoPrompt, previousResources, mentionResources)
+    if (nextPrompt !== videoPrompt) setVideoPrompt(nextPrompt)
+  }, [mentionResources, videoPrompt, setVideoPrompt])
+
+  /** multimodal 模式的网格条目 */
+  const multimodalGridItems = useMemo<MediaGridItem[]>(() => [
+    ...multimodalImages.map((img) => {
+      const id = img.id ?? img.previewUrl
+      const index = multimodalImages.findIndex((item) => (item.id ?? item.previewUrl) === id)
+      return { id, kind: 'image' as const, previewUrl: img.previewUrl, label: `图片${index + 1}` }
+    }),
+    ...multimodalVideos.map((v, i) => ({ id: v.id, kind: 'video' as const, previewUrl: v.previewUrl, label: `视频${i + 1}`, name: v.name, duration: v.duration })),
+    ...multimodalAudios.map((a, i) => ({ id: a.id, kind: 'audio' as const, previewUrl: '', label: `音频${i + 1}`, name: a.name, duration: a.duration })),
+  ], [multimodalImages, multimodalVideos, multimodalAudios])
+
+  /** frames 模式的网格条目 */
+  const framesGridItems = useMemo<MediaGridItem[]>(() => {
+    const items: MediaGridItem[] = []
+    if (firstFrame) items.push({ id: firstFrame.id ?? 'first', kind: 'image', previewUrl: firstFrame.previewUrl, label: '首帧图' })
+    if (lastFrame) items.push({ id: lastFrame.id ?? 'last', kind: 'image', previewUrl: lastFrame.previewUrl, label: '尾帧图' })
+    return items
+  }, [firstFrame, lastFrame])
+
+  /** 当前模式的网格条目 */
+  const gridItems = videoMode === 'frames' ? framesGridItems : multimodalGridItems
+
+  /** frames 模式：删除素材（首帧删除联动清空尾帧） */
+  const handleFrameRemoveItem = useCallback((id: string) => {
+    if (id === (firstFrame?.id ?? 'first')) {
+      setFirstFrame(null)
+      setLastFrame(null)
+    } else if (id === (lastFrame?.id ?? 'last')) {
+      setLastFrame(null)
+    }
+  }, [firstFrame, lastFrame])
+
+  /** frames 模式：添加素材（自动填充空槽位） */
+  const handleFrameFileSelect = useCallback(async (files: FileList | null) => {
+    if (!files?.[0]) return
+    const file = files[0]
+    if (isValidImageFile(file)) {
+      const img = await readFrameFile(file)
+      if (img) {
+        if (!firstFrame) setFirstFrame(img)
+        else if (!lastFrame) setLastFrame(img)
+      }
+    }
+    if (frameInputRef.current) frameInputRef.current.value = ''
+  }, [firstFrame, lastFrame])
 
   const currentVideoModel = videoModels.find((m) => m.code === videoModel)
   const currentCategoryReferences = useMemo(
@@ -164,6 +246,23 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   }, [videoModelsReady, videoModels, videoModel])
 
   const isSeedance = videoModel.startsWith('seedance-')
+
+  /** 多模态上传 Hook（封装验证/拖拽/删除逻辑） */
+  const {
+    allInputRef,
+    handleAllFiles,
+    handleDrop: handleMultimodalDrop,
+    handleRemoveItem: handleMultimodalRemoveItem,
+  } = useMultimodalUpload({
+    images: multimodalImages,
+    videos: multimodalVideos,
+    audios: multimodalAudios,
+    isSeedance,
+    referenceLimits: multimodalReferenceLimits,
+    onImagesChange: setMultimodalImages,
+    onVideosChange: setMultimodalVideos,
+    onAudiosChange: setMultimodalAudios,
+  })
 
   // 预估 A 豆消耗（用于确认弹窗）
   const videoEstimatedCredits = useMemo(() => {
@@ -279,8 +378,9 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         referenceAudiosParam = auds ?? undefined
       }
 
+      const resolvedPrompt = resolveMentionPrompt(videoPrompt, mentionResources)
       const batch = await generateVideo({
-        prompt: videoPrompt.trim(),
+        prompt: resolvedPrompt.trim(),
         workspace_id: activeWorkspaceId ?? '',
         model: videoModel,
         video_category: videoMode,
@@ -329,60 +429,138 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     active ? 'nav-item-active text-primary-foreground' : 'hover:bg-accent text-muted-foreground hover:text-foreground hover:bg-muted/80'
   )
 
+  /** 拖拽覆盖层状态 */
+  const [isDragging, setIsDragging] = useState(false)
+  const dragCounterRef = useRef(0)
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current++
+    if (dragCounterRef.current === 1) setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }, [])
+
+  /** 统一拖拽放下处理（根据当前模式分发） */
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setIsDragging(false)
+    if (videoMode === 'frames') {
+      await handleFrameDrop(e)
+    } else {
+      await handleMultimodalDrop(e)
+    }
+  }, [videoMode, handleFrameDrop, handleMultimodalDrop])
+
+  /** 统一删除处理（根据当前模式分发） */
+  const handleRemoveItem = useCallback((id: string) => {
+    if (videoMode === 'frames') {
+      handleFrameRemoveItem(id)
+    } else {
+      handleMultimodalRemoveItem(id)
+    }
+  }, [videoMode, handleFrameRemoveItem, handleMultimodalRemoveItem])
+
+  /** 统一上传按钮点击（根据当前模式分发） */
+  const handleAddClick = useCallback(() => {
+    if (videoMode === 'frames') {
+      frameInputRef.current?.click()
+    } else {
+      allInputRef.current?.click()
+    }
+  }, [videoMode])
+
+  /** 判断是否还能添加素材 */
+  const canAddMore = videoMode === 'frames'
+    ? !(firstFrame && lastFrame)
+    : (multimodalImages.length + multimodalVideos.length + multimodalAudios.length <
+        (multimodalReferenceLimits.image + multimodalReferenceLimits.video + multimodalReferenceLimits.audio))
+
   return (
     <>
-      <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
-        {/* 模型选择器行 */}
-        <ModelSelectorRow
-          models={videoModels}
-          videoModel={videoModel}
-          isDisabled={isVideoGenerating || isVideoUploading || !!disabled}
-          onModelChange={setVideoModel}
-          onSaveDefaults={handleSaveDefaults}
-        />
-        <div className="flex gap-2 shrink-0">
-          {availableVideoModes.map((mode) => (
-            <button key={mode} onClick={() => switchMode(mode)} className={modeBtnCls(videoMode === mode)}>
-              {currentCategoryReferences[mode]?.label ?? mode}
-            </button>
-          ))}
-        </div>
-
-        {videoMode === 'frames' && (
-          <VideoFramesZone
-            firstFrame={firstFrame}
-            lastFrame={lastFrame}
-            framePreviewIndex={framePreviewIndex}
-            onFirstFrameChange={setFirstFrame}
-            onLastFrameChange={setLastFrame}
-            onPreviewIndexChange={setFramePreviewIndex}
-            onFrameDrop={handleFrameDrop}
-            onFileRead={readFrameFile}
-          />
+      <div
+        className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2 relative transition-colors"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
+      >
+        {isDragging && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 pointer-events-none rounded-b-xl rounded-tr-xl">
+            <ImagePlus className="h-10 w-10 text-primary" />
+            <span className="text-sm font-medium text-primary">松开以添加素材</span>
+          </div>
         )}
-        {videoMode === 'multimodal' && currentCategoryReferences.multimodal && (
-          <VideoMultimodalZone
-            images={multimodalImages}
-            videos={multimodalVideos}
-            audios={multimodalAudios}
-            isSeedance={isSeedance}
-            referenceLimits={multimodalReferenceLimits}
-            onImagesChange={setMultimodalImages}
-            onVideosChange={setMultimodalVideos}
-            onAudiosChange={setMultimodalAudios}
+        <div className={cn('flex flex-col flex-1 min-h-0 gap-2', isDragging && 'opacity-30 pointer-events-none')}>
+          {/* 模型选择器行 */}
+          <ModelSelectorRow
+            models={videoModels}
+            videoModel={videoModel}
+            isDisabled={isVideoGenerating || isVideoUploading || !!disabled}
+            onModelChange={setVideoModel}
+            onSaveDefaults={handleSaveDefaults}
           />
-        )}
+          <div className="flex gap-2 shrink-0">
+            {availableVideoModes.map((mode) => (
+              <button key={mode} onClick={() => switchMode(mode)} className={modeBtnCls(videoMode === mode)}>
+                {currentCategoryReferences[mode]?.label ?? mode}
+              </button>
+            ))}
+          </div>
 
-        <div className="flex-1 min-h-0">
-          <Textarea
-            placeholder="描述你想要生成的视频内容..."
-            value={videoPrompt}
-            onChange={(e) => setVideoPrompt(e.target.value)}
-            className="h-full resize-none"
-            disabled={isVideoGenerating || disabled}
+          {/* 沉浸式编辑器（缩略图网格 + 文本输入） */}
+          <ImmersiveEditor
+            gridItems={gridItems}
+            showAddButton={canAddMore}
+            onAddClick={handleAddClick}
+            addButtonDisabled={isVideoGenerating || isVideoUploading || disabled}
+            onRemoveItem={handleRemoveItem}
+            gridEmptyText={videoMode === 'frames' ? '点击或拖拽上传首帧图/尾帧图' : '点击或拖拽上传素材（图片 / 视频 / 音频）'}
+            gridEmptyIcon={ImagePlus}
+            onGridEmptyClick={handleAddClick}
+            editorValue={videoPrompt}
+            editorOnChange={setVideoPrompt}
+            editorResources={mentionResources}
+            editorPlaceholder="描述你想要生成的视频内容..."
+            editorDisabled={isVideoGenerating || isVideoUploading || disabled}
+            editorMentionClassName={(kind) => {
+              const base = 'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] align-baseline'
+              if (kind === 'video') return `${base} border-accent-purple/35 bg-accent-purple/12 text-accent-purple shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_12px_rgba(200,155,236,0.12)]`
+              if (kind === 'audio') return `${base} border-accent-blue/35 bg-accent-blue/12 text-accent-blue shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_12px_rgba(107,163,245,0.12)]`
+              return `${base} border-primary/35 bg-primary/12 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_12px_rgba(200,156,236,0.12)]`
+            }}
+            editorMentionIcon={(kind) => {
+              if (kind === 'video') return Film
+              if (kind === 'audio') return Music
+              return ImageIcon
+            }}
+            editorEmptyText="暂无可引用资源"
           />
         </div>
       </div>
+
+      {/* frames 模式专用文件 input */}
+      <input
+        ref={frameInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => handleFrameFileSelect(e.target.files)}
+      />
+
+      {/* multimodal 模式统一文件 input */}
+      <input
+        ref={allInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/x-m4a"
+        multiple
+        className="hidden"
+        onChange={(e) => handleAllFiles(e.target.files)}
+      />
 
       <VideoParamsPanel
         models={videoModels}

@@ -36,6 +36,8 @@ export interface MentionEditorProps {
   disabled?: boolean
   /** 编辑器容器 className */
   className?: string
+  /** 输入区域 className */
+  editorClassName?: string
   /** 自定义提及标签样式，按 kind 返回 className */
   mentionClassName?: (kind: string) => string
   /** 自定义提及标签图标，按 kind 返回 LucideIcon 组件 */
@@ -126,6 +128,7 @@ export function MentionEditor({
   onBlur,
   disabled = false,
   className,
+  editorClassName,
   mentionClassName,
   mentionIcon,
   groups,
@@ -287,6 +290,7 @@ export function MentionEditor({
         className={cn(
           'w-full whitespace-pre-wrap break-words p-2 text-xs bg-muted/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary max-h-[400px] overflow-y-auto',
           disabled && 'cursor-not-allowed opacity-70',
+          editorClassName,
         )}
         onFocus={() => setIsFocused(true)}
         onBlur={() => {

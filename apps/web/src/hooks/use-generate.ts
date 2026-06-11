@@ -61,8 +61,9 @@ export function useGenerate() {
   const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, imageModels, setIsGenerating, setActiveBatchId } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
 
-  const generate = useCallback(async (): Promise<BatchResponse | null> => {
-    if (!prompt.trim()) return null
+  const generate = useCallback(async (overridePrompt?: string): Promise<BatchResponse | null> => {
+    const finalPrompt = (overridePrompt ?? prompt).trim()
+    if (!finalPrompt) return null
 
     let resolvedModel: string | undefined
     const model = modelType
@@ -99,7 +100,7 @@ export function useGenerate() {
       const body: GenerateImageRequest = {
         idempotency_key: generateUUID(),
         model,
-        prompt: prompt.trim(),
+        prompt: finalPrompt,
         quantity,
         params,
         workspace_id: activeWorkspaceId ?? '',

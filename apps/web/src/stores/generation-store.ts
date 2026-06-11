@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { BatchResponse, ModelItem } from '@aigc/types'
 import { generateUUID } from '@/lib/utils'
+import { restoreMentionPrompt } from '@/components/shared/mention-editor'
 
 export interface ReferenceImage {
   id: string
@@ -250,7 +251,7 @@ export const useGenerationStore = create<GenerationState>()(
       set({
         pendingModule: 'video',
         videoParams: {
-          videoPrompt: batch.prompt,
+          videoPrompt: restoreMentionPrompt(batch.prompt),
           videoModel: batch.model,
           videoAspectRatio: (params?.aspect_ratio as string) || '',
           videoResolution: (params?.resolution as string) || undefined,
@@ -272,7 +273,7 @@ export const useGenerationStore = create<GenerationState>()(
       const referenceImages = createReferenceImagesFromUrls(extractImageReferenceUrls(batch))
       set({
         pendingModule: 'image',
-        prompt: batch.prompt,
+        prompt: restoreMentionPrompt(batch.prompt),
         quantity: batch.quantity,
         modelType: batch.model,
         referenceImages,
