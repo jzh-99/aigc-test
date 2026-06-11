@@ -18,6 +18,7 @@ import { ReferenceImageUploadCompact } from '../reference-image-upload-compact'
 import { CompanyAImagePicker } from '../company-a-image-picker'
 import { cn, generateUUID } from '@/lib/utils'
 import { ProviderIcon } from '@lobehub/icons'
+import { getModelIconProvider } from '@/lib/model-images'
 import Image from 'next/image'
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
@@ -350,7 +351,7 @@ function ImageModelSelectorRow({
           >
             {/* 供应商图标 */}
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 shrink-0">
-              <ProviderIcon provider={currentModel?.provider_code ?? 'volcengine'} size={40} />
+              <ProviderIcon provider={getModelIconProvider(currentModel?.code ?? modelType, currentModel?.provider_code)} size={40} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">{currentModel?.name ?? modelType}</div>
@@ -386,7 +387,7 @@ function ImageModelSelectorRow({
                   )}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/50 shrink-0">
-                    <ProviderIcon provider={m.provider_code} size={32} />
+                    <ProviderIcon provider={getModelIconProvider(m.code, m.provider_code)} size={32} />
                   </div>
                   <span className="min-w-0 flex-1 truncate">{m.name}</span>
                   {isActive && <Check className="h-3 w-3 shrink-0" />}
