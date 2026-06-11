@@ -12,6 +12,12 @@ export function InspirationContent() {
   const isTabSticky = useHomeScrollStore((s) => s.isTabSticky)
   const setTabSticky = useHomeScrollStore((s) => s.setTabSticky)
   const [selectedItem, setSelectedItem] = useState<InspirationItem | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  /* 根据标题模糊过滤灵感卡片 */
+  const filteredItems = inspirationItems.filter((item) =>
+    item.title.toLowerCase().includes(searchQuery.trim().toLowerCase())
+  )
 
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -61,16 +67,23 @@ export function InspirationContent() {
             </button>
           </div>
 
-          <label className="flex h-11 w-full max-w-[14rem] items-center gap-3 rounded-full border border-violet-200/10 bg-[#151a3f]/35 px-4 text-violet-100/55 shadow-[inset_0_1px_0_rgba(226,214,255,0.1)] backdrop-blur lg:mr-3">
-            <Search className="h-5 w-5" aria-hidden="true" />
-            <span className="text-sm">搜索</span>
-          </label>
+          <div className="flex h-11 w-full max-w-[14rem] items-center gap-3 rounded-full border border-violet-200/10 bg-[#151a3f]/35 px-4 text-violet-100/55 shadow-[inset_0_1px_0_rgba(226,214,255,0.1)] backdrop-blur lg:mr-3">
+            <Search className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索标题"
+              className="h-full w-full bg-transparent text-sm text-white placeholder:text-violet-100/55 focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 
       {/* 灵感内容网格 */}
+      {filteredItems.length > 0 ? (
       <div className="relative z-10 mt-7 grid auto-rows-[12rem] grid-cols-1 gap-2.5 px-5 pb-16 sm:grid-cols-2 sm:px-8 xl:grid-cols-5 lg:px-12">
-        {inspirationItems.map((item) => (
+        {filteredItems.map((item) => (
           <article
             key={item.id}
             className="group relative row-span-2 cursor-pointer overflow-hidden rounded-lg bg-[#10142e]"
@@ -93,6 +106,12 @@ export function InspirationContent() {
           </article>
         ))}
       </div>
+      ) : (
+        <div className="relative z-10 mt-7 flex flex-col items-center justify-center px-5 pb-16 text-violet-100/55">
+          <Search className="mb-3 h-10 w-10 opacity-40" />
+          <p className="text-sm">未找到匹配「{searchQuery}」的灵感</p>
+        </div>
+      )}
 
       {/* 灵感图片大图弹窗 */}
       <InspirationLightbox
