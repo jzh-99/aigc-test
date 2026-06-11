@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, Film } from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -11,7 +11,7 @@ import { useConfirm } from '@/hooks/use-confirm'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { getModelImage } from '@/lib/model-images'
+import { ProviderIcon } from '@lobehub/icons'
 import {
   getVideoCategoryKeys,
   parseCategoryReferences,
@@ -400,7 +400,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   )
 }
 
-/** 模型选择器行 — 占满宽度，显示模型图片 + 名称 + 设为默认 */
+/** 模型选择器行 — 占满宽度，ProviderIcon 供应商图标 + 设为默认在左上角 */
 function ModelSelectorRow({
   models,
   videoModel,
@@ -416,10 +416,18 @@ function ModelSelectorRow({
 }) {
   const [open, setOpen] = useState(false)
   const currentModel = models?.find((m) => m.code === videoModel)
-  const modelImage = getModelImage(videoModel)
 
   return (
-    <div className="flex items-center gap-3 shrink-0">
+    <div className="relative flex items-center gap-3 shrink-0">
+      {/* 设为默认 — 左上角 */}
+      <button
+        className="absolute -top-0.5 left-0 z-10 text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1 py-0.5 rounded hover:bg-accent"
+        disabled={isDisabled}
+        onClick={onSaveDefaults}
+      >
+        设为默认
+      </button>
+
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger asChild>
           <button
@@ -432,14 +440,10 @@ function ModelSelectorRow({
             )}
             disabled={isDisabled}
           >
-            {/* 模型图片或默认图标 */}
-            {modelImage ? (
-              <img src={modelImage} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0" />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-                <Film className="h-5 w-5 text-primary" />
-              </div>
-            )}
+            {/* 供应商图标 */}
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 shrink-0">
+              <ProviderIcon provider={currentModel?.provider_code ?? 'volcengine'} size={40} />
+            </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">{currentModel?.name ?? videoModel}</div>
               {currentModel?.description && (
@@ -459,7 +463,6 @@ function ModelSelectorRow({
             <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
             {(models ?? []).map((m) => {
               const isActive = m.code === videoModel
-              const img = getModelImage(m.code)
               return (
                 <button
                   key={m.code}
@@ -474,13 +477,9 @@ function ModelSelectorRow({
                     isDisabled && 'opacity-50 cursor-not-allowed',
                   )}
                 >
-                  {img ? (
-                    <img src={img} alt="" className="h-8 w-8 rounded-md object-cover shrink-0" />
-                  ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted shrink-0">
-                      <Film className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  )}
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/50 shrink-0">
+                    <ProviderIcon provider={m.provider_code} size={32} />
+                  </div>
                   <span className="min-w-0 flex-1 truncate">{m.name}</span>
                   {isActive && <Check className="h-3 w-3 shrink-0" />}
                 </button>
@@ -489,13 +488,6 @@ function ModelSelectorRow({
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-      <button
-        className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
-        disabled={isDisabled}
-        onClick={onSaveDefaults}
-      >
-        设为默认
-      </button>
     </div>
   )
 }

@@ -2,10 +2,11 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { Sparkles, Loader2, Coins } from 'lucide-react'
+import { Sparkles, Loader2, Coins, Volume2, VolumeX, Move, Lock } from 'lucide-react'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
 import { calculateReferenceVideoDurationSeconds, type ModelItem, type VideoCategory } from '@aigc/types'
 import { VideoConfigPopover } from '../shared/video-config-popover'
+import { cn } from '@/lib/utils'
 
 type VideoMode = VideoCategory
 
@@ -59,42 +60,72 @@ export function VideoParams({
   const billableDuration = (videoDuration === -1 ? 15 : videoDuration) + calculateReferenceVideoDurationSeconds(referenceVideoDurations)
   const estimatedCredits = isSeedance ? billableDuration * unitPrice : unitPrice
 
-  // ConfigPopover 摘要文本
+  // ConfigPopover 摘要文本（不含音频/镜头）
   const currentAspectLabel = dbAspectRatios.find((ar) => ar.value === videoAspectRatio)?.label ?? videoAspectRatio
   const currentDurationLabel = dbDurationOptions.find((opt) => opt.value === videoDuration)?.label ?? `${videoDuration}s`
   const configSummary = [
     activeResolution.toUpperCase(),
     currentAspectLabel,
     isSeedance ? currentDurationLabel : null,
-    isSeedance ? (videoGenerateAudio ? '有声' : '无声') : null,
-    isSeedance && videoMode !== 'frames' ? (videoCameraFixed ? '固定镜头' : '自由镜头') : null,
   ].filter(Boolean).join(' · ')
 
   // 分辨率选项
   const resolutionOptions = dbResolutions.map((r) => r.value)
 
+  // icon 指示器按钮样式
+  const iconBtnCls = (active: boolean) => cn(
+    'inline-flex items-center justify-center rounded-md border p-1.5 transition-colors',
+    active
+      ? 'border-primary/40 bg-primary/10 text-primary'
+      : 'border-border/60 bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground',
+    isDisabled && 'opacity-50 cursor-not-allowed',
+  )
+
   return (
     <div className="flex items-center justify-between gap-3 px-1 py-2">
-      {/* 左侧：配置摘要 Popover */}
-      <VideoConfigPopover
-        summary={configSummary}
-        videoResolution={activeResolution}
-        resolutionOptions={resolutionOptions}
-        videoAspect={videoAspectRatio}
-        aspectOptions={dbAspectRatios}
-        videoDuration={videoDuration}
-        durationOptions={dbDurationOptions}
-        isSeedance={isSeedance}
-        generateAudio={videoGenerateAudio}
-        cameraFixed={videoCameraFixed}
-        showCameraFixed={videoMode !== 'frames'}
-        onResolutionChange={onResolutionChange}
-        onAspectRatioChange={onAspectRatioChange}
-        onDurationChange={onDurationChange}
-        onGenerateAudioChange={onGenerateAudioChange}
-        onCameraFixedChange={onCameraFixedChange}
-        disabled={isDisabled}
-      />
+      {/* 左侧：配置摘要 Popover + 音频/镜头 icon 指示器 */}
+      <div className="flex items-center gap-1.5">
+        <VideoConfigPopover
+          summary={configSummary}
+          videoResolution={activeResolution}
+          resolutionOptions={resolutionOptions}
+          videoAspect={videoAspectRatio}
+          aspectOptions={dbAspectRatios}
+          videoDuration={videoDuration}
+          durationOptions={dbDurationOptions}
+          isSeedance={isSeedance}
+          onResolutionChange={onResolutionChange}
+          onAspectRatioChange={onAspectRatioChange}
+          onDurationChange={onDurationChange}
+          disabled={isDisabled}
+        />
+
+        {/* 音频 icon 指示器（仅 Seedance） */}
+        {isSeedance && (
+          <button
+            type="button"
+            className={iconBtnCls(videoGenerateAudio)}
+            disabled={isDisabled}
+            onClick={() => onGenerateAudioChange(!videoGenerateAudio)}
+            title={videoGenerateAudio ? '有声（点击关闭）' : '无声（点击开启）'}
+          >
+            {videoGenerateAudio ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+          </button>
+        )}
+
+        {/* 镜头 icon 指示器（仅 Seedance multimodal） */}
+        {isSeedance && videoMode !== 'frames' && (
+          <button
+            type="button"
+            className={iconBtnCls(!videoCameraFixed)}
+            disabled={isDisabled}
+            onClick={() => onCameraFixedChange(!videoCameraFixed)}
+            title={videoCameraFixed ? '固定镜头（点击切换自由）' : '自由镜头（点击切换固定）'}
+          >
+            {videoCameraFixed ? <Lock className="h-3.5 w-3.5" /> : <Move className="h-3.5 w-3.5" />}
+          </button>
+        )}
+      </div>
 
       {/* 右侧：积分 + 生成按钮 */}
       <div className="flex items-center gap-2 shrink-0">

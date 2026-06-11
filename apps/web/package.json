@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@aigc/types": "workspace:*",
+    "@lobehub/icons": "^5.10.0",
     "@mdx-js/loader": "^3.1.1",
     "@next/mdx": "^14.2.35",
     "@radix-ui/react-alert-dialog": "^1.1.16",
