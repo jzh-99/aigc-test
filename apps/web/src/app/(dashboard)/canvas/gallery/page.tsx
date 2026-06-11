@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PlusCircle, Loader2, Trash2, Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -27,6 +26,8 @@ export default function CanvasGalleryPage() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [trashOpen, setTrashOpen] = useState(false)
+  /** 正在打开的画布 id，用于防止重复点击 */
+  const [openingId, setOpeningId] = useState<string | null>(null)
 
   const fetchCanvases = useCallback(async () => {
     if (!isInitialized) return
@@ -49,6 +50,13 @@ export default function CanvasGalleryPage() {
   useEffect(() => {
     fetchCanvases()
   }, [fetchCanvases])
+
+  /** 点击画布卡片进入编辑器 */
+  function openCanvas(id: string) {
+    if (openingId) return
+    setOpeningId(id)
+    router.push(`/canvas/editor/${id}`)
+  }
 
   async function createNewCanvas() {
     if (!token) return
@@ -155,10 +163,15 @@ export default function CanvasGalleryPage() {
             canvases.map((canvas) => (
               <div key={canvas.id} className="creative-glass-card group relative overflow-hidden rounded-[24px] p-3 transition duration-300">
                 <div className="creative-glass-sheen" />
-                <Link
+                <div
                   data-testid={`canvas-card-${canvas.id}`}
-                  href={`/canvas/editor/${canvas.id}`}
-                  className="relative block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openCanvas(canvas.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') openCanvas(canvas.id) }}
+                  className={`relative block cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                    openingId === canvas.id ? 'pointer-events-none opacity-60' : ''
+                  }`}
                 >
                   <div className="aspect-video overflow-hidden rounded-[18px] bg-white/[0.06]">
                     {canvas.preview_urls && canvas.preview_urls.length > 0 ? (
@@ -184,6 +197,12 @@ export default function CanvasGalleryPage() {
                         <PlusCircle className="h-8 w-8 text-white/28" />
                       </div>
                     )}
+                    {/* 点击后的加载遮罩 */}
+                    {openingId === canvas.id && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-[18px]">
+                        <Loader2 className="h-6 w-6 animate-spin text-white" />
+                      </div>
+                    )}
                   </div>
                   <div className="px-1 pb-1 pt-4">
                     <h3 className="truncate text-base font-semibold text-white transition-colors group-hover:text-violet-100">{canvas.name}</h3>
@@ -193,7 +212,7 @@ export default function CanvasGalleryPage() {
                       </p>
                     )}
                   </div>
-                </Link>
+                </div>
                 <button
                   onClick={(e) => { e.preventDefault(); deleteCanvas(canvas.id) }}
                   className="absolute right-5 top-5 rounded-full border border-white/15 bg-[#080b22]/72 p-2 text-white/58 opacity-0 shadow-[0_12px_30px_rgba(3,5,22,0.38)] backdrop-blur-xl transition hover:border-rose-200/35 hover:bg-rose-400/16 hover:text-rose-100 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
