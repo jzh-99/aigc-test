@@ -362,9 +362,14 @@ export function VideoGenPanel({
             videoDuration={videoDuration}
             durationOptions={durationOptions}
             isSeedance={isSeedance}
+            generateAudio={generateAudio}
+            cameraFixed={cameraFixed}
+            showCameraFixed={videoMode !== 'keyframe'}
             onResolutionChange={onVideoResolutionChange}
             onAspectRatioChange={(val) => onUpdateCfg({ aspectRatio: val })}
             onDurationChange={(val) => onUpdateCfg({ duration: val })}
+            onGenerateAudioChange={(val) => onUpdateCfg({ generateAudio: val })}
+            onCameraFixedChange={(val) => onUpdateCfg({ cameraFixed: val })}
           />
         </PanelToolbar>
 

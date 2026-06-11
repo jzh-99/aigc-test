@@ -400,7 +400,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   )
 }
 
-/** 模型选择器行 — 占满宽度，ProviderIcon 供应商图标 + 设为默认在左上角 */
+/** 模型选择器行 — 占满宽度，ProviderIcon 供应商图标 + 设为默认在上方 */
 function ModelSelectorRow({
   models,
   videoModel,
@@ -418,22 +418,24 @@ function ModelSelectorRow({
   const currentModel = models?.find((m) => m.code === videoModel)
 
   return (
-    <div className="relative flex items-center gap-3 shrink-0">
-      {/* 设为默认 — 左上角 */}
-      <button
-        className="absolute -top-0.5 left-0 z-10 text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1 py-0.5 rounded hover:bg-accent"
-        disabled={isDisabled}
-        onClick={onSaveDefaults}
-      >
-        设为默认
-      </button>
+    <div className="shrink-0">
+      {/* 设为默认 — 模型框上方左对齐 */}
+      <div className="flex items-center justify-between mb-1">
+        <button
+          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-0.5"
+          disabled={isDisabled}
+          onClick={onSaveDefaults}
+        >
+          设为默认
+        </button>
+      </div>
 
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger asChild>
           <button
             type="button"
             className={cn(
-              'flex flex-1 items-center gap-3 rounded-lg border px-3 py-2 transition-colors text-left',
+              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 transition-colors text-left',
               open
                 ? 'border-primary/40 bg-primary/5'
                 : 'border-border/60 bg-background hover:border-primary/30',

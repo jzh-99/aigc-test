@@ -3,7 +3,7 @@
 
 import { useState, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, Clock, Film, Ratio } from 'lucide-react'
+import { Check, ChevronDown, Clock, Film, Ratio, Video, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ─── ConfigOptionGroup ───────────────────────────────────────
@@ -101,11 +101,10 @@ export function DurationSlider({
 }
 
 // ─── VideoConfigPopover ──────────────────────────────────────
-// 视频配置弹窗：触发按钮显示摘要 + 弹出配置面板
-// 仅包含分辨率、比例、时长；音频/镜头由外部 icon 按钮控制
+// 视频配置弹窗：触发按钮显示摘要（不含音频/镜头文字）+ 弹出配置面板（含全部选项）
 
 export interface VideoConfigPopoverProps {
-  /** 触发按钮上显示的配置摘要文本 */
+  /** 触发按钮上显示的配置摘要文本（不含音频/镜头） */
   summary: string
   videoResolution: string
   resolutionOptions: string[]
@@ -114,9 +113,15 @@ export interface VideoConfigPopoverProps {
   videoDuration: number
   durationOptions: Array<{ value: number; label: string }>
   isSeedance: boolean
+  generateAudio: boolean
+  cameraFixed: boolean
+  /** 是否显示镜头选项（仅 Seedance multimodal 模式） */
+  showCameraFixed?: boolean
   onResolutionChange: (value: string) => void
   onAspectRatioChange: (value: string) => void
   onDurationChange: (value: number) => void
+  onGenerateAudioChange: (value: boolean) => void
+  onCameraFixedChange: (value: boolean) => void
   disabled?: boolean
 }
 
@@ -129,9 +134,14 @@ export function VideoConfigPopover({
   videoDuration,
   durationOptions,
   isSeedance,
+  generateAudio,
+  cameraFixed,
+  showCameraFixed = true,
   onResolutionChange,
   onAspectRatioChange,
   onDurationChange,
+  onGenerateAudioChange,
+  onCameraFixedChange,
   disabled,
 }: VideoConfigPopoverProps) {
   const [open, setOpen] = useState(false)
@@ -185,12 +195,36 @@ export function VideoConfigPopover({
             onChange={onAspectRatioChange}
           />
           {isSeedance && (
-            <DurationSlider
-              value={videoDuration}
-              min={durationMin}
-              max={durationMax}
-              onChange={onDurationChange}
-            />
+            <>
+              <DurationSlider
+                value={videoDuration}
+                min={durationMin}
+                max={durationMax}
+                onChange={onDurationChange}
+              />
+              <ConfigOptionGroup
+                icon={<Volume2 className="h-3 w-3" />}
+                label="音频"
+                value={String(generateAudio)}
+                options={[
+                  { value: 'true', label: '有声' },
+                  { value: 'false', label: '无声' },
+                ]}
+                onChange={(val) => onGenerateAudioChange(val === 'true')}
+              />
+              {showCameraFixed && (
+                <ConfigOptionGroup
+                  icon={<Video className="h-3 w-3" />}
+                  label="镜头"
+                  value={String(cameraFixed)}
+                  options={[
+                    { value: 'false', label: '自由镜头' },
+                    { value: 'true', label: '固定镜头' },
+                  ]}
+                  onChange={(val) => onCameraFixedChange(val === 'true')}
+                />
+              )}
+            </>
           )}
         </Popover.Content>
       </Popover.Portal>

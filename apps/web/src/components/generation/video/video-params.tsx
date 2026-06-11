@@ -94,9 +94,14 @@ export function VideoParams({
           videoDuration={videoDuration}
           durationOptions={dbDurationOptions}
           isSeedance={isSeedance}
+          generateAudio={videoGenerateAudio}
+          cameraFixed={videoCameraFixed}
+          showCameraFixed={videoMode !== 'frames'}
           onResolutionChange={onResolutionChange}
           onAspectRatioChange={onAspectRatioChange}
           onDurationChange={onDurationChange}
+          onGenerateAudioChange={onGenerateAudioChange}
+          onCameraFixedChange={onCameraFixedChange}
           disabled={isDisabled}
         />
 
