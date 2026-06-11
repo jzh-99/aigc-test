@@ -4,7 +4,7 @@
 import { Button } from '@/components/ui/button'
 import { Sparkles, Loader2, Coins } from 'lucide-react'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
-import { calculateReferenceVideoDurationSeconds, parseCategoryReferences, type ModelItem, type VideoCategory } from '@aigc/types'
+import { calculateReferenceVideoDurationSeconds, type ModelItem, type VideoCategory } from '@aigc/types'
 import { VideoConfigPopover } from '../shared/video-config-popover'
 
 type VideoMode = VideoCategory
