@@ -13,6 +13,7 @@ interface TracksQuery {
   page?: string | number
   limit?: string | number
   cursor?: string
+  title?: string
 }
 
 function badRequest(reply: FastifyReply, message: string) {
@@ -30,6 +31,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       const page = Math.max(1, Number(request.query.page ?? 1) || 1)
       const limit = Math.min(50, Math.max(1, Number(request.query.limit ?? 20) || 20))
+      const titleSearch = request.query.title?.trim()
       const db = getDb()
 
       if (!(await canReadMusicWorkspace(db, workspaceId, request.user.id, request.user.role))) {
@@ -52,12 +54,19 @@ const route: FastifyPluginAsync = async (app) => {
         ])
         .where('mt.workspace_id', '=', workspaceId)
 
+      // 按标题模糊搜索
+      if (titleSearch) {
+        query = query.where('mt.title', 'ilike', `%${titleSearch}%`)
+      }
+
       // 查询总数（用于分页导航）
-      const [{ count: total }] = await db
+      const countQuery = db
         .selectFrom('music_tracks')
         .select((eb) => eb.fn.countAll<number>().as('count'))
         .where('workspace_id', '=', workspaceId)
-        .execute()
+      const [{ count: total }] = titleSearch
+        ? await countQuery.where('title', 'ilike', `%${titleSearch}%`).execute()
+        : await countQuery.execute()
 
       if (request.query.cursor) {
         let cursor: ReturnType<typeof decodeMusicTrackCursor>

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Search } from 'lucide-react'
 import { MusicCreatePanel } from '@/components/music/music-create-panel'
 import { MusicTrackList } from '@/components/music/music-track-list'
 import { MusicVoiceUploadDialog } from '@/components/music/music-voice-upload-dialog'
@@ -88,8 +88,9 @@ export default function MusicPage() {
   // 分页状态
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [searchTitle, setSearchTitle] = useState('')
 
-  const tracks = useMusicTracks(page, pageSize)
+  const tracks = useMusicTracks(page, pageSize, searchTitle || undefined)
   const voices = useMusicVoiceClones()
   const mutateVoices = voices.mutate
 
@@ -184,6 +185,16 @@ export default function MusicPage() {
             <div>
               <h2 className="text-xl font-semibold">我的音乐作品</h2>
               <p className="mt-1 text-sm text-muted-foreground">点击封面进入详情页播放与查看歌词</p>
+            </div>
+            <div className="flex h-9 w-full max-w-[13rem] items-center gap-2 rounded-md border bg-background px-3 text-muted-foreground">
+              <Search className="h-4 w-4 shrink-0" />
+              <input
+                type="text"
+                value={searchTitle}
+                onChange={(e) => { setSearchTitle(e.target.value); setPage(1) }}
+                placeholder="搜索歌名"
+                className="h-full w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
             </div>
           </div>
           <MusicTrackList

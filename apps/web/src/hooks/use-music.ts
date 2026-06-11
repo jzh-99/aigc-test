@@ -18,10 +18,10 @@ export type MusicVoiceCloneSseEvent =
   | { event: 'ready'; voice_id?: string }
   | { event: 'failed'; error_message?: string }
 
-export function useMusicTracks(page = 1, limit = 10) {
+export function useMusicTracks(page = 1, limit = 10, title?: string) {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const swr = useSWR<MusicTrackListResponse>(
-    workspaceId ? buildMusicTracksUrl(workspaceId, page, limit) : null,
+    workspaceId ? buildMusicTracksUrl(workspaceId, page, limit, title) : null,
     apiFetcher,
   )
 

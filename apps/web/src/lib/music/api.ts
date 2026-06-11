@@ -45,12 +45,13 @@ export async function createMusicVoiceClone(form: FormData): Promise<MusicVoiceC
   })
 }
 
-export function buildMusicTracksUrl(workspaceId: string, page: number, limit: number): string {
+export function buildMusicTracksUrl(workspaceId: string, page: number, limit: number, title?: string): string {
   const params = new URLSearchParams({
     workspace_id: workspaceId,
     page: String(page),
     limit: String(limit),
   })
+  if (title?.trim()) params.set('title', title.trim())
   return `/music/tracks?${params.toString()}`
 }
 
