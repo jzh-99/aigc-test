@@ -159,7 +159,7 @@ export function VideoConfigPopover({
         <button
           type="button"
           className={cn(
-            'inline-flex min-w-[200px] max-w-[360px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition-colors',
+            'inline-flex min-w-0 max-w-[170px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition-colors',
             open
               ? 'border-primary/40 bg-primary/5 text-primary'
               : 'border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-foreground',
