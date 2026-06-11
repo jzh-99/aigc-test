@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import * as Popover from '@radix-ui/react-popover'
+import { Check, ChevronDown, ImagePlus, Image as ImageIcon, Search, Trash2 } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useGenerationStore } from '@/stores/generation-store'
@@ -8,13 +10,14 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useGenerate } from '@/hooks/use-generate'
 import { useConfirm } from '@/hooks/use-confirm'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
-import { ImagePlus, Image as ImageIcon, Search, Trash2 } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
+import type { ModelItem } from '@aigc/types'
 import { toast } from 'sonner'
 import { getRequestErrorMessage } from '@/lib/api-client'
 import { ReferenceImageUploadCompact } from '../reference-image-upload-compact'
 import { CompanyAImagePicker } from '../company-a-image-picker'
 import { cn, generateUUID } from '@/lib/utils'
+import { ProviderIcon } from '@lobehub/icons'
 import Image from 'next/image'
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
@@ -190,6 +193,19 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
           </div>
         )}
         <div className={cn('flex flex-col flex-1 min-h-0 gap-2', isDragging && 'opacity-30 pointer-events-none')}>
+          {/* 模型选择器行 */}
+          <ImageModelSelectorRow
+            models={imageModels}
+            modelType={modelType}
+            isDisabled={isGenerating || !!disabled}
+            onModelChange={(v) => {
+              setModelType(v)
+              const resolutions = getModelResolutions(v, imageModels)
+              if (resolutions.length > 0) setResolution(resolutions[0] as typeof resolution)
+            }}
+            onSaveDefaults={handleSaveDefaults}
+          />
+
           {/* 参考图区域 */}
           <div className={cn('shrink-0', isCompanyA ? 'h-[88px]' : 'h-[68px]')}>
             {referenceImages.length > 0 ? (
@@ -267,19 +283,10 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
         isGenerating={isGenerating}
         disabled={disabled}
         promptEmpty={!prompt.trim()}
-        onModelChange={(v) => {
-            setModelType(v)
-            // 切换模型时自动选中新模型的首个可用分辨率
-            const resolutions = getModelResolutions(v, imageModels)
-            if (resolutions.length > 0) {
-              setResolution(resolutions[0] as typeof resolution)
-            }
-          }}
         onResolutionChange={(v) => setResolution(v as typeof resolution)}
         onAspectRatioChange={setAspectRatio}
         onQuantityChange={setQuantity}
         onGenerate={handleGenerate}
-        onSaveDefaults={handleSaveDefaults}
       />
 
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
@@ -296,5 +303,99 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
         <CompanyAImagePicker open={companyAPickerOpen} onOpenChange={setCompanyAPickerOpen} onSelectPoster={handleSelectCompanyAImage} />
       )}
     </>
+  )
+}
+
+/** 图片模型选择器行 — ProviderIcon 供应商图标 + 设为默认在上方 */
+function ImageModelSelectorRow({
+  models,
+  modelType,
+  isDisabled,
+  onModelChange,
+  onSaveDefaults,
+}: {
+  models?: ModelItem[]
+  modelType: string
+  isDisabled: boolean
+  onModelChange: (v: string) => void
+  onSaveDefaults: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const currentModel = models?.find((m) => m.code === modelType)
+
+  return (
+    <div className="shrink-0">
+      {/* 设为默认 — 模型框上方 */}
+      <div className="flex items-center justify-between mb-1">
+        <button
+          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-0.5"
+          disabled={isDisabled}
+          onClick={onSaveDefaults}
+        >
+          设为默认
+        </button>
+      </div>
+
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 transition-colors text-left',
+              open
+                ? 'border-primary/40 bg-primary/5'
+                : 'border-border/60 bg-background hover:border-primary/30',
+            )}
+            disabled={isDisabled}
+          >
+            {/* 供应商图标 */}
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 shrink-0">
+              <ProviderIcon provider={currentModel?.provider_code ?? 'volcengine'} size={40} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium truncate">{currentModel?.name ?? modelType}</div>
+              {currentModel?.description && (
+                <div className="text-[11px] text-muted-foreground truncate">{currentModel.description}</div>
+              )}
+            </div>
+            <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            side="bottom"
+            align="start"
+            sideOffset={6}
+            className="z-[120] max-h-72 min-w-[240px] overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 shadow-xl shadow-foreground/5 animate-in fade-in-0 zoom-in-95"
+          >
+            <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
+            {(models ?? []).map((m) => {
+              const isActive = m.code === modelType
+              return (
+                <button
+                  key={m.code}
+                  type="button"
+                  onClick={() => { onModelChange(m.code); setOpen(false) }}
+                  disabled={isDisabled}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-popover-foreground hover:bg-muted',
+                    isDisabled && 'opacity-50 cursor-not-allowed',
+                  )}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/50 shrink-0">
+                    <ProviderIcon provider={m.provider_code} size={32} />
+                  </div>
+                  <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                  {isActive && <Check className="h-3 w-3 shrink-0" />}
+                </button>
+              )
+            })}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    </div>
   )
 }
