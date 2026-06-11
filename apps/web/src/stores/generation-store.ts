@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { BatchResponse, ModelItem } from '@aigc/types'
+import { generateUUID } from '@/lib/utils'
 
 interface ReferenceImage {
   id: string
@@ -124,6 +125,35 @@ const defaults = {
   avatarDefaults: null as AvatarDefaults | null,
 }
 
+function normalizeReferenceUrls(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+  }
+  return typeof value === 'string' && value.length > 0 ? [value] : []
+}
+
+function extractImageReferenceUrls(batch: BatchResponse): string[] {
+  const params = batch.params && typeof batch.params === 'object' && !Array.isArray(batch.params)
+    ? batch.params as Record<string, unknown>
+    : {}
+
+  const urls = [
+    ...normalizeReferenceUrls(params.reference_image_urls),
+    ...normalizeReferenceUrls(params.image),
+    ...normalizeReferenceUrls(params.image_url),
+    ...normalizeReferenceUrls(params.reference_image),
+  ]
+  return [...new Set(urls)]
+}
+
+function createReferenceImagesFromUrls(urls: string[]): ReferenceImage[] {
+  return urls.map((url) => ({
+    id: generateUUID(),
+    previewUrl: url,
+    dataUrl: url,
+  }))
+}
+
 export const useGenerationStore = create<GenerationState>()(
   persist(
     (set) => ({
@@ -200,11 +230,13 @@ export const useGenerationStore = create<GenerationState>()(
     } else {
       // 图片任务：直接用 batch.model（DB code）还原模型和分辨率，无需硬编码映射
       const params = batch.params as Record<string, unknown> | null
+      const referenceImages = createReferenceImagesFromUrls(extractImageReferenceUrls(batch))
       set({
         pendingModule: 'image',
         prompt: batch.prompt,
         quantity: batch.quantity,
         modelType: batch.model,
+        referenceImages,
         ...(params?.resolution ? { resolution: params.resolution as '1k' | '2k' | '3k' | '4k' } : {}),
         ...(params?.aspect_ratio ? { aspectRatio: params.aspect_ratio as string } : {}),
         videoParams: null,

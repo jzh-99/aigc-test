@@ -186,14 +186,14 @@ export default function MusicPage() {
               <h2 className="text-xl font-semibold">我的音乐作品</h2>
               <p className="mt-1 text-sm text-muted-foreground">点击封面进入详情页播放与查看歌词</p>
             </div>
-            <div className="flex h-9 w-full max-w-[13rem] items-center gap-2 rounded-md border bg-background px-3 text-muted-foreground">
+            <div className="flex h-10 w-full max-w-[17rem] items-center gap-2.5 rounded-full border border-white/22 bg-white/14 px-4 text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.24),0_12px_34px_rgba(2,6,23,0.14)] backdrop-blur-xl transition focus-within:border-white/42 focus-within:bg-white/18 focus-within:text-white">
               <Search className="h-4 w-4 shrink-0" />
               <input
                 type="text"
                 value={searchTitle}
                 onChange={(e) => { setSearchTitle(e.target.value); setPage(1) }}
                 placeholder="搜索歌名"
-                className="h-full w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                className="creative-glass-search-input h-full w-full bg-transparent text-sm text-white placeholder:text-white/58 focus:outline-none"
               />
             </div>
           </div>

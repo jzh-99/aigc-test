@@ -1,11 +1,12 @@
 import type { FastifyPluginAsync, FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
+import { randomUUID } from 'node:crypto'
 import type { CategoryReferences, GenerateImageRequest } from '@aigc/types'
 import { ACTIVE_IMAGE_CATEGORY, parseCategoryReferences, validateImageReferenceLimits } from '@aigc/types'
 import { checkPrompt } from '../../services/prompt-filter.js'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getImageQueue } from '../../lib/queue.js'
-import { decryptProxyUrl } from '../../lib/storage.js'
+import { decryptProxyUrl, uploadToTos } from '../../lib/storage.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { resolveBatchSource } from '../../lib/batch-source.js'
 import rateLimit from '@fastify/rate-limit'
@@ -40,6 +41,7 @@ const ALLOWED_PARAM_KEYS = new Set([
   'aspect_ratio', 'width', 'height', 'seed', 'style', 'quality',
   'image', 'image_url', 'reference_image', 'negative_prompt',
   'steps', 'cfg_scale', 'guidance_scale', 'scheduler',
+  'reference_image_urls',
   // 火山引擎 Seedream 参数
   'resolution', 'watermark',
 ])
@@ -116,6 +118,42 @@ function countImageReferences(rawParams: Record<string, unknown>): number {
   return Array.isArray(images) ? images.length : 0
 }
 
+function parseDataUrlImage(value: string): { buffer: Buffer; contentType: string; ext: string } | null {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(value)
+  if (!match) return null
+  const contentType = match[1]
+  const ext = contentType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
+  return {
+    buffer: Buffer.from(match[2], 'base64'),
+    contentType,
+    ext,
+  }
+}
+
+async function persistReferenceImageUrls(params: Record<string, unknown>): Promise<string[]> {
+  const existing = Array.isArray(params.reference_image_urls)
+    ? params.reference_image_urls.filter((url): url is string => typeof url === 'string' && url.length > 0)
+    : []
+  if (existing.length > 0) return existing
+
+  const images = Array.isArray(params.image)
+    ? params.image.filter((url): url is string => typeof url === 'string' && url.length > 0)
+    : []
+  if (images.length === 0) return []
+
+  const urls: string[] = []
+  for (const image of images.slice(0, MAX_IMAGE_REFERENCE_PARAMS)) {
+    const parsed = parseDataUrlImage(image)
+    if (!parsed) {
+      urls.push(image)
+      continue
+    }
+    const key = `generation-references/${randomUUID()}.${parsed.ext}`
+    urls.push(await uploadToTos(key, parsed.buffer, parsed.contentType))
+  }
+  return urls
+}
+
 const route: FastifyPluginAsync = async (app) => {
   // 每用户生成限速：每分钟 10 次
   await app.register(rateLimit, {
@@ -163,10 +201,9 @@ const route: FastifyPluginAsync = async (app) => {
     // 清洗 params：白名单键 + 类型校验
     const imageReferenceCount = countImageReferences(rawParams)
     const params = resolveProxyUrls(sanitizeParams(rawParams))
-
-    // 从存入 DB 的 params 中剥离图片数据（base64 data URI 可能数百 MB，
-    // 会导致每次批次读写极慢）。完整 params（含图片）仍传给 BullMQ job 供 worker 使用。
-    const { image: _imageData, ...paramsForDb } = params as Record<string, unknown> & { image?: unknown }
+    const { reference_image_urls: _referenceImageUrls, ...paramsForJob } =
+      params as Record<string, unknown> & { reference_image_urls?: unknown }
+    let paramsForDb: Record<string, unknown> = {}
 
     const db = getDb()
     const userId = request.user.id
@@ -445,6 +482,13 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
+    const referenceImageUrls = await persistReferenceImageUrls(params)
+    const { image: _imageData, ...paramsForDbBase } = paramsForJob as Record<string, unknown> & { image?: unknown }
+    paramsForDb = {
+      ...paramsForDbBase,
+      ...(referenceImageUrls.length > 0 ? { reference_image_urls: referenceImageUrls } : {}),
+    }
+
     const resolution = (params as Record<string, unknown> | undefined)?.resolution as string | undefined
     const { unitPrice, resolvedModel } = resolveUnitPrice(providerModel.params_pricing, resolution)
     // params_pricing 命中时用底层模型 code 替换请求中的 model
@@ -534,7 +578,7 @@ const route: FastifyPluginAsync = async (app) => {
           provider: providerModel.providerCode,
           model: actualModel,
           prompt,
-          params,
+          params: paramsForJob,
           estimatedCredits: unitPrice,
           ...(canvas_id ? { canvasId: canvas_id, canvasNodeId: canvas_node_id ?? undefined } : {}),
         },

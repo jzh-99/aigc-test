@@ -67,14 +67,14 @@ export function InspirationContent() {
             </button>
           </div>
 
-          <div className="flex h-11 w-full max-w-[14rem] items-center gap-3 rounded-full border border-violet-200/10 bg-[#151a3f]/35 px-4 text-violet-100/55 shadow-[inset_0_1px_0_rgba(226,214,255,0.1)] backdrop-blur lg:mr-3">
-            <Search className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <div className="flex h-10 w-full max-w-[17rem] items-center gap-2.5 rounded-full border border-white/22 bg-white/14 px-4 text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.24),0_12px_34px_rgba(2,6,23,0.14)] backdrop-blur-xl transition focus-within:border-white/42 focus-within:bg-white/18 focus-within:text-white lg:mr-3">
+            <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="搜索标题"
-              className="h-full w-full bg-transparent text-sm text-white placeholder:text-violet-100/55 focus:outline-none"
+              className="creative-glass-search-input h-full w-full bg-transparent text-sm text-white placeholder:text-white/58 focus:outline-none"
             />
           </div>
         </div>

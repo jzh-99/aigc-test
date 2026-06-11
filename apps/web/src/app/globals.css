@@ -996,6 +996,17 @@ select {
   color: hsl(var(--foreground)) !important;
 }
 
+input.creative-glass-search-input {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: none !important;
+}
+
+input.creative-glass-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.58) !important;
+}
+
 tbody tr:hover {
   background: rgba(107, 163, 245, 0.04);
 }

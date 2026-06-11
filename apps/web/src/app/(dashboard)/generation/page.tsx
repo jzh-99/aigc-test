@@ -10,10 +10,10 @@ import { BatchList, type BatchListHandle } from '@/components/history/batch-list
 import { BatchDetail } from '@/components/history/batch-detail'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
-import { AlertTriangle, FolderX, EyeOff } from 'lucide-react'
+import { AlertTriangle, FolderX } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 import type { BatchResponse } from '@aigc/types'
-import { useHiddenBatches, useBatches } from '@/hooks/use-batches'
+import { useBatches } from '@/hooks/use-batches'
 import { useBatchSSE } from '@/hooks/use-batch-sse'
 import { Button } from '@/components/ui/button'
 import { AssetsLibraryTab } from '@/components/generation/assets-library-tab'
@@ -81,9 +81,7 @@ export default function ImagePage() {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [rightTab, setRightTab] = useState<'history' | 'assets'>('history')
-  const { batches: hiddenBatches } = useHiddenBatches(true, 'generation')
   const { batches } = useBatches('generation')
-  const hasHidden = hiddenBatches.length > 0
 
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam)
@@ -240,17 +238,6 @@ export default function ImagePage() {
               {activeBatchIds.size > 0 && rightTab === 'history' && (
                 <Badge variant="processing" className="text-xs">生成中 ({activeBatchIds.size})</Badge>
               )}
-              {hasHidden && rightTab === 'history' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto h-7 px-2 text-xs text-muted-foreground gap-1"
-                  onClick={() => batchListRef.current?.openHiddenDrawer()}
-                >
-                  <EyeOff className="h-3.5 w-3.5" />
-                  已隐藏
-                </Button>
-              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="generation-dream-stage-content flex-1 overflow-y-auto min-w-0 px-6 pb-6">
@@ -258,6 +245,7 @@ export default function ImagePage() {
               <BatchList
                 ref={batchListRef}
                 onSelect={(batch) => { setSelectedBatchId(batch.id); setDetailOpen(true) }}
+                onBatchCreated={handleBatchCreated}
               />
             ) : (
               <AssetsLibraryTab

@@ -3,21 +3,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check, Video, X, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { BatchResponse } from '@aigc/types'
+import { User, Loader2, RotateCcw, Check, Video, X, Trash2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import type { BatchResponse, GenerateImageRequest } from '@aigc/types'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn, generateUUID } from '@/lib/utils'
 import { useGenerationStore } from '@/stores/generation-store'
+import { useAuthStore } from '@/stores/auth-store'
 import { translateTaskError } from '@/lib/error-messages'
-import { apiDelete } from '@/lib/api-client'
+import { apiDelete, apiPost, getRequestErrorMessage } from '@/lib/api-client'
 import { getBatchImagePreviewUrls, getBatchVideoPreviewUrl, getBatchResourceTypes } from './batch-preview'
 
 interface BatchListCardProps {
   batch: BatchResponse & { thumbnail_urls?: string[] }
   onClick?: () => void
   onHide?: (id: string) => void
+  onRegenerateCreated?: (batch: BatchResponse) => void
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
@@ -257,12 +260,51 @@ function formatElapsed(ms: number) {
   return minutes > 0 ? `${minutes}分${rest}秒` : `${rest}秒`
 }
 
-export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
+function getBatchParams(batch: BatchResponse): Record<string, unknown> {
+  return batch.params && typeof batch.params === 'object' && !Array.isArray(batch.params)
+    ? batch.params as Record<string, unknown>
+    : {}
+}
+
+async function regenerateBatch(batch: BatchResponse, workspaceId: string): Promise<BatchResponse> {
+  const params = getBatchParams(batch)
+
+  if (batch.module === 'image') {
+    const imageParams = { ...params }
+    if (!imageParams.image && Array.isArray(imageParams.reference_image_urls)) {
+      imageParams.image = imageParams.reference_image_urls
+    }
+    const body: GenerateImageRequest = {
+      idempotency_key: generateUUID(),
+      model: batch.model,
+      prompt: batch.prompt.trim(),
+      quantity: batch.quantity,
+      params: imageParams,
+      workspace_id: workspaceId,
+    }
+    return apiPost<BatchResponse>('/generate/image', body)
+  }
+
+  if (batch.module === 'video') {
+    return apiPost<BatchResponse>('/videos/generate', {
+      workspace_id: workspaceId,
+      model: batch.model,
+      prompt: batch.prompt.trim(),
+      ...params,
+    })
+  }
+
+  throw new Error('当前类型暂不支持从历史记录直接重新生成')
+}
+
+export function BatchListCard({ batch, onClick, onHide, onRegenerateCreated }: BatchListCardProps) {
   const router = useRouter()
   const applyBatch = useGenerationStore((s) => s.applyBatch)
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const [applied, setApplied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [hiding, setHiding] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const status = statusConfig[batch.status] ?? statusConfig.pending
 
@@ -305,8 +347,12 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
     e.stopPropagation()
     applyBatch(batch)
     setApplied(true)
+    navigateToBatchMode()
 
-    // Auto-navigate to appropriate generation page
+    setTimeout(() => setApplied(false), 1500)
+  }
+
+  function navigateToBatchMode() {
     const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
     if ((batch as any).module === 'avatar') {
       router.push('/generation?mode=avatar')
@@ -317,8 +363,36 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
     } else {
       router.push('/generation')
     }
+  }
 
-    setTimeout(() => setApplied(false), 1500)
+  async function handleRegenerate(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (regenerating) return
+    if (!activeWorkspaceId) {
+      toast.error('当前没有可用的工作区')
+      return
+    }
+    if (batch.module !== 'image' && batch.module !== 'video') {
+      toast.error('当前类型暂不支持从历史记录直接重新生成')
+      return
+    }
+    if (!batch.prompt?.trim()) {
+      toast.error('缺少提示词，无法重新生成')
+      return
+    }
+
+    setRegenerating(true)
+    try {
+      applyBatch(batch)
+      navigateToBatchMode()
+      const nextBatch = await regenerateBatch(batch, activeWorkspaceId)
+      onRegenerateCreated?.(nextBatch)
+      toast.success('已提交重新生成')
+    } catch (err) {
+      toast.error(getRequestErrorMessage(err, err instanceof Error ? err.message : '重新生成失败，请稍后重试'))
+    } finally {
+      setRegenerating(false)
+    }
   }
 
   const thumbnails = getBatchImagePreviewUrls(batch)
@@ -381,10 +455,6 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
                 {time.toLocaleDateString('zh-CN')} {time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
-          </div>
-          <div className="text-right shrink-0">
-            <p className="text-xs text-muted-foreground">A豆</p>
-            <p className="text-sm font-medium">{batch.actual_credits || batch.estimated_credits}</p>
           </div>
         </div>
 
@@ -452,6 +522,9 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               {cancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <><X className="h-3 w-3 mr-1" />取消</>}
             </Button>
           )}
+          <div className="flex h-7 items-center px-2 text-xs font-medium text-muted-foreground">
+            {batch.actual_credits || batch.estimated_credits} A豆
+          </div>
           <Button
             size="sm"
             variant="ghost"
@@ -463,6 +536,15 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
           >
             {applied ? <><Check className="h-3 w-3 mr-1" />已填入</> : <><RotateCcw className="h-3 w-3 mr-1" />复用</>}
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={handleRegenerate}
+            disabled={regenerating}
+          >
+            {regenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <><RefreshCw className="h-3 w-3 mr-1" />重新生成</>}
+          </Button>
           {onHide && (
             <Button
               size="sm"
@@ -472,7 +554,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               disabled={hiding}
               title="隐藏"
             >
-              {hiding ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+              {hiding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
             </Button>
           )}
         </div>

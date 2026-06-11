@@ -18,9 +18,10 @@ export interface BatchListHandle {
 
 interface BatchListProps {
   onSelect: (batch: BatchResponse) => void
+  onBatchCreated?: (batch: BatchResponse) => void
 }
 
-export const BatchList = forwardRef<BatchListHandle, BatchListProps>(function BatchList({ onSelect }, ref) {
+export const BatchList = forwardRef<BatchListHandle, BatchListProps>(function BatchList({ onSelect, onBatchCreated }, ref) {
   const { batches, isLoadingInitial, isLoadingMore, hasMore, loadMore, error, mutate, prependBatch, updateBatchInList, hideBatch } = useBatches('generation')
   const [hiddenDrawerOpen, setHiddenDrawerOpen] = useState(false)
 
@@ -71,6 +72,7 @@ export const BatchList = forwardRef<BatchListHandle, BatchListProps>(function Ba
             batch={batch}
             onClick={() => onSelect(batch)}
             onHide={hideBatch}
+            onRegenerateCreated={onBatchCreated}
           />
         ))}
 

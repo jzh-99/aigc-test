@@ -51,6 +51,12 @@ async function imageUrlToDataUrl(url: string): Promise<string> {
   return fileToDataUrl(new File([blob], 'reference', { type: blob.type || 'image/jpeg' }))
 }
 
+function getReusableReferenceUrls(referenceImages: Array<{ file?: File; previewUrl: string; dataUrl?: string }>): string[] {
+  return referenceImages
+    .filter((img) => !img.file && !img.previewUrl.startsWith('blob:') && !img.previewUrl.startsWith('data:'))
+    .map((img) => img.previewUrl)
+}
+
 export function useGenerate() {
   const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, imageModels, setIsGenerating, setActiveBatchId } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -79,6 +85,10 @@ export function useGenerate() {
       }
 
       if (referenceImages.length > 0) {
+        const reusableReferenceUrls = getReusableReferenceUrls(referenceImages)
+        if (reusableReferenceUrls.length > 0) {
+          params.reference_image_urls = reusableReferenceUrls
+        }
         params.image = await Promise.all(referenceImages.map(async (img) => {
           if (img.dataUrl) return img.dataUrl
           if (img.file) return fileToDataUrl(img.file)
