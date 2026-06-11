@@ -2070,17 +2070,7 @@ tbody tr:hover {
 /* 灵感首页标题字符 —— 手写反美学基础样式 */
 .creative-title-char {
   display: inline-block;
-  will-change: transform;
-  /* 模拟墨迹不均匀的透明度微变 */
-  filter: brightness(0.92);
-}
-
-.creative-title-char:nth-child(odd) {
-  filter: brightness(0.96);
-}
-
-.creative-title-char:nth-child(3n) {
-  filter: brightness(0.88);
+  will-change: transform, filter;
 }
 
 /* ==========================================================================
