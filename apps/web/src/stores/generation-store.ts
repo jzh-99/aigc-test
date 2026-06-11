@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { BatchResponse, ModelItem } from '@aigc/types'
 import { generateUUID } from '@/lib/utils'
 
-interface ReferenceImage {
+export interface ReferenceImage {
   id: string
   file?: File
   previewUrl: string
@@ -19,6 +19,8 @@ export interface VideoParams {
   videoGenerateAudio?: boolean
   videoCameraFixed?: boolean
   videoMode?: string
+  videoFrameImages?: ReferenceImage[]
+  videoReferenceImages?: ReferenceImage[]
 }
 
 interface UserDefaults {
@@ -132,11 +134,26 @@ function normalizeReferenceUrls(value: unknown): string[] {
   return typeof value === 'string' && value.length > 0 ? [value] : []
 }
 
-function extractImageReferenceUrls(batch: BatchResponse): string[] {
-  const params = batch.params && typeof batch.params === 'object' && !Array.isArray(batch.params)
+function getBatchParams(batch: BatchResponse): Record<string, unknown> {
+  if (!batch.params) return {}
+  if (typeof batch.params === 'string') {
+    try {
+      const parsed = JSON.parse(batch.params)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : {}
+    } catch {
+      return {}
+    }
+  }
+
+  return typeof batch.params === 'object' && !Array.isArray(batch.params)
     ? batch.params as Record<string, unknown>
     : {}
+}
 
+function extractImageReferenceUrls(batch: BatchResponse): string[] {
+  const params = getBatchParams(batch)
   const urls = [
     ...normalizeReferenceUrls(params.reference_image_urls),
     ...normalizeReferenceUrls(params.image),
@@ -144,6 +161,21 @@ function extractImageReferenceUrls(batch: BatchResponse): string[] {
     ...normalizeReferenceUrls(params.reference_image),
   ]
   return [...new Set(urls)]
+}
+
+function extractVideoReferenceUrls(batch: BatchResponse): string[] {
+  const params = getBatchParams(batch)
+
+  const urls = [
+    ...normalizeReferenceUrls(params.reference_images),
+  ]
+  return [...new Set(urls)]
+}
+
+function extractVideoFrameUrls(batch: BatchResponse): string[] {
+  const params = getBatchParams(batch)
+
+  return [...new Set(normalizeReferenceUrls(params.images))]
 }
 
 function createReferenceImagesFromUrls(urls: string[]): ReferenceImage[] {
@@ -211,7 +243,10 @@ export const useGenerationStore = create<GenerationState>()(
 
     if (isVideo) {
       // Apply video parameters
-      const params = batch.params as Record<string, unknown> | null
+      const params = getBatchParams(batch)
+      const referenceImages = createReferenceImagesFromUrls(extractVideoReferenceUrls(batch))
+      const frameImages = createReferenceImagesFromUrls(extractVideoFrameUrls(batch))
+      const videoMode = (params?.video_category as string) || (frameImages.length > 0 ? 'frames' : undefined)
       set({
         pendingModule: 'video',
         videoParams: {
@@ -222,14 +257,18 @@ export const useGenerationStore = create<GenerationState>()(
           videoDuration: (params?.duration as number) ?? undefined,
           videoGenerateAudio: (params?.generate_audio as boolean) ?? undefined,
           videoCameraFixed: (params?.camera_fixed as boolean) ?? undefined,
+          videoMode,
+          videoFrameImages: frameImages,
+          videoReferenceImages: referenceImages,
         },
+        pendingVideoReferenceImages: [],
       })
     } else if (isAvatar || isActionImitation) {
       // Avatar / action imitation — signal module and carry the prompt
       set({ pendingModule: module, avatarPrompt: batch.prompt ?? '', videoParams: null })
     } else {
       // 图片任务：直接用 batch.model（DB code）还原模型和分辨率，无需硬编码映射
-      const params = batch.params as Record<string, unknown> | null
+      const params = getBatchParams(batch)
       const referenceImages = createReferenceImagesFromUrls(extractImageReferenceUrls(batch))
       set({
         pendingModule: 'image',

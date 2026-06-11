@@ -37,6 +37,22 @@ interface VideoPanelProps {
   initialParams?: VideoParams | null
 }
 
+function referenceToFrameImage(img: NonNullable<VideoParams['videoFrameImages']>[number] | undefined): FrameImage | null {
+  if (!img) return null
+  return {
+    id: img.id,
+    previewUrl: img.previewUrl,
+    dataUrl: img.dataUrl ?? img.previewUrl,
+    file: img.file,
+  }
+}
+
+function referenceImagesToFrameImages(images: NonNullable<VideoParams['videoReferenceImages']> | undefined): FrameImage[] {
+  return (images ?? [])
+    .map((img) => referenceToFrameImage(img))
+    .filter((img): img is FrameImage => !!img)
+}
+
 export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPanelProps) {
   const { watermark, avatarDefaults, userDefaults, pendingVideoReferenceImages, clearPendingVideoReferenceImages, videoPrompt, setVideoPrompt } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -59,11 +75,11 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     if (initialParams?.videoPrompt) setVideoPrompt(initialParams.videoPrompt)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [firstFrame, setFirstFrame] = useState<FrameImage | null>(null)
-  const [lastFrame, setLastFrame] = useState<FrameImage | null>(null)
+  const [firstFrame, setFirstFrame] = useState<FrameImage | null>(() => referenceToFrameImage(initialParams?.videoFrameImages?.[0]))
+  const [lastFrame, setLastFrame] = useState<FrameImage | null>(() => referenceToFrameImage(initialParams?.videoFrameImages?.[1]))
   const [framePreviewIndex, setFramePreviewIndex] = useState<0 | 1 | null>(null)
 
-  const [multimodalImages, setMultimodalImages] = useState<FrameImage[]>([])
+  const [multimodalImages, setMultimodalImages] = useState<FrameImage[]>(() => referenceImagesToFrameImages(initialParams?.videoReferenceImages))
   const [multimodalVideos, setMultimodalVideos] = useState<MultimodalVideo[]>([])
   const [multimodalAudios, setMultimodalAudios] = useState<MultimodalAudio[]>([])
 

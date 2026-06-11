@@ -62,9 +62,10 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   useEffect(() => {
     if (!pendingModule) return
     if (pendingModule === 'video') {
-      // 有 pending 参考素材时（来自"变视频"操作），不要重建面板，
-      // 否则 VideoPanel 的 useEffect 刚将素材写入 multimodalImages 就被 key 变更销毁
-      if (pendingVideoReferenceImages.length === 0) {
+      // 有 pending 参考素材但没有 videoParams 时（来自"变视频"操作），不要重建面板，
+      // 否则 VideoPanel 的 useEffect 刚将素材写入 multimodalImages 就被 key 变更销毁。
+      // 复用视频会同时带 videoParams，需要重建面板来恢复模型、比例、时长等参数。
+      if (pendingVideoReferenceImages.length === 0 || videoParams) {
         setVideoPanelInitialParams(videoParams ?? null)
         setVideoPanelKey(k => k + 1)
       }
