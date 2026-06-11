@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { CreativeSideRail } from './creative-side-rail'
+import { NavigationOverlay } from './navigation-overlay'
 
 /** 使用暗色全屏背景的页面路径（不需要父级浅色背景和 padding） */
 const DARK_FULLBLEED_PATHS = new Set([
@@ -48,6 +49,7 @@ export function AppShell({ children, title, mainClassName }: AppShellProps) {
           </div>
         </div>
         <AiAssistant />
+        <NavigationOverlay />
       </TooltipProvider>
     )
   }
@@ -75,6 +77,7 @@ export function AppShell({ children, title, mainClassName }: AppShellProps) {
         </div>
       </div>
       <AiAssistant />
+      <NavigationOverlay />
     </TooltipProvider>
   )
 }

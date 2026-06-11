@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import { useNavigationStore } from '@/stores/navigation-store'
 import {
   BookOpenText,
   ImageIcon,
@@ -194,7 +197,7 @@ function ModuleCard({ title, description, icon: Icon, accent, status, available,
 
   if (href) {
     return (
-      <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#060918]">
+      <Link href={href} onClick={() => useNavigationStore.getState().startNavigation(href)} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#060918]">
         {card}
       </Link>
     )

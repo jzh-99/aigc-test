@@ -13,6 +13,7 @@ import { useLayoutStore } from '@/stores/layout-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { PanelLeftClose, PanelLeft } from 'lucide-react'
 import { isNavItemActive, managementNavItems, type NavItem } from './nav-config'
+import { useNavigationStore } from '@/stores/navigation-store'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -22,6 +23,7 @@ export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useLayoutStore()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
+  const startNavigation = useNavigationStore((s) => s.startNavigation)
 
   const visibleManagementItems = managementNavItems.filter((item) => {
     if (item.requireUserRole && user?.role !== item.requireUserRole) return false
@@ -43,7 +45,7 @@ export function Sidebar() {
         )}
         asChild
       >
-        <Link href={item.href} aria-current={isActive ? 'page' : undefined}>
+        <Link href={item.href} onClick={() => startNavigation(item.href)} aria-current={isActive ? 'page' : undefined}>
           <item.icon className="h-4 w-4 shrink-0" />
           {!sidebarCollapsed && <span>{item.label}</span>}
         </Link>
