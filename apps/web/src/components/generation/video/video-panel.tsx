@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import * as Popover from '@radix-ui/react-popover'
+import { Check, ChevronDown, Film } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -9,6 +11,7 @@ import { useConfirm } from '@/hooks/use-confirm'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { getModelImage } from '@/lib/model-images'
 import {
   getVideoCategoryKeys,
   parseCategoryReferences,
@@ -16,6 +19,7 @@ import {
   calculateReferenceVideoDurationSeconds,
   type VideoCategory,
   type VideoReferenceCounts,
+  type ModelItem,
 } from '@aigc/types'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
 import { fetchWithAuth, ApiError, getRequestErrorMessage, reportClientSubmissionError, classifyRequestError } from '@/lib/api-client'
@@ -318,6 +322,14 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   return (
     <>
       <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
+        {/* 模型选择器行 */}
+        <ModelSelectorRow
+          models={videoModels}
+          videoModel={videoModel}
+          isDisabled={isVideoGenerating || isVideoUploading || !!disabled}
+          onModelChange={setVideoModel}
+          onSaveDefaults={handleSaveDefaults}
+        />
         <div className="flex gap-2 shrink-0">
           {availableVideoModes.map((mode) => (
             <button key={mode} onClick={() => switchMode(mode)} className={modeBtnCls(videoMode === mode)}>
@@ -377,15 +389,113 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         isUploading={isVideoUploading}
         disabled={disabled}
         promptEmpty={!videoPrompt.trim()}
-        onModelChange={setVideoModel}
         onAspectRatioChange={setVideoAspectRatio}
         onResolutionChange={setVideoResolution}
         onDurationChange={setVideoDuration}
         onGenerateAudioChange={setVideoGenerateAudio}
         onCameraFixedChange={setVideoCameraFixed}
         onGenerate={handleVideoGenerate}
-        onSaveDefaults={handleSaveDefaults}
       />
     </>
+  )
+}
+
+/** 模型选择器行 — 占满宽度，显示模型图片 + 名称 + 设为默认 */
+function ModelSelectorRow({
+  models,
+  videoModel,
+  isDisabled,
+  onModelChange,
+  onSaveDefaults,
+}: {
+  models?: ModelItem[]
+  videoModel: string
+  isDisabled: boolean
+  onModelChange: (v: string) => void
+  onSaveDefaults: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const currentModel = models?.find((m) => m.code === videoModel)
+  const modelImage = getModelImage(videoModel)
+
+  return (
+    <div className="flex items-center gap-3 shrink-0">
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'flex flex-1 items-center gap-3 rounded-lg border px-3 py-2 transition-colors text-left',
+              open
+                ? 'border-primary/40 bg-primary/5'
+                : 'border-border/60 bg-background hover:border-primary/30',
+            )}
+            disabled={isDisabled}
+          >
+            {/* 模型图片或默认图标 */}
+            {modelImage ? (
+              <img src={modelImage} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0" />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                <Film className="h-5 w-5 text-primary" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium truncate">{currentModel?.name ?? videoModel}</div>
+              {currentModel?.description && (
+                <div className="text-[11px] text-muted-foreground truncate">{currentModel.description}</div>
+              )}
+            </div>
+            <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            side="bottom"
+            align="start"
+            sideOffset={6}
+            className="z-[120] max-h-72 min-w-[240px] overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 shadow-xl shadow-foreground/5 animate-in fade-in-0 zoom-in-95"
+          >
+            <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
+            {(models ?? []).map((m) => {
+              const isActive = m.code === videoModel
+              const img = getModelImage(m.code)
+              return (
+                <button
+                  key={m.code}
+                  type="button"
+                  onClick={() => { onModelChange(m.code); setOpen(false) }}
+                  disabled={isDisabled}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-popover-foreground hover:bg-muted',
+                    isDisabled && 'opacity-50 cursor-not-allowed',
+                  )}
+                >
+                  {img ? (
+                    <img src={img} alt="" className="h-8 w-8 rounded-md object-cover shrink-0" />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted shrink-0">
+                      <Film className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                  {isActive && <Check className="h-3 w-3 shrink-0" />}
+                </button>
+              )
+            })}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      <button
+        className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+        disabled={isDisabled}
+        onClick={onSaveDefaults}
+      >
+        设为默认
+      </button>
+    </div>
   )
 }
