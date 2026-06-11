@@ -1467,33 +1467,6 @@ async function main() {
   }
   console.log(`  provider_system_voices seeded (minimax, ${minimaxSystemVoiceRows.length} voices)`)
 
-  // Short Drama Export Cost Config
-  const shortDramaExportModel = {
-    code: 'short_drama_episode_export_credits',
-    name: 'AI 短剧单集合成导出费用',
-    description: '每导出 1 集 AI 短剧 MP4 固定消耗的 A豆数量',
-  }
-
-  await db
-    .insertInto('provider_models')
-    .values({
-      provider_id: volcProvider.id,
-      code: shortDramaExportModel.code,
-      name: shortDramaExportModel.name,
-      description: shortDramaExportModel.description,
-      module: 'video',
-      params_pricing: JSON.stringify([{ resolution: 'default', model: 'short_drama_episode_export_credits', unit_price: 2 }]),
-      params_schema: JSON.stringify({}),
-      is_active: true,
-    })
-    .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
-      name: shortDramaExportModel.name,
-      description: shortDramaExportModel.description,
-      params_pricing: JSON.stringify([{ resolution: 'default', model: 'short_drama_episode_export_credits', unit_price: 2 }]),
-    }))
-    .execute()
-  console.log(`  provider_models seeded (${shortDramaExportModel.code})`)
-
   // 13. System cost configs — upsert
   const systemCostConfigs = [
     {
