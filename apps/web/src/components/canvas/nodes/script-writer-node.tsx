@@ -10,6 +10,7 @@ import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData } from '@/lib/canvas/types'
 import type { ScriptWriterConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
+import { NodeHandle } from './node-handle'
 
 export const ScriptWriterNode = memo(function ScriptWriterNode({
   id,
@@ -71,8 +72,7 @@ export const ScriptWriterNode = memo(function ScriptWriterNode({
         )}
       </div>
 
-      <Handle type="source" position={Position.Right} id="text-out"
-        className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all" />
+      <NodeHandle type="source" position={Position.Right} id="text-out" nodeId={id} showOnGroupHover />
     </div>
   )
 })

@@ -11,6 +11,7 @@ import type { CanvasNodeData, StoryboardSplitterConfig } from '@/lib/canvas/type
 import { normalizeStoryboardShots } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 import { StoryboardTableDialog } from './storyboard-table-dialog'
+import { NodeHandle } from './node-handle'
 
 const PREVIEW_SHOT_COUNT = 3
 
@@ -128,10 +129,8 @@ export const StoryboardSplitterNode = memo(function StoryboardSplitterNode({
           )}
         </div>
 
-        <Handle type="target" position={Position.Left} id="any-in"
-          className="!w-2 !h-2 !bg-border !border !border-border/80 !-left-1 hover:!bg-violet-400 transition-colors" />
-        <Handle type="source" position={Position.Right} id="text-out"
-          className="!w-2 !h-2 !bg-border !border !border-border/80 !-right-1 hover:!bg-violet-400 transition-colors" />
+        <NodeHandle type="target" position={Position.Left} id="any-in" nodeId={id} />
+        <NodeHandle type="source" position={Position.Right} id="text-out" nodeId={id} />
       </div>
 
       <StoryboardTableDialog

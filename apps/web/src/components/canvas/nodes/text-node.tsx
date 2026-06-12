@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData, TextInputConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
+import { NodeHandle } from './node-handle'
 
 export const TextNode = memo(function TextNode({ id, data }: { id: string; data: CanvasNodeData<TextInputConfig> }) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
@@ -114,10 +115,8 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
         />
       </div>
 
-      <Handle type="target" position={Position.Left} id="any-in"
-        className="!w-2 !h-2 !bg-border !border !border-border/80 !-left-1 hover:!bg-indigo-400 transition-colors" />
-      <Handle type="source" position={Position.Right} id="text-out"
-        className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all" />
+      <NodeHandle type="target" position={Position.Left} id="any-in" nodeId={id} />
+      <NodeHandle type="source" position={Position.Right} id="text-out" nodeId={id} showOnGroupHover />
     </div>
   )
 })

@@ -10,6 +10,7 @@ import { useCanvasExecutionStore, useNodeExecutionState, useNodeHighlighted } fr
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { InlineLabel } from './inline-label'
 import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
+import { NodeHandle } from './node-handle'
 
 function useElapsedTimer(startedAt: number | null): string {
   const [elapsed, setElapsed] = useState(0)
@@ -172,17 +173,18 @@ export const AudioGenNode = memo(function AudioGenNode({ id, data }: { id: strin
         </div>
       )} */}
 
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         id="text-in"
-        className="!h-2.5 !w-2.5 !border !border-border/80 !bg-border transition-colors hover:!bg-emerald-400"
+        nodeId={id}
       />
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         id="audio-out"
-        className="!-right-1.5 !h-3.5 !w-3.5 !rounded-full !border !border-border/80 !bg-border opacity-0 transition-all hover:!border-muted-foreground hover:!bg-muted-foreground group-hover:opacity-100"
+        nodeId={id}
+        showOnGroupHover
       />
     </div>
   )

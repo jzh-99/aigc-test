@@ -14,6 +14,7 @@ import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData, ImageGenConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
+import { NodeHandle } from './node-handle'
 
 function nodeWidthFromRatio(w: number, h: number): number {
   const ratio = w / h
@@ -255,18 +256,19 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           </span>
         </div>
       )}
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         id="any-in"
+        nodeId={id}
         style={{ top: '50%' }}
-        className="!w-2.5 !h-2.5 !bg-border !border !border-border/80 hover:!bg-blue-400 transition-colors"
       />
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         id="image-out"
-        className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all"
+        nodeId={id}
+        showOnGroupHover
       />
     </div>
   )

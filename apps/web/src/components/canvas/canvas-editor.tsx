@@ -154,6 +154,31 @@ function AddNodePanel({ onSelect }: { onSelect: (type: string) => void }) {
   )
 }
 
+// 节点类型兼容性映射：源节点类型 → 允许的下游节点类型
+const NODE_COMPATIBILITY: Record<string, string[]> = {
+  // 文本节点可以连接到：图片、视频、音频、脚本、分镜
+  'text_input': ['image_gen', 'video_gen', 'audio_gen', 'script_writer', 'storyboard_splitter'],
+  // 图片节点可以连接到：视频、音频
+  'image_gen': ['video_gen', 'audio_gen'],
+  // 视频节点可以连接到：拼接、音频
+  'video_gen': ['video_stitch', 'audio_gen'],
+  // 音频节点可以连接到：视频
+  'audio_gen': ['video_gen'],
+  // 资产节点根据类型判断
+  'asset': ['video_gen', 'audio_gen', 'image_gen'],
+  // 剧本节点可以连接到：分镜
+  'script_writer': ['storyboard_splitter'],
+  // 分镜节点通常不再连接其他节点
+  'storyboard_splitter': [],
+  // 视频拼接节点可以连接到：音频
+  'video_stitch': ['audio_gen'],
+}
+
+function getCompatibleNodeTypes(sourceNodeType: string): Set<string> {
+  const allowed = NODE_COMPATIBILITY[sourceNodeType] || []
+  return new Set(allowed)
+}
+
 function ContextNodeMenu({
   x,
   y,
@@ -163,6 +188,7 @@ function ContextNodeMenu({
   onUpload,
   uploadLabel = '上传文件',
   uploadingFromMenu,
+  sourceNodeId, // 新增：源节点ID，用于类型判断
 }: {
   x: number
   y: number
@@ -174,60 +200,117 @@ function ContextNodeMenu({
   uploadLabel?: string
   /** 上传进行中时禁用按钮 */
   uploadingFromMenu?: boolean
+  /** 源节点ID，用于判断兼容性 */
+  sourceNodeId?: string
 }) {
-  return createPortal(
-    <div
-      className="fixed z-50 min-w-[150px] rounded-xl border border-border bg-background py-1 shadow-xl"
-      style={{ top: y, left: x }}
-      onMouseLeave={onClose}
-    >
-      {title && <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground">{title}</div>}
-      {NODE_MENU_CATEGORIES.map((category) => (
-        <div key={category.id} className="group/item relative">
-          <button
-            onClick={() => onSelect(category.baseType)}
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
-          >
-            <span>+ {category.baseLabel}</span>
-            {/* <span className="text-border">›</span> */}
-          </button>
-          {/* <div className="pointer-events-none absolute left-full top-0 ml-1 min-w-[140px] rounded-xl border border-border bg-background py-1 opacity-0 shadow-xl group-hover/item:pointer-events-auto group-hover/item:opacity-100">
-            <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground">{category.label}</div>
-            {category.items.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">暂无</div>
-            ) : category.items.map((item) => (
-              <button
-                key={item.type}
-                onClick={() => onSelect(item.type)}
-                className="w-full px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
-              >
-                + {item.label}
-              </button>
-            ))}
-          </div> */}
-        </div>
-      ))}
-      {/* 上传文件入口：仅 add 模式（非下游节点）时显示 */}
-      {onUpload && (
-        <>
-          <div className="my-1 border-t border-border" />
-          <button
-            onClick={onUpload}
-            disabled={uploadingFromMenu}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-          >
-            {uploadingFromMenu ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <span>↑</span>
-            )}
-            {uploadLabel}
-          </button>
-        </>
-      )}
-    </div>,
-    document.body
-  )
+  // 使用 ref 来管理菜单元素，避免重复创建和销毁
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  // 获取源节点类型
+  let sourceNodeType: string | null = null
+  if (sourceNodeId) {
+    // 通过全局 store 获取节点信息
+    const nodes = useCanvasStructureStore.getState().nodes
+    const sourceNode = nodes.find(n => n.id === sourceNodeId)
+    sourceNodeType = sourceNode?.type || null
+  }
+
+  // 计算兼容的节点类型
+  const compatibleTypes = sourceNodeType ? getCompatibleNodeTypes(sourceNodeType) : null
+
+  useEffect(() => {
+    // 如果菜单已存在，更新位置和内容
+    if (menuRef.current && document.body.contains(menuRef.current)) {
+      menuRef.current.style.top = `${y}px`
+      menuRef.current.style.left = `${x}px`
+      return
+    }
+
+    // 创建新菜单
+    const menuEl = document.createElement('div')
+    menuEl.id = 'context-menu'
+    menuEl.style.cssText = `
+      position: fixed !important;
+      top: ${y}px !important;
+      left: ${x}px !important;
+      min-width: 150px;
+      background: hsl(var(--background)) !important;
+      border: 1px solid hsl(var(--border)) !important;
+      border-radius: 12px;
+      padding: 4px;
+      z-index: 9999 !important;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      opacity: 1 !important;
+      visibility: visible !important;
+      display: block !important;
+      pointer-events: auto !important;
+    `
+
+    // 创建标题
+    if (title) {
+      const titleEl = document.createElement('div')
+      titleEl.style.cssText = 'padding: 6px 12px; font-size: 11px; font-weight: 500; color: hsl(var(--muted-foreground)); border-bottom: 1px solid hsl(var(--border)); margin-bottom: 4px;'
+      titleEl.textContent = title
+      menuEl.appendChild(titleEl)
+    }
+
+    // 创建按钮
+    NODE_MENU_CATEGORIES.forEach((category) => {
+      const btn = document.createElement('button')
+      const isCompatible = compatibleTypes === null || compatibleTypes.has(category.baseType)
+
+      btn.style.cssText = `
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        color: ${isCompatible ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))'};
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        margin-bottom: 2px;
+        cursor: ${isCompatible ? 'pointer' : 'not-allowed'};
+        opacity: ${isCompatible ? '1' : '0.5'};
+        transition: all 0.15s;
+      `
+
+      btn.innerHTML = `<span>+ ${category.baseLabel}</span>`
+
+      if (isCompatible) {
+        btn.onmouseenter = () => {
+          btn.style.background = 'hsl(var(--muted))'
+        }
+        btn.onmouseleave = () => {
+          btn.style.background = 'transparent'
+        }
+        btn.onclick = () => {
+          onSelect(category.baseType)
+        }
+      } else {
+        btn.title = `当前节点类型无法连接到 ${category.baseLabel}`
+      }
+
+      menuEl.appendChild(btn)
+    })
+
+    // 添加到 document.body
+    document.body.appendChild(menuEl)
+    menuRef.current = menuEl
+
+    // 清理函数
+    return () => {
+      if (menuRef.current && document.body.contains(menuRef.current)) {
+        document.body.removeChild(menuRef.current)
+        menuRef.current = null
+      }
+    }
+  }, [x, y, title, onSelect, compatibleTypes])
+
+  // 返回一个占位符（实际渲染在 useEffect 中完成）
+  return null
 }
 
 const NODE_CANVAS_H: Record<string, number> = {
@@ -374,7 +457,8 @@ function Flow({
   const setHighlightedNodes = useCanvasExecutionStore((s) => s.setHighlightedNodes)
   const replaceNodeOutput = useCanvasExecutionStore((s) => s.replaceNodeOutput)
   const initNodeState = useCanvasExecutionStore((s) => s.initNodeState)
-  const { project, fitView } = useReactFlow()
+  const { project, fitView, screenToFlowPosition } = useReactFlow()
+  const [,, zoom] = useStore((s) => s.transform)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
@@ -408,13 +492,29 @@ function Flow({
     connectCompletedRef.current = true
     const err = onConnect(connection)
     if (err) toast.error(err)
+
+    // 触发连接动画事件
+    if (!err && connection.target) {
+      window.dispatchEvent(new CustomEvent('node-connected', {
+        detail: {
+          targetNodeId: connection.target,
+          targetHandleId: connection.targetHandle || 'any-in'
+        }
+      }))
+    }
   }, [onConnect])
 
   const handleConnectEnd = useCallback((event: MouseEvent | TouchEvent) => {
     // If already connected via handle, skip
-    if (connectCompletedRef.current || !connectStartRef.current) return
+    if (connectCompletedRef.current || !connectStartRef.current) {
+      return
+    }
+
     const src = connectStartRef.current
     connectStartRef.current = null
+
+    // 记录连接结束时间戳，防止立即被 handlePaneClick 关闭
+    connectEndTimestampRef.current = Date.now()
 
     const clientX = 'touches' in event ? event.changedTouches[0].clientX : event.clientX
     const clientY = 'touches' in event ? event.changedTouches[0].clientY : event.clientY
@@ -423,6 +523,7 @@ function Flow({
     let el = document.elementFromPoint(clientX, clientY) as HTMLElement | null
     let targetNodeId: string | null = null
     while (el && el !== document.body) {
+      // 只检测真正的节点元素，不检测其他 UI 元素
       if (el.classList?.contains('react-flow__node') && el.dataset?.id) {
         targetNodeId = el.dataset.id
         break
@@ -430,17 +531,75 @@ function Flow({
       el = el.parentElement
     }
 
-    if (!targetNodeId || targetNodeId === src.nodeId) return
+    // 如果找到目标节点且不是源节点，连接到它
+    if (targetNodeId && targetNodeId !== src.nodeId) {
+      const err = onConnect({
+        source: src.nodeId,
+        sourceHandle: src.handleId,
+        target: targetNodeId,
+        targetHandle: 'any-in',
+      })
+      if (err) toast.error(err)
+      return
+    }
 
-    // Determine best targetHandle: for keyframe video nodes use any-in; default any-in
-    const err = onConnect({
-      source: src.nodeId,
-      sourceHandle: src.handleId,
-      target: targetNodeId,
-      targetHandle: 'any-in',
+    // 没有找到有效目标节点 → 空画布拖放，显示节点创建菜单
+    // 检查是否在画布区域内（而不是在工具栏、面板等区域）
+    const rect = wrapperRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    // 检查鼠标是否在画布容器范围内（允许一定误差）
+    const isInCanvas = (
+      clientX >= rect.left - 10 &&
+      clientX <= rect.right + 10 &&
+      clientY >= rect.top - 10 &&
+      clientY <= rect.bottom + 10
+    )
+
+    if (!isInCanvas) {
+      // 鼠标在画布外，不显示菜单
+      return
+    }
+
+    // 使用 screenToFlowPosition 转换坐标（推荐方式，无需手动计算偏移）
+    const canvasPos = screenToFlowPosition({ x: clientX, y: clientY })
+
+    // 边界检测：确保菜单不会超出视口
+    // 预估菜单高度约为 200px，宽度约为 150px
+    const MENU_HEIGHT = 200
+    const MENU_WIDTH = 150
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+
+    // 调整菜单位置，避免超出视口
+    let adjustedX = clientX
+    let adjustedY = clientY
+
+    if (clientX + MENU_WIDTH > viewportWidth) {
+      adjustedX = viewportWidth - MENU_WIDTH - 10
+    }
+    if (clientY + MENU_HEIGHT > viewportHeight) {
+      adjustedY = clientY - MENU_HEIGHT - 10 // 如果下方空间不够，显示在上方
+    }
+
+    // 设置右键菜单为 downstream 模式，显示节点选择器
+    setContextMenu({
+      x: adjustedX,
+      y: adjustedY,
+      canvasX: canvasPos.x,
+      canvasY: canvasPos.y,
+      mode: 'downstream',
+      sourceNodeIds: [src.nodeId],
+      uploadTarget: null, // 不显示上传选项
     })
-    if (err) toast.error(err)
-  }, [onConnect])
+
+    // 设置临时连接线，显示从源节点到菜单的连接
+    setTempConnectionLine({
+      sourceNodeId: src.nodeId,
+      targetX: canvasPos.x,
+      targetY: canvasPos.y
+    })
+  }, [onConnect, screenToFlowPosition])
 
   const { kickPoll } = useCanvasPoller(canvasId)
 
@@ -450,6 +609,8 @@ function Flow({
   }, [kickPoll])
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number; mode: 'add' | 'downstream'; sourceNodeIds: string[]; uploadTarget: CanvasUploadTarget | null } | null>(null)
+  const connectEndTimestampRef = useRef(0)
+  const [tempConnectionLine, setTempConnectionLine] = useState<{ sourceNodeId: string; targetX: number; targetY: number } | null>(null)
 
   const refreshUploadedAssetType = useCallback(async (mediaKind: 'image' | 'video' | 'audio') => {
     if (!token) return
@@ -516,6 +677,7 @@ function Flow({
       addNode(type, { x: contextMenu.canvasX, y: contextMenu.canvasY })
     }
     setContextMenu(null)
+    setTempConnectionLine(null) // 清除临时连接线
   }, [contextMenu, addNode, addNodeAndConnect])
 
   /** 右键菜单点击"上传文件"：记录坐标后触发隐藏 input */
@@ -894,7 +1056,19 @@ function Flow({
     setSelectedNodeId(null)
     setSelectedEdgeId(null)
     setSelectedNodeIds((prev) => (prev.length === 0 ? prev : []))
-    setContextMenu((prev) => (prev ? null : prev))
+
+    // 如果刚刚结束连接拖拽（100ms 内），不要关闭菜单
+    const timeSinceConnectEnd = Date.now() - connectEndTimestampRef.current
+    if (timeSinceConnectEnd < 100) {
+      return
+    }
+
+    setContextMenu((prev) => {
+      if (prev) {
+        return null
+      }
+      return prev
+    })
   }, [])
 
   const handleNodeDragStart = useCallback((_: unknown, node: AppNode) => {
@@ -905,19 +1079,39 @@ function Flow({
     setDraggingNodeId(null)
   }, [])
 
+  // 计算临时连接线的 SVG 路径
+  const tempConnectionLinePath = useMemo(() => {
+    if (!tempConnectionLine || !wrapperRef.current) return null
+
+    const sourceNode = nodes.find(n => n.id === tempConnectionLine.sourceNodeId)
+    if (!sourceNode) return null
+
+    // 获取节点的实际 DOM 元素位置
+    const nodeEl = wrapperRef.current.querySelector(`[data-id="${tempConnectionLine.sourceNodeId}"]`) as HTMLElement
+    if (!nodeEl) return null
+
+    const nodeRect = nodeEl.getBoundingClientRect()
+    const wrapperRect = wrapperRef.current.getBoundingClientRect()
+
+    // 计算源节点的右侧中心点（source handle 位置）
+    const sourceX = (nodeRect.right - wrapperRect.left) / zoom
+    const sourceY = (nodeRect.top + nodeRect.height / 2 - wrapperRect.top) / zoom
+
+    // 目标点（菜单位置，已经是画布坐标）
+    const targetX = tempConnectionLine.targetX
+    const targetY = tempConnectionLine.targetY
+
+    // 使用贝塞尔曲线连接
+    const deltaX = Math.abs(targetX - sourceX)
+    const controlOffset = Math.min(deltaX * 0.5, 100)
+
+    const path = `M ${sourceX} ${sourceY} C ${sourceX + controlOffset} ${sourceY}, ${targetX - controlOffset} ${targetY}, ${targetX} ${targetY}`
+
+    return { path, sourceX, sourceY, targetX, targetY }
+  }, [tempConnectionLine, nodes, zoom, wrapperRef])
+
   return (
-    <div
-      className="w-full h-full relative"
-      ref={wrapperRef}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      style={{
-        background: 'hsl(var(--background))',
-        transform: 'translateZ(0)',
-        backfaceVisibility: 'hidden',
-        WebkitFontSmoothing: 'antialiased',
-      } as React.CSSProperties}
-    >
+    <div ref={wrapperRef} className="relative w-full h-full overflow-hidden">
       {uploading && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/20 pointer-events-none">
           <div className="bg-card rounded-xl px-4 py-2 shadow-lg text-sm font-medium text-foreground">上传中…</div>
@@ -1102,6 +1296,34 @@ function Flow({
         )}
       </ReactFlow>
 
+      {/* 临时连接线 SVG 层 */}
+      {tempConnectionLine && tempConnectionLinePath && (
+        <svg className="absolute inset-0 pointer-events-none z-10" style={{ transform: `scale(${zoom})`, transformOrigin: '0 0' }}>
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+            </marker>
+          </defs>
+          <path
+            d={tempConnectionLinePath.path}
+            stroke="#a78bfa"
+            strokeWidth="2"
+            fill="none"
+            strokeDasharray="5,5"
+            markerEnd="url(#arrowhead)"
+            className="animate-pulse"
+          />
+          {/* 终点圆圈 */}
+          <circle
+            cx={tempConnectionLinePath.targetX}
+            cy={tempConnectionLinePath.targetY}
+            r="6"
+            fill="#a78bfa"
+            className="animate-ping"
+          />
+        </svg>
+      )}
+
       {selectedNode && (
         <FloatingParamPanel
           node={selectedNode}
@@ -1124,16 +1346,22 @@ function Flow({
       />
 
       {contextMenu && (
-        <ContextNodeMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          title={contextMenu.mode === 'downstream' ? '创建下游节点' : undefined}
-          onSelect={handleContextMenuAdd}
-          onClose={() => setContextMenu(null)}
-          onUpload={contextMenu.uploadTarget ? handleContextMenuUpload : undefined}
-          uploadLabel={contextMenu.uploadTarget ? getUploadTargetLabel(contextMenu.uploadTarget) : undefined}
-          uploadingFromMenu={uploadingFromMenu}
-        />
+        <>
+          <ContextNodeMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            title={contextMenu.mode === 'downstream' ? '创建下游节点' : undefined}
+            onSelect={handleContextMenuAdd}
+            onClose={() => {
+              setContextMenu(null)
+              setTempConnectionLine(null) // 清除临时连接线
+            }}
+            onUpload={contextMenu.uploadTarget ? handleContextMenuUpload : undefined}
+            uploadLabel={contextMenu.uploadTarget ? getUploadTargetLabel(contextMenu.uploadTarget) : undefined}
+            uploadingFromMenu={uploadingFromMenu}
+            sourceNodeId={contextMenu.sourceNodeIds[0]} // 传入源节点ID
+          />
+        </>
       )}
     </div>
   )

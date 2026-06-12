@@ -15,6 +15,7 @@ import type { AppNode, CanvasNodeData } from '@/lib/canvas/types'
 import { isAssetConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
 import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
+import { NodeHandle } from './node-handle'
 
 export type VideoMode = 'multiref' | 'keyframe'
 
@@ -395,21 +396,22 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
             )}
           </>
         )}
-        <Handle
+        <NodeHandle
           type="target"
           position={Position.Left}
           id="any-in"
+          nodeId={id}
           style={{ top: '50%' }}
-          className="!w-2.5 !h-2.5 !bg-border !border !border-border/80 hover:!bg-blue-400 transition-colors"
         />
       </>
 
       {/* Output handle */}
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         id="video-out"
-        className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all"
+        nodeId={id}
+        showOnGroupHover
       />
     </div>
   )

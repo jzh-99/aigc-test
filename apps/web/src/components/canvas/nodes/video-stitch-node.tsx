@@ -11,6 +11,7 @@ import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { CanvasNodeData, VideoStitchConfig } from '@/lib/canvas/types'
 import { isAssetConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
+import { NodeHandle } from './node-handle'
 
 interface PreviewVideo {
   edgeId: string
@@ -234,18 +235,19 @@ export const VideoStitchNode = memo(function VideoStitchNode({ id, data }: { id:
           </span>
         </div>
       )}
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         id="video-in"
+        nodeId={id}
         style={{ top: '50%' }}
-        className="!w-2.5 !h-2.5 !bg-red-300 !border !border-red-400 hover:!bg-red-500 transition-colors"
       />
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         id="video-out"
-        className="!w-3.5 !h-3.5 !bg-border !border !border-border/80 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-muted-foreground hover:!border-muted-foreground transition-all"
+        nodeId={id}
+        showOnGroupHover
       />
     </div>
   )
