@@ -873,7 +873,20 @@ function Flow({
   }, [addNode, project, nodes])
 
   const handleOrganizeNodes = useCallback(() => {
-    const changedCount = organizeNodes()
+    const rect = wrapperRef.current?.getBoundingClientRect()
+    const viewport = rect
+      ? (() => {
+        const topLeft = screenToFlowPosition({ x: rect.left, y: rect.top })
+        const bottomRight = screenToFlowPosition({ x: rect.right, y: rect.bottom })
+        return {
+          x: topLeft.x,
+          y: topLeft.y,
+          width: Math.max(1, bottomRight.x - topLeft.x),
+          height: Math.max(1, bottomRight.y - topLeft.y),
+        }
+      })()
+      : undefined
+    const changedCount = organizeNodes(viewport)
     // if (changedCount === 0) {
     //   toast.info(nodes.length <= 1 ? '暂无可整理的节点' : '画布已经很整齐了')
     //   return
@@ -888,7 +901,7 @@ function Flow({
     }, 0)
     void onSave()
     // toast.success(`已整理 ${changedCount} 个节点`)
-  }, [fitView, nodes.length, onSave, organizeNodes, setHighlightedNodes])
+  }, [fitView, nodes.length, onSave, organizeNodes, screenToFlowPosition, setHighlightedNodes])
 
   const handleToggleGrid = useCallback(() => {
     setShowGrid((current) => {
