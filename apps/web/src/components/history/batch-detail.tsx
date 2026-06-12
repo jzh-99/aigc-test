@@ -52,7 +52,7 @@ export function BatchDetail({ batchId, open, onOpenChange, onApplied, onReferenc
         <DialogHeader className="generation-detail-header absolute left-10 right-16 top-6 z-20 p-0 text-left">
           <DialogTitle className="sr-only">批次详情</DialogTitle>
           <DialogDescription asChild>
-            <div className="generation-detail-prompt-shell" title={promptText}>
+            <div className="generation-detail-prompt-shell">
               <p className="generation-detail-prompt text-left text-xs font-medium leading-5 text-white/52">
                 {promptText}
               </p>

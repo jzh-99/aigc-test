@@ -1283,14 +1283,16 @@ tbody tr:hover {
 
 .generation-detail-prompt-shell {
   position: relative;
-  width: 100%;
+  display: inline-block;
+  width: fit-content;
   max-width: none;
   min-height: 1.25rem;
   background: #000;
+  vertical-align: top;
 }
 
 .generation-detail-prompt {
-  width: 100%;
+  max-width: calc(min(1280px, 100vw - 32px) - 7rem);
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
