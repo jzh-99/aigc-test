@@ -41,6 +41,8 @@
 | D7 | 图标方案 | `model.avatar` → `provider.logo_url` → 首字母色块；`@lobehub/icons` 渐进移除 |
 | D8 | admin 界面 | 扩展现有 `/admin` 标签页 + 复用 `adminGuard`，不新建独立页/权限 |
 | D9 | 定价分层 | 对用户价放 `models`（模型级一致，切换供应商不影响用户扣费）；不存供应商成本价 |
+| D10 | 能力约束 | resolution、时长白名单等对用户一致的能力约束上移到 `models.capabilities` |
+| D11 | 主备供应商 | `active_provider_model_id`=主（运行时唯一生效），其他候选=备用；手动切换、不自动接管（无故障转移） |
 
 ## 4. 数据模型
 
@@ -56,9 +58,10 @@ CREATE TABLE models (
   avatar                      varchar(500),                   -- 模型图标 TOS URL
   params_pricing              jsonb NOT NULL DEFAULT '[]',    -- 对用户定价（从 provider_models 上移）
   category_references         jsonb NOT NULL DEFAULT '{}',    -- 对用户能力上限（参考素材数量等）
+  capabilities                jsonb NOT NULL DEFAULT '{}',    -- 其它对用户一致的能力约束（resolution 档位、时长白名单等）
   sort_order                  integer NOT NULL DEFAULT 0,
   is_active                   boolean  NOT NULL DEFAULT true,
-  active_provider_model_id    uuid,                           -- 当前生效供应商实现（后置外键）
+  active_provider_model_id    uuid,                           -- 主供应商（当前生效），后置外键；备用=该模型其他候选 provider_models，运行时不用
   created_at                  timestamptz NOT NULL DEFAULT NOW(),
   updated_at                  timestamptz NOT NULL DEFAULT NOW(),
   CONSTRAINT chk_models_module CHECK (module IN ('image','video','tts','lipsync','agent'))
@@ -131,6 +134,7 @@ interface ResolvedModel {
   credentials: Record<string, string>  // 已解密
   paramsPricing: unknown            // 对用户定价（来自 models，与供应商无关）
   categoryReferences: unknown       // 对用户能力上限（来自 models）
+  capabilities: unknown             // 其它能力约束（resolution、时长白名单等，来自 models）
 }
 ```
 
@@ -192,7 +196,7 @@ worker: 消费任务
 
 **「模型管理」标签改造**（现有 `ModelTable` 以 `models` 逻辑模型为主维度重构）：
 - 列表行：模型 code / name / module / avatar / 当前生效供应商
-- 模型行可编辑对用户定价（`params_pricing`）、能力上限（`category_references`）—— 模型级，与供应商无关
+- 模型行可编辑对用户定价（`params_pricing`）、能力上限（`category_references`）、其它能力约束（`capabilities`：resolution、时长等）—— 模型级，与供应商无关
 - 行展开：该模型下所有 `provider_models` 实现（供应商 + vendor_model_id + 状态），单选切换 active_provider_model_id；展开行内编辑各实现的参数 schema（复用现有 `PATCH /admin/models/:id`，已收窄为只改供应商级字段）
 - 逻辑模型 CRUD：新建（code/name/module/avatar）、停用（is_active）、绑定 / 解绑供应商实现
 - avatar 上传入口
@@ -209,7 +213,7 @@ worker: 消费任务
 **逻辑模型层**（`routes/admin/catalog-*`）：
 - `GET /admin/catalog/models` — 查逻辑模型列表（含 active provider + 下挂实现）
 - `POST /admin/catalog/models` — 新建逻辑模型
-- `PATCH /admin/catalog/models/:id` — 改 name / avatar / is_active / sort_order / params_pricing / category_references
+- `PATCH /admin/catalog/models/:id` — 改 name / avatar / is_active / sort_order / params_pricing / category_references / capabilities
 - `POST /admin/catalog/models/:id/switch` — 切换 active_provider_model_id（**写入后调 `invalidateCache('model', code)`**）
 - `POST /admin/catalog/models/:id/providers` — 绑定一个供应商实现（vendor_model_id）
 - `DELETE /admin/catalog/models/:id/providers/:pmId` — 解绑
@@ -257,7 +261,7 @@ worker: 消费任务
 
 1. 新建 `models` 表（`active_provider_model_id` 先建为普通列，无外键）
 2. `provider_models` 加 `model_id`、`vendor_model_id` 列
-3. **数据回填**：遍历现有 `provider_models`，按 `code` 去重生成 `models` 记录（首个出现的 code 作为该 model 来源），回填每条 `provider_models.model_id`；`vendor_model_id` 从 worker/api 两处硬编码的 `VOLCENGINE_MODEL_ID` 等映射表灌入；同时把 `params_pricing`、`category_references` 从该 provider_model **上移到 `models`**（取当前生效实现的值）
+3. **数据回填**：遍历现有 `provider_models`，按 `code` 去重生成 `models` 记录（首个出现的 code 作为该 model 来源），回填每条 `provider_models.model_id`；`vendor_model_id` 从 worker/api 两处硬编码的 `VOLCENGINE_MODEL_ID` 等映射表灌入；同时把 `params_pricing`、`category_references`、`resolution` 等从该 provider_model **上移到 `models`**（取当前生效实现的值），时长白名单从代码常量 `SEEDANCE_*_ALLOWED_DURATIONS` 灌入 `models.capabilities`
 4. 每个 `model` 设 `active_provider_model_id` = 其当前唯一 / 首选 `provider_model`
 5. `provider_models` 唯一约束改为 `(model_id, provider_id)`
 6. `providers` 加 `base_url`、`credentials_encrypted`、`logo_url`、`credentials_updated_at`
