@@ -1,65 +1,6 @@
-import {
-  BookOpenText,
-  ImageIcon,
-  Music2,
-  Presentation,
-  Video,
-  WandSparkles,
-} from 'lucide-react'
+import { WandSparkles } from 'lucide-react'
 import { CursorRepelTitle } from '@/components/dashboard/cursor-repel-title'
-import { ModuleCard } from './module-card'
-
-/** 每个模块的渐变色配置 */
-const moduleAccents: Record<string, string> = {
-  'AI 音乐': 'from-violet-500/70 via-fuchsia-500/25 to-pink-500/30',
-  'AI 短剧': 'from-sky-500/60 via-blue-500/20 to-indigo-500/40',
-  'AI 绘本': 'from-amber-500/60 via-orange-400/20 to-rose-400/30',
-  'AI 海报': 'from-emerald-500/60 via-teal-400/20 to-cyan-400/30',
-  'AI PPT': 'from-rose-500/60 via-pink-400/20 to-fuchsia-400/30',
-}
-
-const studioModules = [
-  {
-    title: 'AI 音乐',
-    description: '生成歌曲、纯音乐，管理我的音乐作品与克隆音色。',
-    href: '/toby-studio/music',
-    icon: Music2,
-    status: '已开放',
-    available: true,
-  },
-  {
-    title: 'AI 短剧',
-    description: '面向短剧脚本、分镜与成片工作流的创作模块。',
-    href: '/toby-studio/short-drama',
-    icon: Video,
-    status: '已开放',
-    available: true,
-  },
-  {
-    title: 'AI 绘本',
-    description: '面向绘本故事、角色设定与连续画面生成的创作模块。',
-    href: '/toby-studio/picture-book',
-    icon: BookOpenText,
-    status: '已开放',
-    available: true,
-  },
-  {
-    title: 'AI 海报',
-    description: '面向品牌宣传、活动物料与营销视觉的海报创作模块。',
-    href: '/toby-studio/poster',
-    icon: ImageIcon,
-    status: '待开放',
-    available: false,
-  },
-  {
-    title: 'AI PPT',
-    description: '面向提纲生成、页面排版与演示文稿制作的创作模块。',
-    href: '/toby-studio/ppt',
-    icon: Presentation,
-    status: '待开放',
-    available: false,
-  },
-]
+import { StudioModuleGrid } from './module-card'
 
 export default function TobyStudioPage() {
   return (
@@ -108,25 +49,7 @@ export default function TobyStudioPage() {
         </header>
 
         {/* 模块卡片网格：统一行高 */}
-        <section className="toby-module-grid mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {studioModules.map((item) => {
-            const Icon = item.icon
-            const accent = moduleAccents[item.title]
-
-            return (
-              <ModuleCard
-                key={item.title}
-                title={item.title}
-                description={item.description}
-                icon={Icon}
-                accent={accent}
-                status={item.status}
-                available={item.available}
-                href={item.available ? item.href : undefined}
-              />
-            )
-          })}
-        </section>
+        <StudioModuleGrid />
       </div>
     </main>
   )
