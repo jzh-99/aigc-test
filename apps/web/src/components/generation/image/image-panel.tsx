@@ -371,7 +371,7 @@ function ImageModelSelectorRow({
             side="bottom"
             align="start"
             sideOffset={6}
-            className="z-[120] max-h-72 min-w-[240px] overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 shadow-xl shadow-foreground/5 animate-in fade-in-0 zoom-in-95"
+            className="z-[120] max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 shadow-xl shadow-foreground/5 animate-in fade-in-0 zoom-in-95"
           >
             <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
             {(models ?? []).map((m) => {
@@ -393,7 +393,14 @@ function ImageModelSelectorRow({
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/50 shrink-0">
                     <ModelBrandIcon modelCode={m.code} providerCode={m.provider_code} size={32} />
                   </div>
-                  <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{m.name}</span>
+                    {m.description && (
+                      <span className="mt-0.5 block truncate text-[11px] font-normal text-muted-foreground">
+                        {m.description}
+                      </span>
+                    )}
+                  </span>
                   {isActive && <Check className="h-3 w-3 shrink-0" />}
                 </button>
               )
