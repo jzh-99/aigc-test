@@ -40,6 +40,7 @@
 | D6 | 加密主密钥 | 独立 `MASTER_KEY`，不再复用 `JWT_SECRET` |
 | D7 | 图标方案 | `model.avatar` → `provider.logo_url` → 首字母色块；`@lobehub/icons` 渐进移除 |
 | D8 | admin 界面 | 扩展现有 `/admin` 标签页 + 复用 `adminGuard`，不新建独立页/权限 |
+| D9 | 定价分层 | 对用户价放 `models`（模型级一致，切换供应商不影响用户扣费）；不存供应商成本价 |
 
 ## 4. 数据模型
 
@@ -53,6 +54,8 @@ CREATE TABLE models (
   module                      varchar(20)  NOT NULL,          -- image|video|tts|lipsync|agent
   description                 text,
   avatar                      varchar(500),                   -- 模型图标 TOS URL
+  params_pricing              jsonb NOT NULL DEFAULT '[]',    -- 对用户定价（从 provider_models 上移）
+  category_references         jsonb NOT NULL DEFAULT '{}',    -- 对用户能力上限（参考素材数量等）
   sort_order                  integer NOT NULL DEFAULT 0,
   is_active                   boolean  NOT NULL DEFAULT true,
   active_provider_model_id    uuid,                           -- 当前生效供应商实现（后置外键）
@@ -69,8 +72,9 @@ CREATE TABLE models (
 - 新增 `vendor_model_id varchar(255)`：供应商真实模型 ID（原 `VOLCENGINE_MODEL_ID['seedance-2.0']` 的值 `doubao-seedance-2-0-260128` 落此）
 - 原 `(provider_id, code)` 唯一约束 → 替换为 `(model_id, provider_id)` 唯一约束（一个模型在一个供应商下只有一条实现）
 - `code` 列保留但语义降级为"供应商侧标识"，可空；面向用户的标识完全由 `models.code` 接管
-- `params_pricing`、`params_schema`、`category_references` 等业务字段保留不动
-- 现有 admin `GET/PATCH /admin/models` 仍管理本表的定价/参数/schema（供应商实现层管理），保留
+- `params_pricing`（用户定价）、`category_references`（用户能力上限）**上移到 `models`**（对用户一致的契约，切换供应商不影响用户扣费 / 看到的能力）
+- `params_schema`（各供应商支持的参数差异，如火山支持 `camera_fixed`、代理可能不支持）留在本表
+- 现有 admin `GET /admin/models`（查 provider_models）保留；`PATCH /admin/models/:id` **收窄为只改 `params_schema` 等供应商级字段**，定价编辑改到 `PATCH /admin/catalog/models/:id`
 
 ### 4.3 改造 `providers`（供应商 + 凭据）
 
@@ -125,10 +129,12 @@ interface ResolvedModel {
   providerCode: string              // 'volcengine-ark'
   baseUrl: string
   credentials: Record<string, string>  // 已解密
+  paramsPricing: unknown            // 对用户定价（来自 models，与供应商无关）
+  categoryReferences: unknown       // 对用户能力上限（来自 models）
 }
 ```
 
-解析步骤：`models(code)` → `active_provider_model_id` → `provider_models(vendor_model_id, provider_id)` → `providers(base_url, credentials_encrypted)` → 解密。
+解析步骤：`models(code)`（同时取 `params_pricing` / `category_references`，作为对用户扣费与能力校验的依据）→ `active_provider_model_id` → `provider_models(vendor_model_id, provider_id)` → `providers(base_url, credentials_encrypted)` → 解密。扣费始终用 `models.params_pricing`，与当前生效供应商无关（D9）。
 
 ### 5.3 缓存与立即生效（D4）
 
@@ -186,7 +192,8 @@ worker: 消费任务
 
 **「模型管理」标签改造**（现有 `ModelTable` 以 `models` 逻辑模型为主维度重构）：
 - 列表行：模型 code / name / module / avatar / 当前生效供应商
-- 行展开：该模型下所有 `provider_models` 实现（供应商 + vendor_model_id + 状态），单选切换 active_provider_model_id；展开行内可编辑各供应商实现的定价 / 参数 / schema（复用现有 `PATCH /admin/models/:id`，保留不动）
+- 模型行可编辑对用户定价（`params_pricing`）、能力上限（`category_references`）—— 模型级，与供应商无关
+- 行展开：该模型下所有 `provider_models` 实现（供应商 + vendor_model_id + 状态），单选切换 active_provider_model_id；展开行内编辑各实现的参数 schema（复用现有 `PATCH /admin/models/:id`，已收窄为只改供应商级字段）
 - 逻辑模型 CRUD：新建（code/name/module/avatar）、停用（is_active）、绑定 / 解绑供应商实现
 - avatar 上传入口
 
@@ -202,7 +209,7 @@ worker: 消费任务
 **逻辑模型层**（`routes/admin/catalog-*`）：
 - `GET /admin/catalog/models` — 查逻辑模型列表（含 active provider + 下挂实现）
 - `POST /admin/catalog/models` — 新建逻辑模型
-- `PATCH /admin/catalog/models/:id` — 改 name / avatar / is_active / sort_order
+- `PATCH /admin/catalog/models/:id` — 改 name / avatar / is_active / sort_order / params_pricing / category_references
 - `POST /admin/catalog/models/:id/switch` — 切换 active_provider_model_id（**写入后调 `invalidateCache('model', code)`**）
 - `POST /admin/catalog/models/:id/providers` — 绑定一个供应商实现（vendor_model_id）
 - `DELETE /admin/catalog/models/:id/providers/:pmId` — 解绑
@@ -250,7 +257,7 @@ worker: 消费任务
 
 1. 新建 `models` 表（`active_provider_model_id` 先建为普通列，无外键）
 2. `provider_models` 加 `model_id`、`vendor_model_id` 列
-3. **数据回填**：遍历现有 `provider_models`，按 `code` 去重生成 `models` 记录（首个出现的 code 作为该 model 来源），回填每条 `provider_models.model_id`；`vendor_model_id` 从 worker/api 两处硬编码的 `VOLCENGINE_MODEL_ID` 等映射表灌入
+3. **数据回填**：遍历现有 `provider_models`，按 `code` 去重生成 `models` 记录（首个出现的 code 作为该 model 来源），回填每条 `provider_models.model_id`；`vendor_model_id` 从 worker/api 两处硬编码的 `VOLCENGINE_MODEL_ID` 等映射表灌入；同时把 `params_pricing`、`category_references` 从该 provider_model **上移到 `models`**（取当前生效实现的值）
 4. 每个 `model` 设 `active_provider_model_id` = 其当前唯一 / 首选 `provider_model`
 5. `provider_models` 唯一约束改为 `(model_id, provider_id)`
 6. `providers` 加 `base_url`、`credentials_encrypted`、`logo_url`、`credentials_updated_at`
@@ -272,6 +279,7 @@ worker: 消费任务
 - `routes/admin/providers-*.ts`（新增：供应商列表 + 凭据 + base_url + logo）
 - `lib/queue.ts` 或入队点：投递时带 `modelCode` / `vendorModelId` / `providerCode`
 - 所有 env 读取点改为 `resolveModel`：`routes/ai-assistant`、`routes/canvas-agent/*`、`routes/picture-book`、`routes/video-studio/_shared`、`services/minimax-tts.ts` 等
+- 扣费逻辑（`routes/videos/post-generate`、`routes/short-drama/post-generate-segment-video` 的 `resolveUnitPrice` / `calculateVideoEstimatedCredits`）改为用 `resolveModel` 返回的 `paramsPricing`（来自 `models`），不再读 `provider_models.params_pricing`
 - 启动钩子：校验 `MASTER_KEY`、订阅失效广播
 
 **apps/worker**
@@ -294,3 +302,4 @@ worker: 消费任务
 - TOS、支付凭据落库
 - `MASTER_KEY` 自动轮换
 - admin 界面的操作审计日志（除现有 `provider_api_logs` 外，不额外建审计表）
+- 按供应商核算成本 / 利润率（D9：只存对用户价，不存供应商成本价）
