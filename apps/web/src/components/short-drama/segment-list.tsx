@@ -69,37 +69,6 @@ export function SegmentList({
             <div className="text-xs text-muted-foreground">片段 {String(selectedSafeIndex + 1).padStart(2, '0')}</div>
             <h3 className="truncate text-lg font-semibold">{selectedSegment.title}</h3>
           </div>
-          <div className="flex items-center gap-1">
-            {!disabled && (
-              <>
-                <button
-                  onClick={() => onSegmentMove(selectedSafeIndex, selectedSafeIndex - 1)}
-                  disabled={selectedSafeIndex === 0}
-                  className="flex h-8 items-center gap-1 rounded-full px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
-                  title="前移"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                  前移
-                </button>
-                <button
-                  onClick={() => onSegmentMove(selectedSafeIndex, selectedSafeIndex + 1)}
-                  disabled={selectedSafeIndex === segments.length - 1}
-                  className="flex h-8 items-center gap-1 rounded-full px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
-                  title="后移"
-                >
-                  后移
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => onSegmentDelete(selectedSafeIndex)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-red-500/10"
-                  title="删除分镜"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </>
-            )}
-          </div>
         </div>
 
         <SegmentPromptEditor
@@ -157,13 +126,40 @@ export function SegmentList({
       </section>
 
       <section className="rounded-2xl border bg-card/80 p-3">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-3">
           <span className="text-xs font-medium text-muted-foreground">片段序列</span>
           {!disabled && (
-            <Button variant="ghost" size="sm" onClick={() => onSegmentAdd(selectedSafeIndex)} className="h-7 px-2 text-xs">
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              添加
-            </Button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onSegmentMove(selectedSafeIndex, selectedSafeIndex - 1)}
+                disabled={selectedSafeIndex === 0}
+                className="flex h-7 items-center gap-1 rounded-full px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                title="前移"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                前移
+              </button>
+              <button
+                onClick={() => onSegmentMove(selectedSafeIndex, selectedSafeIndex + 1)}
+                disabled={selectedSafeIndex === segments.length - 1}
+                className="flex h-7 items-center gap-1 rounded-full px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                title="后移"
+              >
+                后移
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => onSegmentDelete(selectedSafeIndex)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-red-500 hover:bg-red-500/10"
+                title="删除分镜"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+              <Button variant="ghost" size="sm" onClick={() => onSegmentAdd(selectedSafeIndex)} className="h-7 px-2 text-xs">
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                添加
+              </Button>
+            </div>
           )}
         </div>
         <div className="flex gap-3 overflow-x-auto pb-1">
