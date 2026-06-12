@@ -38,7 +38,7 @@
 | D4 | 切换生效 | 立即生效（Redis pub/sub 广播失效） |
 | D5 | 火山双鉴权 | 拆分为 `volcengine-ark` 与 `volcengine-visual` 两个 provider |
 | D6 | 加密主密钥 | 独立 `MASTER_KEY`，不再复用 `JWT_SECRET` |
-| D7 | 图标方案 | `model.avatar` → `provider.logo_url` → 首字母色块；`@lobehub/icons` 渐进移除 |
+| D7 | 图标方案 | `model.avatar` → `provider.logo_url` → 首字母色块；本次直接移除 `@lobehub/icons`（须先备齐所有 avatar） |
 | D8 | admin 界面 | 扩展现有 `/admin` 标签页 + 复用 `adminGuard`，不新建独立页/权限 |
 | D9 | 定价分层 | 对用户价放 `models`（模型级一致，切换供应商不影响用户扣费）；不存供应商成本价 |
 | D10 | 能力约束 | resolution、时长白名单等对用户一致的能力约束上移到 `models.capabilities` |
@@ -177,11 +177,11 @@ worker: 消费任务
 2. `provider.logo_url`（TOS URL）→ `<img>`（同供应商模型共享 logo）
 3. 首字母色块（纯 CSS，零依赖兜底）
 
-### 7.2 `@lobehub/icons` 渐进移除
+### 7.2 `@lobehub/icons` 直接移除（本次完成）
 
-- **过渡期**：保留 `@lobehub/icons` 作为"avatar + logo 均空"时的最后 fallback，保证迁移期所有模型都有可见图标。
-- **移除时机**：所有在用模型均补齐 `avatar` 后，单独 PR 删除 `@lobehub/icons` 依赖与 `model-images.ts` 映射表。
-- 此方案符合既有"映射表 + 兜底"图标原则（在兜底链前端新增一档自托管图片，非二极管式优先级切换）。
+- 本次即移除 `@lobehub/icons` 依赖与 `model-images.ts` 中 lobehub 相关导入/映射，**不保留作 fallback**。
+- **前提**：本次必须为所有在用系统模型与供应商备齐 `avatar` / `logo_url`（见迁移步骤 9），否则图标空白。
+- 兜底链仅剩 `model.avatar → provider.logo_url → 首字母色块`（纯 CSS，零依赖）。
 
 ### 7.3 avatar 资源管理
 
@@ -267,8 +267,9 @@ worker: 消费任务
 6. `providers` 加 `base_url`、`credentials_encrypted`、`logo_url`、`credentials_updated_at`
 7. **火山拆分**：插入 `volcengine-ark` / `volcengine-visual`，原 `provider_models` 中火山记录的 `provider_id` 迁移到对应新 provider，删除旧 `volcengine` 记录
 8. **凭据 bootstrap**：迁移脚本从环境变量读取现有 key（`VOLCENGINE_API_KEY` 等），加密写入对应 `providers.credentials_encrypted`（一次性，生产首次部署执行）
-9. 建立 `active_provider_model_id` 外键（DEFERRABLE）
-10. 更新 `packages/types` 中 DB 类型与共享类型
+9. **图标资源导入**：为所有在用系统模型与供应商准备 avatar / logo，上传 TOS 回填 `models.avatar` / `providers.logo_url`（运营提供图标文件，脚本批量导入；本次移除 `@lobehub/icons` 的前提）
+10. 建立 `active_provider_model_id` 外键（DEFERRABLE）
+11. 更新 `packages/types` 中 DB 类型与共享类型
 
 ## 12. 改造文件清单
 
@@ -296,9 +297,9 @@ worker: 消费任务
 - `app/(dashboard)/admin/page.tsx`：新增「供应商管理」标签
 - `components/admin/model-table.tsx`：以逻辑模型为主维度重构（切换 + CRUD + avatar）
 - `components/admin/provider-table.tsx`（新增）：供应商凭据 / base_url / logo 管理
-- `lib/model-images.ts`、`components/generation/shared/model-brand-icon.tsx`：avatar → logo → 首字母三级渲染
+- `lib/model-images.ts`、`components/generation/shared/model-brand-icon.tsx`：avatar → logo → 首字母三级渲染，删除 lobehub 映射
 - 模型列表接口消费 `models.avatar`
-- （后续单独 PR）移除 `@lobehub/icons` 依赖
+- 本次移除 `@lobehub/icons` 依赖（`package.json` + 清理 `model-images.ts` 的 lobehub 导入）
 
 ## 13. 非目标（YAGNI 重申）
 
