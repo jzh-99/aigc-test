@@ -13,17 +13,20 @@
 1. **凭据落库**：每个供应商的 `base_url` + 凭据加密存入数据库，支持运营在后台管理、免重启切换。
 2. **模型与供应商解耦**：引入"逻辑模型"层，一个逻辑模型可绑定多个供应商实现，运营可为模型指定"当前生效供应商"并手动切换。
 3. **切换立即生效**：运营切换后，下一次请求即使用新供应商。
-4. **移除模型图标重依赖**：为模型增加 `avatar`（自托管图片），逐步移除 `@lobehub/icons`。
+4. **admin 管理后台**：admin 角色可在可视化界面完成切换供应商、编辑凭据、上传图标、逻辑模型 CRUD。
+5. **移除模型图标重依赖**：为模型增加 `avatar`（自托管图片），逐步移除 `@lobehub/icons`。
 
 ## 2. 范围
 
 - **覆盖供应商**：火山（ARK）、火山（Visual 数字人）、豆包、Nano Banana、Qwen、Minimax、Mureka，共 7 路。
 - **覆盖应用**：`apps/api`、`apps/worker`、`apps/web`、`packages/db`、`packages/types`。
+- **admin 管理界面**（本次纳入）：扩展现有 `/admin` 标签页，复用 `adminGuard` 权限体系。
 - **不包含**（YAGNI，明确排除）：
   - 自动故障转移 / 熔断 / 重试（本次仅运营手动切换，静态生效）。
   - 同供应商多账号轮询 / 负载均衡。
   - 按团队 / 套餐路由不同供应商（`team_model_configs` 表保留，本次不扩展凭据字段）。
-  - 凭据管理后台 UI（本次仅提供 admin API；UI 后续单独迭代）。
+  - TOS、支付（`LIFE_SERVICE_*`）凭据落库（非 AI 供应商，形态特殊，仍走环境变量）。
+  - `MASTER_KEY` 自动轮换。
 
 ## 3. 关键决策
 
@@ -36,6 +39,7 @@
 | D5 | 火山双鉴权 | 拆分为 `volcengine-ark` 与 `volcengine-visual` 两个 provider |
 | D6 | 加密主密钥 | 独立 `MASTER_KEY`，不再复用 `JWT_SECRET` |
 | D7 | 图标方案 | `model.avatar` → `provider.logo_url` → 首字母色块；`@lobehub/icons` 渐进移除 |
+| D8 | admin 界面 | 扩展现有 `/admin` 标签页 + 复用 `adminGuard`，不新建独立页/权限 |
 
 ## 4. 数据模型
 
@@ -56,7 +60,7 @@ CREATE TABLE models (
   updated_at                  timestamptz NOT NULL DEFAULT NOW(),
   CONSTRAINT chk_models_module CHECK (module IN ('image','video','tts','lipsync','agent'))
 );
--- active_provider_model_id → provider_models.id，循环外键，迁移末尾用 DEFERRABLE 建立
+-- active_provider_model_id → provider_models.id，循环外键，迁移末尾以 DEFERRABLE 建立
 ```
 
 ### 4.2 改造 `provider_models`（某供应商对该模型的实现）
@@ -66,12 +70,14 @@ CREATE TABLE models (
 - 原 `(provider_id, code)` 唯一约束 → 替换为 `(model_id, provider_id)` 唯一约束（一个模型在一个供应商下只有一条实现）
 - `code` 列保留但语义降级为"供应商侧标识"，可空；面向用户的标识完全由 `models.code` 接管
 - `params_pricing`、`params_schema`、`category_references` 等业务字段保留不动
+- 现有 admin `GET/PATCH /admin/models` 仍管理本表的定价/参数/schema（供应商实现层管理），保留
 
 ### 4.3 改造 `providers`（供应商 + 凭据）
 
 - 新增 `base_url varchar(500)`：该供应商 API 基地址
 - 新增 `credentials_encrypted text`：AES-256-GCM 密文（base64url），明文为 JSON
 - 新增 `logo_url varchar(500)`：供应商 logo，作模型 avatar 缺失兜底
+- 新增 `credentials_updated_at timestamptz`：凭据最后更新时间（供 admin 展示，不暴露明文）
 - `config jsonb` 保留作杂项配置
 - **D5 拆分**：现有单条 `code='volcengine'` 拆为：
   - `volcengine-ark`：图片 / 视频 / 对话，凭据 `{ api_key }`，base_url `https://ark.cn-beijing.volces.com/api/v3`
@@ -85,8 +91,6 @@ CREATE TABLE models (
 // Visual 类（volcengine-visual，AK/SK 签名）
 { "access_key": "xxxx", "secret_key": "xxxx" }
 ```
-
-> TOS 与支付（`LIFE_SERVICE_*`）凭据**本次不纳入** providers（它们不是 AI 供应商，且形态特殊），仍保留环境变量。
 
 ### 4.5 ER 关系
 
@@ -131,6 +135,7 @@ interface ResolvedModel {
 - **进程内缓存**：`Map<modelCode, ResolvedModel>`，命中则直接返回（避免每次 AI 调用查 3 张表 + 解密）
 - **失效广播**：admin 写入 / 切换后，`redis.publish('provider:invalidated', JSON.stringify({ scope, code }))`；各 api/worker 节点订阅该频道，收到后 `cache.delete(code)`（scope 为 `model` 或 `provider`，provider 维度失效时清所有相关 model）
 - **兜底 TTL**：缓存条目设 5 分钟 TTL 作为广播丢失的保险（正常路径靠广播即时失效，TTL 仅兜底）
+- 导出 `invalidateCache(scope, code)` 供 admin 写入接口调用
 
 ## 6. 数据流（以 seedance-2.0 为例）
 
@@ -170,56 +175,101 @@ worker: 消费任务
 
 ### 7.3 avatar 资源管理
 
-- admin API 支持上传图标到 TOS，回填 `models.avatar` / `providers.logo_url`
+- admin API 支持上传图标到 TOS，回填 `models.avatar` / `providers.logo_url`（见第 8 节）
 - 迁移期可批量导入（脚本读取现有映射，运营提供图标文件）
 
-## 8. 错误处理
+## 8. Admin 管理界面（D8）
+
+复用现有权限（`adminGuard` + 页面 `role !== 'admin'` 拦截）与标签页范式，扩展现有 `/admin` 页面。
+
+### 8.1 Web 端（扩展 `app/(dashboard)/admin/page.tsx` 标签）
+
+**「模型管理」标签改造**（现有 `ModelTable` 以 `models` 逻辑模型为主维度重构）：
+- 列表行：模型 code / name / module / avatar / 当前生效供应商
+- 行展开：该模型下所有 `provider_models` 实现（供应商 + vendor_model_id + 状态），单选切换 active_provider_model_id；展开行内可编辑各供应商实现的定价 / 参数 / schema（复用现有 `PATCH /admin/models/:id`，保留不动）
+- 逻辑模型 CRUD：新建（code/name/module/avatar）、停用（is_active）、绑定 / 解绑供应商实现
+- avatar 上传入口
+
+**「供应商管理」标签新增**（新组件 `components/admin/provider-table.tsx`，参照现有 `OtherCostConfigTable` 范式）：
+- 列表行：provider code / name / base_url / logo / 凭据状态（已设置 + 最后更新时间，**不显示明文**）
+- 编辑 base_url、上传 logo
+- 凭据设置 / 轮换：表单提交明文 → 服务端加密入库 → 仅回显"已设置 / 更新时间"
+
+### 8.2 API 端（新增 admin 路由，复用 `autohooks` 自动注册 + `adminGuard`）
+
+> 命名约定：现有 `/admin/models` 管的是 `provider_models`（供应商实现层），保留不动；逻辑模型层用 `/admin/catalog/models` 区分。
+
+**逻辑模型层**（`routes/admin/catalog-*`）：
+- `GET /admin/catalog/models` — 查逻辑模型列表（含 active provider + 下挂实现）
+- `POST /admin/catalog/models` — 新建逻辑模型
+- `PATCH /admin/catalog/models/:id` — 改 name / avatar / is_active / sort_order
+- `POST /admin/catalog/models/:id/switch` — 切换 active_provider_model_id（**写入后调 `invalidateCache('model', code)`**）
+- `POST /admin/catalog/models/:id/providers` — 绑定一个供应商实现（vendor_model_id）
+- `DELETE /admin/catalog/models/:id/providers/:pmId` — 解绑
+- `POST /admin/catalog/models/:id/avatar` — 上传 avatar 到 TOS
+
+**供应商凭据层**（`routes/admin/providers-*`）：
+- `GET /admin/providers` — 查供应商列表（凭据仅返回"是否已设置 + credentials_updated_at"，不返回密文 / 明文）
+- `PATCH /admin/providers/:id` — 改 base_url / logo_url
+- `PUT /admin/providers/:id/credentials` — 设置 / 轮换凭据（body 含明文，服务端 `encryptCredentials` 入库，更新 `credentials_updated_at`，**调 `invalidateCache('provider', code)`**）
+- `POST /admin/providers/:id/logo` — 上传 logo 到 TOS
+
+### 8.3 凭据安全要点
+
+- `PUT /admin/providers/:id/credentials`：明文仅在请求体一次性传入，加密入库后立即从内存丢弃；**不写 `provider_api_logs`**（避免明文进日志）；响应不回显明文。
+- `GET /admin/providers`：`credentials_encrypted` 字段不返回，仅返回派生的"已设置 + 更新时间"。
+- 所有写入凭据 / 切换的接口，成功后必须发失效广播（D4）。
+
+## 9. 错误处理
 
 | 场景 | 处理 |
 |------|------|
-| `MASTER_KEY` 缺失 / 非法 | 进程启动即退出（启动失败 > 运行时失败） |
+| `MASTER_KEY` 缺失 | 进程启动即退出（启动失败 > 运行时失败） |
 | 模型无 `active_provider_model_id` | API 返回 `503 MODEL_NOT_CONFIGURED`，提示运营配置 |
 | 凭据缺失 / 解密失败 | 该模型不可用，API 返回明确错误并记 `provider_api_logs`，不静默 401 |
 | 失效广播丢失 | 缓存 5min TTL 兜底 |
 | 切换瞬间在途任务 | 已入队任务按入队时 `modelCode` 解析，可能命中旧供应商——属可接受行为（运营手动切换低频，且任务已扣冻结积分，最终以结果轮询为准） |
 | 循环外键 | 迁移末尾以 `DEFERRABLE INITIALLY DEFERRED` 建立 `active_provider_model_id` 外键 |
+| admin 凭据接口被非 admin 调用 | `adminGuard` 返回 403 |
 
-## 9. 测试策略
+## 10. 测试策略
 
 - **单元测试**：
   - `crypto.ts`：加密 → 解密往返；错误密文 / 错误 master key 抛错
-  - `provider-resolver.ts`：命中缓存、缓存失效后重查、`active_provider_model_id` 缺失分支
+  - `provider-resolver.ts`：命中缓存、缓存失效后重查、`active_provider_model_id` 缺失分支、`invalidateCache` 清理
 - **迁移测试**（参照 `packages/db/src/*.test.ts` 模式）：
   - 现有 `provider_models` 数据正确生成 `models`（按 code 去重）
   - `model_id` / `vendor_model_id` 回填正确
   - 火山拆分后 `provider_models` 挂到正确 provider
 - **集成测试**：
-  - 切换 `active_provider_model_id` → 发广播 → 缓存失效 → 下次 `resolveModel` 返回新供应商
+  - admin 切换 `active_provider_model_id` → 发广播 → 缓存失效 → 下次 `resolveModel` 返回新供应商
+  - admin `PUT credentials` → 加密入库 → 广播失效 → worker 取到新凭据
   - seedance-2.0 端到端：生成请求实际打到解析后的供应商
 
-## 10. 迁移步骤（迁移脚本 + 数据回填）
+## 11. 迁移步骤（迁移脚本 + 数据回填）
 
-1. 新建 `models` 表（无 `active_provider_model_id` 外键先建为普通列）
+1. 新建 `models` 表（`active_provider_model_id` 先建为普通列，无外键）
 2. `provider_models` 加 `model_id`、`vendor_model_id` 列
 3. **数据回填**：遍历现有 `provider_models`，按 `code` 去重生成 `models` 记录（首个出现的 code 作为该 model 来源），回填每条 `provider_models.model_id`；`vendor_model_id` 从 worker/api 两处硬编码的 `VOLCENGINE_MODEL_ID` 等映射表灌入
-4. 每个 `model` 设 `active_provider_model_id` = 其当前唯一/首选 `provider_model`
+4. 每个 `model` 设 `active_provider_model_id` = 其当前唯一 / 首选 `provider_model`
 5. `provider_models` 唯一约束改为 `(model_id, provider_id)`
-6. `providers` 加 `base_url`、`credentials_encrypted`、`logo_url`
+6. `providers` 加 `base_url`、`credentials_encrypted`、`logo_url`、`credentials_updated_at`
 7. **火山拆分**：插入 `volcengine-ark` / `volcengine-visual`，原 `provider_models` 中火山记录的 `provider_id` 迁移到对应新 provider，删除旧 `volcengine` 记录
 8. **凭据 bootstrap**：迁移脚本从环境变量读取现有 key（`VOLCENGINE_API_KEY` 等），加密写入对应 `providers.credentials_encrypted`（一次性，生产首次部署执行）
 9. 建立 `active_provider_model_id` 外键（DEFERRABLE）
 10. 更新 `packages/types` 中 DB 类型与共享类型
 
-## 11. 改造文件清单
+## 12. 改造文件清单
 
 **packages**
 - `packages/db/migrations/062_provider_credentials_model_switch.ts`（新迁移；编号以执行时仓库最新序号为准，当前最大为 061）
 - `packages/db/src/crypto.ts`（新增）、`packages/db/src/provider-resolver.ts`（新增）
-- `packages/db/src/schema.ts`（models/provider_models/providers 类型）
+- `packages/db/src/schema.ts`（models / provider_models / providers 类型）
 - `packages/types/src/*`（ResolvedModel 等共享类型）
 
 **apps/api**
-- `routes/admin/*`：新增凭据写入 + 切换供应商 + 图标上传接口
+- `routes/admin/catalog-*.ts`（新增：逻辑模型 CRUD + 切换 + avatar 上传）
+- `routes/admin/providers-*.ts`（新增：供应商列表 + 凭据 + base_url + logo）
 - `lib/queue.ts` 或入队点：投递时带 `modelCode` / `vendorModelId` / `providerCode`
 - 所有 env 读取点改为 `resolveModel`：`routes/ai-assistant`、`routes/canvas-agent/*`、`routes/picture-book`、`routes/video-studio/_shared`、`services/minimax-tts.ts` 等
 - 启动钩子：校验 `MASTER_KEY`、订阅失效广播
@@ -231,13 +281,16 @@ worker: 消费任务
 - 启动钩子：校验 `MASTER_KEY`、订阅失效广播
 
 **apps/web**
+- `app/(dashboard)/admin/page.tsx`：新增「供应商管理」标签
+- `components/admin/model-table.tsx`：以逻辑模型为主维度重构（切换 + CRUD + avatar）
+- `components/admin/provider-table.tsx`（新增）：供应商凭据 / base_url / logo 管理
 - `lib/model-images.ts`、`components/generation/shared/model-brand-icon.tsx`：avatar → logo → 首字母三级渲染
 - 模型列表接口消费 `models.avatar`
 - （后续单独 PR）移除 `@lobehub/icons` 依赖
 
-## 12. 非目标（YAGNI 重申）
+## 13. 非目标（YAGNI 重申）
 
-- 凭据管理后台 UI
 - 自动故障转移 / 多账号轮询 / 按团队路由
 - TOS、支付凭据落库
 - `MASTER_KEY` 自动轮换
+- admin 界面的操作审计日志（除现有 `provider_api_logs` 外，不额外建审计表）
