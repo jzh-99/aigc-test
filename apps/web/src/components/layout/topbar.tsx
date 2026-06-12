@@ -13,7 +13,7 @@ import {
 import { useLayoutStore } from '@/stores/layout-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
-import { useMemo } from 'react'
+import { useMemo, Suspense } from 'react'
 import { apiPost } from '@/lib/api-client'
 import { useRouter } from 'next/navigation'
 import { MobileSidebar } from './mobile-sidebar'
@@ -62,7 +62,9 @@ export function Topbar({ title }: TopbarProps) {
       {title ? (
         <h1 className="text-lg font-semibold">{title}</h1>
       ) : (
-        <CreativeTopNav />
+        <Suspense fallback={<div className="h-8 w-48" />}>
+          <CreativeTopNav />
+        </Suspense>
       )}
 
       <div className="ml-auto flex items-center gap-2">
@@ -110,7 +112,9 @@ export function Topbar({ title }: TopbarProps) {
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="p-0 w-60">
           <SheetTitle className="sr-only">导航菜单</SheetTitle>
-          <MobileSidebar />
+          <Suspense fallback={null}>
+            <MobileSidebar />
+          </Suspense>
         </SheetContent>
       </Sheet>
     </header>

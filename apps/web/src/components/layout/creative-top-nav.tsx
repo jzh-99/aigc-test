@@ -12,7 +12,6 @@ import {
 import { cn } from '@/lib/utils'
 import { creativeNavItems, isNavItemActive } from './nav-config'
 import { useTeamFeatures } from '@/hooks/use-team-features'
-import { useNavigationStore } from '@/stores/navigation-store'
 
 export function CreativeTopNav() {
   const pathname = usePathname()
@@ -20,7 +19,6 @@ export function CreativeTopNav() {
   const query = searchParams.toString()
   const currentPath = query ? `${pathname}?${query}` : pathname
   const { showVideoStudioTab } = useTeamFeatures()
-  const startNavigation = useNavigationStore((s) => s.startNavigation)
 
   return (
     <nav className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="创作主导航">
@@ -56,7 +54,6 @@ export function CreativeTopNav() {
                     <DropdownMenuItem key={child.href} asChild>
                       <Link
                         href={child.href}
-                        onClick={() => startNavigation(child.href)}
                         className={cn(
                           'flex flex-col items-start gap-0.5',
                           childActive && 'bg-accent text-accent-foreground'
@@ -80,7 +77,6 @@ export function CreativeTopNav() {
           <Link
             key={item.href}
             href={item.href}
-            onClick={() => startNavigation(item.href)}
             className={cn(
               'inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
               active && 'bg-accent text-accent-foreground'

@@ -6,7 +6,6 @@ import { PlusCircle, Loader2, Trash2, Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { useNavigationStore } from '@/stores/navigation-store'
 import { CanvasTrashDrawer } from '@/components/canvas/canvas-trash-drawer'
 import { useConfirm } from '@/hooks/use-confirm'
 
@@ -56,7 +55,6 @@ export default function CanvasGalleryPage() {
   function openCanvas(id: string) {
     if (openingId) return
     setOpeningId(id)
-    useNavigationStore.getState().startNavigation(`/canvas/editor/${id}`)
     router.push(`/canvas/editor/${id}`)
   }
 

@@ -3,12 +3,12 @@
 import { useAuthStore } from '@/stores/auth-store'
 import { MemberList } from '@/components/team/member-list'
 import { WorkspaceList } from '@/components/team/workspace-list'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { TeamCreditsSettings } from '@/components/team/team-credits-settings'
 
-export default function TeamPage() {
+function TeamPageContent() {
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const isOwner = activeTeam?.role === 'owner'
@@ -60,5 +60,13 @@ export default function TeamPage() {
       {activeTab === 'workspaces' && <WorkspaceList teamId={activeTeamId} />}
       {activeTab === 'credits' && isOwner && <TeamCreditsSettings teamId={activeTeamId} />}
     </div>
+  )
+}
+
+export default function TeamPage() {
+  return (
+    <Suspense>
+      <TeamPageContent />
+    </Suspense>
   )
 }

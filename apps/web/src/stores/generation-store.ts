@@ -305,6 +305,9 @@ export const useGenerationStore = create<GenerationState>()(
         aspectRatio: state.aspectRatio,
         quantity: state.quantity,
       }),
+      // 跳过服务端自动 rehydrate，避免 SSR 默认值与 localStorage 值不一致导致 hydration mismatch。
+      // 改为在客户端 useEffect 里手动调用 rehydrate（见 lib/store-hydration.tsx）。
+      skipHydration: true,
     }
   )
 )

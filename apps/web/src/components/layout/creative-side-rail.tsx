@@ -22,7 +22,6 @@ import {
   isNavItemActive,
   managementNavItems,
 } from './nav-config'
-import { useNavigationStore } from '@/stores/navigation-store'
 
 const navLabelMap: Record<string, string> = {
   'Toby Studio': 'Toby',
@@ -95,7 +94,7 @@ export function CreativeSideRail() {
             : 'bg-transparent'
       )}
     >
-      <Link href="/" onClick={() => useNavigationStore.getState().startNavigation('/')} className={cn('relative z-10 mb-12 grid h-9 w-9 place-items-center transition', railTheme.logo)}>
+      <Link href="/" className={cn('relative z-10 mb-12 grid h-9 w-9 place-items-center transition', railTheme.logo)}>
         <svg viewBox="0 0 40 40" className="h-8 w-8 overflow-visible" aria-hidden="true">
           <defs>
             <linearGradient id="toby-logo-fill" x1="9" y1="6" x2="31" y2="34" gradientUnits="userSpaceOnUse">
@@ -153,7 +152,6 @@ export function CreativeSideRail() {
               <TooltipTrigger asChild>
                 <Link
                   href={item.href}
-                  onClick={() => useNavigationStore.getState().startNavigation(item.href)}
                   aria-current={isActive ? 'page' : undefined}
                   className={cn(
                     'group flex flex-col items-center gap-1.5 text-[10px] font-medium leading-none transition',
@@ -294,7 +292,7 @@ export function CreativeSideRail() {
                     isActive && 'bg-white/[0.12] text-white'
                   )}
                 >
-                  <Link href={item.href} onClick={() => useNavigationStore.getState().startNavigation(item.href)} aria-current={isActive ? 'page' : undefined}>
+                  <Link href={item.href} aria-current={isActive ? 'page' : undefined}>
                     <Icon className="h-4 w-4" aria-hidden="true" />
                     <span>{item.label}</span>
                   </Link>

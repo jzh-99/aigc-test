@@ -117,11 +117,11 @@ export async function fetchWithAuth<T>(path: string, init: RequestInit = {}): Pr
           resolve()
         }
       })
-      // 兜底超时：10 秒后强制继续，防止 subscribe 永远不触发
+      // 兜底超时：3 秒后强制继续，防止 subscribe 永远不触发
       setTimeout(() => {
         unsubscribe()
         resolve()
-      }, 10000)
+      }, 3000)
     })
   }
 

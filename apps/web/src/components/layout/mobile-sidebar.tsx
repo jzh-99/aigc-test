@@ -18,7 +18,6 @@ import {
   type NavItem,
 } from './nav-config'
 import { useTeamFeatures } from '@/hooks/use-team-features'
-import { useNavigationStore } from '@/stores/navigation-store'
 
 export function MobileSidebar() {
   const pathname = usePathname()
@@ -54,7 +53,7 @@ export function MobileSidebar() {
         >
           <Link
             href={item.href}
-            onClick={() => { useNavigationStore.getState().startNavigation(item.href); setMobileOpen(false) }}
+            onClick={() => { setMobileOpen(false) }}
             aria-current={isActive ? 'page' : undefined}
           >
             <item.icon className={cn('h-4 w-4 shrink-0')} />
@@ -76,7 +75,7 @@ export function MobileSidebar() {
                 >
                   <Link
                     href={child.href}
-                    onClick={() => { useNavigationStore.getState().startNavigation(child.href); setMobileOpen(false) }}
+                    onClick={() => { setMobileOpen(false) }}
                     aria-current={childActive ? 'page' : undefined}
                   >
                     {child.label}
@@ -94,7 +93,7 @@ export function MobileSidebar() {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex h-14 items-center px-4 border-b">
-        <Link href="/" className="flex items-center gap-2" onClick={() => { useNavigationStore.getState().startNavigation('/'); setMobileOpen(false) }}>
+        <Link href="/" className="flex items-center gap-2" onClick={() => { setMobileOpen(false) }}>
           <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-accent">
             <Sparkles className="h-4 w-4 text-white" />
           </div>

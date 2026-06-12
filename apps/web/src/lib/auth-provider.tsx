@@ -80,13 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval)
   }, [isInitialized, user])
 
-  if (!isInitialized) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-blue" />
-      </div>
-    )
-  }
-
+  // 不阻塞渲染：refresh 期间直接展示 children，各页面的 loading.tsx skeleton 承接过渡态。
+  // refresh 完成后若未登录，useEffect 里的跳转逻辑会执行 router.replace('/login')。
   return <>{children}</>
 }

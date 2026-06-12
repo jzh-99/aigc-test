@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { Suspense, useState, useCallback, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -56,7 +56,7 @@ function BatchSSEWatcher({ batchId, onUpdate, onTerminal }: BatchSSEWatcherProps
   return null
 }
 
-export default function ImagePage() {
+function ImagePageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const _mode = searchParams.get('mode')
@@ -265,5 +265,13 @@ export default function ImagePage() {
         onOpenChange={setDetailOpen}
       />
     </div>
+  )
+}
+
+export default function GenerationPage() {
+  return (
+    <Suspense>
+      <ImagePageContent />
+    </Suspense>
   )
 }
