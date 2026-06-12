@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 6006",
+    "dev": "next dev -p 6006 --turbo",
     "build": "next build",
     "start": "next start -p 6006",
     "test:e2e": "playwright test",
