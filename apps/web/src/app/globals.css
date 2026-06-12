@@ -1,3 +1,7 @@
+/* 本地字体（@fontsource），零 Google 网络依赖 */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/syne';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -179,7 +183,7 @@ html {
 
 .auth-bg-abyss h1,
 .auth-bg-abyss h2 {
-  font-family: var(--font-syne), sans-serif;
+  font-family: 'Syne Variable', sans-serif;
   letter-spacing: 0.02em;
 }
 
@@ -1034,7 +1038,7 @@ tbody tr:hover {
   isolation: isolate;
   overflow: hidden;
   color: var(--dream-ink);
-  font-family: var(--font-inter), "Noto Sans SC", sans-serif;
+  font-family: 'Inter Variable', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background:
     linear-gradient(180deg, rgba(7, 9, 31, 0.86) 0%, rgba(8, 13, 34, 0.98) 52%, rgba(5, 8, 24, 1) 100%),
     radial-gradient(ellipse at 48% -18%, rgba(202, 184, 255, 0.18), transparent 42rem),

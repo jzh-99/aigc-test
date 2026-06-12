@@ -135,6 +135,12 @@ importers:
       '@aigc/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@fontsource-variable/inter':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource-variable/syne':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@lobehub/icons':
         specifier: ^5.10.0
         version: 5.10.0(@lobehub/ui@5.15.13)(@types/react@18.3.28)(antd@6.4.3(date-fns@4.1.0)(luxon@3.7.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1027,6 +1033,12 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@fontsource-variable/inter@5.2.8':
+    resolution: {integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==}
+
+  '@fontsource-variable/syne@5.2.7':
+    resolution: {integrity: sha512-B2z7P0mGdNSAgz6SmtK7HXReZL22WJ8Z8sk5Z1ZuKiCSRM7DwWLjWXLwhbQ+CvmtNS/+p95jGvVEfQT9bm+UKw==}
 
   '@giscus/react@3.1.0':
     resolution: {integrity: sha512-0TCO2TvL43+oOdyVVGHDItwxD1UMKP2ZYpT6gXmhFOqfAJtZxTzJ9hkn34iAF/b6YzyJ4Um89QIt9z/ajmAEeg==}
@@ -6442,6 +6454,10 @@ snapshots:
       tabbable: 6.4.0
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@fontsource-variable/inter@5.2.8': {}
+
+  '@fontsource-variable/syne@5.2.7': {}
 
   '@giscus/react@3.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:

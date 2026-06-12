@@ -15,6 +15,10 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter Variable', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+        display: ['Syne Variable', 'Inter Variable', 'sans-serif'],
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
