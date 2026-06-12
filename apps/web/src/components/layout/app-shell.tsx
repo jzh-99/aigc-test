@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { CreativeSideRail } from './creative-side-rail'
+import { NavigationOverlay } from './navigation-overlay'
 
 /** useSearchParams 加载期占位，宽度与侧边栏一致避免布局跳变 */
 function SideRailFallback() {
@@ -56,6 +57,7 @@ export function AppShell({ children, title, mainClassName }: AppShellProps) {
           </div>
         </div>
         <AiAssistant />
+        <NavigationOverlay />
       </TooltipProvider>
     )
   }
@@ -85,6 +87,7 @@ export function AppShell({ children, title, mainClassName }: AppShellProps) {
         </div>
       </div>
       <AiAssistant />
+      <NavigationOverlay />
     </TooltipProvider>
   )
 }

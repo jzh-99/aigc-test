@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AlertCircle, Loader2, Download, Play, Film, RotateCcw, CheckSquare, Square, X } from 'lucide-react'
+import { useNavigationStore } from '@/stores/navigation-store'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,6 +27,7 @@ interface StepEpisodesProps {
 const POLL_INTERVAL = 3_000
 
 export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesProps) {
+  const startNavigation = useNavigationStore((s) => s.startNavigation)
   const [exporting, setExporting] = useState(false)
   const [generatingEpisodeNumber, setGeneratingEpisodeNumber] = useState<number | null>(null)
   const [generatedCount, setGeneratedCount] = useState(0)
@@ -357,7 +359,10 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
                       )}
                       {isCurrentGenerating ? '生成中' : generateButtonLabel}
                     </Button>
-                    <Link href={`/toby-studio/short-drama/${projectId}/episodes/${episode.episodeNumber}`}>
+                    <Link
+                      href={`/toby-studio/short-drama/${projectId}/episodes/${episode.episodeNumber}`}
+                      onClick={() => startNavigation(`/toby-studio/short-drama/${projectId}/episodes/${episode.episodeNumber}`)}
+                    >
                       <Button size="sm" variant="outline">
                         <Play className="w-3.5 h-3.5 mr-1" />
                         编辑

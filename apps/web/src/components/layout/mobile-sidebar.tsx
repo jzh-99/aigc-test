@@ -18,6 +18,7 @@ import {
   type NavItem,
 } from './nav-config'
 import { useTeamFeatures } from '@/hooks/use-team-features'
+import { useNavigationStore } from '@/stores/navigation-store'
 
 export function MobileSidebar() {
   const pathname = usePathname()
@@ -25,6 +26,7 @@ export function MobileSidebar() {
   const query = searchParams.toString()
   const currentPath = query ? `${pathname}?${query}` : pathname
   const { setMobileOpen } = useLayoutStore()
+  const startNavigation = useNavigationStore((s) => s.startNavigation)
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const { showVideoStudioTab } = useTeamFeatures()
@@ -53,7 +55,7 @@ export function MobileSidebar() {
         >
           <Link
             href={item.href}
-            onClick={() => { setMobileOpen(false) }}
+            onClick={() => { startNavigation(item.href); setMobileOpen(false) }}
             aria-current={isActive ? 'page' : undefined}
           >
             <item.icon className={cn('h-4 w-4 shrink-0')} />
@@ -75,7 +77,7 @@ export function MobileSidebar() {
                 >
                   <Link
                     href={child.href}
-                    onClick={() => { setMobileOpen(false) }}
+                    onClick={() => { startNavigation(child.href); setMobileOpen(false) }}
                     aria-current={childActive ? 'page' : undefined}
                   >
                     {child.label}

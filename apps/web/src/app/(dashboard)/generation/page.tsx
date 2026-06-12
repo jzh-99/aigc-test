@@ -87,10 +87,11 @@ function ImagePageContent() {
   const activeTeam = useAuthStore((s) => s.activeTeam)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const activeTeamIdRef = useRef(activeTeamId)
   const hasInitiallyLoadedBatches = useRef(false)
   useEffect(() => { activeTeamIdRef.current = activeTeamId }, [activeTeamId])
-  const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
+  const { data: teamData } = useSWR<TeamInfo>(isInitialized && activeTeamId ? `/teams/${activeTeamId}` : null)
 
   // 切换工作区时清空所有活跃订阅
   useEffect(() => {
@@ -101,32 +102,28 @@ function ImagePageContent() {
   // 从 batches 中筛选出正在进行中的任务并自动订阅 SSE
   useEffect(() => {
     if (!activeWorkspaceId) return
-    
+
     if (batches.length > 0) {
       hasInitiallyLoadedBatches.current = true
     }
-    
+
     if (!hasInitiallyLoadedBatches.current) return
-    
-    console.log('[GenerationPage] batches loaded, count:', batches.length)
+
     const activeIds = new Set<string>()
     for (const batch of batches) {
       if (!isTerminalStatus(batch.status)) {
-        console.log(`[GenerationPage] Found active batch: id=${batch.id}, status=${batch.status}`)
         activeIds.add(batch.id)
       }
     }
-    
+
     setActiveBatchIds((prev) => {
       if (activeIds.size === 0 && prev.size === 0) return prev
       if (activeIds.size === prev.size && [...activeIds].every(id => prev.has(id))) return prev
-      console.log(`[GenerationPage] Setting ${activeIds.size} active batch IDs for SSE subscription`)
       return activeIds
     })
   }, [activeWorkspaceId, batches.length])
 
   const handleBatchUpdate = useCallback((batch: BatchResponse) => {
-    console.log(`[GenerationPage] 🔔 handleBatchUpdate: id=${batch.id}, status=${batch.status}`)
     batchListRef.current?.update(batch)
   }, [])
 

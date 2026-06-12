@@ -7,6 +7,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { MusicDownloadMenu } from './music-download-menu'
 import type { MusicTrackResponse } from '@aigc/types'
+import { useNavigationStore } from '@/stores/navigation-store'
 
 interface Props {
   tracks: MusicTrackResponse[]
@@ -91,6 +92,7 @@ export function MusicTrackList({
   onPageChange,
   onPageSizeChange,
 }: Props) {
+  const startNavigation = useNavigationStore((s) => s.startNavigation)
   if (!isLoading && tracks.length === 0) {
     return (
       <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border bg-card text-center text-muted-foreground">
@@ -108,7 +110,7 @@ export function MusicTrackList({
             key={track.id}
             className="grid grid-cols-[76px_1fr_auto] items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/70"
           >
-          <Link href={`/toby-studio/music/${track.id}`} className="aspect-square overflow-hidden rounded-lg bg-muted">
+          <Link href={`/toby-studio/music/${track.id}`} className="aspect-square overflow-hidden rounded-lg bg-muted" onClick={() => startNavigation(`/toby-studio/music/${track.id}`)}>
             {track.cover_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={track.cover_url} alt={track.title ?? '音乐封面'} className="h-full w-full object-cover" />
@@ -116,7 +118,7 @@ export function MusicTrackList({
               <div className="flex h-full w-full items-center justify-center"><Music2 className="h-6 w-6 text-muted-foreground" /></div>
             )}
           </Link>
-          <Link href={`/toby-studio/music/${track.id}`} className="min-w-0">
+          <Link href={`/toby-studio/music/${track.id}`} className="min-w-0" onClick={() => startNavigation(`/toby-studio/music/${track.id}`)}>
             <div className="truncate font-medium">{track.title ?? '未命名音乐'}</div>
             <div className="mt-1 truncate text-xs text-muted-foreground">
               {trackTypeText(track.track_type)} · {track.voice_name ?? 'Toby AI'} · {creatorText(track.track_type)}

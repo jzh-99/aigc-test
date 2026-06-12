@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { creativeNavItems, isNavItemActive } from './nav-config'
 import { useTeamFeatures } from '@/hooks/use-team-features'
+import { useNavigationStore } from '@/stores/navigation-store'
 
 export function CreativeTopNav() {
   const pathname = usePathname()
@@ -19,6 +20,7 @@ export function CreativeTopNav() {
   const query = searchParams.toString()
   const currentPath = query ? `${pathname}?${query}` : pathname
   const { showVideoStudioTab } = useTeamFeatures()
+  const startNavigation = useNavigationStore((s) => s.startNavigation)
 
   return (
     <nav className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="创作主导航">
@@ -59,6 +61,7 @@ export function CreativeTopNav() {
                           childActive && 'bg-accent text-accent-foreground'
                         )}
                         aria-current={childActive ? 'page' : undefined}
+                        onClick={() => startNavigation(child.href)}
                       >
                         <span className="text-sm font-medium">{child.label}</span>
                         {child.description && (
@@ -82,6 +85,7 @@ export function CreativeTopNav() {
               active && 'bg-accent text-accent-foreground'
             )}
             aria-current={active ? 'page' : undefined}
+            onClick={() => startNavigation(item.href)}
           >
             <Icon className="h-4 w-4" />
             <span>{item.label}</span>

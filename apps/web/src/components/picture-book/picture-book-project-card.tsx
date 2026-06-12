@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { BookOpenText, Clock3, Layers3 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { PictureBookProjectListItem } from '@/lib/picture-book/types'
+import { useNavigationStore } from '@/stores/navigation-store'
 
 const statusText: Record<string, string> = {
   draft: '草稿',
@@ -15,10 +16,13 @@ const statusText: Record<string, string> = {
 }
 
 export function PictureBookProjectCard({ project }: { project: PictureBookProjectListItem }) {
+  const startNavigation = useNavigationStore((s) => s.startNavigation)
+
   return (
     <Link
       href={`/toby-studio/picture-book/${project.id}`}
       className="group block overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary/60"
+      onClick={() => startNavigation(`/toby-studio/picture-book/${project.id}`)}
     >
       <div className="aspect-[4/3] bg-muted">
         {project.cover_url ? (

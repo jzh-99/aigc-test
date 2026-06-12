@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { ArrowUpRight, Clock3, Film, Layers3 } from 'lucide-react'
 import type { ShortDramaProjectListItem } from '@/lib/short-drama/api'
+import { useNavigationStore } from '@/stores/navigation-store'
 
 interface ShortDramaProjectCardProps {
   project: ShortDramaProjectListItem
@@ -30,11 +31,13 @@ const STATUS_LABELS: Record<string, { text: string; className: string }> = {
 
 export function ShortDramaProjectCard({ project }: ShortDramaProjectCardProps) {
   const statusInfo = STATUS_LABELS[project.status] ?? STATUS_LABELS.draft
+  const startNavigation = useNavigationStore((s) => s.startNavigation)
 
   return (
     <Link
       href={`/toby-studio/short-drama/${project.id}`}
       className="group relative flex min-h-[148px] overflow-hidden rounded-lg border border-[#201b49] bg-[#0d0b1d] shadow-[0_18px_45px_rgba(0,0,0,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_22px_55px_rgba(34,26,63,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+      onClick={() => startNavigation(`/toby-studio/short-drama/${project.id}`)}
     >
       <div className="w-1.5 shrink-0 bg-gradient-to-b from-[#6f7cff] via-[#a86af5] to-[#21c4d6]" />
       <div className="flex min-w-0 flex-1 flex-col justify-between p-4">

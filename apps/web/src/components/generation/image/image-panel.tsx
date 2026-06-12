@@ -16,26 +16,16 @@ import { toast } from 'sonner'
 import { getRequestErrorMessage } from '@/lib/api-client'
 import { CompanyAImagePicker } from '../company-a-image-picker'
 import { cn, generateUUID } from '@/lib/utils'
-import { ModelIcon, ProviderIcon } from '@lobehub/icons'
-import { getModelDirectIcon, getModelIconProvider } from '@/lib/model-images'
+import dynamic from 'next/dynamic'
+
+const ModelBrandIcon = dynamic(
+  () => import('../shared/model-brand-icon').then((m) => ({ default: m.ModelBrandIcon })),
+  { ssr: false, loading: () => <span className="inline-block h-4 w-4" /> }
+)
 import { ImmersiveEditor } from '../shared/immersive-editor'
 import type { MediaGridItem } from '../shared/media-grid-types'
 
-/** 模型图标渲染：直接图标组件 > ProviderIcon 映射 > ModelIcon 自动匹配 */
-function ModelBrandIcon({ modelCode, providerCode, size }: { modelCode: string; providerCode?: string; size: number }) {
-  // 优先级1：直接图标组件（ProviderIcon 未注册的品牌，如 Gemini）
-  const DirectIcon = getModelDirectIcon(modelCode)
-  if (DirectIcon) {
-    return <DirectIcon size={size} />
-  }
-  // 优先级2：ProviderIcon 映射
-  const mappedProvider = getModelIconProvider(modelCode, providerCode)
-  if (mappedProvider) {
-    return <ProviderIcon provider={mappedProvider} size={size} />
-  }
-  // 优先级3：ModelIcon 自动匹配
-  return <ModelIcon model={modelCode} size={size} />
-}
+/** 模型图标渲染入口（异步加载，避免 @lobehub/icons 进入首屏 bundle） */
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
 import { MAX_REF_IMAGES } from '../shared/constants'

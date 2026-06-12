@@ -18,6 +18,7 @@ import { StudioReturnBar } from '@/components/toby-studio/studio-return-bar'
 export function PictureBookHome() {
   const router = useRouter()
   const workspaceId = useAuthStore((state) => state.activeWorkspaceId)
+  const isInitialized = useAuthStore((state) => state.isInitialized)
   const [prompt, setPrompt] = useState('')
   const [style, setStyle] = useState<PictureBookStyle>('吉卜力风')
   const [pageCount, setPageCount] = useState<PictureBookPageCount>(15)
@@ -25,7 +26,7 @@ export function PictureBookHome() {
   const [submitting, setSubmitting] = useState(false)
   const [streamText, setStreamText] = useState('')
   const recent = useSWR(
-    workspaceId ? ['picture-book-recent', workspaceId] : null,
+    isInitialized && workspaceId ? ['picture-book-recent', workspaceId] : null,
     () => listRecentPictureBookProjects(workspaceId!, 4),
   )
 

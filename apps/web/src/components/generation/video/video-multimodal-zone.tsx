@@ -7,7 +7,7 @@ import Image from 'next/image'
 import { toast } from 'sonner'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { cn, generateUUID } from '@/lib/utils'
-import { fetchWithAuth } from '@/lib/fetch-with-auth'
+import { fetchRawWithAuth } from '@/lib/fetch-with-auth'
 import type { FrameImage, MediaPreview } from '../shared/types'
 import { readFrameFile, fetchAssetFile, getDraggedAsset } from '../shared/file-utils'
 import { getAcceptedReferenceFiles, getReferenceFileKind } from './video-reference-upload'
@@ -149,7 +149,7 @@ export function VideoMultimodalZone({
     const asset = getDraggedAsset(e.dataTransfer)
     if (!asset.url) return
     try {
-      const file = await fetchAssetFile(asset.url, asset.type, 'asset', fetchWithAuth)
+      const file = await fetchAssetFile(asset.url, asset.type, 'asset', fetchRawWithAuth)
       if (getReferenceFileKind(file) === 'video') {
         if (videos.length >= videoLimit) { toast.error(`最多添加 ${videoLimit} 个参考视频`); return }
         validateAndAddVideo(file)

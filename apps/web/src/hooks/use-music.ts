@@ -20,8 +20,9 @@ export type MusicVoiceCloneSseEvent =
 
 export function useMusicTracks(page = 1, limit = 10, title?: string) {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const swr = useSWR<MusicTrackListResponse>(
-    workspaceId ? buildMusicTracksUrl(workspaceId, page, limit, title) : null,
+    isInitialized && workspaceId ? buildMusicTracksUrl(workspaceId, page, limit, title) : null,
     apiFetcher,
   )
 
@@ -44,7 +45,11 @@ export function useMusicAdjacent(id: string | null | undefined) {
 
 export function useMusicVoiceClones() {
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
-  return useSWR<MusicVoiceCloneListResponse>(workspaceId ? buildMusicVoiceClonesUrl(workspaceId) : null, apiFetcher)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+  return useSWR<MusicVoiceCloneListResponse>(
+    isInitialized && workspaceId ? buildMusicVoiceClonesUrl(workspaceId) : null,
+    apiFetcher,
+  )
 }
 
 type SseEventHandler<T> = (event: T) => void

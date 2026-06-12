@@ -8,10 +8,21 @@ import { useTeamFeatures } from '@/hooks/use-team-features'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { cn } from '@/lib/utils'
 import type { BatchResponse } from '@aigc/types'
+import dynamic from 'next/dynamic'
 import { ImagePanel } from './image/image-panel'
-import { VideoPanel } from './video/video-panel'
-import { AvatarPanel } from './avatar/avatar-panel'
-import { ActionImitationPanel } from './action-imitation/action-imitation-panel'
+
+const VideoPanel = dynamic(
+  () => import('./video/video-panel').then((m) => ({ default: m.VideoPanel })),
+  { ssr: false }
+)
+const AvatarPanel = dynamic(
+  () => import('./avatar/avatar-panel').then((m) => ({ default: m.AvatarPanel })),
+  { ssr: false }
+)
+const ActionImitationPanel = dynamic(
+  () => import('./action-imitation/action-imitation-panel').then((m) => ({ default: m.ActionImitationPanel })),
+  { ssr: false }
+)
 
 type Mode = 'image' | 'video' | 'avatar' | 'action_imitation'
 

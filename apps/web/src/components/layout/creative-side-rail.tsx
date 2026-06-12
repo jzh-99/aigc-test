@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { useTeamFeatures } from '@/hooks/use-team-features'
+import { useNavigationStore } from '@/stores/navigation-store'
 import {
   creativeNavItems,
   isNavItemActive,
@@ -63,6 +64,7 @@ export function CreativeSideRail() {
   const { setActiveTeam, setActiveWorkspace, clearAuth } = useAuthStore()
   const resetGeneration = useGenerationStore((s) => s.reset)
   const { showVideoStudioTab } = useTeamFeatures()
+  const startNavigation = useNavigationStore((s) => s.startNavigation)
   const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
   const visibleManagementItems = managementNavItems.filter((item) => {
     if (item.label === '操作手册') return false
@@ -153,6 +155,7 @@ export function CreativeSideRail() {
                 <Link
                   href={item.href}
                   aria-current={isActive ? 'page' : undefined}
+                  onClick={() => startNavigation(item.href)}
                   className={cn(
                     'group flex flex-col items-center gap-1.5 text-[10px] font-medium leading-none transition',
                     isActive ? railTheme.activeText : `text-white/50 ${railTheme.hoverText}`
@@ -292,7 +295,7 @@ export function CreativeSideRail() {
                     isActive && 'bg-white/[0.12] text-white'
                   )}
                 >
-                  <Link href={item.href} aria-current={isActive ? 'page' : undefined}>
+                  <Link href={item.href} aria-current={isActive ? 'page' : undefined} onClick={() => startNavigation(item.href)}>
                     <Icon className="h-4 w-4" aria-hidden="true" />
                     <span>{item.label}</span>
                   </Link>

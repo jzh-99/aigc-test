@@ -6,8 +6,9 @@ import { useAuthStore } from '@/stores/auth-store'
 
 export function useBatchStats() {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
 
-  const key = activeWorkspaceId
+  const key = isInitialized && activeWorkspaceId
     ? `/batches/stats?workspace_id=${activeWorkspaceId}`
     : null
 

@@ -21,11 +21,12 @@ export async function cancelSeedanceBatch(batchId: string): Promise<void> {
 
 export function useBatches(source: BatchSource = 'generation') {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const wsParam = activeWorkspaceId ? `&workspace_id=${activeWorkspaceId}` : ''
 
   const { data, error, size, setSize, isValidating, mutate } = useSWRInfinite<BatchListResponse>(
     (pageIndex, previousPageData) => {
-      if (!activeWorkspaceId) return null
+      if (!isInitialized || !activeWorkspaceId) return null
       if (previousPageData && !previousPageData.cursor) return null
       if (pageIndex === 0) return `/batches?limit=${PAGE_SIZE}&source=${source}${wsParam}`
       return `/batches?limit=${PAGE_SIZE}&source=${source}&cursor=${previousPageData!.cursor}${wsParam}`
@@ -48,14 +49,12 @@ export function useBatches(source: BatchSource = 'generation') {
   }, [mutate])
 
   const updateBatchInList = useCallback((updated: BatchResponse) => {
-    console.log('[useBatches] updateBatchInList called with:', updated.id, updated.status, updated.completed_count)
     mutate((pages) => {
       if (!pages) return pages
       const newPages = pages.map((page) => ({
         ...page,
         data: page.data.map((b) => b.id === updated.id ? { ...b, ...updated } : b),
       }))
-      console.log('[useBatches] mutate completed, new pages:', newPages[0]?.data[0])
       return newPages
     }, { revalidate: false })
   }, [mutate])
@@ -85,11 +84,12 @@ export function useBatches(source: BatchSource = 'generation') {
 
 export function useHiddenBatches(enabled: boolean = true, source: BatchSource = 'generation') {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const wsParam = activeWorkspaceId ? `&workspace_id=${activeWorkspaceId}` : ''
 
   const { data, error, size, setSize, isValidating, mutate } = useSWRInfinite<BatchListResponse>(
     (pageIndex, previousPageData) => {
-      if (!enabled || !activeWorkspaceId) return null
+      if (!enabled || !isInitialized || !activeWorkspaceId) return null
       if (previousPageData && !previousPageData.cursor) return null
       if (pageIndex === 0) return `/batches/hidden?limit=${PAGE_SIZE}&source=${source}${wsParam}`
       return `/batches/hidden?limit=${PAGE_SIZE}&source=${source}&cursor=${previousPageData!.cursor}${wsParam}`

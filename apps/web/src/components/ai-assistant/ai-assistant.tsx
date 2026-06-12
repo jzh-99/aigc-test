@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { loadAiChatHistory, saveAiChatHistory, clearAiChatHistory } from '@/hooks/use-ai-chat-history'
 import type { AiChatMessage } from '@/hooks/use-ai-chat-history'
 import { cn, generateUUID } from '@/lib/utils'
-import { fetchWithAuth } from '@/lib/fetch-with-auth'
+import { fetchRawWithAuth } from '@/lib/fetch-with-auth'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import {
   Bot, X, Send, ImageIcon, Video, Trash2, Loader2, Upload, MessageSquare, GripVertical, Copy, Check,
@@ -395,7 +395,7 @@ export function AiAssistant() {
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 12000) }))
 
     try {
-      const res = await fetchWithAuth('/api/v1/ai-assistant/chat', {
+      const res = await fetchRawWithAuth('/api/v1/ai-assistant/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

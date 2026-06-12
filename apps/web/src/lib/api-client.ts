@@ -101,28 +101,34 @@ export function dedupedRefresh(): Promise<{ token: string | null; rateLimited: b
   return refreshPromise
 }
 
+/**
+ * 等待认证初始化完成（isInitialized && !isRefreshing）。
+ * 用 subscribe 替代轮询，兜底 3 秒超时防止永远挂起。
+ */
+export function waitForAuth(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const state = useAuthStore.getState()
+    if (state.isInitialized && !state.isRefreshing) {
+      resolve()
+      return
+    }
+    const unsubscribe = useAuthStore.subscribe((s) => {
+      if (s.isInitialized && !s.isRefreshing) {
+        unsubscribe()
+        resolve()
+      }
+    })
+    setTimeout(() => {
+      unsubscribe()
+      resolve()
+    }, 3000)
+  })
+}
+
 export async function fetchWithAuth<T>(path: string, init: RequestInit = {}): Promise<T> {
   // auth 路径（登录/注册/SSO 等）不依赖已有认证状态，跳过初始化等待
   if (!path.startsWith('/auth/')) {
-    // 等待认证初始化完成（包括 refresh 流程），用 subscribe 替代轮询避免超时误判
-    await new Promise<void>((resolve) => {
-      const state = useAuthStore.getState()
-      if (state.isInitialized && !state.isRefreshing) {
-        resolve()
-        return
-      }
-      const unsubscribe = useAuthStore.subscribe((s) => {
-        if (s.isInitialized && !s.isRefreshing) {
-          unsubscribe()
-          resolve()
-        }
-      })
-      // 兜底超时：3 秒后强制继续，防止 subscribe 永远不触发
-      setTimeout(() => {
-        unsubscribe()
-        resolve()
-      }, 3000)
-    })
+    await waitForAuth()
   }
 
   const finalState = useAuthStore.getState()
@@ -181,8 +187,16 @@ export async function fetchWithAuth<T>(path: string, init: RequestInit = {}): Pr
 }
 
 export async function apiGetBlob(path: string): Promise<Blob> {
-  const headers = getHeaders()
-  const res = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' })
+  await waitForAuth()
+  let headers = getHeaders()
+  let res = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' })
+  if (res.status === 401) {
+    const refreshResult = await dedupedRefresh()
+    if (refreshResult.token) {
+      headers = { Authorization: `Bearer ${refreshResult.token}` }
+      res = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' })
+    }
+  }
   if (!res.ok) {
     throw new ApiError(res.status, 'FETCH_FAILED', `Failed to fetch ${path}`)
   }

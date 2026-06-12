@@ -55,6 +55,7 @@ type ShortDramaCreateMode = 'idea' | 'upload'
 export function ShortDramaHome() {
   const router = useRouter()
   const workspaceId = useAuthStore(s => s.activeWorkspaceId)
+  const isInitialized = useAuthStore(s => s.isInitialized)
 
   const [mode, setMode] = useState<ShortDramaCreateMode>('idea')
   const [prompt, setPrompt] = useState('')
@@ -80,7 +81,7 @@ export function ShortDramaHome() {
     : Boolean(normalizedOriginalScript) && !isOriginalScriptTooLong
 
   const { data: recentProjects, isLoading: loadingProjects } = useSWR<ShortDramaProjectListItem[]>(
-    workspaceId ? ['short-drama-recent', workspaceId] : null,
+    isInitialized && workspaceId ? ['short-drama-recent', workspaceId] : null,
     () => listRecentShortDramaProjects(workspaceId!, 4),
     { revalidateOnFocus: true }
   )
