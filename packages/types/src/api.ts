@@ -365,6 +365,7 @@ export interface ModelItem {
   resolution: string | null
   is_active: boolean
   provider_code: string
+  avatar: string | null
 }
 
 export type SystemCostConfigKey = 'music_voice_clone' | 'video_segment_merge'
