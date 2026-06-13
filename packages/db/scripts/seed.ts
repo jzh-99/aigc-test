@@ -725,6 +725,7 @@ async function main() {
         image: [],
       },
       category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
+      avatar: llmAvatar('volcengine'),
     },
     {
       code: 'seedream-4.5',
@@ -740,6 +741,7 @@ async function main() {
         image: [],
       },
       category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
+      avatar: llmAvatar('volcengine'),
     },
     {
       code: 'seedream-4.0',
@@ -756,6 +758,7 @@ async function main() {
         image: [],
       },
       category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
+      avatar: llmAvatar('volcengine'),
     },
   ]
 
@@ -771,6 +774,7 @@ async function main() {
         category_references: JSON.stringify(m.category_references),
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
+        avatar: m.avatar,
         is_active: true,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
@@ -780,6 +784,7 @@ async function main() {
         category_references: JSON.stringify(m.category_references),
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
+        avatar: m.avatar,
         is_active: true,
       }))
       .execute()
