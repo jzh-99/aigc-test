@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Image as ImageIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +35,7 @@ interface ModelEditDialogProps {
 /** 编辑模型信息弹窗 */
 export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEditDialogProps): React.ReactElement | null {
   const [description, setDescription] = useState('')
+  const [avatar, setAvatar] = useState('')
   const [isActive, setIsActive] = useState(true)
   // 可编辑的定价规则列表，unit_price 允许修改
   const [pricingRules, setPricingRules] = useState<ParamsPricingRule[]>([])
@@ -46,6 +47,7 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
   useEffect(() => {
     if (model) {
       setDescription(model.description ?? '')
+      setAvatar(model.avatar ?? '')
       setIsActive(model.is_active)
       // 深拷贝，避免直接修改原始数据
       setPricingRules(model.params_pricing.map((r) => ({ ...r })))
@@ -75,6 +77,7 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
     try {
       await apiPatch(`/admin/models/${model.id}`, {
         description: description.trim() || null,
+        avatar: avatar.trim() || null,
         is_active: isActive,
         params_pricing: pricingRules,
       })
@@ -118,6 +121,28 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
               rows={3}
               className="resize-none"
             />
+          </div>
+
+          {/* 模型图标 avatar */}
+          <div className="space-y-1.5">
+            <Label htmlFor="model-avatar">模型图标 URL</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="model-avatar"
+                value={avatar}
+                onChange={(e) => setAvatar(e.target.value)}
+                placeholder="TOS 存储地址，如 https://.../assets/llm/openai.png"
+              />
+              {avatar.trim() && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatar}
+                  alt="图标预览"
+                  className="h-9 w-9 shrink-0 rounded object-contain ring-1 ring-border"
+                />
+              )}
+              {!avatar.trim() && <ImageIcon className="h-9 w-9 shrink-0 text-muted-foreground" />}
+            </div>
           </div>
 
           {/* 定价规则 */}
