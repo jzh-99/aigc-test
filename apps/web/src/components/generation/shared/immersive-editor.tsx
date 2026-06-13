@@ -23,6 +23,8 @@ interface ImmersiveEditorProps {
   gridEmptyIcon?: React.ComponentType<{ className?: string }>
   /** 网格空状态点击回调 */
   onGridEmptyClick?: () => void
+  /** 网格空状态额外 className */
+  gridEmptyClassName?: string
 
   // MentionEditor props 透传
   /** 文本值（受控） */
@@ -63,6 +65,7 @@ export function ImmersiveEditor({
   gridEmptyText,
   gridEmptyIcon,
   onGridEmptyClick,
+  gridEmptyClassName,
   editorValue,
   editorOnChange,
   editorResources,
@@ -88,6 +91,7 @@ export function ImmersiveEditor({
             emptyText={gridEmptyText}
             emptyIcon={gridEmptyIcon}
             onEmptyClick={onGridEmptyClick}
+            emptyClassName={gridEmptyClassName}
           />
         </div>
       )}
@@ -102,6 +106,7 @@ export function ImmersiveEditor({
           emptyText={gridEmptyText ?? '点击或拖拽上传素材'}
           emptyIcon={gridEmptyIcon ?? ImagePlus}
           onEmptyClick={onGridEmptyClick ?? onAddClick}
+          emptyClassName={gridEmptyClassName}
         />
       )}
 

@@ -259,6 +259,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
             addButtonDisabled={isGenerating || disabled}
             onRemoveItem={handleRemoveReferenceImage}
             gridEmptyText={`点击或拖拽上传参考图 · 最多 ${maxReferenceImages} 张`}
+            gridEmptyClassName="h-[88px] flex-col justify-center gap-2 text-center"
             gridEmptyIcon={ImagePlus}
             onGridEmptyClick={() => fileInputRef.current?.click()}
             editorValue={prompt}

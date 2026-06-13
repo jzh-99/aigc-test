@@ -26,6 +26,8 @@ interface MediaThumbnailGridProps {
   emptyIcon?: React.ComponentType<{ className?: string }>
   /** 空状态点击回调（点击整个区域触发上传） */
   onEmptyClick?: () => void
+  /** 空状态容器额外样式 */
+  emptyClassName?: string
 }
 
 /**
@@ -41,6 +43,7 @@ export function MediaThumbnailGrid({
   emptyText = '点击或拖拽上传素材',
   emptyIcon: EmptyIcon,
   onEmptyClick,
+  emptyClassName,
 }: MediaThumbnailGridProps): React.ReactElement {
   const [preview, setPreview] = useState<MediaPreviewState | null>(null)
 
@@ -95,7 +98,10 @@ export function MediaThumbnailGrid({
       {isEmpty ? (
         <div
           onClick={onEmptyClick ?? onAddClick}
-          className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all cursor-pointer flex items-center gap-2.5 px-3 py-3"
+          className={cn(
+            'rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all cursor-pointer flex items-center gap-2.5 px-3 py-3',
+            emptyClassName,
+          )}
         >
           {EmptyIcon ? <EmptyIcon className="h-5 w-5 text-primary shrink-0" /> : <Plus className="h-5 w-5 text-primary shrink-0" />}
           <span className="text-xs font-medium text-primary">{emptyText}</span>

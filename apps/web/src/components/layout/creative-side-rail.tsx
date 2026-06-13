@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { LogOut, UserRound, Building2, ArrowLeftRight, Check } from 'lucide-react'
+import useSWR from 'swr'
+import { LogOut, UserRound, Building2, ArrowLeftRight, Check, Coins } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +24,18 @@ import {
   isNavItemActive,
   managementNavItems,
 } from './nav-config'
+import type { CreditBalance } from '@aigc/types'
+
+interface TeamMemberCredit {
+  user_id: string
+  credit_quota: number | null
+  credit_used: number
+}
+
+interface TeamCreditInfo {
+  credits: { balance: number; frozen_credits: number }
+  members: TeamMemberCredit[]
+}
 
 const navLabelMap: Record<string, string> = {
   'Toby Studio': 'Toby',
@@ -66,6 +79,19 @@ export function CreativeSideRail() {
   const { showVideoStudioTab } = useTeamFeatures()
   const startNavigation = useNavigationStore((s) => s.startNavigation)
   const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
+  const { data: teamCreditData } = useSWR<TeamCreditInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
+  const { data: balanceData } = useSWR<CreditBalance>(
+    activeTeamId ? `/payment/balance?team_id=${activeTeamId}` : '/payment/balance'
+  )
+  const isCreditAdmin = activeTeam?.role === 'owner' || activeTeam?.role === 'admin' || user?.role === 'admin'
+  const currentMemberCredit = !isCreditAdmin
+    ? teamCreditData?.members?.find((member) => member.user_id === user?.id)
+    : null
+  const teamBalance = balanceData?.team_balance ?? 0
+  const frozenCredits = teamCreditData?.credits?.frozen_credits ?? 0
+  const remainingCredits = currentMemberCredit?.credit_quota != null
+    ? Math.max(0, currentMemberCredit.credit_quota - (currentMemberCredit.credit_used ?? 0))
+    : Math.max(0, teamBalance - frozenCredits)
   const visibleManagementItems = managementNavItems.filter((item) => {
     if (item.label === '操作手册') return false
     if (item.requireUserRole && user?.role !== item.requireUserRole) return false
@@ -238,6 +264,19 @@ export function CreativeSideRail() {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+
+        <button
+          type="button"
+          onClick={() => {
+            startNavigation('/credits')
+            router.push('/credits')
+          }}
+          className="flex flex-col items-center gap-1 rounded-xl border-2 border-white/20 bg-white/[0.06] px-2 py-1.5 text-[10px] font-medium text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition hover:border-white/35 hover:bg-white/[0.1] hover:text-white"
+          aria-label={`剩余 ${remainingCredits.toLocaleString()} A豆`}
+        >
+          <Coins className="h-3.5 w-3.5 text-amber-300" aria-hidden="true" />
+          <span className="whitespace-nowrap">{remainingCredits.toLocaleString()} A豆</span>
+        </button>
 
         {/* 用户头像菜单 */}
         <DropdownMenu>

@@ -501,6 +501,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
             addButtonDisabled={isVideoGenerating || isVideoUploading || disabled}
             onRemoveItem={handleRemoveItem}
             gridEmptyText={videoMode === 'frames' ? '点击或拖拽上传首帧图/尾帧图' : '点击或拖拽上传素材（图片 / 视频 / 音频）'}
+            gridEmptyClassName="h-[88px] flex-col justify-center gap-2 text-center"
             gridEmptyIcon={ImagePlus}
             onGridEmptyClick={handleAddClick}
             editorValue={videoPrompt}
