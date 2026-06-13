@@ -123,6 +123,7 @@ export interface VideoConfigPopoverProps {
   onGenerateAudioChange?: (value: boolean) => void
   onCameraFixedChange?: (value: boolean) => void
   disabled?: boolean
+  children?: ReactNode
 }
 
 export function VideoConfigPopover({
@@ -143,6 +144,7 @@ export function VideoConfigPopover({
   onGenerateAudioChange = () => {},
   onCameraFixedChange = () => {},
   disabled,
+  children,
 }: VideoConfigPopoverProps) {
   const [open, setOpen] = useState(false)
 
@@ -194,6 +196,7 @@ export function VideoConfigPopover({
             options={aspectOptions}
             onChange={onAspectRatioChange}
           />
+          {children}
           {isSeedance && (
             <>
               <DurationSlider

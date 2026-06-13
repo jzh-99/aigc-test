@@ -1,9 +1,8 @@
 // apps/web/src/components/generation/image/image-params.tsx
 'use client'
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Loader2, Coins } from 'lucide-react'
+import { Sparkles, Loader2, Coins, Images } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { QUANTITY_OPTIONS } from '../shared/constants'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
@@ -20,6 +19,8 @@ interface ImageParamsProps {
   isGenerating: boolean
   disabled?: boolean
   promptEmpty?: boolean
+  showConfigControls?: boolean
+  showQuantitySelect?: boolean
   onResolutionChange: (v: string) => void
   onAspectRatioChange: (v: string) => void
   onQuantityChange: (v: number) => void
@@ -28,7 +29,7 @@ interface ImageParamsProps {
 
 export function ImageParams({
   models, modelType, resolution, aspectRatio, quantity,
-  isGenerating, disabled, promptEmpty,
+  isGenerating, disabled, promptEmpty, showConfigControls = true, showQuantitySelect = true,
   onResolutionChange, onAspectRatioChange, onQuantityChange,
   onGenerate,
 }: ImageParamsProps) {
@@ -40,56 +41,22 @@ export function ImageParams({
   const unitPrice = currentDbModel ? getPriceByResolution(currentDbModel, resolution) : 0
   const estimatedCredits = unitPrice * quantity
 
-  // 质量选项
-  const resolutionOptions = availableResolutions.map((r) => r.value)
-
-  // 比例选项（静态列表）
-  const ASPECT_RATIOS = [
-    { value: '1:1', label: '1:1' },
-    { value: '4:3', label: '4:3' },
-    { value: '3:4', label: '3:4' },
-    { value: '16:9', label: '16:9' },
-    { value: '9:16', label: '9:16' },
-  ]
-
-  // ConfigPopover 摘要文本
-  const currentResLabel = availableResolutions.find((r) => r.value === resolution)?.label ?? resolution
-  const currentAspectLabel = ASPECT_RATIOS.find((ar) => ar.value === aspectRatio)?.label ?? aspectRatio
-  const configSummary = [
-    currentResLabel,
-    currentAspectLabel,
-  ].filter(Boolean).join(' · ')
-
   return (
     <div className="flex items-center justify-between gap-3 px-1 py-2">
       {/* 左侧：配置摘要 Popover + 数量 */}
-      <div className="flex items-center gap-1.5">
-        <VideoConfigPopover
-          summary={configSummary}
-          videoResolution={resolution}
-          resolutionOptions={resolutionOptions}
-          videoAspect={aspectRatio}
-          aspectOptions={ASPECT_RATIOS}
-          videoDuration={0}
-          durationOptions={[]}
-          isSeedance={false}
+      {showConfigControls ? (
+        <ImageConfigControls
+          availableResolutions={availableResolutions}
+          resolution={resolution}
+          aspectRatio={aspectRatio}
+          quantity={quantity}
+          disabled={isDisabled}
           onResolutionChange={onResolutionChange}
           onAspectRatioChange={onAspectRatioChange}
-          onDurationChange={() => {}}
+          onQuantityChange={onQuantityChange}
+          showQuantitySelect={showQuantitySelect}
         />
-
-        {/* 数量选择 */}
-        <Select value={String(quantity)} onValueChange={(v) => onQuantityChange(Number(v))} disabled={isDisabled}>
-          <SelectTrigger className="w-[72px] h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {QUANTITY_OPTIONS.map((n) => (
-              <SelectItem key={n} value={String(n)}>{n} 张</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      ) : <div />}
 
       {/* 右侧：积分 + 生成按钮 */}
       <div className="flex items-center gap-2 shrink-0">
@@ -101,6 +68,69 @@ export function ImageParams({
           {isGenerating ? <><Loader2 className="h-4 w-4 animate-spin" />生成中...</> : <><Sparkles className="h-4 w-4" />生成</>}
         </Button>
       </div>
+    </div>
+  )
+}
+
+export function ImageConfigControls({
+  availableResolutions,
+  resolution,
+  aspectRatio,
+  quantity,
+  disabled,
+  showQuantitySelect = true,
+  onResolutionChange,
+  onAspectRatioChange,
+  onQuantityChange,
+}: {
+  availableResolutions: ReturnType<typeof extractSchemaEnums>
+  resolution: string
+  aspectRatio: string
+  quantity: number
+  disabled?: boolean
+  showQuantitySelect?: boolean
+  onResolutionChange: (v: string) => void
+  onAspectRatioChange: (v: string) => void
+  onQuantityChange: (v: number) => void
+}) {
+  const aspectRatios = [
+    { value: '1:1', label: '1:1' },
+    { value: '4:3', label: '4:3' },
+    { value: '3:4', label: '3:4' },
+    { value: '16:9', label: '16:9' },
+    { value: '9:16', label: '9:16' },
+  ]
+  const resolutionOptions = availableResolutions.map((r) => r.value)
+  const currentResLabel = availableResolutions.find((r) => r.value === resolution)?.label ?? resolution
+  const currentAspectLabel = aspectRatios.find((ar) => ar.value === aspectRatio)?.label ?? aspectRatio
+  const configSummary = [currentResLabel, currentAspectLabel, `${quantity}张`].filter(Boolean).join(' · ')
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <VideoConfigPopover
+        summary={configSummary}
+        videoResolution={resolution}
+        resolutionOptions={resolutionOptions}
+        videoAspect={aspectRatio}
+        aspectOptions={aspectRatios}
+        videoDuration={0}
+        durationOptions={[]}
+        isSeedance={false}
+        onResolutionChange={onResolutionChange}
+        onAspectRatioChange={onAspectRatioChange}
+        onDurationChange={() => {}}
+      >
+        {showQuantitySelect && (
+          <ConfigOptionGroup
+            icon={<Images className="h-3 w-3" />}
+            label="生成数量"
+            value={String(quantity)}
+            options={QUANTITY_OPTIONS.map((n) => ({ value: String(n), label: String(n) }))}
+            onChange={(value) => onQuantityChange(Number(value))}
+            disabled={disabled}
+          />
+        )}
+      </VideoConfigPopover>
     </div>
   )
 }

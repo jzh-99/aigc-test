@@ -7,7 +7,6 @@ import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVideoGenerate } from '@/hooks/use-video-generate'
 import { useConfirm } from '@/hooks/use-confirm'
-import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import dynamic from 'next/dynamic'
@@ -67,9 +66,8 @@ function referenceImagesToFrameImages(images: NonNullable<VideoParams['videoRefe
 }
 
 export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPanelProps) {
-  const { watermark, avatarDefaults, userDefaults, pendingVideoReferenceImages, clearPendingVideoReferenceImages, videoPrompt, setVideoPrompt } = useGenerationStore()
+  const { watermark, pendingVideoReferenceImages, clearPendingVideoReferenceImages, videoPrompt, setVideoPrompt } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
-  const { save: saveDefaults } = useGenerationDefaults()
   const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
   const confirm = useConfirm()
   const { models: videoModels, isReady: videoModelsReady } = useModels('video', activeWorkspaceId)
@@ -403,12 +401,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     }
   }
 
-  const handleSaveDefaults = () => {
-    const d = { videoModel, videoAspectRatio, videoResolution, videoDuration, videoGenerateAudio, videoCameraFixed }
-    saveDefaults({ image: userDefaults ?? undefined, video: d, avatar: avatarDefaults ?? undefined })
-    toast.success('已保存为默认参数')
-  }
-
   const switchMode = (mode: VideoMode) => {
     if (mode === videoMode) return
     setVideoMode(mode)
@@ -472,6 +464,13 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
 
   return (
     <>
+      <ModelSelectorRow
+        models={videoModels}
+        videoModel={videoModel}
+        isDisabled={isVideoGenerating || isVideoUploading || !!disabled}
+        onModelChange={setVideoModel}
+      />
+
       <div
         className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2 relative transition-colors"
         onDragEnter={handleDragEnter}
@@ -486,14 +485,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
           </div>
         )}
         <div className={cn('flex flex-col flex-1 min-h-0 gap-2', isDragging && 'opacity-30 pointer-events-none')}>
-          {/* 模型选择器行 */}
-          <ModelSelectorRow
-            models={videoModels}
-            videoModel={videoModel}
-            isDisabled={isVideoGenerating || isVideoUploading || !!disabled}
-            onModelChange={setVideoModel}
-            onSaveDefaults={handleSaveDefaults}
-          />
           <div className="flex gap-2 shrink-0">
             {availableVideoModes.map((mode) => (
               <button key={mode} onClick={() => switchMode(mode)} className={modeBtnCls(videoMode === mode)}>
@@ -578,36 +569,23 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   )
 }
 
-/** 模型选择器行 — 占满宽度，ProviderIcon 供应商图标 + 设为默认在上方 */
+/** 模型选择器行 — 占满宽度，ProviderIcon 供应商图标 */
 function ModelSelectorRow({
   models,
   videoModel,
   isDisabled,
   onModelChange,
-  onSaveDefaults,
 }: {
   models?: ModelItem[]
   videoModel: string
   isDisabled: boolean
   onModelChange: (v: string) => void
-  onSaveDefaults: () => void
 }) {
   const [open, setOpen] = useState(false)
   const currentModel = models?.find((m) => m.code === videoModel)
 
   return (
-    <div className="shrink-0">
-      {/* 设为默认 — 模型框上方左对齐 */}
-      <div className="flex items-center justify-between mb-1">
-        <button
-          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-0.5"
-          disabled={isDisabled}
-          onClick={onSaveDefaults}
-        >
-          设为默认
-        </button>
-      </div>
-
+    <div className="shrink-0 my-2">
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger asChild>
           <button
@@ -615,8 +593,8 @@ function ModelSelectorRow({
             className={cn(
               'flex w-full items-center gap-3 rounded-lg border px-3 py-2 transition-colors text-left',
               open
-                ? 'border-primary/40 bg-primary/5'
-                : 'border-border/60 bg-background hover:border-primary/30',
+                ? 'border-primary/40 bg-card'
+                : 'border-border/60 bg-card hover:border-primary/30',
             )}
             disabled={isDisabled}
           >
@@ -638,7 +616,7 @@ function ModelSelectorRow({
             side="bottom"
             align="start"
             sideOffset={6}
-            className="z-[120] max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 shadow-xl shadow-foreground/5 animate-in fade-in-0 zoom-in-95"
+            className="z-[120] max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-xl border border-white/15 bg-card/40 p-1.5 shadow-2xl shadow-black/30 backdrop-blur-2xl ring-1 ring-white/10 animate-in fade-in-0 zoom-in-95"
           >
             <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
             {(models ?? []).map((m) => {

@@ -9,7 +9,6 @@ import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerate } from '@/hooks/use-generate'
 import { useConfirm } from '@/hooks/use-confirm'
-import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import type { BatchResponse } from '@aigc/types'
 import type { ModelItem } from '@aigc/types'
 import { toast } from 'sonner'
@@ -47,12 +46,10 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
     quantity, setQuantity,
     aspectRatio, setAspectRatio,
     referenceImages, addReferenceImage,
-    watermark, isGenerating,
-    saveAsDefaults, videoDefaults, avatarDefaults, userDefaults,
+    isGenerating,
     setImageModels,
   } = useGenerationStore()
 
-  const { save: saveDefaults } = useGenerationDefaults()
   const { generate } = useGenerate()
   const confirm = useConfirm()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
@@ -203,12 +200,6 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !isGenerating && !disabled) handleGenerate()
   }
 
-  const handleSaveDefaults = () => {
-    saveAsDefaults()
-    saveDefaults({ image: { modelType, resolution, aspectRatio, quantity, watermark }, video: videoDefaults ?? undefined, avatar: avatarDefaults ?? undefined })
-    toast.success('已保存为默认参数')
-  }
-
   /** 删除单张参考图 */
   const handleRemoveReferenceImage = useCallback((id: string) => {
     useGenerationStore.setState((state) => ({
@@ -218,6 +209,17 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
 
   return (
     <>
+      <ImageModelSelectorRow
+        models={imageModels}
+        modelType={modelType}
+        isDisabled={isGenerating || !!disabled}
+        onModelChange={(v) => {
+          setModelType(v)
+          const resolutions = getModelResolutions(v, imageModels)
+          if (resolutions.length > 0) setResolution(resolutions[0] as typeof resolution)
+        }}
+      />
+
       <div
         className={cn(
           'border border-border bg-card p-4 flex-1 flex flex-col min-h-0 relative transition-colors',
@@ -236,19 +238,6 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
           </div>
         )}
         <div className={cn('flex flex-col flex-1 min-h-0 gap-2', isDragging && 'opacity-30 pointer-events-none')}>
-          {/* 模型选择器行 */}
-          <ImageModelSelectorRow
-            models={imageModels}
-            modelType={modelType}
-            isDisabled={isGenerating || !!disabled}
-            onModelChange={(v) => {
-              setModelType(v)
-              const resolutions = getModelResolutions(v, imageModels)
-              if (resolutions.length > 0) setResolution(resolutions[0] as typeof resolution)
-            }}
-            onSaveDefaults={handleSaveDefaults}
-          />
-
           {/* CompanyA 图库搜索按钮（在编辑器上方） */}
           {isCompanyA && (
             <div className="flex items-center gap-2 shrink-0">
@@ -311,36 +300,23 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
   )
 }
 
-/** 图片模型选择器行 — ProviderIcon 供应商图标 + 设为默认在上方 */
+/** 图片模型选择器行 — ProviderIcon 供应商图标 */
 function ImageModelSelectorRow({
   models,
   modelType,
   isDisabled,
   onModelChange,
-  onSaveDefaults,
 }: {
   models?: ModelItem[]
   modelType: string
   isDisabled: boolean
   onModelChange: (v: string) => void
-  onSaveDefaults: () => void
 }) {
   const [open, setOpen] = useState(false)
   const currentModel = models?.find((m) => m.code === modelType)
 
   return (
-    <div className="shrink-0">
-      {/* 设为默认 — 模型框上方 */}
-      <div className="flex items-center justify-between mb-1">
-        <button
-          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-0.5"
-          disabled={isDisabled}
-          onClick={onSaveDefaults}
-        >
-          设为默认
-        </button>
-      </div>
-
+    <div className="shrink-0 my-2">
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger asChild>
           <button
@@ -348,8 +324,8 @@ function ImageModelSelectorRow({
             className={cn(
               'flex w-full items-center gap-3 rounded-lg border px-3 py-2 transition-colors text-left',
               open
-                ? 'border-primary/40 bg-primary/5'
-                : 'border-border/60 bg-background hover:border-primary/30',
+                ? 'border-primary/40 bg-card'
+                : 'border-border/60 bg-card hover:border-primary/30',
             )}
             disabled={isDisabled}
           >
@@ -371,7 +347,7 @@ function ImageModelSelectorRow({
             side="bottom"
             align="start"
             sideOffset={6}
-            className="z-[120] max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 shadow-xl shadow-foreground/5 animate-in fade-in-0 zoom-in-95"
+            className="z-[120] max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-xl border border-white/15 bg-card/40 p-1.5 shadow-2xl shadow-black/30 backdrop-blur-2xl ring-1 ring-white/10 animate-in fade-in-0 zoom-in-95"
           >
             <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
             {(models ?? []).map((m) => {

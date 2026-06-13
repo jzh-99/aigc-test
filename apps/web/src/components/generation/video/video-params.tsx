@@ -24,6 +24,7 @@ interface VideoParamsProps {
   isUploading: boolean
   disabled?: boolean
   promptEmpty?: boolean
+  showConfigControls?: boolean
   onAspectRatioChange: (v: string) => void
   onResolutionChange: (v: string) => void
   onDurationChange: (v: number) => void
@@ -35,7 +36,7 @@ interface VideoParamsProps {
 export function VideoParams({
   models, videoMode, videoModel, videoAspectRatio, videoResolution, videoDuration,
   referenceVideoDurations, videoGenerateAudio, videoCameraFixed, isSeedance,
-  isGenerating, isUploading, disabled, promptEmpty,
+  isGenerating, isUploading, disabled, promptEmpty, showConfigControls = true,
   onAspectRatioChange, onResolutionChange, onDurationChange,
   onGenerateAudioChange, onCameraFixedChange,
   onGenerate,
@@ -59,42 +60,29 @@ export function VideoParams({
   const billableDuration = (videoDuration === -1 ? 15 : videoDuration) + calculateReferenceVideoDurationSeconds(referenceVideoDurations)
   const estimatedCredits = isSeedance ? billableDuration * unitPrice : unitPrice
 
-  // ConfigPopover 摘要文本（不含音频/镜头）
-  const currentAspectLabel = dbAspectRatios.find((ar) => ar.value === videoAspectRatio)?.label ?? videoAspectRatio
-  const currentDurationLabel = dbDurationOptions.find((opt) => opt.value === videoDuration)?.label ?? `${videoDuration}s`
-  const configSummary = [
-    activeResolution.toUpperCase(),
-    videoAspectRatio === 'adaptive' ? null : currentAspectLabel,
-    isSeedance ? currentDurationLabel : null,
-  ].filter(Boolean).join(' · ')
-
-  // 分辨率选项
-  const resolutionOptions = dbResolutions.map((r) => r.value)
-
   return (
     <div className="flex items-center justify-between gap-3 px-1 py-2">
       {/* 左侧：配置摘要 Popover */}
-      <div className="flex items-center gap-1.5">
-        <VideoConfigPopover
-          summary={configSummary}
+      {showConfigControls ? (
+        <VideoConfigControls
+          dbResolutions={dbResolutions}
+          dbAspectRatios={dbAspectRatios}
+          dbDurationOptions={dbDurationOptions}
+          videoMode={videoMode}
+          videoAspectRatio={videoAspectRatio}
           videoResolution={activeResolution}
-          resolutionOptions={resolutionOptions}
-          videoAspect={videoAspectRatio}
-          aspectOptions={dbAspectRatios}
           videoDuration={videoDuration}
-          durationOptions={dbDurationOptions}
+          videoGenerateAudio={videoGenerateAudio}
+          videoCameraFixed={videoCameraFixed}
           isSeedance={isSeedance}
-          generateAudio={videoGenerateAudio}
-          cameraFixed={videoCameraFixed}
-          showCameraFixed={videoMode !== 'frames'}
-          onResolutionChange={onResolutionChange}
+          disabled={isDisabled}
           onAspectRatioChange={onAspectRatioChange}
+          onResolutionChange={onResolutionChange}
           onDurationChange={onDurationChange}
           onGenerateAudioChange={onGenerateAudioChange}
           onCameraFixedChange={onCameraFixedChange}
-          disabled={isDisabled}
         />
-      </div>
+      ) : <div />}
 
       {/* 右侧：积分 + 生成按钮 */}
       <div className="flex items-center gap-2 shrink-0">
@@ -108,6 +96,75 @@ export function VideoParams({
             : <><Sparkles className="h-4 w-4" />生成</>}
         </Button>
       </div>
+    </div>
+  )
+}
+
+export function VideoConfigControls({
+  dbResolutions,
+  dbAspectRatios,
+  dbDurationOptions,
+  videoMode,
+  videoAspectRatio,
+  videoResolution,
+  videoDuration,
+  videoGenerateAudio,
+  videoCameraFixed,
+  isSeedance,
+  disabled,
+  onAspectRatioChange,
+  onResolutionChange,
+  onDurationChange,
+  onGenerateAudioChange,
+  onCameraFixedChange,
+}: {
+  dbResolutions: ReturnType<typeof extractSchemaEnums>
+  dbAspectRatios: ReturnType<typeof extractSchemaEnums>
+  dbDurationOptions: Array<{ value: number; label: string }>
+  videoMode: VideoMode
+  videoAspectRatio: string
+  videoResolution: string
+  videoDuration: number
+  videoGenerateAudio: boolean
+  videoCameraFixed: boolean
+  isSeedance: boolean
+  disabled?: boolean
+  onAspectRatioChange: (v: string) => void
+  onResolutionChange: (v: string) => void
+  onDurationChange: (v: number) => void
+  onGenerateAudioChange: (v: boolean) => void
+  onCameraFixedChange: (v: boolean) => void
+}) {
+  const currentAspectLabel = dbAspectRatios.find((ar) => ar.value === videoAspectRatio)?.label ?? videoAspectRatio
+  const currentDurationLabel = dbDurationOptions.find((opt) => opt.value === videoDuration)?.label ?? `${videoDuration}s`
+  const configSummary = [
+    videoResolution.toUpperCase(),
+    videoAspectRatio === 'adaptive' ? null : currentAspectLabel,
+    isSeedance ? currentDurationLabel : null,
+  ].filter(Boolean).join(' · ')
+  const resolutionOptions = dbResolutions.map((r) => r.value)
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <VideoConfigPopover
+        summary={configSummary}
+        videoResolution={videoResolution}
+        resolutionOptions={resolutionOptions}
+        videoAspect={videoAspectRatio}
+        aspectOptions={dbAspectRatios}
+        videoDuration={videoDuration}
+        durationOptions={dbDurationOptions}
+        isSeedance={isSeedance}
+        generateAudio={videoGenerateAudio}
+        cameraFixed={videoCameraFixed}
+        showCameraFixed={videoMode !== 'frames'}
+        onResolutionChange={onResolutionChange}
+        onAspectRatioChange={onAspectRatioChange}
+        onDurationChange={onDurationChange}
+        onGenerateAudioChange={onGenerateAudioChange}
+        onCameraFixedChange={onCameraFixedChange}
+        disabled={disabled}
+      />
     </div>
   )
 }
