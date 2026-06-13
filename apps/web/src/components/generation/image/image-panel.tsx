@@ -348,7 +348,7 @@ function ImageModelSelectorRow({
             side="bottom"
             align="start"
             sideOffset={6}
-            className="z-[120] max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-xl border border-white/15 bg-card/40 p-1.5 shadow-2xl shadow-black/30 backdrop-blur-2xl ring-1 ring-white/10 animate-in fade-in-0 zoom-in-95"
+            className="z-[120] w-[var(--radix-popover-trigger-width)] rounded-xl border border-white/15 bg-card/40 p-1.5 shadow-2xl shadow-black/30 backdrop-blur-2xl ring-1 ring-white/10 animate-in fade-in-0 zoom-in-95"
           >
             <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
             {(models ?? []).map((m) => {
@@ -360,7 +360,7 @@ function ImageModelSelectorRow({
                   onClick={() => { onModelChange(m.code); setOpen(false) }}
                   disabled={isDisabled}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
+                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                     isActive
                       ? 'bg-primary/10 text-primary font-medium'
                       : 'text-popover-foreground hover:bg-muted',

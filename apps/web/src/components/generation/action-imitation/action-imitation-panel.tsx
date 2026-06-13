@@ -75,7 +75,14 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
   }
 
   const handleActionImitationGenerate = async () => {
-    if (!actionImage || !actionVideo) return
+    if (!actionImage) {
+      toast.error('请先上传人物图片')
+      return
+    }
+    if (!actionVideo) {
+      toast.error('请先上传驱动视频')
+      return
+    }
     const creditsNum = Math.ceil(actionVideo.duration) * 20
     const ok = await confirm({
       title: '确认生成',
@@ -129,7 +136,7 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
       <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
         {/* 人物图片上传 */}
         <div className="flex-1 min-h-0 flex flex-col">
-          <p className="text-[11px] text-muted-foreground mb-1 shrink-0">人物图片（必填，≤4.7MB）</p>
+          <p className="text-[11px] text-muted-foreground mb-1 shrink-0">人物图片</p>
           {actionImage ? (
             <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-muted group"
               onDragOver={(e) => e.preventDefault()} onDrop={handleActionImageDrop}>
@@ -157,7 +164,7 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
 
         {/* 驱动视频上传 */}
         <div className="flex-1 min-h-0 flex flex-col">
-          <p className="text-[11px] text-muted-foreground mb-1 shrink-0">驱动视频（必填，≤30秒）</p>
+          <p className="text-[11px] text-muted-foreground mb-1 shrink-0">驱动视频</p>
           {actionVideo ? (
             <div
               className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-black group cursor-pointer"

@@ -28,7 +28,7 @@ export function ConfigOptionGroup({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         {icon}
         <span>{label}</span>
       </div>
@@ -42,7 +42,7 @@ export function ConfigOptionGroup({
               onClick={() => onChange(option.value)}
               disabled={disabled}
               className={cn(
-                'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors',
+                'inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-sm transition-colors',
                 active
                   ? 'border-primary/40 bg-primary/10 text-primary'
                   : 'border-border/60 bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground',
@@ -79,7 +79,7 @@ export function DurationSlider({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between text-[10px] font-medium text-muted-foreground">
+      <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <Clock className="h-3 w-3" />
           时长
@@ -161,7 +161,7 @@ export function VideoConfigPopover({
         <button
           type="button"
           className={cn(
-            'inline-flex min-w-0 max-w-[170px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition-colors',
+            'inline-flex min-w-0 max-w-[190px] items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors',
             open
               ? 'border-primary/40 bg-primary/5 text-primary'
               : 'border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-foreground',
@@ -169,9 +169,9 @@ export function VideoConfigPopover({
           disabled={disabled}
           title="视频配置"
         >
-          <Film className="h-3.5 w-3.5 shrink-0" />
+          <Film className="h-4 w-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-left font-medium">{summary}</span>
-          <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform', open && 'rotate-180')} />
+          <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', open && 'rotate-180')} />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -181,7 +181,7 @@ export function VideoConfigPopover({
           sideOffset={8}
           className="z-[120] w-72 space-y-3 rounded-xl border border-border/80 bg-popover p-3 shadow-xl shadow-foreground/5 animate-in fade-in-0 zoom-in-95"
         >
-          <div className="text-xs font-semibold text-popover-foreground">视频配置</div>
+          <div className="text-sm font-semibold text-popover-foreground">视频配置</div>
           <ConfigOptionGroup
             icon={<Film className="h-3 w-3" />}
             label="分辨率"

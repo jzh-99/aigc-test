@@ -629,7 +629,7 @@ function ModelSelectorRow({
                   onClick={() => { onModelChange(m.code); setOpen(false) }}
                   disabled={isDisabled}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
+                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                     isActive
                       ? 'bg-primary/10 text-primary font-medium'
                       : 'text-popover-foreground hover:bg-muted',

@@ -45,9 +45,23 @@ export function parseAspectRatio(ratio?: string): string {
   return `${w} / ${h}`
 }
 
+function setAssetDragData(e: React.DragEvent, url: string, type: 'image' | 'video') {
+  e.dataTransfer.setData('application/x-aigc-asset-url', url)
+  e.dataTransfer.setData('application/x-aigc-asset-type', type)
+  e.dataTransfer.setData('text/uri-list', url)
+  e.dataTransfer.setData('text/plain', url)
+  e.dataTransfer.effectAllowed = 'copy'
+}
+
+function preventPendingAssetDrag(e: React.DragEvent, type: 'image' | 'video') {
+  e.preventDefault()
+  toast.error(type === 'image' ? '图片加载完成后才能拖拽到参考' : '视频加载完成后才能拖拽到参考')
+}
+
 /** 视频预览：16:9 固定比例，进入视野自动静音播放 */
 function VideoPreview({ url }: { url: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
     const video = videoRef.current
@@ -67,7 +81,21 @@ function VideoPreview({ url }: { url: string }) {
   }, [])
 
   return (
-    <div className="relative w-full aspect-video rounded-md overflow-hidden bg-black">
+    <div
+      className={cn(
+        'relative w-full aspect-video rounded-md overflow-hidden bg-black',
+        isReady ? 'cursor-grab active:cursor-grabbing' : 'cursor-wait',
+      )}
+      draggable
+      onDragStart={(e) => {
+        if (!isReady) {
+          preventPendingAssetDrag(e, 'video')
+          return
+        }
+        setAssetDragData(e, url, 'video')
+      }}
+      title={isReady ? '拖拽到视频参考区域' : '视频加载完成后可拖拽'}
+    >
       <video
         ref={videoRef}
         src={url}
@@ -77,6 +105,7 @@ function VideoPreview({ url }: { url: string }) {
         playsInline
         preload="metadata"
         controls
+        onLoadedMetadata={() => setIsReady(true)}
       />
     </div>
   )
@@ -94,10 +123,22 @@ function isPortraitRatio(ratio: string): boolean {
  */
 function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: string }) {
   const [index, setIndex] = useState(0)
+  const [loadedUrls, setLoadedUrls] = useState<Set<string>>(new Set())
   const isPortrait = isPortraitRatio(aspectRatio)
   const isMulti = urls.length > 1
   const itemRefs = useRef<(HTMLDivElement | null)[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
+  const currentUrl = urls[index]
+  const isCurrentLoaded = loadedUrls.has(currentUrl)
+
+  const markLoaded = (url: string) => {
+    setLoadedUrls((current) => {
+      if (current.has(url)) return current
+      const next = new Set(current)
+      next.add(url)
+      return next
+    })
+  }
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -118,15 +159,30 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
   // 横图模式
   if (!isPortrait) {
     return (
-      <div className="generation-dream-media-frame group relative w-full rounded-2xl overflow-hidden bg-muted flex justify-center">
+      <div
+        className={cn(
+          'generation-dream-media-frame group relative w-full rounded-2xl overflow-hidden bg-muted flex justify-center',
+          isCurrentLoaded ? 'cursor-grab active:cursor-grabbing' : 'cursor-wait',
+        )}
+        draggable
+        onDragStart={(e) => {
+          if (!isCurrentLoaded) {
+            preventPendingAssetDrag(e, 'image')
+            return
+          }
+          setAssetDragData(e, currentUrl, 'image')
+        }}
+        title={isCurrentLoaded ? '拖拽当前图片到参考区域' : '图片加载完成后可拖拽'}
+      >
         <div className="relative" style={{ height: 400, aspectRatio }}>
           <Image
-            src={urls[index]}
+            src={currentUrl}
             alt=""
             fill
             className="object-cover"
             sizes="600px"
             unoptimized
+            onLoad={() => markLoaded(currentUrl)}
           />
         </div>
         {isMulti && (
@@ -212,7 +268,19 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
           <div
             key={i}
             ref={(el) => { itemRefs.current[i] = el }}
-            className="break-inside-avoid mb-1.5 overflow-hidden rounded-sm"
+            className={cn(
+              'break-inside-avoid mb-1.5 overflow-hidden rounded-sm',
+              loadedUrls.has(url) ? 'cursor-grab active:cursor-grabbing' : 'cursor-wait',
+            )}
+            draggable
+            onDragStart={(e) => {
+              if (!loadedUrls.has(url)) {
+                preventPendingAssetDrag(e, 'image')
+                return
+              }
+              setAssetDragData(e, url, 'image')
+            }}
+            title={loadedUrls.has(url) ? '拖拽当前图片到参考区域' : '图片加载完成后可拖拽'}
           >
             <Image
               src={url}
@@ -223,6 +291,7 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
               className="w-full h-auto block"
               style={{ aspectRatio }}
               unoptimized
+              onLoad={() => markLoaded(url)}
             />
           </div>
         ))}
@@ -529,7 +598,7 @@ export function BatchListCard({ batch, onClick, onHide, onRegenerateCreated }: B
             size="sm"
             variant="ghost"
             className={cn(
-              'h-7 px-2 text-xs',
+              'h-7 border border-primary/40 px-2 text-xs text-primary hover:border-primary/70 hover:bg-primary/10 hover:text-primary',
               applied && 'text-green-600'
             )}
             onClick={handleApply}
@@ -539,7 +608,7 @@ export function BatchListCard({ batch, onClick, onHide, onRegenerateCreated }: B
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-xs"
+            className="h-7 border border-primary/40 px-2 text-xs text-primary hover:border-primary/70 hover:bg-primary/10 hover:text-primary"
             onClick={handleRegenerate}
             disabled={regenerating}
           >
@@ -549,12 +618,12 @@ export function BatchListCard({ batch, onClick, onHide, onRegenerateCreated }: B
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              className="h-7 border border-primary/40 px-2 text-xs text-primary hover:border-primary/70 hover:bg-primary/10 hover:text-primary"
               onClick={handleHide}
               disabled={hiding}
-              title="隐藏"
+              title="删除记录"
             >
-              {hiding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              {hiding ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Trash2 className="h-3 w-3 mr-1" />删除记录</>}
             </Button>
           )}
         </div>
