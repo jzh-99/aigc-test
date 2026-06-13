@@ -13,6 +13,7 @@ const route: FastifyPluginAsync = async (app) => {
         'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
         'pm.category_references',
         'pm.params_pricing', 'pm.params_schema', 'pm.resolution', 'pm.is_active',
+        'pm.avatar',
         'p.code as provider_code',
       ])
       .orderBy('pm.module', 'asc')
