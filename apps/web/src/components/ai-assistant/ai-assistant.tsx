@@ -10,6 +10,7 @@ import { fetchRawWithAuth } from '@/lib/fetch-with-auth'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import {
   Bot, X, Send, ImageIcon, Video, Trash2, Loader2, Upload, MessageSquare, GripVertical, Copy, Check,
+  ArrowUp, ArrowDown,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -76,6 +77,7 @@ export function AiAssistant() {
   const buttonDragStartedRef = useRef(false)
   const buttonDraggedRef = useRef(false)
 
+  const topRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const chatImageRef = useRef<HTMLInputElement>(null)
@@ -99,10 +101,24 @@ export function AiAssistant() {
     return () => clearTimeout(timer)
   }, [user?.id])
 
+  const scrollMessagesToTop = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    topRef.current?.scrollIntoView({ behavior, block: 'start' })
+  }, [])
+
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    bottomRef.current?.scrollIntoView({ behavior, block: 'end' })
+  }, [])
+
   // Auto-scroll
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    scrollMessagesToBottom('smooth')
+  }, [messages, scrollMessagesToBottom])
+
+  useEffect(() => {
+    if (!open) return
+    const frame = requestAnimationFrame(() => scrollMessagesToBottom('auto'))
+    return () => cancelAnimationFrame(frame)
+  }, [open, messages.length, scrollMessagesToBottom])
 
   // Save history whenever messages change
   useEffect(() => {
@@ -661,56 +677,83 @@ export function AiAssistant() {
           />
 
           {/* Messages */}
-          <ScrollArea className="flex-1 px-3 py-3 overflow-x-hidden">
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center py-12 gap-2">
-                <Bot className="h-10 w-10 text-white/20" />
-                <p className="text-sm text-white/60">你好！我是 Toby.AI 创作助手</p>
-                <p className="text-xs text-white/40">可以帮你设计提示词、解析图片/视频</p>
+          <div className="relative flex-1 min-h-0">
+            <div className="group/scroll-controls absolute right-1 top-1/2 z-20 flex h-32 w-12 -translate-y-1/2 items-center justify-center">
+              <div className="flex flex-col gap-2 opacity-0 transition-opacity duration-200 group-hover/scroll-controls:opacity-100">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => scrollMessagesToTop()}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/70 shadow-lg backdrop-blur-xl transition-colors hover:border-white/30 hover:bg-white/18 hover:text-white"
+                  aria-label="滚动到顶部"
+                  title="滚动到顶部"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => scrollMessagesToBottom()}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/70 shadow-lg backdrop-blur-xl transition-colors hover:border-white/30 hover:bg-white/18 hover:text-white"
+                  aria-label="滚动到底部"
+                  title="滚动到底部"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </button>
               </div>
-            )}
-            {messages.map((msg) => (
-              <div key={msg.id} className={cn(
-                'mb-3 flex min-w-0 w-full overflow-hidden',
-                msg.role === 'user' ? 'justify-end pl-8' : 'justify-start pr-8'
-              )}>
-                <div className={cn(
-                  'max-w-full min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words overflow-hidden relative group',
-                  msg.role === 'user'
-                    ? 'gradient-accent text-white rounded-br-sm'
-                    : 'ai-glass-msg-bot rounded-bl-sm'
-                )}>
-                  {msg.imagePreview && (
-                    <img src={msg.imagePreview} alt="附件" className="mb-1.5 max-h-32 rounded-lg object-cover" />
-                  )}
-                  {msg.content === '' && msg.role === 'assistant'
-                    ? <Loader2 className="h-4 w-4 animate-spin opacity-50" />
-                    : msg.role === 'assistant'
-                    ? (
-                      <>
-                        <div className="prose prose-sm prose-invert max-w-full break-words overflow-hidden pb-4 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words [&_a]:text-violet-300 [&_a:hover]:text-violet-200"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
-                        {msg.content && (
-                          <button
-                            onClick={() => handleCopy(msg.content, msg.id)}
-                            className="absolute bottom-2 right-2 p-1.5 rounded-md ai-glass-bg-copy border ai-glass-border-faint opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="复制"
-                          >
-                            {copiedId === msg.id ? (
-                              <Check className="h-3.5 w-3.5 text-green-500" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        )}
-                      </>
-                    )
-                    : <span className="whitespace-pre-wrap break-words">{msg.content}</span>
-                  }
+            </div>
+            <ScrollArea className="h-full px-3 py-3 overflow-x-hidden">
+              <div ref={topRef} />
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center py-12 gap-2">
+                  <Bot className="h-10 w-10 text-white/20" />
+                  <p className="text-sm text-white/60">你好！我是 Toby.AI 创作助手</p>
+                  <p className="text-xs text-white/40">可以帮你设计提示词、解析图片/视频</p>
                 </div>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </ScrollArea>
+              )}
+              {messages.map((msg) => (
+                <div key={msg.id} className={cn(
+                  'mb-3 flex min-w-0 w-full overflow-hidden',
+                  msg.role === 'user' ? 'justify-end pl-8' : 'justify-start pr-8'
+                )}>
+                  <div className={cn(
+                    'max-w-full min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words overflow-hidden relative group',
+                    msg.role === 'user'
+                      ? 'gradient-accent text-white rounded-br-sm'
+                      : 'ai-glass-msg-bot rounded-bl-sm'
+                  )}>
+                    {msg.imagePreview && (
+                      <img src={msg.imagePreview} alt="附件" className="mb-1.5 max-h-32 rounded-lg object-cover" />
+                    )}
+                    {msg.content === '' && msg.role === 'assistant'
+                      ? <Loader2 className="h-4 w-4 animate-spin opacity-50" />
+                      : msg.role === 'assistant'
+                      ? (
+                        <>
+                          <div className="prose prose-sm prose-invert max-w-full break-words overflow-hidden pb-4 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words [&_a]:text-violet-300 [&_a:hover]:text-violet-200"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                          {msg.content && (
+                            <button
+                              onClick={() => handleCopy(msg.content, msg.id)}
+                              className="absolute bottom-2 right-2 p-1.5 rounded-md ai-glass-bg-copy border ai-glass-border-faint opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="复制"
+                            >
+                              {copiedId === msg.id ? (
+                                <Check className="h-3.5 w-3.5 text-green-500" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </>
+                      )
+                      : <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                    }
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </ScrollArea>
+          </div>
 
           {/* Input area */}
           <div className="border-t ai-glass-border-subtle ai-glass-bg-deep">

@@ -7,6 +7,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { TeamCreditsSettings } from '@/components/team/team-credits-settings'
+import { SettingsManagementNav } from '@/components/layout/settings-management-nav'
 
 function TeamPageContent() {
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
@@ -38,6 +39,8 @@ function TeamPageContent() {
         <h1 className="text-2xl font-semibold">团队管理</h1>
         <p className="text-muted-foreground">管理团队成员、配额和工作区</p>
       </div>
+
+      <SettingsManagementNav showBack />
 
       <div className="flex gap-1 border-b">
         {tabs.map((tab) => (

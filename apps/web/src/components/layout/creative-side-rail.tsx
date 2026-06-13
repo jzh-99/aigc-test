@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
-import { LogOut, UserRound, Building2, ArrowLeftRight, Check, Coins } from 'lucide-react'
+import { UserRound, Building2, ArrowLeftRight, Check, Coins } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,16 +13,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { apiPost } from '@/lib/api-client'
 import { useAuthStore } from '@/stores/auth-store'
-import { useGenerationStore } from '@/stores/generation-store'
 import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { useTeamFeatures } from '@/hooks/use-team-features'
 import { useNavigationStore } from '@/stores/navigation-store'
 import {
   creativeNavItems,
   isNavItemActive,
-  managementNavItems,
 } from './nav-config'
 import type { CreditBalance } from '@aigc/types'
 
@@ -74,11 +71,9 @@ export function CreativeSideRail() {
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
-  const { setActiveTeam, setActiveWorkspace, clearAuth } = useAuthStore()
-  const resetGeneration = useGenerationStore((s) => s.reset)
+  const { setActiveTeam, setActiveWorkspace } = useAuthStore()
   const { showVideoStudioTab } = useTeamFeatures()
   const startNavigation = useNavigationStore((s) => s.startNavigation)
-  const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
   const { data: teamCreditData } = useSWR<TeamCreditInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
   const { data: balanceData } = useSWR<CreditBalance>(
     activeTeamId ? `/payment/balance?team_id=${activeTeamId}` : '/payment/balance'
@@ -92,24 +87,6 @@ export function CreativeSideRail() {
   const remainingCredits = currentMemberCredit?.credit_quota != null
     ? Math.max(0, currentMemberCredit.credit_quota - (currentMemberCredit.credit_used ?? 0))
     : Math.max(0, teamBalance - frozenCredits)
-  const visibleManagementItems = managementNavItems.filter((item) => {
-    if (item.label === '操作手册') return false
-    if (item.requireUserRole && user?.role !== item.requireUserRole) return false
-    if (item.requireTeamRole && activeTeam?.role !== item.requireTeamRole) return false
-    return true
-  })
-
-  async function handleLogout() {
-    try {
-      await apiPost('/auth/logout', {})
-    } catch {
-      // 服务端登出失败时仍清理本地状态，避免用户被卡在当前会话。
-    } finally {
-      resetGeneration()
-      clearAuth()
-      router.replace('/login')
-    }
-  }
 
   return (
     <aside
@@ -278,13 +255,17 @@ export function CreativeSideRail() {
           <span className="whitespace-nowrap">{remainingCredits.toLocaleString()} A豆</span>
         </button>
 
-        {/* 用户头像菜单 */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        {/* 用户头像：进入设置页 */}
+        <Tooltip>
+          <TooltipTrigger asChild>
             <button
               type="button"
+              onClick={() => {
+                startNavigation('/settings')
+                router.push('/settings')
+              }}
               className="grid h-8 w-8 place-items-center rounded-full border border-white/20 bg-white/10 text-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:border-white/35 hover:bg-white/20 hover:text-white hover:shadow-[0_0_22px_rgba(129,220,255,0.25)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-              aria-label="打开账户管理菜单"
+              aria-label="进入设置页"
             >
               {user?.avatar_url ? (
                 <img
@@ -296,61 +277,9 @@ export function CreativeSideRail() {
                 <UserRound className="h-[18px] w-[18px]" aria-hidden="true" />
               )}
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            side="right"
-            align="end"
-            sideOffset={12}
-            className="w-44 border-white/15 bg-[#121735]/95 p-1.5 text-white shadow-[0_18px_60px_rgba(5,8,30,0.48)] backdrop-blur-xl"
-          >
-            <div className="flex items-center gap-2 px-2 py-2">
-              <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full border border-white/15 bg-white/10 text-white/70">
-                {user?.avatar_url ? (
-                  <img
-                    src={user.avatar_url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <UserRound className="h-4 w-4" aria-hidden="true" />
-                )}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-white">{user?.username ?? '当前用户'}</p>
-                <p className="truncate text-[11px] text-white/50">{accountDisplay}</p>
-              </div>
-            </div>
-            <DropdownMenuSeparator className="bg-white/10" />
-            {visibleManagementItems.map((item) => {
-              const isActive = isNavItemActive(item.href, currentPath)
-              const Icon = item.icon
-
-              return (
-                <DropdownMenuItem
-                  key={item.href}
-                  asChild
-                  className={cn(
-                    'cursor-pointer rounded-md px-2.5 py-2 text-xs text-white/70 focus:bg-white/10 focus:text-white',
-                    isActive && 'bg-white/[0.12] text-white'
-                  )}
-                >
-                  <Link href={item.href} aria-current={isActive ? 'page' : undefined} onClick={() => startNavigation(item.href)}>
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </Link>
-                </DropdownMenuItem>
-              )
-            })}
-            <DropdownMenuSeparator className="bg-white/10" />
-            <DropdownMenuItem
-              onClick={handleLogout}
-              className="cursor-pointer rounded-md px-2.5 py-2 text-xs text-rose-200 focus:bg-rose-400/10 focus:text-rose-100"
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              <span>退出登录</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </TooltipTrigger>
+          <TooltipContent side="right">设置</TooltipContent>
+        </Tooltip>
       </div>
     </aside>
   )

@@ -8,6 +8,7 @@ import { UserTable } from '@/components/admin/user-table'
 import { ErrorDashboard } from '@/components/admin/error-dashboard'
 import { ModelTable } from '@/components/admin/model-table'
 import { OtherCostConfigTable } from '@/components/admin/other-cost-config-table'
+import { SettingsManagementNav } from '@/components/layout/settings-management-nav'
 import { cn } from '@/lib/utils'
 
 const tabs = [
@@ -35,6 +36,8 @@ export default function AdminPage() {
         <h1 className="text-2xl font-semibold">管理后台</h1>
         <p className="text-muted-foreground">管理所有团队、用户和A豆</p>
       </div>
+
+      <SettingsManagementNav showBack />
 
       <div className="flex gap-1 border-b">
         {tabs.map((tab) => (

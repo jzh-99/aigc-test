@@ -140,8 +140,14 @@ export default function MusicDetailPage() {
 
   useEffect(() => {
     if (currentLyricIndex < 0) return
+    const container = lyricScrollRef.current
     const activeLine = lyricLineRefs.current[currentLyricIndex]
-    activeLine?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (!container || !activeLine) return
+    // 仅滚动歌词容器自身：scrollIntoView 会向上传播到页面根滚动容器，导致左侧播放器跟随滚动
+    const containerRect = container.getBoundingClientRect()
+    const lineRect = activeLine.getBoundingClientRect()
+    const offset = lineRect.top - containerRect.top - (container.clientHeight - lineRect.height) / 2
+    container.scrollTo({ top: container.scrollTop + offset, behavior: 'smooth' })
   }, [currentLyricIndex])
 
   if (track.error) {

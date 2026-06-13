@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Coins, ArrowRight } from 'lucide-react'
 import { TopupModal } from '@/components/credits/topup-modal'
 import { LedgerCard } from '@/components/credits/ledger-card'
+import { SettingsManagementNav } from '@/components/layout/settings-management-nav'
 import type { LedgerRow } from '@/components/credits/ledger-card'
 import type { CreditBalance } from '@aigc/types'
 import Link from 'next/link'
@@ -76,6 +77,8 @@ export default function CreditsPage() {
         <h1 className="text-2xl font-semibold">A豆管理</h1>
         <p className="text-muted-foreground">查看当前工作区可用A豆和消费记录</p>
       </div>
+
+      <SettingsManagementNav showBack />
 
       {/* Team credits nav for owner */}
       {isOwner && activeTeamId && (

@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { apiPatch, apiPost, fetchWithAuth, ApiError } from '@/lib/api-client'
+import { SettingsManagementNav } from '@/components/layout/settings-management-nav'
 import type { UserProfile } from '@aigc/types'
 import { toast } from 'sonner'
 import { Loader2, AlertCircle, LogOut, ImagePlus } from 'lucide-react'
@@ -221,11 +222,13 @@ function SettingsPageContent() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">个人设置</h1>
-        <p className="text-muted-foreground">管理您的个人信息</p>
+        <p className="text-muted-foreground">管理您的个人信息、账户安全和团队相关入口</p>
       </div>
+
+      <SettingsManagementNav />
 
       <Card className="border-destructive/25 bg-destructive/[0.03]">
         <CardHeader>
@@ -253,60 +256,6 @@ function SettingsPageContent() {
               退出登录
             </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>手机号换绑</CardTitle>
-          <CardDescription>通过短信验证码更新登录手机号</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleBindPhone} className="space-y-4">
-            <div className="space-y-2">
-              <Label>当前手机号</Label>
-              <Input value={user?.phone ?? '未绑定手机号'} disabled className="bg-muted" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-phone">新手机号</Label>
-              <Input
-                id="new-phone"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                placeholder="请输入新的手机号"
-                inputMode="tel"
-                maxLength={11}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone-code">验证码</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="phone-code"
-                  value={phoneCode}
-                  onChange={(e) => setPhoneCode(e.target.value)}
-                  placeholder="请输入验证码"
-                  inputMode="numeric"
-                  maxLength={10}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSendPhoneCode}
-                  disabled={phoneCodeLoading || phoneCodeCountdown > 0 || phoneBindLoading}
-                  className="shrink-0"
-                >
-                  {phoneCodeLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {phoneCodeCountdown > 0 ? `${phoneCodeCountdown}s` : '获取验证码'}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">换绑成功后，将使用新的手机号作为登录账户</p>
-            </div>
-            <Button type="submit" disabled={phoneBindLoading || phoneCodeLoading}>
-              {phoneBindLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              确认换绑
-            </Button>
-          </form>
         </CardContent>
       </Card>
 
@@ -480,6 +429,60 @@ function SettingsPageContent() {
               onCheckedChange={setWatermark}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>手机号换绑</CardTitle>
+          <CardDescription>通过短信验证码更新登录手机号</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleBindPhone} className="space-y-4">
+            <div className="space-y-2">
+              <Label>当前手机号</Label>
+              <Input value={user?.phone ?? '未绑定手机号'} disabled className="bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-phone">新手机号</Label>
+              <Input
+                id="new-phone"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="请输入新的手机号"
+                inputMode="tel"
+                maxLength={11}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone-code">验证码</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="phone-code"
+                  value={phoneCode}
+                  onChange={(e) => setPhoneCode(e.target.value)}
+                  placeholder="请输入验证码"
+                  inputMode="numeric"
+                  maxLength={10}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSendPhoneCode}
+                  disabled={phoneCodeLoading || phoneCodeCountdown > 0 || phoneBindLoading}
+                  className="shrink-0"
+                >
+                  {phoneCodeLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {phoneCodeCountdown > 0 ? `${phoneCodeCountdown}s` : '获取验证码'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">换绑成功后，将使用新的手机号作为登录账户</p>
+            </div>
+            <Button type="submit" disabled={phoneBindLoading || phoneCodeLoading}>
+              {phoneBindLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              确认换绑
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
