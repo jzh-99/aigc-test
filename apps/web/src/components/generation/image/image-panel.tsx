@@ -15,16 +15,10 @@ import { toast } from 'sonner'
 import { getRequestErrorMessage } from '@/lib/api-client'
 import { CompanyAImagePicker } from '../company-a-image-picker'
 import { cn, generateUUID } from '@/lib/utils'
-import dynamic from 'next/dynamic'
-
-const ModelBrandIcon = dynamic(
-  () => import('../shared/model-brand-icon').then((m) => ({ default: m.ModelBrandIcon })),
-  { ssr: false, loading: () => <span className="inline-block h-4 w-4" /> }
-)
+import { ModelBrandIcon } from '../shared/model-brand-icon'
 import { ImmersiveEditor } from '../shared/immersive-editor'
 import type { MediaGridItem } from '../shared/media-grid-types'
 
-/** 模型图标渲染入口（异步加载，避免 @lobehub/icons 进入首屏 bundle） */
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
 import { MAX_REF_IMAGES } from '../shared/constants'
@@ -331,7 +325,7 @@ function ImageModelSelectorRow({
           >
             {/* 供应商图标 */}
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 shrink-0">
-              <ModelBrandIcon modelCode={currentModel?.code ?? modelType} providerCode={currentModel?.provider_code} size={40} />
+              <ModelBrandIcon avatar={currentModel?.avatar} modelCode={currentModel?.code ?? modelType} size={40} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">{currentModel?.name ?? modelType}</div>
@@ -367,7 +361,7 @@ function ImageModelSelectorRow({
                   )}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/50 shrink-0">
-                    <ModelBrandIcon modelCode={m.code} providerCode={m.provider_code} size={32} />
+                    <ModelBrandIcon avatar={m.avatar} modelCode={m.code} size={32} />
                   </div>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{m.name}</span>
