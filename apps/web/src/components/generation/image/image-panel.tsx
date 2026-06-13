@@ -146,7 +146,6 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
       return
     }
     addReferenceImage({ id: generateUUID(), previewUrl: url })
-    toast.success('已添加参考图，提交时会自动加载原图')
   }, [referenceImages.length, maxReferenceImages, addReferenceImage])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -265,7 +264,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
             editorValue={prompt}
             editorOnChange={setPrompt}
             editorResources={mentionResources}
-            editorPlaceholder={'描述你想要生成的图片...\n\nCtrl+Enter 快速生成'}
+            editorPlaceholder={'上传参考图、输入文字或 @ （紫色）参考内容，描述你想生成的图片。'}
             editorDisabled={isGenerating || disabled}
             editorMentionClassName={() =>
               'inline-flex items-center gap-1 rounded-md border border-primary/35 bg-primary/12 px-1.5 py-0.5 font-semibold text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_12px_rgba(200,156,236,0.12)] align-baseline'
