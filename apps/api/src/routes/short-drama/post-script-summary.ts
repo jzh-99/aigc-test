@@ -12,6 +12,7 @@ import {
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { buildShortDramaScriptSummaryPrompts, getShortDramaSummarySourceText } from './_script-source.js'
+import { createShortDramaSSESession } from './_sse.js'
 
 // 保守预估：结构化剧集设定内容较长，输入+输出均计费，预冻结 35 积分
 const ESTIMATED_CREDITS = 35
@@ -100,13 +101,14 @@ const route: FastifyPluginAsync = async (app) => {
     reply.hijack()
     reply.raw.write(': connected\n\n')
 
-    const sendEvent = (event: string, data: unknown): void => {
-      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-    }
+    // 封装 SSE 写入：连接断开时静默失败，并暴露 clientSignal 用于及时中止 AI 上游请求
+    const session = createShortDramaSSESession(reply)
+    const { sendEvent, sendPing, clientSignal } = session
 
-    const sendPing = (): void => {
-      reply.raw.write(': ping\n\n')
-    }
+    // 标记业务是否已成功落库（状态 + 积分结算）。
+    // 用于区分「AI 真正失败」与「业务已成功但 SSE 推送失败（连接断开）」，
+    // 避免后者误触发退积分 + 覆盖成功状态为 failed。
+    let persisted = false
 
     try {
       sendEvent('progress', { message: sourceText.label === '原始剧本' ? '正在提炼剧本摘要' : '正在生成剧本摘要' })
@@ -114,6 +116,7 @@ const route: FastifyPluginAsync = async (app) => {
       const aiResponse = await callQwenForTextStream(systemPrompt, userPrompt, 8000, {
         onChunk: (text) => sendEvent('chunk', { text }),
         onPing: sendPing,
+        externalSignal: clientSignal,
         audit: {
           userId,
           teamId,
@@ -157,6 +160,10 @@ const route: FastifyPluginAsync = async (app) => {
         episodeCount,
       })).settledCredits
 
+      // 状态落库 + 积分结算已完成，标记业务成功。
+      // 此后即便 sendEvent('done') 因连接断开写入失败，也不应回退业务结果。
+      persisted = true
+
       sendEvent('done', {
         success: true,
         title: parsed.title,
@@ -165,19 +172,25 @@ const route: FastifyPluginAsync = async (app) => {
         state,
       })
     } catch (error) {
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成失败')
-      state.script.status = 'failed'
-      await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
-        app.log.error({ saveError, projectId }, '短剧摘要失败状态保存失败')
-      })
-      app.log.error({ error, projectId }, '短剧摘要流式生成失败')
-      sendEvent('error', {
-        code: 'AI_ERROR',
-        message: error instanceof Error ? error.message : 'AI 生成失败，请稍后重试',
-      })
+      if (persisted) {
+        // 业务已成功，仅 SSE 推送失败（多为客户端连接断开）：
+        // 不退积分、不覆盖状态，仅记日志；用户刷新即可看到已生成结果。
+        app.log.warn({ error, projectId }, '短剧摘要已生成成功，但向客户端推送结果失败')
+      } else {
+        await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成失败')
+        state.script.status = 'failed'
+        await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
+          app.log.error({ saveError, projectId }, '短剧摘要失败状态保存失败')
+        })
+        app.log.error({ error, projectId }, '短剧摘要流式生成失败')
+        sendEvent('error', {
+          code: 'AI_ERROR',
+          message: error instanceof Error ? error.message : 'AI 生成失败，请稍后重试',
+        })
+      }
     } finally {
       await releaseRedisLock(app.redis, generationLock)
-      reply.raw.end()
+      session.end()
     }
   })
 }

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS } from '@aigc/types'
 import type { ShortDramaState } from '@aigc/types'
+import { translateError } from '@/lib/error-messages'
 import {
   generateShortDramaScriptSummary,
   generateShortDramaEpisodeOutlines,
@@ -993,7 +994,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '生成失败'
 
-      toast.error(errorMessage)
+      toast.error(translateError(errorMessage))
     } finally {
       generatingSummaryRef.current = false
       setGeneratingSummary(false)
@@ -1033,7 +1034,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '生成失败'
 
-      toast.error(errorMessage)
+      toast.error(translateError(errorMessage))
     } finally {
       generatingOutlinesRef.current = false
       setGeneratingOutlines(false)

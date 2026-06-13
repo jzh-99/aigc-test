@@ -102,6 +102,17 @@ export interface ShortDramaScriptUploadResult {
 
 const API_BASE = '/api/v1'
 
+/**
+ * 后端 SSE 主动下发的 error 事件（业务明确失败）。
+ * 与网络中断（fetch/reader 抛错）区分：前者直接抛出，后者触发回查兜底。
+ */
+class ShortDramaSseError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ShortDramaSseError'
+  }
+}
+
 async function consumeShortDramaSSE<T>(
   res: Response,
   options: ShortDramaStreamOptions = {}
@@ -150,7 +161,7 @@ async function consumeShortDramaSSE<T>(
         result = json as T
       } else if (currentEvent === 'error') {
         const payload = json as { message?: string }
-        throw new Error(payload.message ?? '操作失败')
+        throw new ShortDramaSseError(payload.message ?? '操作失败')
       }
 
       currentEvent = ''
@@ -166,7 +177,8 @@ async function consumeShortDramaSSE<T>(
 
 async function postShortDramaSSE<T>(
   path: string,
-  options: ShortDramaStreamOptions = {}
+  options: ShortDramaStreamOptions = {},
+  projectId?: string,
 ): Promise<T> {
   const token = useAuthStore.getState().accessToken
   const headers: Record<string, string> = {}
@@ -183,7 +195,37 @@ async function postShortDramaSSE<T>(
     throw new Error(err.error?.message ?? '生成失败')
   }
 
-  return consumeShortDramaSSE<T>(res, options)
+  try {
+    return await consumeShortDramaSSE<T>(res, options)
+  } catch (err) {
+    // 后端主动 error 事件（业务明确失败）：直接抛出，不回查
+    if (err instanceof ShortDramaSseError) throw err
+    // 其余（网络中断/连接被代理掐断）：后端可能仍在生成或已成功落库。
+    // 回查项目状态：若未标记失败，按「已同步最新状态」返回，避免误报 network error。
+    if (projectId) {
+      const recovered = await recoverShortDramaStream<T>(projectId)
+      if (recovered) return recovered
+    }
+    throw err
+  }
+}
+
+/**
+ * 流式连接中断后回查项目状态。
+ * 后端 AI 生成耗时较长时，连接可能被中间代理（nginx/SLB）掐断，
+ * 但后端仍会跑完并落库。此时回查拿到最新状态，避免给用户误报失败。
+ * 仅当后端未标记 failed 时视为「已同步」，由上层 onStateChange 刷新 UI。
+ */
+async function recoverShortDramaStream<T>(projectId: string): Promise<T | null> {
+  try {
+    const project = await getShortDramaProject(projectId)
+    if (project.status !== 'failed') {
+      return { success: true, state: project.state } as unknown as T
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 // ============================================================================
@@ -279,6 +321,7 @@ export function generateShortDramaScriptSummary(
   return postShortDramaSSE<ShortDramaStreamResult>(
     `/short-drama/projects/${projectId}/script/summary`,
     options,
+    projectId,
   )
 }
 
@@ -289,6 +332,7 @@ export function generateShortDramaEpisodeOutlines(
   return postShortDramaSSE<ShortDramaStreamResult>(
     `/short-drama/projects/${projectId}/script/episode-outlines`,
     options,
+    projectId,
   )
 }
 
@@ -299,6 +343,7 @@ export function generateShortDramaAssetPrompts(
   return postShortDramaSSE<ShortDramaStreamResult>(
     `/short-drama/projects/${projectId}/assets/prompts`,
     options,
+    projectId,
   )
 }
 
@@ -347,6 +392,7 @@ export function generateShortDramaEpisodeSegments(
   return postShortDramaSSE<ShortDramaStreamResult>(
     `/short-drama/projects/${projectId}/episodes/${episodeNumber}/segments`,
     options,
+    projectId,
   )
 }
 

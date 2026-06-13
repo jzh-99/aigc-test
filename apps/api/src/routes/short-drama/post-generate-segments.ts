@@ -17,6 +17,7 @@ import {
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
+import { createShortDramaSSESession } from './_sse.js'
 
 // 保守预估：片段脚本输入+输出均计费，输入较长，预冻结 40 积分
 const ESTIMATED_CREDITS = 40
@@ -222,13 +223,9 @@ const route: FastifyPluginAsync = async (app) => {
     reply.hijack()
     reply.raw.write(': connected\n\n')
 
-    const sendEvent = (event: string, data: unknown): void => {
-      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-    }
-
-    const sendPing = (): void => {
-      reply.raw.write(': ping\n\n')
-    }
+    // 封装 SSE 写入：连接断开时静默失败，并暴露 clientSignal 用于及时中止 AI 上游请求
+    const session = createShortDramaSSESession(reply)
+    const { sendEvent, sendPing, clientSignal } = session
 
     const failStream = async (
       code: string,
@@ -249,7 +246,7 @@ const route: FastifyPluginAsync = async (app) => {
       app.log.error({ error, projectId, episodeNumber }, message)
       sendEvent('error', { code, message })
       await releaseRedisLock(app.redis, generationLock)
-      reply.raw.end()
+      session.end()
     }
 
     sendEvent('progress', {
@@ -263,6 +260,7 @@ const route: FastifyPluginAsync = async (app) => {
       aiResponse = await callQwenForTextStream(REDACTED, userPrompt, 12000, {
         onChunk: (text) => sendEvent('chunk', { text, episodeNumber }),
         onPing: sendPing,
+        externalSignal: clientSignal,
         audit: {
           userId,
           teamId,
@@ -494,7 +492,7 @@ const route: FastifyPluginAsync = async (app) => {
       state,
     })
     await releaseRedisLock(app.redis, generationLock)
-    reply.raw.end()
+    session.end()
   })
 }
 

@@ -28,12 +28,20 @@ const QWEN_MODEL = process.env.QWEN_MODEL ?? 'qwen3.7-max'
 // 文本生成计费：每千字 1 A豆
 const TEXT_CREDITS_PER_THOUSAND_CHARS = 1
 const TEXT_TIMEOUT_MS = 360_000 // 增加到 6 分钟，避免生成超时
+// SSE 独立心跳间隔：必须远小于生产 nginx 的 proxy_read_timeout（默认 60s），
+// 保证 Qwen reasoning 静默期（上游无数据）也能向客户端保活，避免中间代理判定空闲超时掐断连接
+const SSE_HEARTBEAT_INTERVAL_MS = 15_000
 export const SHORT_DRAMA_OUTLINE_BATCH_SIZE = 5 // 减少批次大小到 5 集，降低单次生成压力
 
 export interface ShortDramaTextStreamCallbacks {
   onChunk?: (text: string) => void
   onPing?: () => void
   audit?: LlmProviderAuditContext
+  /**
+   * 外部中止信号（通常是客户端 SSE 连接断开）。
+   * 触发后会中止对 Qwen 的上游请求，避免客户端已离开后 AI 仍空跑到超时浪费 token。
+   */
+  externalSignal?: AbortSignal
 }
 
 export interface ShortDramaOutlineBatch {
@@ -141,6 +149,20 @@ export async function callQwenForTextStream(
   const chatEndpoint = `${QWEN_API_URL}/chat/completions`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TEXT_TIMEOUT_MS)
+
+  // 外部信号（客户端 SSE 断开）触发时，中止 AI 上游请求，避免空跑浪费 token
+  const externalSignal = callbacks.externalSignal
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort()
+    else externalSignal.addEventListener('abort', () => controller.abort(), { once: true })
+  }
+
+  // 独立心跳：固定间隔触发，不依赖 AI 上游数据流。
+  // 这样 reasoning 静默期也能向客户端保活，避免 nginx/SLB 空闲超时掐断连接。
+  const heartbeat = callbacks.onPing
+    ? setInterval(() => callbacks.onPing?.(), SSE_HEARTBEAT_INTERVAL_MS)
+    : null
+
   const startedAt = Date.now()
   const requestPayload = {
     model: QWEN_MODEL,
@@ -223,10 +245,7 @@ export async function callQwenForTextStream(
 
       for (const line of lines) {
         const text = extractQwenStreamDeltaText(line.trim())
-        if (!text) {
-          callbacks.onPing?.()
-          continue
-        }
+        if (!text) continue
         fullText += text
         summarizeLlmStreamChunk(streamSummary, text)
         callbacks.onChunk?.(text)
@@ -263,6 +282,7 @@ export async function callQwenForTextStream(
     throw error
   } finally {
     clearTimeout(timer)
+    if (heartbeat) clearInterval(heartbeat)
   }
 }
 
