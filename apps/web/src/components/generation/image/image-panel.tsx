@@ -294,7 +294,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
   )
 }
 
-/** 图片模型选择器行 — ProviderIcon 供应商图标 */
+/** 图片模型选择器行 */
 function ImageModelSelectorRow({
   models,
   modelType,

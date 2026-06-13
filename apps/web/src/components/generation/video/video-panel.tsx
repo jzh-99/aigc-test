@@ -564,7 +564,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   )
 }
 
-/** 模型选择器行 — 占满宽度，ProviderIcon 供应商图标 */
+/** 模型选择器行 — 占满宽度 */
 function ModelSelectorRow({
   models,
   videoModel,
