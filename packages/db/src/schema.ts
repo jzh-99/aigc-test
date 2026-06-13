@@ -300,6 +300,7 @@ export interface ProviderModelsTable {
   params_pricing: ColumnType<unknown, string, string>
   params_schema: ColumnType<unknown, string, string>
   resolution: string | null
+  avatar: string | null
   is_active: Generated<boolean>
 }
 
