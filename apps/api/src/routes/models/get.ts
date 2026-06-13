@@ -69,7 +69,8 @@ const route: FastifyPluginAsync = async (app) => {
       .select([
         'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
         'pm.category_references', 'pm.params_pricing',
-        'pm.params_schema', 'pm.resolution', 'p.code as provider_code',
+        'pm.params_schema', 'pm.resolution', 'pm.avatar',
+        'p.code as provider_code',
         'pm.is_active as global_is_active', 'tmc.is_active as team_is_active',
       ])
       .orderBy('pm.module', 'asc')
@@ -82,18 +83,23 @@ const route: FastifyPluginAsync = async (app) => {
     const rows = await query.execute()
 
     // 团队配置优先于全局配置：team_is_active 不为 null 时以团队配置为准
-    return rows
-      .filter((r) => {
-        const effective = r.team_is_active !== null ? r.team_is_active : r.global_is_active
-        return effective
-      })
-      .map((r) => normalizeModelJsonFields({
-        id: r.id, code: r.code, name: r.name, description: r.description,
-        module: r.module, category_references: r.category_references,
-        params_pricing: r.params_pricing,
-        params_schema: r.params_schema, resolution: r.resolution,
-        is_active: true, provider_code: r.provider_code,
-      }))
+    const filtered = rows.filter((r) => {
+      const effective = r.team_is_active !== null ? r.team_is_active : r.global_is_active
+      return effective
+    })
+
+    return Promise.all(
+      filtered.map(async (r) =>
+        normalizeModelJsonFields({
+          id: r.id, code: r.code, name: r.name, description: r.description,
+          module: r.module, category_references: r.category_references,
+          params_pricing: r.params_pricing,
+          params_schema: r.params_schema, resolution: r.resolution,
+          is_active: true, provider_code: r.provider_code,
+          avatar: await signAssetUrl(r.avatar),
+        }),
+      ),
+    )
   })
 
   app.get<{ Querystring: { provider?: string; language?: string } }>('/models/system-voices', async (request) => {
