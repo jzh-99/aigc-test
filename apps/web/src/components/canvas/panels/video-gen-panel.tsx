@@ -1,4 +1,4 @@
-import { Cpu, Film, ImageIcon, Music, Play, X } from 'lucide-react'
+import { Cpu, Music, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useConfirm } from '@/hooks/use-confirm'
 import type { VideoMode } from '@/lib/canvas/types'
@@ -40,7 +40,7 @@ function ReferencePreviewItem({
   return (
     <div
       data-testid={`canvas-reference-preview-${resource.mentionLabel}`}
-      className="group/reference relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/40"
+      className="group/reference relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/40 shadow-sm"
       title={`${resource.mentionLabel} · ${resource.sourceLabel}`}
     >
       {(isImage || (isVideo && previewImageUrl)) && (
@@ -70,42 +70,31 @@ function ReferencePreviewItem({
         aria-label="取消引用"
         title={`取消引用${resource.mentionLabel}`}
         onClick={(event) => { event.stopPropagation(); onRemoveReference(resource.id) }}
-        className="pointer-events-none absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-background/95 text-muted-foreground opacity-0 shadow transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
+        className="pointer-events-none absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background/95 text-muted-foreground opacity-0 shadow transition group-hover/reference:pointer-events-auto group-hover/reference:opacity-100 group-focus-within/reference:pointer-events-auto group-focus-within/reference:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
       >
-        <X className="h-2 w-2" />
+        <X className="h-2.5 w-2.5" />
       </button>
     </div>
   )
 }
 
-function ReferencePreviewGroup({
-  title,
-  count,
-  type,
+function ReferencePreviewStrip({
   resources,
   onRemoveReference,
 }: {
-  title: string
-  count: number
-  type: CanvasReferenceMentionResource['type']
   resources: CanvasReferenceMentionResource[]
   onRemoveReference: (resourceId: string) => void
 }) {
   if (resources.length === 0) return null
-  const Icon = type === 'video' ? Film : type === 'audio' ? Music : ImageIcon
-  const iconClassName = type === 'video' ? 'text-violet-600' : type === 'audio' ? 'text-emerald-600' : 'text-blue-600'
 
   return (
-    <div data-testid={`canvas-reference-preview-group-${type}`} className="space-y-1">
-      <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-        <Icon className={cn('h-3 w-3', iconClassName)} />
-        <span>{title} {count}</span>
-      </div>
-      <div data-testid={`canvas-reference-preview-list-${type}`} className="flex max-w-full gap-1.5 overflow-x-auto pb-1">
-        {resources.map((resource) => (
-          <ReferencePreviewItem key={resource.id} resource={resource} onRemoveReference={onRemoveReference} />
-        ))}
-      </div>
+    <div
+      data-testid="canvas-reference-preview-strip"
+      className="flex max-w-full gap-1.5 overflow-x-auto rounded-xl border border-border/60 bg-muted/25 px-2 py-1.5"
+    >
+      {resources.map((resource) => (
+        <ReferencePreviewItem key={resource.id} resource={resource} onRemoveReference={onRemoveReference} />
+      ))}
     </div>
   )
 }
@@ -203,10 +192,6 @@ export function VideoGenPanel({
       ? (videoDuration + referenceDuration) * videoUnitPrice
       : videoUnitPrice * DEFAULT_VIDEO_AUTO_DURATION_SECS + referenceDuration * videoUnitPrice)
     : videoUnitPrice
-  const imageMentionResources = mentionResources.filter((resource) => resource.type === 'image')
-  const videoMentionResources = mentionResources.filter((resource) => resource.type === 'video')
-  const audioMentionResources = mentionResources.filter((resource) => resource.type === 'audio')
-
   // Popover 选项列表
   const modelOptions = filteredModels.map((m) => ({ value: m.code, label: m.name }))
   const aspectPopOptions = aspectRatioOptions.map((ar) => ({ value: ar.value, label: ar.label }))
@@ -274,12 +259,8 @@ export function VideoGenPanel({
 
       {/* 多模态参考素材预览 */}
       {videoMode === 'multiref' && (
-        multirefImages.length + multirefVideos.length + multirefAudios.length > 0 && (
-          <div className="space-y-2">
-            <ReferencePreviewGroup title="图片" count={multirefImages.length} type="image" resources={imageMentionResources} onRemoveReference={onRemoveReference} />
-            <ReferencePreviewGroup title="视频" count={multirefVideos.length} type="video" resources={videoMentionResources} onRemoveReference={onRemoveReference} />
-            <ReferencePreviewGroup title="音频" count={multirefAudios.length} type="audio" resources={audioMentionResources} onRemoveReference={onRemoveReference} />
-          </div>
+        mentionResources.length > 0 && (
+          <ReferencePreviewStrip resources={mentionResources} onRemoveReference={onRemoveReference} />
         )
       )}
 

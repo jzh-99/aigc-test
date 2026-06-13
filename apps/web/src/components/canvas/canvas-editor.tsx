@@ -1022,10 +1022,36 @@ function Flow({
     const isActive = generatingNodeIds.has(edge.target)
     const isSelected = edge.id === selectedEdgeId
 
-    if (isSelected) return { ...edge, animated: false, style: { stroke: '#ef4444', strokeWidth: 2 } }
-    if (isActive) return { ...edge, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }
-    if (isUpstream) return { ...edge, animated: false, style: { stroke: '#a78bfa', strokeWidth: 2 } }
-    return { ...edge, animated: false, style: { stroke: '#d4d4d8', strokeWidth: 1.5 } }
+    if (isSelected) {
+      return {
+        ...edge,
+        animated: false,
+        className: 'canvas-edge canvas-edge--selected',
+        style: { stroke: '#a855f7', strokeWidth: 2.5 },
+      }
+    }
+    if (isActive) {
+      return {
+        ...edge,
+        animated: true,
+        className: 'canvas-edge canvas-edge--active',
+        style: { stroke: '#8b5cf6', strokeWidth: 2 },
+      }
+    }
+    if (isUpstream) {
+      return {
+        ...edge,
+        animated: false,
+        className: 'canvas-edge canvas-edge--upstream',
+        style: { stroke: '#a78bfa', strokeWidth: 2 },
+      }
+    }
+    return {
+      ...edge,
+      animated: false,
+      className: 'canvas-edge',
+      style: { stroke: '#d4d4d8', strokeWidth: 1.5 },
+    }
   }), [edges, selectedNodeId, selectedEdgeId, generatingNodeIds])
 
   // Push direct upstream highlight set into execution store so nodes read it directly
