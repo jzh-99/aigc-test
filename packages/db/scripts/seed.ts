@@ -9,6 +9,11 @@ import bcrypt from 'bcryptjs'
 import { sql } from 'kysely'
 import { getDb, closeDb } from '../src/client.js'
 
+// 模型 avatar 图标：拼接 TOS 公网域名，未配置 TOS_PUBLIC_URL 时返回 null（走占位图标）
+const TOS_PUBLIC_URL = process.env.TOS_PUBLIC_URL ?? ''
+const llmAvatar = (icon: string): string | null =>
+  TOS_PUBLIC_URL ? `${TOS_PUBLIC_URL}/assets/llm/${icon}.png` : null
+
 async function main() {
   const db = getDb()
 
@@ -495,6 +500,7 @@ async function main() {
       code: 'gemini-3.1-flash-image-preview',
       name: '全能图片2',
       description: '快速生成，适合日常使用',
+      avatar: llmAvatar('nanoBanana'),
       params_pricing: [
         { resolution: '1k', model: 'gemini-3.1-flash-image-preview', unit_price: 1 },
         { resolution: '2k', model: 'gemini-3.1-flash-image-preview-2k', unit_price: 1 },
@@ -511,6 +517,7 @@ async function main() {
       code: 'gpt-image-2',
       name: '超能图片2',
       description: '文字渲染准确，UI截图逼真，照片级真实感',
+      avatar: llmAvatar('openai'),
       params_pricing: [
         { resolution: '2k', model: 'gpt-image-2', unit_price: 2 },
       ],
@@ -525,6 +532,7 @@ async function main() {
       code: 'nano-banana-2',
       name: '全能图片Pro',
       description: '高质量输出，细节丰富',
+      avatar: llmAvatar('nanoBanana'),
       params_pricing: [
         { resolution: '1k', model: 'nano-banana-2', unit_price: 4 },
         { resolution: '2k', model: 'nano-banana-2-2k', unit_price: 4 },
@@ -557,6 +565,7 @@ async function main() {
         category_references: JSON.stringify(m.category_references),
         params_pricing: JSON.stringify((m.params_pricing ?? [])),
         params_schema: JSON.stringify(m.params_schema),
+        avatar: m.avatar,
         is_active: true,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
@@ -566,6 +575,7 @@ async function main() {
         category_references: JSON.stringify(m.category_references),
         params_pricing: JSON.stringify(m.params_pricing ?? []),
         params_schema: JSON.stringify(m.params_schema),
+        avatar: m.avatar,
         is_active: true,
       }))
       .execute()
@@ -802,6 +812,7 @@ async function main() {
       code: 'seedance-1.5-pro',
       name: 'Seedance 1.5 Pro',
       description: '有声视频生成，支持首尾帧',
+      avatar: llmAvatar('volcengine'),
       category_references: FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-1.5-pro', unit_price: 5 },
@@ -819,7 +830,8 @@ async function main() {
     {
       code: 'seedance-2.0',
       name: 'Seedance 2.0',
-      description: '新一代有声视频，支持首尾帧',
+      description: '全能王者，音视文图均可参考',
+      avatar: llmAvatar('volcengine'),
       category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-2.0', unit_price: 7 },
@@ -837,7 +849,8 @@ async function main() {
     {
       code: 'seedance-2.0-fast',
       name: 'Seedance 2.0 Fast',
-      description: '新一代有声视频，支持首尾帧',
+      description: '高性价比，音视文图均可参考',
+      avatar: llmAvatar('volcengine'),
       category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
       params_pricing: [
         { resolution: '480p', model: 'seedance-2.0-fast', unit_price: 5 },
@@ -865,6 +878,7 @@ async function main() {
         category_references: JSON.stringify(m.category_references),
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,
+        avatar: m.avatar,
         is_active: true,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
@@ -873,6 +887,7 @@ async function main() {
         category_references: JSON.stringify(m.category_references),
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,
+        avatar: m.avatar,
         is_active: true,
       }))
       .execute()
