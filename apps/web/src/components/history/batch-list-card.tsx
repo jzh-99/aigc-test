@@ -58,6 +58,48 @@ function preventPendingAssetDrag(e: React.DragEvent, type: 'image' | 'video') {
   toast.error(type === 'image' ? '图片加载完成后才能拖拽到参考' : '视频加载完成后才能拖拽到参考')
 }
 
+function setCompactDragPreview(e: React.DragEvent, url: string, type: 'image' | 'video') {
+  const preview = document.createElement('div')
+  preview.style.position = 'fixed'
+  preview.style.left = '-120px'
+  preview.style.top = '-120px'
+  preview.style.width = '96px'
+  preview.style.height = '96px'
+  preview.style.borderRadius = '16px'
+  preview.style.overflow = 'hidden'
+  preview.style.background = 'hsl(var(--muted))'
+  preview.style.border = '1px solid rgba(255,255,255,0.16)'
+  preview.style.boxShadow = '0 14px 34px rgba(0,0,0,0.35)'
+  preview.style.pointerEvents = 'none'
+
+  if (type === 'image') {
+    const image = document.createElement('img')
+    image.src = url
+    image.alt = ''
+    image.style.width = '100%'
+    image.style.height = '100%'
+    image.style.objectFit = 'cover'
+    preview.appendChild(image)
+  } else {
+    preview.innerHTML = '<div style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;background:#050816;color:white;font-size:12px;font-weight:600;">视频</div>'
+  }
+
+  document.body.appendChild(preview)
+  e.dataTransfer.setDragImage(preview, 48, 48)
+  window.setTimeout(() => preview.remove(), 0)
+}
+
+function handleLoadedImageDragStart(e: React.DragEvent<HTMLImageElement>, url: string) {
+  const image = e.currentTarget
+  e.stopPropagation()
+  if (!image.complete || image.naturalWidth <= 0) {
+    preventPendingAssetDrag(e, 'image')
+    return
+  }
+  setAssetDragData(e, url, 'image')
+  setCompactDragPreview(e, url, 'image')
+}
+
 /** 视频预览：16:9 固定比例，进入视野自动静音播放 */
 function VideoPreview({ url }: { url: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -105,6 +147,15 @@ function VideoPreview({ url }: { url: string }) {
         playsInline
         preload="metadata"
         controls
+        draggable
+        onDragStart={(e) => {
+          if (e.currentTarget.readyState < HTMLMediaElement.HAVE_METADATA) {
+            preventPendingAssetDrag(e, 'video')
+            return
+          }
+          setAssetDragData(e, url, 'video')
+          setCompactDragPreview(e, url, 'video')
+        }}
         onLoadedMetadata={() => setIsReady(true)}
       />
     </div>
@@ -160,21 +211,13 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
   if (!isPortrait) {
     return (
       <div
-        className={cn(
-          'generation-dream-media-frame group relative w-full rounded-2xl overflow-hidden bg-muted flex justify-center',
-          isCurrentLoaded ? 'cursor-grab active:cursor-grabbing' : 'cursor-wait',
-        )}
-        draggable
-        onDragStart={(e) => {
-          if (!isCurrentLoaded) {
-            preventPendingAssetDrag(e, 'image')
-            return
-          }
-          setAssetDragData(e, currentUrl, 'image')
-        }}
-        title={isCurrentLoaded ? '拖拽当前图片到参考区域' : '图片加载完成后可拖拽'}
+        className="generation-dream-media-frame group relative w-full rounded-2xl overflow-hidden bg-muted flex justify-center"
       >
-        <div className="relative" style={{ height: 400, aspectRatio }}>
+        <div
+          className={cn('relative', isCurrentLoaded ? 'cursor-grab active:cursor-grabbing' : 'cursor-wait')}
+          style={{ height: 400, aspectRatio }}
+          title={isCurrentLoaded ? '拖拽当前图片到参考区域' : '图片加载完成后可拖拽'}
+        >
           <Image
             src={currentUrl}
             alt=""
@@ -182,6 +225,8 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
             className="object-cover"
             sizes="600px"
             unoptimized
+            draggable
+            onDragStart={(e) => handleLoadedImageDragStart(e, currentUrl)}
             onLoad={() => markLoaded(currentUrl)}
           />
         </div>
@@ -291,6 +336,8 @@ function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: str
               className="w-full h-auto block"
               style={{ aspectRatio }}
               unoptimized
+              draggable
+              onDragStart={(e) => handleLoadedImageDragStart(e, url)}
               onLoad={() => markLoaded(url)}
             />
           </div>

@@ -316,7 +316,7 @@ function ImageModelSelectorRow({
           <button
             type="button"
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 transition-colors text-left',
+              'flex w-full items-center gap-3.5 rounded-lg border px-3.5 py-2.5 transition-colors text-left',
               open
                 ? 'border-primary/40 bg-card'
                 : 'border-border/60 bg-card hover:border-primary/30',
@@ -324,13 +324,13 @@ function ImageModelSelectorRow({
             disabled={isDisabled}
           >
             {/* 供应商图标 */}
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 shrink-0">
-              <ModelBrandIcon avatar={currentModel?.avatar} modelCode={currentModel?.code ?? modelType} size={40} />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted/50 shrink-0">
+              <ModelBrandIcon avatar={currentModel?.avatar} modelCode={currentModel?.code ?? modelType} size={44} />
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 space-y-0.5">
               <div className="text-sm font-medium truncate">{currentModel?.name ?? modelType}</div>
               {currentModel?.description && (
-                <div className="text-[11px] text-muted-foreground truncate">{currentModel.description}</div>
+                <div className="text-xs text-muted-foreground truncate">{currentModel.description}</div>
               )}
             </div>
             <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
@@ -341,7 +341,7 @@ function ImageModelSelectorRow({
             side="bottom"
             align="start"
             sideOffset={6}
-            className="z-[120] w-[var(--radix-popover-trigger-width)] rounded-xl border border-white/15 bg-card/40 p-1.5 shadow-2xl shadow-black/30 backdrop-blur-2xl ring-1 ring-white/10 animate-in fade-in-0 zoom-in-95"
+            className="z-[120] w-[var(--radix-popover-trigger-width)] rounded-xl border border-white/15 bg-card/40 p-2 shadow-2xl shadow-black/30 backdrop-blur-2xl ring-1 ring-white/10 animate-in fade-in-0 zoom-in-95"
           >
             <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
             {(models ?? []).map((m) => {
@@ -353,20 +353,20 @@ function ImageModelSelectorRow({
                   onClick={() => { onModelChange(m.code); setOpen(false) }}
                   disabled={isDisabled}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
+                    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
                     isActive
                       ? 'bg-primary/10 text-primary font-medium'
                       : 'text-popover-foreground hover:bg-muted',
                     isDisabled && 'opacity-50 cursor-not-allowed',
                   )}
                 >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/50 shrink-0">
-                    <ModelBrandIcon avatar={m.avatar} modelCode={m.code} size={32} />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/50 shrink-0">
+                    <ModelBrandIcon avatar={m.avatar} modelCode={m.code} size={36} />
                   </div>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{m.name}</span>
                     {m.description && (
-                      <span className="mt-0.5 block truncate text-[11px] font-normal text-muted-foreground">
+                      <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
                         {m.description}
                       </span>
                     )}
