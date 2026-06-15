@@ -86,9 +86,7 @@ export function AudioGenPanel({
   async function playVoiceDemo(voice: SystemVoiceItem) {
     setDemoLoadingId(voice.id)
     try {
-      const demo = voice.demo_audio_url
-        ? { demo_audio_url: voice.demo_audio_url }
-        : await apiFetcher<SystemVoiceDemoResponse>(`/models/system-voices/${voice.id}/demo`)
+      const demo = await apiFetcher<SystemVoiceDemoResponse>(`/models/system-voices/${voice.id}/demo`)
       await new Audio(demo.demo_audio_url).play()
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : '音色试听失败')
