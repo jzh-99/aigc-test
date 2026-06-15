@@ -156,7 +156,6 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
               <ImagePlus className="h-5 w-5 text-primary shrink-0" />
               <div className="text-center">
                 <div className="text-sm font-medium text-primary">上传人物图片</div>
-                <div className="text-[11px] text-primary/60">jpg / png · 最大 4.7MB</div>
               </div>
             </button>
           )}
@@ -199,7 +198,6 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
               <Clapperboard className="h-4 w-4 text-primary shrink-0" />
               <div className="text-center">
                 <div className="text-sm font-medium text-primary">上传驱动视频</div>
-                <div className="text-[11px] text-primary/60">mp4 / mov / webm · 最大 30s</div>
               </div>
             </button>
           )}
