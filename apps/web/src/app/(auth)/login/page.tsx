@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/stores/auth-store'
@@ -197,6 +198,11 @@ export default function LoginPage() {
             <span>和</span>
             <span className="login-link">《隐私政策》</span>
           </div>
+          <p className="basis-full text-center" style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.5)' }}>
+            <Link href="/docs/user-guide" className="login-link">
+              《AIGC 用户使用手册》
+            </Link>
+          </p>
         </div>
       </div>
     </div>

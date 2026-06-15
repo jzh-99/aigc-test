@@ -2,33 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-
-const navSections = [
-  {
-    label: '开始使用',
-    items: [
-      { href: '/docs', label: '平台简介' },
-      { href: '/docs/login', label: '登录与账户' },
-      { href: '/docs/workspace', label: '工作台' },
-    ],
-  },
-  {
-    label: '核心功能',
-    items: [
-      { href: '/docs/image-generation', label: '图片生成' },
-      { href: '/docs/video-generation', label: '视频生成' },
-      { href: '/docs/asset-library', label: '资产库' },
-      { href: '/docs/ai-assistant', label: 'AI 助手' },
-    ],
-  },
-  {
-    label: '实战样例',
-    items: [
-      { href: '/docs/case-poster', label: '海报制作' },
-      { href: '/docs/case-video', label: '宣传短片' },
-    ],
-  },
-]
+import { docsNavSections } from '@/components/docs/docs-data'
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -56,7 +30,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
 
         {/* Nav */}
         <nav className="docs-nav">
-          {navSections.map((section) => (
+          {docsNavSections.map((section) => (
             <div key={section.label}>
               <div className="docs-nav-section-label">{section.label}</div>
               <ul className="space-y-0.5">
