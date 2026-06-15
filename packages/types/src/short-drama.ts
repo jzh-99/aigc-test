@@ -155,9 +155,17 @@ export interface ShortDramaState {
     originalPrompt: string
     originalScript: string
     refinedPrompt: string | null
+    /** 剧本摘要生成失败的持久化原因（重进页面仍可见）；成功或重新生成时清空 */
+    summaryErrorMessage: string | null
     episodeSummaries: ShortDramaEpisodeSummary[]
     episodeSummaryStatus: ShortDramaGenerationStatus
+    /** 概述生成失败的持久化原因（重进页面仍可见）；成功或重新生成时清空 */
+    episodeSummaryErrorMessage: string | null
     outlines: ShortDramaEpisodeOutline[]
+    /** 分集剧本批次请求状态（与 script.status 解耦）：generating=请求进行中，completed=本批成功，failed=失败 */
+    outlinesStatus: ShortDramaGenerationStatus
+    /** 分集剧本生成失败的持久化原因（重进页面仍可见）；成功或重新生成时清空 */
+    outlinesErrorMessage: string | null
     status: ShortDramaGenerationStatus
   }
   assets: {
@@ -389,9 +397,13 @@ export function makeDefaultShortDramaState(params: {
       originalPrompt: params.prompt,
       originalScript: '',
       refinedPrompt: null,
+      summaryErrorMessage: null,
       episodeSummaries: [],
       episodeSummaryStatus: 'idle',
+      episodeSummaryErrorMessage: null,
       outlines: [],
+      outlinesStatus: 'idle',
+      outlinesErrorMessage: null,
       status: 'idle',
     },
     assets: {
@@ -439,9 +451,13 @@ export function makeUploadedShortDramaState(params: {
       originalPrompt: '',
       originalScript: params.originalScript,
       refinedPrompt: null,
+      summaryErrorMessage: null,
       episodeSummaries: [],
       episodeSummaryStatus: 'idle',
+      episodeSummaryErrorMessage: null,
       outlines: [],
+      outlinesStatus: 'idle',
+      outlinesErrorMessage: null,
       status: 'idle',
     },
   }
@@ -469,9 +485,13 @@ export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>):
       originalPrompt: partial.script?.originalPrompt ?? '',
       originalScript: partial.script?.originalScript ?? '',
       refinedPrompt: partial.script?.refinedPrompt ?? null,
+      summaryErrorMessage: partial.script?.summaryErrorMessage ?? null,
       episodeSummaries: (partial.script?.episodeSummaries ?? []) as ShortDramaEpisodeSummary[],
       episodeSummaryStatus: partial.script?.episodeSummaryStatus ?? 'idle',
+      episodeSummaryErrorMessage: partial.script?.episodeSummaryErrorMessage ?? null,
       outlines,
+      outlinesStatus: partial.script?.outlinesStatus ?? 'idle',
+      outlinesErrorMessage: partial.script?.outlinesErrorMessage ?? null,
       status: partial.script?.status ?? 'idle',
     },
     assets: {
@@ -504,11 +524,17 @@ export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>):
 }
 
 /**
- * 判断分集概述是否已全量就绪（数量 >= 设定集数）。
+ * 判断分集概述是否已全量就绪（完整覆盖 1..N 集且不重复）。
  * 概述就绪是生成分集剧本的前置条件。
  */
 export function isShortDramaEpisodeSummariesReady(state: ShortDramaState): boolean {
-  return state.script.episodeSummaries.length >= state.settings.episodeCount
+  const episodeCount = state.settings.episodeCount
+  const episodeNumbers = new Set(state.script.episodeSummaries.map(summary => summary.episodeNumber))
+  if (episodeNumbers.size !== episodeCount) return false
+  for (let episodeNumber = 1; episodeNumber <= episodeCount; episodeNumber += 1) {
+    if (!episodeNumbers.has(episodeNumber)) return false
+  }
+  return true
 }
 
 export function canEnterShortDramaStep(state: ShortDramaState, step: ShortDramaStepId): boolean {

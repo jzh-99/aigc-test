@@ -14,6 +14,13 @@ import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { buildShortDramaScriptSummaryPrompts, getShortDramaSummarySourceText } from './_script-source.js'
 import { createShortDramaSSESession } from './_sse.js'
+import {
+  createShortDramaTextTaskBatch,
+  heartbeatShortDramaTextTask,
+  completeShortDramaTextTask,
+  failShortDramaTextTask,
+  TEXT_TASK_HEARTBEAT_INTERVAL_MS,
+} from './_text-task.js'
 
 // 保守预估：结构化剧集设定内容较长，输入+输出均计费，预冻结 35 积分
 const ESTIMATED_CREDITS = 35
@@ -80,6 +87,8 @@ const route: FastifyPluginAsync = async (app) => {
 
     try {
       state.script.status = 'generating'
+      // 重新生成时清空历史失败原因，前端 banner 同步消失
+      state.script.summaryErrorMessage = null
       await saveShortDramaProjectState(projectId, state, 0)
     } catch (error) {
       await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成状态保存失败')
@@ -89,6 +98,26 @@ const route: FastifyPluginAsync = async (app) => {
         error: { code: 'DATABASE_ERROR', message: '保存生成状态失败，请稍后重试' },
       })
     }
+
+    // 创建文本任务记录（僵死自愈的进程外状态来源）+ 心跳定时器
+    let textTaskId: string | null = null
+    try {
+      textTaskId = await createShortDramaTextTaskBatch({
+        projectId,
+        textType: 'script-summary',
+        userId,
+        teamId,
+        workspaceId: project.workspace_id,
+        creditAccountId,
+        estimatedCredits: ESTIMATED_CREDITS,
+      })
+    } catch (error) {
+      app.log.warn({ error, projectId }, '短剧摘要文本任务记录创建失败，继续生成')
+    }
+    const heartbeatTimer = setInterval(() => {
+      if (textTaskId) void heartbeatShortDramaTextTask(textTaskId).catch(() => {})
+    }, TEXT_TASK_HEARTBEAT_INTERVAL_MS)
+    heartbeatTimer.unref?.()
 
     // 调用 AI 生成结构化剧集设定
     const { systemPrompt, userPrompt } = buildShortDramaScriptSummaryPrompts(state)
@@ -165,6 +194,9 @@ const route: FastifyPluginAsync = async (app) => {
       // 此后即便 sendEvent('done') 因连接断开写入失败，也不应回退业务结果。
       persisted = true
 
+      // 文本任务记录标记完成
+      if (textTaskId) await completeShortDramaTextTask(textTaskId, actualCredits).catch(() => {})
+
       sendEvent('done', {
         success: true,
         title: parsed.title,
@@ -180,9 +212,12 @@ const route: FastifyPluginAsync = async (app) => {
       } else {
         await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成失败')
         state.script.status = 'failed'
+        // 持久化失败原因，前端重进页面仍可见并可重试
+        state.script.summaryErrorMessage = error instanceof Error ? error.message : '剧本摘要生成失败'
         await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
           app.log.error({ saveError, projectId }, '短剧摘要失败状态保存失败')
         })
+        if (textTaskId) await failShortDramaTextTask(textTaskId).catch(() => {})
         app.log.error({ error, projectId }, '短剧摘要流式生成失败')
         sendEvent('error', {
           code: 'AI_ERROR',
@@ -190,6 +225,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
     } finally {
+      clearInterval(heartbeatTimer)
       await releaseRedisLock(app.redis, generationLock)
       session.end()
     }

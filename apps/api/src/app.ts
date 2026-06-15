@@ -199,5 +199,22 @@ export async function buildApp() {
     })
   }, { prefix: '/api/v1' })
 
+  // 进程启动时扫描并重置僵死的短剧文本生成任务（进程重启遗留的死状态）
+  // 动态 import：避免在模块顶层静态拉入 _zombie-scan → _text-generation。
+  // 原因：ESM 静态 import 会被提升，早于 index.ts 的 dotenv config() 求值，
+  // 导致 _text-generation 模块顶层 const QWEN_API_KEY = process.env... 读到空，
+  // 进而 callQwen 报「QWEN_API_KEY 未配置」。放到 onReady（运行时）加载，env 已就绪。
+  app.addHook('onReady', async () => {
+    try {
+      const { scanAndResetStuckShortDramaTextTasks } = await import(
+        './routes/short-drama/_zombie-scan.js'
+      )
+      const resetCount = await scanAndResetStuckShortDramaTextTasks(app)
+      app.log.info({ resetCount }, '启动扫描僵死文本任务完成')
+    } catch (err) {
+      app.log.error({ err }, '启动扫描僵死文本任务失败')
+    }
+  })
+
   return app
 }

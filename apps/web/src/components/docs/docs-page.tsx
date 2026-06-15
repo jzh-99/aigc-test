@@ -26,9 +26,11 @@ export function DocsCards({ children }: { children: ReactNode }) {
 
 export function DocsCard({ title, children, href }: { title: string; children: ReactNode; href?: string }) {
   const body = (
-    <div className="rounded-lg border border-[#E7DDF4] bg-white/70 p-4">
-      <h3>{title}</h3>
-      <div>{children}</div>
+    <div className="group relative overflow-hidden rounded-lg border border-violet-300/18 bg-[linear-gradient(135deg,rgba(89,70,170,0.28),rgba(20,33,72,0.44)_48%,rgba(10,15,34,0.62))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_40px_rgba(0,0,0,0.18)] transition duration-200 hover:border-violet-300/38 hover:bg-[linear-gradient(135deg,rgba(118,85,214,0.34),rgba(29,48,96,0.48)_48%,rgba(12,18,40,0.68))]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+      <div className="pointer-events-none absolute -right-16 -top-20 h-36 w-36 rounded-full bg-violet-300/12 blur-3xl transition-opacity duration-200 group-hover:opacity-80" />
+      <h3 className="relative text-white">{title}</h3>
+      <div className="relative text-[#BFD0F2]">{children}</div>
     </div>
   )
 

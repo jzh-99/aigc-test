@@ -148,8 +148,11 @@ assert.equal(nestedPartial.script.originalPrompt, '测试')
 assert.equal(nestedPartial.script.source, 'idea')
 assert.equal(nestedPartial.script.originalScript, '')
 assert.equal(nestedPartial.script.refinedPrompt, null)
+assert.equal(nestedPartial.script.summaryErrorMessage, null)
 assert.deepEqual(nestedPartial.script.outlines, [])
 assert.equal(nestedPartial.script.status, 'idle')
+assert.equal(nestedPartial.script.outlinesStatus, 'idle')
+assert.equal(nestedPartial.script.outlinesErrorMessage, null)
 
 // canEnterShortDramaStep - script 总可进入
 assert.equal(canEnterShortDramaStep(state, 'script'), true)

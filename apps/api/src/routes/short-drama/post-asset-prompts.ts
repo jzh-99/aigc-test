@@ -15,6 +15,13 @@ import {
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { createShortDramaSSESession } from './_sse.js'
+import {
+  createShortDramaTextTaskBatch,
+  heartbeatShortDramaTextTask,
+  completeShortDramaTextTask,
+  failShortDramaTextTask,
+  TEXT_TASK_HEARTBEAT_INTERVAL_MS,
+} from './_text-task.js'
 
 // 保守预估：每个素材描述批次输入+输出均计费，预冻结 25 积分
 const ESTIMATED_CREDITS = 25
@@ -145,6 +152,14 @@ const route: FastifyPluginAsync = async (app) => {
     const session = createShortDramaSSESession(reply)
     const { sendEvent, sendPing, clientSignal } = session
 
+    // 文本任务记录（僵死自愈的状态来源）：该路由积分按批冻结，循环外无 creditAccountId，
+    // 故任务记录在第一批 freezeCredits 后创建（见循环内）。心跳定时器先启动，textTaskId 赋值后自动写心跳。
+    let textTaskId: string | null = null
+    const heartbeatTimer = setInterval(() => {
+      if (textTaskId) void heartbeatShortDramaTextTask(textTaskId).catch(() => {})
+    }, TEXT_TASK_HEARTBEAT_INTERVAL_MS)
+    heartbeatTimer.unref?.()
+
     const totalOutlines = state.script.outlines.length
     const startEpisode = state.assets.processedOutlineCount + 1
     const batches = buildShortDramaOutlineBatches(startEpisode, totalOutlines)
@@ -160,6 +175,22 @@ const route: FastifyPluginAsync = async (app) => {
         try {
           const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS, '短剧素材描述冻结')
           creditAccountId = freezeResult.creditAccountId
+          // 第一批冻结后创建文本任务记录（creditAccountId 已可用，整个生成仅创建一次）
+          if (!textTaskId) {
+            try {
+              textTaskId = await createShortDramaTextTaskBatch({
+                projectId,
+                textType: 'asset-prompts',
+                userId,
+                teamId,
+                workspaceId: project.workspace_id,
+                creditAccountId,
+                estimatedCredits: ESTIMATED_CREDITS,
+              })
+            } catch (err) {
+              app.log.warn({ err, projectId }, '素材描述文本任务记录创建失败，继续生成')
+            }
+          }
         } catch (error) {
           stoppedByBalance = true
           warningMessage = 'A豆余额不足，已停止生成后续素材描述。已保存已完成的角色、场景和道具描述，请充值后点击「继续生成描述」生成剩余素材。'
@@ -349,6 +380,8 @@ const route: FastifyPluginAsync = async (app) => {
           await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
             app.log.error({ error: saveError, projectId }, '短剧素材描述失败状态保存失败')
           })
+          // 文本任务记录标记失败
+          if (textTaskId) await failShortDramaTextTask(textTaskId).catch(() => {})
 
           sendEvent('error', {
             code: 'AI_ERROR',
@@ -361,6 +394,8 @@ const route: FastifyPluginAsync = async (app) => {
       }
 
       const partial = stoppedByBalance || state.assets.processedOutlineCount < totalOutlines
+      // 文本任务记录标记完成（循环正常结束，全部成功或部分成功已落库）
+      if (textTaskId) await completeShortDramaTextTask(textTaskId, totalCredits).catch(() => {})
       sendEvent('done', {
         success: true,
         partial,
@@ -373,6 +408,7 @@ const route: FastifyPluginAsync = async (app) => {
         state,
       })
     } finally {
+      clearInterval(heartbeatTimer)
       await releaseRedisLock(app.redis, generationLock)
       session.end()
     }

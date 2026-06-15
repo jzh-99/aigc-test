@@ -408,6 +408,8 @@ export function applyShortDramaScriptSummaryResult(
   }
   state.script.refinedPrompt = result.summary
   state.script.status = 'completed'
+  // 成功后清空历史失败原因
+  state.script.summaryErrorMessage = null
 }
 
 /**
@@ -422,6 +424,8 @@ export function applyShortDramaEpisodeSummariesResult(
   state.script.episodeSummaries = summaries
     .sort((a, b) => a.episodeNumber - b.episodeNumber)
   state.script.episodeSummaryStatus = 'completed'
+  // 成功后清空历史失败原因
+  state.script.episodeSummaryErrorMessage = null
 }
 
 export function applyShortDramaEpisodeOutlinesBatchResult(
@@ -443,8 +447,13 @@ export function applyShortDramaEpisodeOutlinesBatchResult(
   )
 
   state.script.outlines = mergedOutlines
-  state.script.status =
-    mergedOutlines.length >= state.settings.episodeCount ? 'completed' : 'generating'
+  // 分集剧本批次请求独立状态：本批成功即 completed（区别于 script.status 的整体流程进度语义）
+  state.script.outlinesStatus = 'completed'
+  state.script.outlinesErrorMessage = null
+  // 仅全量完成时同步 script.status（顶层整体进度语义，触发「下一步」可点）
+  if (mergedOutlines.length >= state.settings.episodeCount) {
+    state.script.status = 'completed'
+  }
   state.episodes.items = mergedOutlines.map((outline) => {
     const existing = state.episodes.items.find(
       (episode) => episode.episodeNumber === outline.episodeNumber

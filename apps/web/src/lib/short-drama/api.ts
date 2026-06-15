@@ -81,6 +81,7 @@ export interface ShortDramaStreamResult {
   title?: string
   summary?: string
   outlines?: ShortDramaState['script']['outlines']
+  episodeSummaries?: ShortDramaState['script']['episodeSummaries']
   assets?: ShortDramaState['assets']['items']
   credits?: number
   completedCount?: number
@@ -381,6 +382,18 @@ export function generateShortDramaEpisodeOutlines(
     options,
     projectId,
     (project) => project.state.script.status === 'generating',
+  )
+}
+
+export function generateShortDramaEpisodeSummaries(
+  projectId: string,
+  options: ShortDramaStreamOptions = {}
+): Promise<ShortDramaStreamResult> {
+  return postShortDramaSSE<ShortDramaStreamResult>(
+    `/short-drama/projects/${projectId}/script/episode-summaries`,
+    options,
+    projectId,
+    (project) => project.state.script.episodeSummaryStatus === 'generating',
   )
 }
 

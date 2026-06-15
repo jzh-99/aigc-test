@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Sparkles, Check, Pencil, Save, X, Plus, Coins } from 'lucide-react'
+import { AlertCircle, Loader2, Sparkles, Check, Pencil, Save, X, Plus, Coins, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,15 +14,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS } from '@aigc/types'
+import { SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS, isShortDramaEpisodeSummariesReady } from '@aigc/types'
 import type { ShortDramaState } from '@aigc/types'
 import { translateError } from '@/lib/error-messages'
 import {
   generateShortDramaScriptSummary,
   generateShortDramaEpisodeOutlines,
+  generateShortDramaEpisodeSummaries,
   saveShortDramaProject,
   updateShortDramaScriptSource,
 } from '@/lib/short-drama/api'
+import { EpisodeSummaryCard } from './episode-summary-card'
 
 interface StepScriptOutlineProps {
   projectId: string
@@ -790,16 +792,26 @@ function ScriptSummaryView({
 
 function EpisodeOutlineList({
   outlines,
-  canEdit,
+  episodeSummaries,
+  canEditSummary,
+  canEditOutline,
+  projectId,
+  state,
+  onStateChange,
   onEditTitle,
   onEditScene,
 }: {
   outlines: Array<{ episodeNumber: number; title: string; summary: string }>
-  canEdit: boolean
+  episodeSummaries: Array<{ episodeNumber: number; summary: string }>
+  canEditSummary: boolean
+  canEditOutline: boolean
+  projectId: string
+  state: ShortDramaState
+  onStateChange: () => void
   onEditTitle: (episodeNumber: number) => void
   onEditScene: (episodeNumber: number, sceneIndex: number) => void
 }) {
-  const groups = buildEpisodeOutlineGroups(outlines)
+  const groups = buildEpisodeOutlineGroups(outlines, episodeSummaries)
 
   return (
     <div className="space-y-5">
@@ -819,17 +831,33 @@ function EpisodeOutlineList({
                     <div className="text-xs font-medium text-muted-foreground">第 {outline.episodeNumber} 集</div>
                     <h4 className="mt-1 text-sm font-semibold text-foreground">{outline.title}</h4>
                   </div>
-                  {canEdit && (
+                  {canEditOutline && (
                     <SummaryIconButton label={`编辑第${outline.episodeNumber}集标题`} onClick={() => onEditTitle(outline.episodeNumber)} />
                   )}
                 </div>
+
+                {(() => {
+                  const episodeSummary = episodeSummaries.find(item => item.episodeNumber === outline.episodeNumber)
+                  return episodeSummary ? (
+                    <div className="mt-3">
+                      <EpisodeSummaryCard
+                        projectId={projectId}
+                        episodeNumber={outline.episodeNumber}
+                        summary={episodeSummary.summary}
+                        canEdit={canEditSummary}
+                        state={state}
+                        onStateChange={onStateChange}
+                      />
+                    </div>
+                  ) : null
+                })()}
 
                 <div className="mt-3 space-y-2">
                   {scenes.length > 0 ? scenes.map((scene, index) => (
                     <div key={`${outline.episodeNumber}-${scene.heading}-${index}`} className="rounded-lg border border-border/60 bg-muted/25 p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-xs font-semibold text-muted-foreground">{scene.heading}</div>
-                        {canEdit && (
+                        {canEditOutline && (
                           <SummaryIconButton label={`编辑${scene.heading}`} onClick={() => onEditScene(outline.episodeNumber, index)} />
                         )}
                       </div>
@@ -846,6 +874,31 @@ function EpisodeOutlineList({
               </section>
             )
           })}
+          {(() => {
+            const outlineNumbers = new Set(group.outlines.map(outline => outline.episodeNumber))
+            const summariesWithoutOutline = episodeSummaries.filter(
+              summary =>
+                summary.episodeNumber >= group.from &&
+                summary.episodeNumber <= group.to &&
+                !outlineNumbers.has(summary.episodeNumber)
+            ).sort((a, b) => a.episodeNumber - b.episodeNumber)
+            return summariesWithoutOutline.map(summary => (
+              <section key={`summary-${summary.episodeNumber}`} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 shadow-none">
+                <div className="text-xs font-medium text-muted-foreground">第 {summary.episodeNumber} 集</div>
+                <h4 className="mt-1 text-sm font-semibold text-foreground/50">待生成剧本</h4>
+                <div className="mt-3">
+                  <EpisodeSummaryCard
+                    projectId={projectId}
+                    episodeNumber={summary.episodeNumber}
+                    summary={summary.summary}
+                    canEdit={canEditSummary}
+                    state={state}
+                    onStateChange={onStateChange}
+                  />
+                </div>
+              </section>
+            ))
+          })()}
         </div>
       ))}
     </div>
@@ -858,17 +911,21 @@ function formatEpisodeRangeLabel(from: number, to: number): string {
   return from === to ? String(from) : `${from}-${to}`
 }
 
-function buildEpisodeOutlineGroups(outlines: Array<{ episodeNumber: number; title: string; summary: string }>) {
+function buildEpisodeOutlineGroups(
+  outlines: Array<{ episodeNumber: number; title: string; summary: string }>,
+  episodeSummaries: Array<{ episodeNumber: number; summary: string }> = []
+) {
   const groups: Array<{
     id: string
     label: string
     from: number
     to: number
     outlines: Array<{ episodeNumber: number; title: string; summary: string }>
+    episodeNumbers: number[]
   }> = []
 
-  for (const outline of outlines) {
-    const groupIndex = Math.floor((outline.episodeNumber - 1) / EPISODE_NAV_GROUP_SIZE)
+  const ensureGroup = (episodeNumber: number) => {
+    const groupIndex = Math.floor((episodeNumber - 1) / EPISODE_NAV_GROUP_SIZE)
     const from = groupIndex * EPISODE_NAV_GROUP_SIZE + 1
     const to = from + EPISODE_NAV_GROUP_SIZE - 1
     let group = groups.find(item => item.from === from)
@@ -879,15 +936,31 @@ function buildEpisodeOutlineGroups(outlines: Array<{ episodeNumber: number; titl
         from,
         to,
         outlines: [],
+        episodeNumbers: [],
       }
       groups.push(group)
     }
+    if (!group.episodeNumbers.includes(episodeNumber)) {
+      group.episodeNumbers.push(episodeNumber)
+    }
+    return group
+  }
+
+  for (const outline of outlines) {
+    const group = ensureGroup(outline.episodeNumber)
     group.outlines.push(outline)
   }
 
-  return groups.map((group) => {
-    const firstEpisodeNumber = group.outlines[0]?.episodeNumber ?? group.from
-    const lastEpisodeNumber = group.outlines[group.outlines.length - 1]?.episodeNumber ?? group.to
+  const outlineNumbers = new Set(outlines.map(outline => outline.episodeNumber))
+  for (const summary of episodeSummaries) {
+    if (outlineNumbers.has(summary.episodeNumber)) continue
+    ensureGroup(summary.episodeNumber)
+  }
+
+  return groups.sort((a, b) => a.from - b.from).map((group) => {
+    const episodeNumbers = [...group.episodeNumbers].sort((a, b) => a - b)
+    const firstEpisodeNumber = episodeNumbers[0] ?? group.from
+    const lastEpisodeNumber = episodeNumbers[episodeNumbers.length - 1] ?? group.to
     return {
       ...group,
       label: formatEpisodeRangeLabel(firstEpisodeNumber, lastEpisodeNumber),
@@ -917,12 +990,16 @@ function getCurrentOutlineProgressMessage(state: StepScriptOutlineProps['state']
 export function StepScriptOutline({ projectId, state, onStateChange }: StepScriptOutlineProps) {
   const [generatingSummary, setGeneratingSummary] = useState(false)
   const [generatingOutlines, setGeneratingOutlines] = useState(false)
+  const [generatingSummaries, setGeneratingSummaries] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const confirmDialog = useConfirm()
   const [summaryStreamText, setSummaryStreamText] = useState('')
   const [outlineStreamText, setOutlineStreamText] = useState('')
   const [outlineProgressMessage, setOutlineProgressMessage] = useState('')
   const [streamWarningMessage, setStreamWarningMessage] = useState('')
+  // 持久化的生成失败原因（参考 step-episodes 的 failedEpisodeErrors：失败信息常驻页面，不再靠一闪而过的 toast）
+  const [summaryErrorMessage, setSummaryErrorMessage] = useState('')
+  const [outlineErrorMessage, setOutlineErrorMessage] = useState('')
   const [editingSummaryHeading, setEditingSummaryHeading] = useState<SummaryHeading | null>(null)
   const [characterBioDialog, setCharacterBioDialog] = useState<CharacterBioDialogDraft | null>(null)
   const [summaryDraft, setSummaryDraft] = useState<SummaryDraft>(() =>
@@ -936,30 +1013,45 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   const [savingSourceEdit, setSavingSourceEdit] = useState(false)
   const generatingSummaryRef = useRef(false)
   const generatingOutlinesRef = useRef(false)
-  const typedSummaryStreamText = useTypewriterText(summaryStreamText, generatingSummary)
+  const generatingSummariesRef = useRef(false)
+  const typedSummaryStreamText = useTypewriterText(summaryStreamText, generatingSummary || generatingSummaries)
   const typedOutlineStreamText = useTypewriterText(outlineStreamText, generatingOutlines)
   const isLocked = state.locks.script
   const isSummaryGenerating = generatingSummary || (state.script.status === 'generating' && !state.script.refinedPrompt)
+  // 跨刷新兜底：重进页面后前端临时错误已丢失，从后端持久化的摘要失败原因读取
+  const summaryErrorText = summaryErrorMessage || state.script.summaryErrorMessage || ''
   const canEditSource = !isLocked && !state.script.refinedPrompt && !isSummaryGenerating
   const isUploadSource = state.script.source === 'upload'
   const sourceMaxLength = isUploadSource ? SHORT_DRAMA_ORIGINAL_SCRIPT_MAX_CHARS : ORIGINAL_PROMPT_MAX_LENGTH
   const sourceDraftLength = sourceEditDraft.trim().length
   const isSourceDraftTooLong = sourceDraftLength > sourceMaxLength
+  // 加载态同时覆盖「本地请求进行中」与「后端持久化的生成中（刷新恢复）」。
+  // 用独立的 outlinesStatus 判断，避开 script.status 在中间批次的语义冲突。
   const isOutlinesGenerating =
-    generatingOutlines ||
-    (
-      state.script.status === 'generating' &&
-      Boolean(state.script.refinedPrompt) &&
-      state.script.outlines.length < state.settings.episodeCount
-    )
+    generatingOutlines || state.script.outlinesStatus === 'generating'
+  const isSummariesGenerating =
+    generatingSummaries ||
+    state.script.episodeSummaryStatus === 'generating'
+  const isSummariesReady = isShortDramaEpisodeSummariesReady(state)
+  // 跨刷新兜底：重进页面后前端临时错误已丢失，从后端持久化的分集剧本失败原因读取
+  const outlineErrorText = outlineErrorMessage || state.script.outlinesErrorMessage || ''
+  const isSummariesLocked = state.script.outlines.length > 0
+  const remainingOutlineCount = Math.max(state.settings.episodeCount - state.script.outlines.length, 0)
+  const nextOutlineBatchCount = Math.min(remainingOutlineCount, EPISODE_NAV_GROUP_SIZE)
+  const canGenerateSummaries =
+    !isSummariesReady &&
+    !isSummariesGenerating &&
+    !isOutlinesGenerating &&
+    state.script.status !== 'generating' &&
+    state.script.outlines.length === 0
   const isEditingSummary = Boolean(editingSummaryHeading || characterBioDialog)
   const summarySectionsForNavigation = state.script.refinedPrompt ? parseScriptSummary(state.script.refinedPrompt) : {}
   const hasCharacterBioNavigation = Boolean(
     summarySectionsForNavigation.人物小传 &&
     parseCharacterBios(summarySectionsForNavigation.人物小传).length > 0
   )
-  const outlineNavigationGroups = buildEpisodeOutlineGroups(state.script.outlines)
-  const hasOutlinesNavigation = state.script.outlines.length > 0
+  const outlineNavigationGroups = buildEpisodeOutlineGroups(state.script.outlines, state.script.episodeSummaries)
+  const hasOutlinesNavigation = state.script.outlines.length > 0 || state.script.episodeSummaries.length > 0
   const hasConfirmNavigation = !isLocked && state.script.outlines.length === state.settings.episodeCount
   const sourceLabel = state.script.source === 'upload' ? '原始剧本' : '原始创意'
   const sourceText = state.script.source === 'upload'
@@ -984,6 +1076,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     setGeneratingSummary(true)
     setSummaryStreamText('')
     setStreamWarningMessage('')
+    setSummaryErrorMessage('')
     try {
       const result = await generateShortDramaScriptSummary(projectId, {
         onChunk: text => setSummaryStreamText(current => current + text),
@@ -992,9 +1085,10 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
       })
       onStateChange()
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '生成失败'
-
-      toast.error(translateError(errorMessage))
+      // 持久化失败原因到页面（红色 banner），同时保留 toast 作为即时反馈
+      const errorMessage = translateError(err instanceof Error ? err.message : '生成失败')
+      setSummaryErrorMessage(errorMessage)
+      toast.error(errorMessage)
     } finally {
       generatingSummaryRef.current = false
       setGeneratingSummary(false)
@@ -1004,16 +1098,17 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   const handleGenerateOutlines = async () => {
     if (
       generatingOutlinesRef.current ||
-      state.script.status === 'generating' ||
+      // 精确拦截「请求进行中」：outlinesStatus 在中间批次完成时是 'completed'，
+      // 不会误锁「继续生成剧本」按钮（区别于旧的 script.status 拦截）。
+      // 并发仍由本地 generatingOutlinesRef + 后端 Redis 锁双重保证。
+      state.script.outlinesStatus === 'generating' ||
       !state.script.refinedPrompt ||
+      !isSummariesReady ||
       state.script.outlines.length >= state.settings.episodeCount
     ) return
-    const remaining = state.settings.episodeCount - state.script.outlines.length
-    const batches = Math.ceil(remaining / 5)
-    const outlineCredits = batches * 70
     const ok = await confirmDialog({
       title: '确认生成',
-      description: `本次操作预计消耗约 ${outlineCredits} A豆（生成 ${batches} 批分集剧本），确认是否继续？`,
+      description: '本次操作预计消耗约 70 A豆（生成本批分集剧本），确认是否继续？',
       confirmText: '确认生成',
       destructive: false,
     })
@@ -1023,6 +1118,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     setOutlineStreamText('')
     setOutlineProgressMessage('')
     setStreamWarningMessage('')
+    setOutlineErrorMessage('')
     try {
       const result = await generateShortDramaEpisodeOutlines(projectId, {
         onChunk: text => setOutlineStreamText(current => current + text),
@@ -1032,12 +1128,52 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
       onStateChange()
       if (result.warning) setStreamWarningMessage(result.warning)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '生成失败'
-
-      toast.error(translateError(errorMessage))
+      const errorMessage = translateError(err instanceof Error ? err.message : '生成失败')
+      setOutlineErrorMessage(errorMessage)
+      toast.error(errorMessage)
     } finally {
       generatingOutlinesRef.current = false
       setGeneratingOutlines(false)
+    }
+  }
+
+  const handleGenerateSummaries = async () => {
+    if (
+      generatingSummariesRef.current ||
+      isOutlinesGenerating ||
+      state.script.status === 'generating' ||
+      state.script.episodeSummaryStatus === 'generating' ||
+      !state.script.refinedPrompt ||
+      state.script.outlines.length > 0 ||
+      isSummariesReady
+    ) return
+    const ok = await confirmDialog({
+      title: '确认生成',
+      description: '本次操作预计消耗约 40 A豆（生成全部分集概述），确认是否继续？',
+      confirmText: '确认生成',
+      destructive: false,
+    })
+    if (!ok) return
+    generatingSummariesRef.current = true
+    setGeneratingSummaries(true)
+    setSummaryStreamText('')
+    setOutlineProgressMessage('')
+    setStreamWarningMessage('')
+    setOutlineErrorMessage('')
+    try {
+      await generateShortDramaEpisodeSummaries(projectId, {
+        onChunk: text => setSummaryStreamText(current => current + text),
+        onProgress: progress => setOutlineProgressMessage(progress.message),
+        onWarning: warning => setStreamWarningMessage(warning.message),
+      })
+      onStateChange()
+    } catch (err) {
+      const errorMessage = translateError(err instanceof Error ? err.message : '生成失败')
+      setOutlineErrorMessage(errorMessage)
+      toast.error(errorMessage)
+    } finally {
+      generatingSummariesRef.current = false
+      setGeneratingSummaries(false)
     }
   }
 
@@ -1330,7 +1466,8 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_112px]">
-      <div className="min-w-0 space-y-6">
+      {/* pb-24：为底部 fixed 悬浮按钮组预留空间，避免最后内容被遮挡 */}
+      <div className="min-w-0 space-y-6 pb-24">
       <section id="short-drama-original" className="scroll-mt-24 space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="font-medium">{sourceLabel}</h3>
@@ -1397,34 +1534,60 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
             摘要生成中，页面会自动刷新状态...
           </div>
         )}
+        {summaryErrorText && !isSummaryGenerating && (
+          <div className="rounded-lg border border-destructive/35 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="flex-1">
+                <div className="font-medium">摘要生成失败</div>
+                <p className="mt-1">{summaryErrorText}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => handleGenerateSummary('manual')}
+                >
+                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                  重试
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       <section id="short-drama-outlines" className="scroll-mt-24 space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-medium">分集剧本 ({state.script.outlines.length} 集)</h3>
+          <h3 className="font-medium">分集剧本 ({state.script.outlines.length}/{state.settings.episodeCount} 集)</h3>
           {!isLocked && state.script.refinedPrompt && (
             <div className="flex items-center gap-2">
-              {!isOutlinesGenerating && (() => {
-                const remaining = state.settings.episodeCount - state.script.outlines.length
-                const batches = Math.ceil(remaining / 5)
-                return remaining > 0 ? (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Coins className="h-3.5 w-3.5 text-amber-500" />
-                    预计 {batches} 批 × 70 ≈ {batches * 70} A豆
-                  </span>
-                ) : null
-              })()}
-              <Button size="sm" variant="outline" onClick={() => handleGenerateOutlines()} disabled={isOutlinesGenerating}>
-                {isOutlinesGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
-                {isOutlinesGenerating
-                  ? '剧本生成中'
-                  : state.script.outlines.length > 0 && state.script.outlines.length < state.settings.episodeCount
-                  ? '继续生成剧本'
-                  : '生成分集剧本'}
-              </Button>
+              {canGenerateSummaries && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Coins className="h-3.5 w-3.5 text-amber-500" />
+                  预计 ~40 A豆
+                </span>
+              )}
+              {!isSummariesReady && (
+                <Button size="sm" variant="outline" onClick={handleGenerateSummaries} disabled={!canGenerateSummaries}>
+                  {isSummariesGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+                  {isSummariesGenerating ? '概述生成中' : '生成分集概述'}
+                </Button>
+              )}
             </div>
           )}
         </div>
+        {isSummariesGenerating && (
+          <div className="flex items-center gap-2 rounded-lg border border-violet-900/60 bg-violet-950/20 p-3 text-sm text-violet-200">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            <span>{outlineProgressMessage || '正在生成分集概述，页面会自动刷新状态...'}</span>
+          </div>
+        )}
+        {generatingSummaries && typedSummaryStreamText && (
+          <TypewriterStreamBlock
+            value={typedSummaryStreamText}
+            className="max-h-48 overflow-y-auto rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground whitespace-pre-wrap"
+          />
+        )}
         {streamWarningMessage && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             <div className="font-medium">生成已暂停</div>
@@ -1432,6 +1595,26 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
             <p className="mt-1 text-xs">
               已生成 {state.script.outlines.length} / {state.settings.episodeCount} 集，可补充 A豆后继续生成剩余集数。
             </p>
+          </div>
+        )}
+        {outlineErrorText && !isSummariesGenerating && !isOutlinesGenerating && (
+          <div className="rounded-lg border border-destructive/35 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="flex-1">
+                <div className="font-medium">生成失败</div>
+                <p className="mt-1">{outlineErrorText}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => handleGenerateOutlines()}
+                >
+                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                  重试
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1448,10 +1631,15 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
             className="max-h-48 overflow-y-auto rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground whitespace-pre-wrap"
           />
         )}
-        {state.script.outlines.length > 0 && (
+        {(state.script.outlines.length > 0 || state.script.episodeSummaries.length > 0) && (
           <EpisodeOutlineList
             outlines={state.script.outlines}
-            canEdit={!isLocked && !Boolean(episodeOutlineDialog)}
+            episodeSummaries={state.script.episodeSummaries}
+            canEditSummary={!isLocked && !isSummariesLocked}
+            canEditOutline={!isLocked && !Boolean(episodeOutlineDialog)}
+            projectId={projectId}
+            state={state}
+            onStateChange={onStateChange}
             onEditTitle={handleEditEpisodeTitle}
             onEditScene={handleEditEpisodeScene}
           />
@@ -1465,11 +1653,37 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
         />
       </section>
 
-      {!isLocked && state.script.outlines.length === state.settings.episodeCount && (
-        <Button id="short-drama-confirm" onClick={handleConfirm} disabled={confirming} className="w-full scroll-mt-24">
-          {confirming ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-          确认剧本，进入素材
-        </Button>
+      {/* 底部悬浮按钮组：生成本批剧本 + 下一步。
+          概述就绪且剧本未锁定时显示；未全量时「下一步」灰显（disabled），全量后「生成」隐藏、「下一步」可点进入素材。 */}
+      {!isLocked && isSummariesReady && (
+        <div className="sticky bottom-4 z-30 rounded-2xl border border-border/60 bg-background/88 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.32)] backdrop-blur">
+          <div className="mx-auto flex max-w-3xl items-center gap-3">
+            {remainingOutlineCount > 0 && (
+              <Button onClick={() => handleGenerateOutlines()} disabled={isOutlinesGenerating} className="flex-1">
+                {isOutlinesGenerating ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Sparkles className="w-4 h-4 mr-2" />
+                )}
+                {isOutlinesGenerating
+                  ? '生成中...'
+                  : state.script.outlines.length > 0
+                    ? `继续生成剧本（剩 ${remainingOutlineCount} 集）`
+                    : `生成 ${nextOutlineBatchCount} 集剧本`}
+              </Button>
+            )}
+            <Button
+              id="short-drama-confirm"
+              variant={state.script.outlines.length >= state.settings.episodeCount ? 'default' : 'outline'}
+              onClick={handleConfirm}
+              disabled={confirming || state.script.outlines.length < state.settings.episodeCount}
+              className={state.script.outlines.length >= state.settings.episodeCount ? 'flex-1' : ''}
+            >
+              {confirming ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+              下一步
+            </Button>
+          </div>
+        </div>
       )}
 
       {isLocked && (

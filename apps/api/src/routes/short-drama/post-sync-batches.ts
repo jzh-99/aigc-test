@@ -9,6 +9,11 @@ import {
   syncShortDramaSegmentsFromState,
   type ShortDramaImageTaskRow,
 } from './_shared.js'
+import {
+  isShortDramaTextTaskStuck,
+  resetShortDramaTextTaskState,
+  type ShortDramaTextType,
+} from './_text-task.js'
 
 const SYNCABLE_BATCH_STATUSES = ['pending', 'processing', 'completed', 'partial_complete', 'failed'] as const
 
@@ -66,6 +71,16 @@ export default async function postSyncBatches(app: FastifyInstance): Promise<voi
             if (changed) syncedCount++
           } catch (err) {
             app.log.warn({ err, batchId: batch.id }, 'Failed to sync image batch, skipping')
+          }
+          continue
+        }
+
+        if (module === 'text') {
+          try {
+            const changed = await syncTextBatch(db, state, batch)
+            if (changed) syncedCount++
+          } catch (err) {
+            app.log.warn({ err, batchId: batch.id }, 'Failed to sync text batch, skipping')
           }
           continue
         }
@@ -260,5 +275,39 @@ async function syncVideoBatch(
           : state.episodes.status
   }
 
+  return changed
+}
+
+/**
+ * 同步 text 类型批次（短剧 SSE 文本生成任务记录）。
+ * text 任务无 tasks 子表行，状态直接在 task_batches 行上。
+ * 僵死（processing 且 updated_at 超 10 分钟无心跳）→ 重置对应 state 字段 + 标记 batch failed；
+ * 若已有结果但 batch 仍 processing（进程死前没更新 batch）→ 补标 completed。
+ */
+async function syncTextBatch(
+  db: ReturnType<typeof getDb>,
+  state: any,
+  batch: any,
+): Promise<boolean> {
+  if (!isShortDramaTextTaskStuck(batch)) return false
+  const params = typeof batch.params === 'string' ? JSON.parse(batch.params) : batch.params
+  const textType = params.textType as ShortDramaTextType
+  const episodeNumber: number | undefined = params.episodeNumber ?? undefined
+  const changed = resetShortDramaTextTaskState(state, textType, episodeNumber)
+  if (changed) {
+    // 重置了 state → 标记 batch 失败（主循环会因 syncedCount>0 保存 state）
+    await db
+      .updateTable('task_batches')
+      .set({ status: 'failed', failed_count: 1 })
+      .where('id', '=', batch.id)
+      .execute()
+  } else {
+    // 已有结果但 batch 仍 processing → 补标 completed，避免一直被扫描
+    await db
+      .updateTable('task_batches')
+      .set({ status: 'completed', completed_count: 1 })
+      .where('id', '=', batch.id)
+      .execute()
+  }
   return changed
 }

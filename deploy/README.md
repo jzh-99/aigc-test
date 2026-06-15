@@ -312,3 +312,40 @@ pnpm dev
 本地开发时：
 - Web 访问 `http://localhost:6006`
 - API 访问 `http://localhost:7001`
+
+
+## 部署步骤
+1. 登录跳板机
+2. 部署服务(api服务为例，其它基本相同)
+```
+# 本地打包api服务
+# 项目根目录执行打包命令
+pnpm --filter @aigc/api dev
+
+# 构建后的地址在 项目根目录/deploy/dist/aigc-api.tar.gz
+
+# ssh连接 api/worker 服务器
+ssh vmuser@177.11.219.44
+
+# ssh连接 web 服务器
+ssh vmuser@177.11.219.45
+# 键入密码后进入服务器
+
+# api 项目地址
+/home/vmuser/projects/aigc-api
+
+## 进入项目文件夹(注意修改对应的镜像名称 api/worker/web)
+1. 删除旧aigc-api.tar.gz 
+rm -rf aigc-api.tar.gz 
+2. 上传新构建的包
+rz -bey
+3. 修改.env环境变量（有修改的话）
+4. 镜像加载
+docker load < aigc-api.tar.gz
+5. 镜像强制重新构建（web服务器docker版本问题执行docker-compose up -d --build --force-recreate）
+docker compose up -d --build --force-recreate
+6. 数据迁移 （只有api需要执行）
+docker exec -it aigc-api sh -lc 'tsx /app/migrate/scripts/migrate.ts'
+docker exec -it aigc-api sh -lc 'tsx /app/migrate/scripts/seed.ts'
+6. 完成
+```

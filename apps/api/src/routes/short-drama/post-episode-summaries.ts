@@ -6,7 +6,6 @@ import {
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
-  parseAndValidateJson,
   applyShortDramaEpisodeSummariesResult,
   saveShortDramaProjectState,
   markShortDramaProjectFailed,
@@ -15,6 +14,13 @@ import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { buildShortDramaEpisodeSummariesPrompts } from './_script-source.js'
 import { createShortDramaSSESession } from './_sse.js'
+import {
+  createShortDramaTextTaskBatch,
+  heartbeatShortDramaTextTask,
+  completeShortDramaTextTask,
+  failShortDramaTextTask,
+  TEXT_TASK_HEARTBEAT_INTERVAL_MS,
+} from './_text-task.js'
 
 // 概述生成预冻结积分：按全量 N 集估算，每集约 0.5 A豆（100 字概述），保守取 40
 const ESTIMATED_CREDITS = 40
@@ -25,7 +31,18 @@ function parseEpisodeSummaries(
   aiResponse: string,
   episodeCount: number
 ): ShortDramaEpisodeSummary[] {
-  const parsed = parseAndValidateJson(aiResponse, [])
+  // 概述 prompt 约定返回 JSON 数组；parseAndValidateJson 仅支持对象（对数组输入会抛错），
+  // 这里对齐 parseEpisodeOutlineBatch 的解析方式，同时兼容纯数组与 {episodes|summaries:[...]} 包裹
+  const jsonMatch = aiResponse.match(/\{[\s\S]*\}|\[[\s\S]*\]/)
+  if (!jsonMatch) {
+    throw new Error('AI 返回的概述不是有效的 JSON，请重试')
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(jsonMatch[0])
+  } catch {
+    throw new Error('AI 返回的概述不是有效的 JSON，请重试')
+  }
 
   let summaries: unknown
   if (Array.isArray(parsed)) {
@@ -42,7 +59,7 @@ function parseEpisodeSummaries(
     throw new Error(`AI 返回的概述数量不正确，期望 ${episodeCount} 集，实际 ${Array.isArray(summaries) ? summaries.length : 0} 集`)
   }
 
-  return summaries.map((item, index) => {
+  const result = summaries.map((item, index) => {
     const ep = item as Record<string, unknown>
     if (
       typeof ep.episodeNumber !== 'number' ||
@@ -55,6 +72,18 @@ function parseEpisodeSummaries(
       summary: ep.summary.trim(),
     }
   })
+
+  const episodeNumbers = new Set(result.map(summary => summary.episodeNumber))
+  if (episodeNumbers.size !== episodeCount) {
+    throw new Error('AI 返回的概述集号重复或缺失')
+  }
+  for (let episodeNumber = 1; episodeNumber <= episodeCount; episodeNumber += 1) {
+    if (!episodeNumbers.has(episodeNumber)) {
+      throw new Error(`AI 返回的概述缺少第 ${episodeNumber} 集`)
+    }
+  }
+
+  return result
 }
 
 const route: FastifyPluginAsync = async (app) => {
@@ -83,6 +112,20 @@ const route: FastifyPluginAsync = async (app) => {
     if (!state.script.refinedPrompt) {
       return reply.status(400).send({
         error: { code: 'VALIDATION_ERROR', message: '请先生成剧本摘要' },
+      })
+    }
+
+    // 前置校验：避免与分集剧本生成并发覆盖同一份 state
+    if (state.script.status === 'generating') {
+      return reply.status(409).send({
+        error: { code: 'GENERATION_IN_PROGRESS', message: '分集剧本正在生成中，请稍后再生成概述' },
+      })
+    }
+
+    // 前置校验：已有剧本后概述隐式锁定，不允许重生成故事蓝图
+    if (state.script.outlines.length > 0) {
+      return reply.status(400).send({
+        error: { code: 'ALREADY_LOCKED', message: '分集剧本已生成，分集概述已锁定' },
       })
     }
 
@@ -117,6 +160,8 @@ const route: FastifyPluginAsync = async (app) => {
     // 设置概述生成状态（不修改 script.status，避免与摘要/剧本流程互相覆盖）
     try {
       state.script.episodeSummaryStatus = 'generating'
+      // 重新生成时清空历史失败原因
+      state.script.episodeSummaryErrorMessage = null
       await saveShortDramaProjectState(projectId, state, 0)
     } catch (error) {
       await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '概述生成状态保存失败')
@@ -126,6 +171,26 @@ const route: FastifyPluginAsync = async (app) => {
         error: { code: 'DATABASE_ERROR', message: '保存生成状态失败，请稍后重试' },
       })
     }
+
+    // 创建文本任务记录（僵死自愈的进程外状态来源）+ 心跳定时器
+    let textTaskId: string | null = null
+    try {
+      textTaskId = await createShortDramaTextTaskBatch({
+        projectId,
+        textType: 'episode-summaries',
+        userId,
+        teamId,
+        workspaceId: project.workspace_id,
+        creditAccountId,
+        estimatedCredits: ESTIMATED_CREDITS,
+      })
+    } catch (error) {
+      app.log.warn({ error, projectId }, '分集概述文本任务记录创建失败，继续生成')
+    }
+    const heartbeatTimer = setInterval(() => {
+      if (textTaskId) void heartbeatShortDramaTextTask(textTaskId).catch(() => {})
+    }, TEXT_TASK_HEARTBEAT_INTERVAL_MS)
+    heartbeatTimer.unref?.()
 
     const { systemPrompt, userPrompt } = buildShortDramaEpisodeSummariesPrompts(state)
 
@@ -174,10 +239,12 @@ const route: FastifyPluginAsync = async (app) => {
         creditAccountId,
         userId,
         teamId,
-        status: 'generating',  // 项目仍在生成中，剧本尚未完成
       })).settledCredits
 
       persisted = true
+
+      // 文本任务记录标记完成
+      if (textTaskId) await completeShortDramaTextTask(textTaskId, actualCredits).catch(() => {})
 
       sendEvent('done', {
         success: true,
@@ -191,9 +258,12 @@ const route: FastifyPluginAsync = async (app) => {
       } else {
         await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '概述生成失败')
         state.script.episodeSummaryStatus = 'failed'
+        // 持久化失败原因，前端重进页面仍可见
+        state.script.episodeSummaryErrorMessage = error instanceof Error ? error.message : '概述生成失败'
         await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
           app.log.error({ saveError, projectId }, '短剧概述失败状态保存失败')
         })
+        if (textTaskId) await failShortDramaTextTask(textTaskId).catch(() => {})
         app.log.error({ error, projectId }, '短剧概述流式生成失败')
         sendEvent('error', {
           code: 'AI_ERROR',
@@ -201,6 +271,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
     } finally {
+      clearInterval(heartbeatTimer)
       await releaseRedisLock(app.redis, generationLock)
       session.end()
     }

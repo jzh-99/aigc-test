@@ -15,12 +15,40 @@ import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { createShortDramaSSESession } from './_sse.js'
 import { buildShortDramaStoryLineage } from './_script-source.js'
+import {
+  createShortDramaTextTaskBatch,
+  heartbeatShortDramaTextTask,
+  completeShortDramaTextTask,
+  failShortDramaTextTask,
+  TEXT_TASK_HEARTBEAT_INTERVAL_MS,
+} from './_text-task.js'
 
 // 保守预估：分集分场剧本输入+输出均计费，每批 5 集预冻结 70 积分
 const ESTIMATED_CREDITS = 70
 const OUTLINE_BATCH_MAX_TOKENS = 16000
 
-function parseEpisodeOutlineBatch(
+function formatExpectedEpisodeNumbers(from: number, to: number): string {
+  const episodeNumbers: number[] = []
+  for (let episodeNumber = from; episodeNumber <= to; episodeNumber += 1) {
+    episodeNumbers.push(episodeNumber)
+  }
+  return episodeNumbers.join('、')
+}
+
+function parseEpisodeNumber(value: unknown): number {
+  if (typeof value === 'number') return value
+  if (typeof value !== 'string') return NaN
+
+  const trimmed = value.trim()
+  if (/^\d+$/.test(trimmed)) return Number(trimmed)
+
+  const sceneLikeMatch = trimmed.match(/^(\d+)-\d+$/)
+  if (sceneLikeMatch) return Number(sceneLikeMatch[1])
+
+  return NaN
+}
+
+export function parseEpisodeOutlineBatch(
   aiResponse: string,
   from: number,
   to: number
@@ -53,16 +81,17 @@ function parseEpisodeOutlineBatch(
 
   return episodes.map((item, index) => {
     const ep = item as Record<string, unknown>
+    const episodeNumber = parseEpisodeNumber(ep.episodeNumber)
     if (
-      typeof ep.episodeNumber !== 'number' ||
+      !Number.isInteger(episodeNumber) ||
+      episodeNumber < from ||
+      episodeNumber > to ||
       typeof ep.title !== 'string' ||
-      typeof ep.logline !== 'string' ||
       typeof ep.synopsis !== 'string' ||
       !Array.isArray(ep.characters) ||
-      !Array.isArray(ep.scenes) ||
-      typeof ep.hook !== 'string'
+      !Array.isArray(ep.scenes)
     ) {
-      throw new Error(`第 ${from + index} 集的字段格式错误或缺少必需字段`)
+      throw new Error(`第 ${from + index} 集的字段格式错误或缺少必需字段，请检查 episodeNumber、title、synopsis、characters、scenes`)
     }
 
     const dedupeStrings = (raw: unknown[]): string[] => {
@@ -79,7 +108,7 @@ function parseEpisodeOutlineBatch(
     }
 
     return {
-      episodeNumber: ep.episodeNumber,
+      episodeNumber,
       title: ep.title,
       summary: ep.synopsis,
       mentionedCharacters: dedupeStrings(ep.characters),
@@ -164,6 +193,9 @@ const route: FastifyPluginAsync = async (app) => {
 
     try {
       state.script.status = 'generating'
+      // 分集剧本批次请求独立状态：刷新后前端据此恢复加载态；重新生成时清空历史失败原因
+      state.script.outlinesStatus = 'generating'
+      state.script.outlinesErrorMessage = null
       await saveShortDramaProjectState(projectId, state, 0)
     } catch (error) {
       await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '大纲生成状态保存失败')
@@ -173,6 +205,26 @@ const route: FastifyPluginAsync = async (app) => {
         error: { code: 'DATABASE_ERROR', message: '保存生成状态失败，请稍后重试' },
       })
     }
+
+    // 创建文本任务记录（僵死自愈的进程外状态来源）+ 心跳定时器
+    let textTaskId: string | null = null
+    try {
+      textTaskId = await createShortDramaTextTaskBatch({
+        projectId,
+        textType: 'episode-outlines',
+        userId,
+        teamId,
+        workspaceId: project.workspace_id,
+        creditAccountId,
+        estimatedCredits: ESTIMATED_CREDITS,
+      })
+    } catch (error) {
+      app.log.warn({ error, projectId }, '分集剧本文本任务记录创建失败，继续生成')
+    }
+    const heartbeatTimer = setInterval(() => {
+      if (textTaskId) void heartbeatShortDramaTextTask(textTaskId).catch(() => {})
+    }, TEXT_TASK_HEARTBEAT_INTERVAL_MS)
+    heartbeatTimer.unref?.()
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -201,11 +253,13 @@ const route: FastifyPluginAsync = async (app) => {
 
       // 构建注入故事脉络的 systemPrompt + userPrompt
       const storyLineage = buildShortDramaStoryLineage(state, batch.to)
+      const expectedEpisodeNumbers = formatExpectedEpisodeNumbers(batch.from, batch.to)
       const systemPrompt = [
         '你是专业短剧编剧，擅长把系列设定拆成可拍摄的分场剧本。',
         `请根据剧本摘要生成第 ${batch.from}-${batch.to} 集的分集剧本。`,
         storyLineage ? '必须延续上方故事脉络，不得与已确定的概述产生剧情冲突。' : '',
         '只输出 JSON 数组，每个元素包含 episodeNumber、title、logline、synopsis、characters、scenes、hook 字段，不要输出 markdown、代码块或额外解释。',
+        `episodeNumber 必须是集数整数，只能填写 ${expectedEpisodeNumbers}，禁止写成 "1-1" 这类场号。`,
         'synopsis 不再写普通梗概，必须写成分场剧本正文，使用"### 场X-Y"作为场次标题。',
         '每场必须包含：时段、内/外、地点、出场人物、动作描写、对白，可按需要加入【字幕】、【闪回】、【闪回结束】、角色（vo）、角色（os）。',
         '动作描写使用"△ "开头；对白使用"角色名（语气/状态）：对白"。',
@@ -219,7 +273,7 @@ const route: FastifyPluginAsync = async (app) => {
       ].filter(Boolean).join('\n')
 
       const lineageBlock = storyLineage ? `${storyLineage}\n\n其中第 ${batch.from}-${batch.to} 集为本次需要生成分场剧本的集数，请依据上述脉络展开。\n\n` : ''
-      const userPrompt = `${lineageBlock}剧本摘要：${state.script.refinedPrompt}\n\n项目视觉风格：${state.settings.style}\n画面比例：${state.settings.aspectRatio}\n\n请只生成第 ${batch.from}-${batch.to} 集，每集包含：\n- episodeNumber: 集数（${batch.from}-${batch.to}）\n- title: 集标题\n- logline: 一句话梗概（20-30字）\n- synopsis: 分场剧本正文，必须类似下面格式：\n### 场1-1\n日 内 旧教室\n【戏剧功能：开场钩子，建立拆迁压力和主角困境】\n出场人物：林微\n【场记锚点：场开始时林微站在教室门口，旧课桌堆在画面右侧；场结束时她走到第一排课桌旁，手按在刻字桌面上】\n【字幕：2024年，南方县城老中学，即将拆除】\n△ 阳光透过布满灰尘的窗户，墙上一个刺眼的红色"拆"字随风晃动。\n角色名（语气）：对白内容。\n角色名（os）：内心独白。\n\n### 场1-2\n夜 外 校园走廊\n【戏剧功能：冲突升级】\n出场人物：角色A、角色B\n【场记锚点：角色A靠近走廊左侧窗台，角色B挡在楼梯口，手机始终握在角色A右手】\n△ 动作与画面调度。\n角色A（压低声音）：对白内容。\n- characters: 该集出现的主要角色列表（字符串数组）\n- scenes: 该集主要场景列表（字符串数组）\n- hook: 悬念或钩子（吸引观众继续观看的要素，50字以内）\n\n长度与节奏要求：\n- 每集 synopsis 必须能支撑约 2 分钟成片，不要生成只能拍几十秒的短概要。\n- 每集整体分成 3-5 个场景，避免 8 个以上碎场；每个场景要有清晰戏剧功能，例如"开场钩子、冲突升级、信息反转、主动选择、结尾钩子"。\n- 每集至少写出 12-16 个清晰的动作/对白节点，方便后续按场内节拍拆成 10-12 个视频片段。\n- 每个场景至少包含 3-6 条"△"动作描写或对白/OS/VO，不要只有一两句概述。\n- 场号按"场${batch.from}-1、场${batch.from}-2..."书写；每场第一行写"日/夜 内/外 地点"，第二行写"【戏剧功能：...】"，第三行写"出场人物：..."，第四行写"【场记锚点：...】"。\n- 多用画面动作和人物对白推进剧情，少写概述性总结。\n- 动作描写要能被摄影和演员执行：写清人物从哪里来、看向哪里、哪只手拿着什么、动作结束停在哪里。\n- 视觉风格"${state.settings.style}"必须体现在场景选择、表演克制程度、镜头节奏、色彩和灯光上，不要只写剧情。\n- 每集要形成一个小冲突和结尾钩子。`
+      const userPrompt = `${lineageBlock}剧本摘要：${state.script.refinedPrompt}\n\n项目视觉风格：${state.settings.style}\n画面比例：${state.settings.aspectRatio}\n\n请只生成第 ${batch.from}-${batch.to} 集，每集包含：\n- episodeNumber: 集数整数，只能填写 ${expectedEpisodeNumbers}，不要填写场号\n- title: 集标题\n- logline: 一句话梗概（20-30字）\n- synopsis: 分场剧本正文，必须类似下面格式：\n### 场1-1\n日 内 旧教室\n【戏剧功能：开场钩子，建立拆迁压力和主角困境】\n出场人物：林微\n【场记锚点：场开始时林微站在教室门口，旧课桌堆在画面右侧；场结束时她走到第一排课桌旁，手按在刻字桌面上】\n【字幕：2024年，南方县城老中学，即将拆除】\n△ 阳光透过布满灰尘的窗户，墙上一个刺眼的红色"拆"字随风晃动。\n角色名（语气）：对白内容。\n角色名（os）：内心独白。\n\n### 场1-2\n夜 外 校园走廊\n【戏剧功能：冲突升级】\n出场人物：角色A、角色B\n【场记锚点：角色A靠近走廊左侧窗台，角色B挡在楼梯口，手机始终握在角色A右手】\n△ 动作与画面调度。\n角色A（压低声音）：对白内容。\n- characters: 该集出现的主要角色列表（字符串数组）\n- scenes: 该集主要场景列表（字符串数组）\n- hook: 悬念或钩子（吸引观众继续观看的要素，50字以内）\n\n长度与节奏要求：\n- 每集 synopsis 必须能支撑约 2 分钟成片，不要生成只能拍几十秒的短概要。\n- 每集整体分成 3-5 个场景，避免 8 个以上碎场；每个场景要有清晰戏剧功能，例如"开场钩子、冲突升级、信息反转、主动选择、结尾钩子"。\n- 每集至少写出 12-16 个清晰的动作/对白节点，方便后续按场内节拍拆成 10-12 个视频片段。\n- 每个场景至少包含 3-6 条"△"动作描写或对白/OS/VO，不要只有一两句概述。\n- 场号按"场${batch.from}-1、场${batch.from}-2..."书写；每场第一行写"日/夜 内/外 地点"，第二行写"【戏剧功能：...】"，第三行写"出场人物：..."，第四行写"【场记锚点：...】"。\n- 多用画面动作和人物对白推进剧情，少写概述性总结。\n- 动作描写要能被摄影和演员执行：写清人物从哪里来、看向哪里、哪只手拿着什么、动作结束停在哪里。\n- 视觉风格"${state.settings.style}"必须体现在场景选择、表演克制程度、镜头节奏、色彩和灯光上，不要只写剧情。\n- 每集要形成一个小冲突和结尾钩子。`
 
       const aiResponse = await callQwenForTextStream(systemPrompt, userPrompt, OUTLINE_BATCH_MAX_TOKENS, {
         onChunk: (text) => sendEvent('chunk', { text, from: batch.from, to: batch.to }),
@@ -255,6 +309,9 @@ const route: FastifyPluginAsync = async (app) => {
 
         persisted = true
 
+        // 文本任务记录标记完成
+        if (textTaskId) await completeShortDramaTextTask(textTaskId, actualCredits).catch(() => {})
+
         sendEvent('progress', {
           message: `第 ${batch.from}-${batch.to} 集剧本生成完成`,
           from: batch.from,
@@ -279,9 +336,13 @@ const route: FastifyPluginAsync = async (app) => {
       } else {
         await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, `第 ${batch.from}-${batch.to} 集剧本生成失败`)
         state.script.status = 'failed'
+        // 持久化分集剧本失败状态与原因，前端重进页面仍可见并可重试
+        state.script.outlinesStatus = 'failed'
+        state.script.outlinesErrorMessage = error instanceof Error ? error.message : '分集剧本生成失败'
         await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
           app.log.error({ error: saveError, projectId }, '短剧分集剧本失败状态保存失败')
         })
+        if (textTaskId) await failShortDramaTextTask(textTaskId).catch(() => {})
         app.log.error({ error, projectId, batch }, '短剧分集剧本批次生成失败')
         sendEvent('error', {
           code: 'AI_ERROR',
@@ -291,6 +352,7 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
     } finally {
+      clearInterval(heartbeatTimer)
       await releaseRedisLock(app.redis, generationLock)
       session.end()
     }

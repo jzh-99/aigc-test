@@ -8,6 +8,7 @@ import {
   buildShortDramaOutlineBatches,
   extractQwenStreamDeltaText,
 } from '../routes/short-drama/_text-generation.js'
+import { parseEpisodeOutlineBatch } from '../routes/short-drama/post-episode-outlines.js'
 
 console.log('测试短剧文本生成状态写回...')
 
@@ -62,6 +63,8 @@ assert.deepEqual(outlinesState.script.outlines, [
   { episodeNumber: 2, title: '街巷救援', summary: '主角用能力救下被困的孩子。' },
 ])
 assert.equal(outlinesState.script.status, 'completed')
+assert.equal(outlinesState.script.outlinesStatus, 'completed')
+assert.equal(outlinesState.script.outlinesErrorMessage, null)
 assert.equal(outlinesState.episodes.items.length, 2)
 assert.equal(outlinesState.episodes.items[0]?.title, '意外觉醒')
 assert.equal(outlinesState.episodes.items[1]?.summary, '主角用能力救下被困的孩子。')
@@ -90,6 +93,8 @@ const partialState = makeDefaultShortDramaState({
   episodeCount: 3,
 })
 partialState.script.refinedPrompt = '一个普通外卖员意外获得超能力。'
+// 模拟路由层 post-episode-outlines.ts:166 在生成开始时设置的 status
+partialState.script.status = 'generating'
 
 applyShortDramaEpisodeOutlinesBatchResult(partialState, [
   { episodeNumber: 1, title: '觉醒', summary: '主角觉醒能力。' },
@@ -98,11 +103,14 @@ applyShortDramaEpisodeOutlinesBatchResult(partialState, [
 
 assert.equal(partialState.script.outlines.length, 2)
 assert.equal(partialState.episodes.items.length, 2)
+// apply 函数：outlinesStatus 标记本批完成，但不改 script.status（交由路由层管理）
+assert.equal(partialState.script.outlinesStatus, 'completed')
+assert.equal(partialState.script.outlinesErrorMessage, null)
 assert.equal(partialState.script.status, 'generating')
 assert.equal(partialState.episodes.status, 'idle')
 assert.equal(partialState.episodes.items[0]?.episodeNumber, 1)
 assert.equal(partialState.episodes.items[1]?.episodeNumber, 2)
-console.log('✓ 部分批次会保留已生成大纲，但不标记 completed')
+console.log('✓ 部分批次会保留已生成大纲，outlinesStatus 标记本批完成，script.status 交由路由层')
 
 partialState.episodes.items[0] = {
   ...partialState.episodes.items[0]!,
@@ -142,15 +150,37 @@ assert.equal(partialState.episodes.items[0]?.title, '觉醒委托更新')
 assert.equal(partialState.episodes.items[0]?.segments.length, 1)
 console.log('✓ 旧的大纲写回入口复用批次合并逻辑')
 
+const parsedOutlines = parseEpisodeOutlineBatch(JSON.stringify([
+  {
+    episodeNumber: '1-1',
+    title: '觉醒',
+    synopsis: '### 场1-1\n日 内 小巷\n【戏剧功能：开场钩子】\n出场人物：林晚\n【场记锚点：林晚站在巷口】\n△ 林晚抬头看向闪烁的路灯。',
+    characters: ['林晚', '林晚', ''],
+    scenes: ['小巷'],
+  },
+]), 1, 1)
+
+assert.deepEqual(parsedOutlines, [
+  {
+    episodeNumber: 1,
+    title: '觉醒',
+    summary: '### 场1-1\n日 内 小巷\n【戏剧功能：开场钩子】\n出场人物：林晚\n【场记锚点：林晚站在巷口】\n△ 林晚抬头看向闪烁的路灯。',
+    mentionedCharacters: ['林晚'],
+    mentionedScenes: ['小巷'],
+  },
+])
+console.log('✓ 分集剧本解析允许缺省未落库的 logline/hook，并兼容 AI 误把集号写成场号')
+
 applyShortDramaEpisodeOutlinesBatchResult(partialState, [
   { episodeNumber: 3, title: '守护', summary: '主角守护街区。' },
 ])
 
 assert.equal(partialState.script.outlines.length, 3)
 assert.equal(partialState.episodes.items.length, 3)
+assert.equal(partialState.script.outlinesStatus, 'completed')
 assert.equal(partialState.script.status, 'completed')
 assert.equal(partialState.episodes.status, 'idle')
-console.log('✓ 全部集数生成完成后标记 script.completed')
+console.log('✓ 全部集数生成完成后标记 outlinesStatus 与 script.status 为 completed')
 
 console.log('\n测试短剧素材描述分批与去重状态...')
 

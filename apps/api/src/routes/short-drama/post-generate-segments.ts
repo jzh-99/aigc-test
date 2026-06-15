@@ -19,6 +19,13 @@ import {
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { createShortDramaSSESession } from './_sse.js'
+import {
+  createShortDramaTextTaskBatch,
+  heartbeatShortDramaTextTask,
+  completeShortDramaTextTask,
+  failShortDramaTextTask,
+  TEXT_TASK_HEARTBEAT_INTERVAL_MS,
+} from './_text-task.js'
 
 // 保守预估：片段脚本输入+输出均计费，输入较长，预冻结 40 积分
 const ESTIMATED_CREDITS = 40
@@ -122,6 +129,27 @@ const route: FastifyPluginAsync = async (app) => {
         error: { code: 'DATABASE_ERROR', message: '保存生成状态失败，请稍后重试' },
       })
     }
+
+    // 创建文本任务记录（僵死自愈的进程外状态来源）+ 心跳定时器
+    let textTaskId: string | null = null
+    try {
+      textTaskId = await createShortDramaTextTaskBatch({
+        projectId,
+        textType: 'episode-segments',
+        episodeNumber,
+        userId,
+        teamId,
+        workspaceId: project.workspace_id,
+        creditAccountId,
+        estimatedCredits: ESTIMATED_CREDITS,
+      })
+    } catch (error) {
+      app.log.warn({ error, projectId, episodeNumber }, '片段脚本文本任务记录创建失败，继续生成')
+    }
+    const heartbeatTimer = setInterval(() => {
+      if (textTaskId) void heartbeatShortDramaTextTask(textTaskId).catch(() => {})
+    }, TEXT_TASK_HEARTBEAT_INTERVAL_MS)
+    heartbeatTimer.unref?.()
 
     // 获取全局素材和该集的素材
     const globalAssets = state.assets.items.filter((a) => a.scope === 'global')
@@ -247,9 +275,11 @@ const route: FastifyPluginAsync = async (app) => {
       await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
         app.log.error({ error: saveError, projectId, episodeNumber }, '短剧片段脚本失败状态保存失败')
       })
+      if (textTaskId) await failShortDramaTextTask(textTaskId).catch(() => {})
       app.log.error({ error, projectId, episodeNumber }, message)
       sendEvent('error', { code, message })
       await releaseRedisLock(app.redis, generationLock)
+      clearInterval(heartbeatTimer)
       session.end()
     }
 
@@ -482,6 +512,9 @@ const route: FastifyPluginAsync = async (app) => {
       return
     }
 
+    // 文本任务记录标记完成
+    if (textTaskId) await completeShortDramaTextTask(textTaskId, actualCredits).catch(() => {})
+
     sendEvent('progress', {
       message: `第 ${episodeNumber} 集片段脚本生成完成`,
       completedCount: 1,
@@ -496,6 +529,7 @@ const route: FastifyPluginAsync = async (app) => {
       state,
     })
     await releaseRedisLock(app.redis, generationLock)
+    clearInterval(heartbeatTimer)
     session.end()
   })
 }

@@ -41,7 +41,13 @@ function hasPendingWork(state: ShortDramaState, scope: ShortDramaPollScope): boo
   }
 
   if (state.steps.active === 'script') {
-    return state.script.status === 'generating'
+    // 覆盖全部 script 步骤发起的文本流程 generating，任一卡死时持续轮询触发 /sync 自愈
+    return (
+      state.script.status === 'generating' ||
+      state.script.outlinesStatus === 'generating' ||
+      state.script.episodeSummaryStatus === 'generating' ||
+      state.assets.status === 'generating'
+    )
   }
 
   const hasPendingAssets = state.assets.items.some(
@@ -59,7 +65,9 @@ function hasPendingWork(state: ShortDramaState, scope: ShortDramaPollScope): boo
     b => isPendingStatus(b.status) || b.exports.some(item => isPendingStatus(item.status))
   )
   if (state.steps.active === 'episodes') {
-    return hasPendingSegments || hasPendingExports
+    // episode.status=generating 为片段「脚本」生成中（区别于 segment 视频状态），同样需轮询自愈
+    const hasGeneratingEpisodes = state.episodes.items.some(ep => ep.status === 'generating')
+    return hasGeneratingEpisodes || hasPendingSegments || hasPendingExports
   }
 
   return false

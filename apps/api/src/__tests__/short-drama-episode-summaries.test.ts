@@ -17,6 +17,8 @@ assert.equal(state.script.episodeSummaries.length, 0)
 assert.equal(state.script.episodeSummaryStatus, 'idle')
 console.log('✓ 初始状态：概述为空，状态为 idle')
 
+// 模拟上一次生成失败残留的错误原因，验证成功后会清空
+state.script.episodeSummaryErrorMessage = '上一次生成的失败原因'
 applyShortDramaEpisodeSummariesResult(state, [
   { episodeNumber: 1, summary: '外卖员林晚在暴雨夜送餐途中被雷击，觉醒超能力。' },
   { episodeNumber: 2, summary: '林晚尝试隐藏能力，却在火灾中被迫出手救下邻居小孩。' },
@@ -27,7 +29,8 @@ assert.equal(state.script.episodeSummaries.length, 3)
 assert.equal(state.script.episodeSummaries[0]?.summary, '外卖员林晚在暴雨夜送餐途中被雷击，觉醒超能力。')
 assert.equal(state.script.episodeSummaries[2]?.episodeNumber, 3)
 assert.equal(state.script.episodeSummaryStatus, 'completed')
-console.log('✓ 概述生成结果写回 episodeSummaries + episodeSummaryStatus = completed')
+assert.equal(state.script.episodeSummaryErrorMessage, null)
+console.log('✓ 概述生成结果写回 episodeSummaries + episodeSummaryStatus = completed + 清空历史失败原因')
 
 // 测试 2：isShortDramaEpisodeSummariesReady
 const readyState = makeDefaultShortDramaState({
@@ -44,6 +47,14 @@ readyState.script.episodeSummaries = [
 ]
 assert.equal(isShortDramaEpisodeSummariesReady(readyState), true)
 console.log('✓ isShortDramaEpisodeSummariesReady 判断正确')
+
+readyState.script.episodeSummaries = [
+  { episodeNumber: 1, summary: 'a' },
+  { episodeNumber: 1, summary: 'b' },
+  { episodeNumber: 3, summary: 'c' },
+]
+assert.equal(isShortDramaEpisodeSummariesReady(readyState), false)
+console.log('✓ isShortDramaEpisodeSummariesReady 会拒绝重复或缺失集号')
 
 // 测试 3：normalize 对旧 JSON 的向后兼容
 const normalized = normalizeShortDramaState({

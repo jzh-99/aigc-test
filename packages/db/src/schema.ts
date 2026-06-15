@@ -171,6 +171,7 @@ export interface TaskBatchesTable {
     | 'music_voice_clone'
     | 'picture_book'
     | 'short_drama'
+    | 'text'
   provider: string
   model: string
   prompt: string
