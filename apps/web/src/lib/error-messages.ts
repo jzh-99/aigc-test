@@ -60,7 +60,7 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /already exists|duplicate/i, message: '资源已存在' },
 
   // 服务器错误
-  { pattern: /internal server error|500/i, message: '服务繁忙，请稍后重试' },
+  { pattern: /internal server error|500/i, message: '服务器处理出错，请稍后重试' },
   { pattern: /service unavailable|503/i, message: '服务暂时不可用，请稍后重试' },
   { pattern: /bad gateway|502/i, message: '网关错误，请稍后重试' },
 
@@ -159,8 +159,10 @@ export function getErrorMessage(code: string, fallback?: string): string {
 
 // 上游 API 通用中文错误映射（在中文检测之前执行，将上游原始中文替换为更友好的措辞）
 const UPSTREAM_CHINESE_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
-  { pattern: /系统繁忙.*请稍后再试/, message: '服务繁忙，请稍后重试' },
-  { pattern: /服务器内部错误/, message: '服务繁忙，请稍后重试' },
+  // 上游 AI 服务过载（火山/千问等返回的“系统繁忙”），属于瞬时故障，提示稍后重试
+  { pattern: /系统繁忙.*请稍后再试/, message: 'AI 服务当前繁忙，请稍后重试' },
+  // 服务器内部错误（500 类），多为后端/上游处理异常
+  { pattern: /服务器内部错误/, message: '服务器处理出错，请稍后重试' },
   { pattern: /请求过于频繁/, message: '操作过于频繁，请稍后再试' },
 ]
 
@@ -295,7 +297,7 @@ export function translateTaskError(errorMessage: string | null | undefined): str
     // 根据状态码返回通用提示
     if (statusCode === '422') return '生成失败，请尝试修改提示词'
     if (statusCode === '429') return '请求过于频繁'
-    if (statusCode === '500') return '服务繁忙，请稍后重试'
+    if (statusCode === '500') return '服务器处理出错，请稍后重试'
     if (statusCode === '503') return '服务暂时不可用'
   }
 
