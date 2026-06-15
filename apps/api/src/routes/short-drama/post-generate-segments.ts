@@ -22,10 +22,12 @@ import { createShortDramaSSESession } from './_sse.js'
 
 // 保守预估：片段脚本输入+输出均计费，输入较长，预冻结 40 积分
 const ESTIMATED_CREDITS = 40
-const EPISODE_TARGET_DURATION_SECONDS = 120
-const EPISODE_MIN_DURATION_SECONDS = 110
-const EPISODE_MAX_DURATION_SECONDS = 130
-const SEGMENT_VIDEO_ALLOWED_DURATIONS = [10, 11, 12]
+// 单片段时长档位：13/14/15 秒，由 AI 根据剧本复杂度自判（动作/对白密集→15s，居中→14s，简洁→13s）
+const SEGMENT_VIDEO_ALLOWED_DURATIONS = [13, 14, 15]
+// 每集总时长：10-12 片段 × 13-15 秒，下限 10×13=130、上限 12×15=180
+const EPISODE_TARGET_DURATION_SECONDS = 150
+const EPISODE_MIN_DURATION_SECONDS = 130
+const EPISODE_MAX_DURATION_SECONDS = 180
 const RAW_SHOT_DURATION_PATTERN = /分镜\s*\d+(?:\s*[·.\-:：]\s*|\s+)\d+\s*s\b/gi
 
 const route: FastifyPluginAsync = async (app) => {
@@ -142,8 +144,8 @@ const route: FastifyPluginAsync = async (app) => {
       '你是专业短剧分镜师、导演和摄影指导。请根据剧本摘要、分集分场剧本和素材，为该集生成可直接提交视频模型的片段脚本。',
       '只输出 JSON 数组，每个元素包含 title、prompt、mentionNames、durationSeconds 字段，不要输出 markdown。',
       '片段是视频生成的最小单位；必须基于分集剧本中的场次拆分，优先做到一场对应一个片段，长场可以拆成多个连续片段。',
-      '一集成片时长必须控制在 2 分钟左右：总时长目标 120 秒，可接受范围 110-130 秒。',
-      '每集必须生成 10-12 个片段；每个片段 10-12 秒，通过增加动作承接、表情反应、环境压迫、对白停顿和钩子镜头来扩充分段。',
+      '一集成片时长必须控制在 2.5 分钟左右：总时长目标 150 秒，可接受范围 130-180 秒。',
+      '每集必须生成 10-12 个片段；每个片段 13-15 秒，通过增加动作承接、表情反应、环境压迫、对白停顿和钩子镜头来扩充分段。',
       '不要脱离分集剧本另写新剧情；片段顺序、场景、人物、动作、对白重点必须来自分集剧本。',
       '必须延续项目选择的视觉风格，并把该风格落实到摄影、灯光、布景、妆造、色彩和表演质感中。',
       '如果项目视觉风格是 2D/3D 动漫、漫画、插画、卡通、国漫、日漫、赛璐璐、黏土/粘土、盲盒、定格动画或虾仁动画风格，片段 prompt 必须使用动画、插画、CG、黏土或对应风格语言描述线条、上色、角色表演、镜头节奏、材质和场景光影，禁止写真人照片、写实摄影、影视剧剧照或真人实拍质感。',
@@ -163,7 +165,7 @@ const route: FastifyPluginAsync = async (app) => {
       '妆造和布景必须延续剧本摘要与分集剧本设定，不要凭空改变角色服装、发型、身份质感或场景时代背景。',
       '灯光和摄影要服务剧情情绪，例如压迫感用低角度和强反差，暧昧/回忆用柔光和慢推，反转用特写和突然留白。',
       '每个分镜时长 X 必须为 2-10 秒；durationSeconds 必须等于本片段所有分镜时长之和。',
-      '片段总时长必须为 10-12 秒，优先生成 10 秒以上的完整情绪推进，且必须能由 prompt 内所有分镜时长累加得到。',
+      '片段总时长必须为 13、14 或 15 秒三者之一，根据本片段剧本内容自行选定档位：动作/对白密集、情绪推进复杂的长场选 15 秒；叙事简洁、节奏明快的短场选 13 秒；介于两者之间选 14 秒。选定后必须能由 prompt 内所有分镜时长累加得到，优先生成完整情绪推进而非缩短时长。',
       '当画面出现某个角色或场景时，必须在 prompt 中直接写对应的 @素材名或可用别名，例如 @祁同伟、@祁同学、@汉东政法大学校园。',
       'mentionNames 必须填写本片段实际引用的素材名称或可用别名，不带 @，且只能使用可用素材列表中的名称或别名。',
       '不要虚构素材名称；没有引用素材时 mentionNames 返回空数组。',
@@ -188,14 +190,15 @@ const route: FastifyPluginAsync = async (app) => {
       '',
       '总时长要求：',
       `- 本集目标总时长约 ${EPISODE_TARGET_DURATION_SECONDS} 秒，最终所有片段 durationSeconds 累加必须在 ${EPISODE_MIN_DURATION_SECONDS}-${EPISODE_MAX_DURATION_SECONDS} 秒之间。`,
-      '- 必须生成 10-12 个片段，每个片段 10-12 秒。',
+      '- 必须生成 10-12 个片段，每个片段 13、14 或 15 秒。',
+      '- 每个片段的时长档位根据其剧本内容自行选定：动作/对白密集、情绪推进复杂的长场选 15 秒；叙事简洁、节奏明快的短场选 13 秒；介于两者之间选 14 秒。',
       '- 如果原分场较少，要把同一场拆成“进入/发现/对峙/反应/推进/钩子”等连续片段，不要减少片段数量。',
       '',
       '每个片段包含：',
       `- title: 片段标题，建议体现对应场号和关键动作，例如“场${episodeNumber}-1：宿舍惊醒”`,
       '- prompt: 完整片段文本，第一段写“本片段场景设定在：...”，后续优先写 3 个“分镜N · Xs：...”描述；出现素材时必须使用 @素材名。每个分镜都要包含景别、人物动作、面部微表情、场景背景和情绪，不要只写事件概要',
       '- mentionNames: 提及的素材名称或可用别名列表，只能从可用素材中选择，名称不带 @',
-      '- durationSeconds: 片段总时长，必须等于 prompt 中所有分镜时长之和，且必须为 10-12 秒',
+      '- durationSeconds: 片段总时长，必须等于 prompt 中所有分镜时长之和，且必须为 13、14 或 15 秒之一',
       '',
       '专业执行要求：',
       `- 所有片段必须统一遵循项目视觉风格“${state.settings.style}”，并把该风格具体写进摄影、灯光、色彩、布景、妆造和表演气质中，不要只在开头提一次。`,
@@ -212,7 +215,7 @@ const route: FastifyPluginAsync = async (app) => {
       '- 摄影描述要具体到景别、角度、运动或构图重点，例如“低角度近景压迫”“过肩镜头制造偷窥感”“慢推到眼神特写”。',
       '- 灯光、布景、妆造必须与剧情情绪和角色身份一致，不要写成无关的视觉堆砌。',
       '',
-      '每个分镜时长必须在 2-10 秒之间。片段总时长必须为 10-12 秒，生成内容需要在 10 秒钟往上，避免 4-9 秒的短片段。分镜不是视频生成单位，不要输出分镜 videoUrl、status 或单独任务字段。',
+      '每个分镜时长必须在 2-10 秒之间。片段总时长必须为 13、14 或 15 秒之一，按本片段剧本复杂度自行选定档位，避免低于 13 秒或高于 15 秒。分镜不是视频生成单位，不要输出分镜 videoUrl、status 或单独任务字段。',
     ].join('\n')
 
     reply.raw.writeHead(200, {
@@ -383,7 +386,7 @@ const route: FastifyPluginAsync = async (app) => {
       if (!SEGMENT_VIDEO_ALLOWED_DURATIONS.includes(durationSeconds)) {
         await failStream(
           'VALIDATION_ERROR',
-          `第 ${i + 1} 个片段的总时长必须为 10-12 秒`,
+          `第 ${i + 1} 个片段的总时长必须为 13-15 秒`,
           new Error(`segment ${i + 1} invalid duration`),
           'AI 返回片段总时长错误',
         )
@@ -439,7 +442,7 @@ const route: FastifyPluginAsync = async (app) => {
     ) {
       await failStream(
         'VALIDATION_ERROR',
-        `本集需要生成 10-12 个片段，总时长控制在 ${EPISODE_MIN_DURATION_SECONDS}-${EPISODE_MAX_DURATION_SECONDS} 秒`,
+        `本集需要生成 10-12 个片段（每片段 13-15 秒），总时长控制在 ${EPISODE_MIN_DURATION_SECONDS}-${EPISODE_MAX_DURATION_SECONDS} 秒`,
         new Error(`invalid episode duration: ${parsedSegments.length} segments, ${episodeDurationSeconds}s`),
         'AI 返回本集时长不符合要求',
       )
