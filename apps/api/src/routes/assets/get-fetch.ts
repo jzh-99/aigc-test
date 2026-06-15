@@ -20,31 +20,35 @@ const route: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { key } = request.query
 
-      // 防止路径穿越：key 不能包含 .. 或以 / 开头
-      if (key.includes('..') || key.startsWith('/')) {
-        return reply.code(400).send({ error: 'Invalid key' })
-      }
-
-      // 验证 key 确实属于本存储（通过 extractStorageKey 反向校验）
       const publicUrl = process.env.TOS_PUBLIC_URL ?? ''
       if (!publicUrl) {
         return reply.code(503).send({ error: 'Storage not configured' })
       }
+
+      // 前端传入的 key 可能是百分号编码态（含 %20 等）。extractStorageKey 内部会
+      // decodeURIComponent 还原成 TOS 真实存储的原始 key。校验归属与取对象必须使用
+      // 同一个（还原后的）key，否则半编码 key 会导致 getTosObjectBuffer NoSuchKey。
       const fullUrl = `${publicUrl}/${key}`
-      if (!extractStorageKey(fullUrl)) {
+      const resolvedKey = extractStorageKey(fullUrl)
+      if (!resolvedKey) {
         return reply.code(403).send({ error: 'Forbidden' })
+      }
+
+      // 防止路径穿越：用还原后的原始 key 校验，避免 %2e%2e 等编码绕过
+      if (resolvedKey.includes('..') || resolvedKey.startsWith('/')) {
+        return reply.code(400).send({ error: 'Invalid key' })
       }
 
       let buffer: Buffer
       try {
-        buffer = await getTosObjectBuffer(key)
+        buffer = await getTosObjectBuffer(resolvedKey)
       } catch (err) {
-        app.log.warn({ err, key }, 'Failed to fetch asset from TOS')
+        app.log.warn({ err, key: resolvedKey }, 'Failed to fetch asset from TOS')
         return reply.code(502).send({ error: 'Failed to fetch asset' })
       }
 
       // 根据文件扩展名推断 Content-Type
-      const ext = key.split('.').pop()?.toLowerCase()
+      const ext = resolvedKey.split('.').pop()?.toLowerCase()
       const contentType =
         ext === 'mp4' ? 'video/mp4' :
         ext === 'webp' ? 'image/webp' :
