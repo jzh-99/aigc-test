@@ -52,23 +52,26 @@
 
 ## 图文策略
 
-优先复用 `apps/web/public/docs-images` 中现有图片：
+由于当前页面已经有较大改动，手册图片不复用旧截图。实施时使用截图功能采集当前页面，保存到 `apps/web/public/docs-images`，再在 MDX 手册中引用。
 
-- `platform-overview.png`
-- `image-gen-overview.png`
-- `image-gen-reference.png`
-- `image-gen-params.png`
-- `image-gen-history.png`
-- `video-gen-overview.png`
-- `video-gen-keyframe.png`
-- `video-gen-components.png`
-- `video-gen-params.png`
-- `video-gen-detail.png`
-- `asset-library-overview.png`
-- `asset-library-grid.png`
-- `asset-library-detail.png`
+计划采集的截图：
 
-对于当前没有专用截图的模块，先使用文字步骤和现有入口截图，不为了截图启动或刷新本地前端服务。这样符合仓库约定中“前端改动完成后不要继续执行构建、浏览器刷新、重启 localhost:6006 或其他后续预览验证动作”的边界。
+- 登录页底部手册链接。
+- 平台首页与主要功能入口。
+- 创作生成的图片模式。
+- 创作生成的视频模式。
+- 资产库列表与详情入口。
+- 灵动画布入口页。
+- 视频工坊项目页或新建入口页。
+- Toby Studio 首页。
+
+截图执行边界：
+
+- 只在已有可访问的本地页面上截图。
+- 不为了截图执行前端构建。
+- 不重启 `localhost:6006`。
+- 如果当前本地页面服务不可访问，实施时先停止并反馈，而不是自行启动或刷新生产式预览流程。
+- 截图文件使用清晰命名，例如 `user-guide-login-link.png`、`user-guide-home.png`、`user-guide-generation-image.png`。
 
 ## 数据与交互影响
 
@@ -84,12 +87,13 @@
 
 1. 确认登录页存在低调文本链接，链接地址为 `/docs/user-guide`。
 2. 确认 docs 侧边栏出现“用户使用手册”入口。
-3. 确认新增 MDX 中引用的图片文件均存在。
-4. 不启动本地 dev server，不刷新 `localhost:6006`，不执行前端构建预览。
+3. 确认新增 MDX 中引用的截图文件均存在。
+4. 确认截图文件位于 `apps/web/public/docs-images`，且命名与手册引用一致。
+5. 不启动本地 dev server，不重启 `localhost:6006`，不执行前端构建预览。
 
 ## 非目标
 
 - 不新增注册、找回密码、团队管理、管理员后台、A 豆充值或设置页说明。
 - 不修改登录认证流程。
 - 不新增动态引导、弹窗、产品导览或埋点。
-- 不补拍或生成新的截图。
+- 不生成虚构 UI 截图；截图必须来自当前可访问页面。
