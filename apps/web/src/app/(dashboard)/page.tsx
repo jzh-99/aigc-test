@@ -41,6 +41,7 @@ export default function DashboardPage() {
               charClassName="creative-title-char"
               charVariants={heroCharVariants}
               glowColor="rgba(173, 144, 255, "
+              windEnabled={false}
             />
           </div>
 

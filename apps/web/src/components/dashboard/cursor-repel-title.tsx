@@ -33,6 +33,7 @@ interface CursorRepelTitleProps {
   charClassName?: string
   charVariants?: CharVariant[]
   glowColor?: string
+  windEnabled?: boolean
 }
 
 /** 每个字符的物理状态 */
@@ -100,6 +101,7 @@ export function CursorRepelTitle({
   charClassName = 'toby-title-char',
   charVariants,
   glowColor = 'rgba(168, 85, 247, ',
+  windEnabled = true,
 }: CursorRepelTitleProps) {
   const chars = Array.from(text)
   const containerRef = useRef<HTMLHeadingElement>(null)
@@ -135,7 +137,7 @@ export function CursorRepelTitle({
 
         // ── 1) 风力 ──
         const charDelay = i * 0.12
-        const wind = computeWind(t - charDelay)
+        const wind = windEnabled ? computeWind(t - charDelay) : { x: 0, y: 0 }
         const charMul = 1 + (i % 3 - 1) * 0.15
         const fx = wind.x * charMul
         const fy = wind.y * charMul
@@ -278,7 +280,7 @@ export function CursorRepelTitle({
 
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [chars.length, charVariants, glowColor])
+  }, [chars.length, charVariants, glowColor, windEnabled])
 
   return (
     <h1

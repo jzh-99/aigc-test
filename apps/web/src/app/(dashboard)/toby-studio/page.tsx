@@ -41,6 +41,7 @@ export default function TobyStudioPage() {
             <CursorRepelTitle
               text="Toby Studio"
               className="select-none font-serif text-[2.8rem] font-normal leading-[1.12] tracking-wide sm:text-[3.6rem]"
+              windEnabled={false}
             />
             <p className="mt-3 text-sm font-medium leading-6 text-white/45">
               独立内容工作室，承载音乐、短剧、绘本等专项创作模块。
