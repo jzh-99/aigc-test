@@ -37,6 +37,7 @@ export function ImageParams({
 
   const currentDbModel = models?.find((m) => m.code === modelType)
   const availableResolutions = extractSchemaEnums(currentDbModel?.params_schema, 'resolution')
+  const availableAspectRatios = extractSchemaEnums(currentDbModel?.params_schema, 'aspect_ratio')
 
   const unitPrice = currentDbModel ? getPriceByResolution(currentDbModel, resolution) : 0
   const estimatedCredits = unitPrice * quantity
@@ -47,6 +48,7 @@ export function ImageParams({
       {showConfigControls ? (
         <ImageConfigControls
           availableResolutions={availableResolutions}
+          availableAspectRatios={availableAspectRatios}
           resolution={resolution}
           aspectRatio={aspectRatio}
           quantity={quantity}
@@ -74,6 +76,7 @@ export function ImageParams({
 
 export function ImageConfigControls({
   availableResolutions,
+  availableAspectRatios,
   resolution,
   aspectRatio,
   quantity,
@@ -84,6 +87,7 @@ export function ImageConfigControls({
   onQuantityChange,
 }: {
   availableResolutions: ReturnType<typeof extractSchemaEnums>
+  availableAspectRatios: ReturnType<typeof extractSchemaEnums>
   resolution: string
   aspectRatio: string
   quantity: number
@@ -93,13 +97,14 @@ export function ImageConfigControls({
   onAspectRatioChange: (v: string) => void
   onQuantityChange: (v: number) => void
 }) {
-  const aspectRatios = [
+  const defaultAspectRatios = [
     { value: '1:1', label: '1:1' },
     { value: '4:3', label: '4:3' },
     { value: '3:4', label: '3:4' },
     { value: '16:9', label: '16:9' },
     { value: '9:16', label: '9:16' },
   ]
+  const aspectRatios = availableAspectRatios.length > 0 ? availableAspectRatios : defaultAspectRatios
   const resolutionOptions = availableResolutions.map((r) => r.value)
   const currentResLabel = availableResolutions.find((r) => r.value === resolution)?.label ?? resolution
   const currentAspectLabel = aspectRatios.find((ar) => ar.value === aspectRatio)?.label ?? aspectRatio

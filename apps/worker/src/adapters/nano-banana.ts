@@ -28,6 +28,31 @@ async function compressBuffer(input: Buffer): Promise<Buffer> {
 // 参考图片下载超时：30 秒，防止慢速/挂起连接卡死整个 job
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000
 
+export function isRetryableNanoBananaError(errorMessage?: string): boolean {
+  if (!errorMessage) return false
+
+  // 不重试超时错误，避免一次任务在上游慢响应时占用 worker 过久。
+  if (errorMessage.includes('aborted') || errorMessage.includes('timeout')) {
+    return false
+  }
+
+  const isNetworkError = errorMessage.includes('fetch failed') ||
+                        errorMessage.includes('ECONNREFUSED') ||
+                        errorMessage.includes('ENOTFOUND') ||
+                        errorMessage.includes('ETIMEDOUT') ||
+                        errorMessage.includes('ECONNRESET')
+
+  if (isNetworkError) return true
+
+  const isServerError = /^API 5\d\d:/.test(errorMessage)
+  const isTransientProviderError = errorMessage.includes('系统繁忙') ||
+                                  errorMessage.includes('请稍后再试') ||
+                                  errorMessage.includes('new_api_error') ||
+                                  errorMessage.includes('unknown_error')
+
+  return isServerError && isTransientProviderError
+}
+
 async function prepareDataUri(urlOrDataUri: string, index: number): Promise<string> {
   let inputBuffer: Buffer
 
@@ -260,22 +285,6 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
   }
 
   private isRetryable(errorMessage?: string): boolean {
-    if (!errorMessage) return false
-
-    // Do NOT retry on timeout errors (AbortError)
-    if (errorMessage.includes('aborted') || errorMessage.includes('timeout')) {
-      return false
-    }
-
-    // Retry on fast API errors (connection refused, network errors, DNS failures)
-    // but NOT on HTTP error responses (4xx, 5xx) which indicate API-level issues
-    const isHttpError = errorMessage.startsWith('API ')
-    const isNetworkError = errorMessage.includes('fetch failed') ||
-                          errorMessage.includes('ECONNREFUSED') ||
-                          errorMessage.includes('ENOTFOUND') ||
-                          errorMessage.includes('ETIMEDOUT') ||
-                          errorMessage.includes('ECONNRESET')
-
-    return !isHttpError && isNetworkError
+    return isRetryableNanoBananaError(errorMessage)
   }
 }

@@ -22,7 +22,7 @@ import type { MediaGridItem } from '../shared/media-grid-types'
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
 import { MAX_REF_IMAGES } from '../shared/constants'
-import { getModelResolutions, getPriceByResolution } from '../shared/schema-utils'
+import { getModelAspectRatios, getModelResolutions, getPriceByResolution } from '../shared/schema-utils'
 import { useModels } from '@/hooks/use-models'
 import { getMaxImageReferenceCount } from '@/lib/image-categories'
 
@@ -80,14 +80,20 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
       // 同步重置为新模型的首个分辨率
       const resolutions = getModelResolutions(firstModel, imageModels)
       if (resolutions.length > 0) setResolution(resolutions[0] as typeof resolution)
+      const aspectRatios = getModelAspectRatios(firstModel, imageModels)
+      if (aspectRatios.length > 0) setAspectRatio(aspectRatios[0])
     } else {
       // 模型有效，但当前 resolution 可能不在该模型支持列表中，自动修正
       const resolutions = getModelResolutions(modelType, imageModels)
       if (resolutions.length > 0 && !resolutions.includes(resolution)) {
         setResolution(resolutions[0] as typeof resolution)
       }
+      const aspectRatios = getModelAspectRatios(modelType, imageModels)
+      if (aspectRatios.length > 0 && !aspectRatios.includes(aspectRatio)) {
+        setAspectRatio(aspectRatios[0])
+      }
     }
-  }, [imageModelsReady, imageModels, modelType, resolution, setModelType, setResolution])
+  }, [imageModelsReady, imageModels, modelType, resolution, aspectRatio, setModelType, setResolution, setAspectRatio])
 
   const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -210,6 +216,8 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
           setModelType(v)
           const resolutions = getModelResolutions(v, imageModels)
           if (resolutions.length > 0) setResolution(resolutions[0] as typeof resolution)
+          const aspectRatios = getModelAspectRatios(v, imageModels)
+          if (aspectRatios.length > 0) setAspectRatio(aspectRatios[0])
         }}
       />
 

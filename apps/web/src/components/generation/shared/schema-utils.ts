@@ -36,6 +36,19 @@ export function getModelResolutions(modelCode: string, dbModels?: ModelItem[]): 
   return []
 }
 
+/**
+ * 获取指定模型的可用画幅比例列表（首项为默认值）。
+ * 从 DB 模型的 params_schema 提取。
+ */
+export function getModelAspectRatios(modelCode: string, dbModels?: ModelItem[]): string[] {
+  const dbModel = dbModels?.find((m) => m.code === modelCode)
+  if (dbModel) {
+    const enums = extractSchemaEnums(dbModel.params_schema, 'aspect_ratio')
+    if (enums.length > 0) return enums.map((e) => e.value)
+  }
+  return []
+}
+
 export function isSeedanceModel(model: ModelItem): boolean {
   return model.code.startsWith('seedance-')
 }

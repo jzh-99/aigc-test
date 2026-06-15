@@ -523,7 +523,7 @@ async function main() {
       ],
       params_schema: {
         resolution: ['2k'],
-        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        aspect_ratio: ['1:1', '4:3', '3:4'],
         image: [],
       },
       category_references: SIX_IMAGE_CATEGORY_REFERENCES,
