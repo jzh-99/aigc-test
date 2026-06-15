@@ -155,9 +155,9 @@ async function persistReferenceImageUrls(params: Record<string, unknown>): Promi
 }
 
 const route: FastifyPluginAsync = async (app) => {
-  // 每用户生成限速：每分钟 20 次
+  // 每用户生成限速：每分钟 30 次
   await app.register(rateLimit, {
-    max: 20,
+    max: 30,
     timeWindow: '1 minute',
     keyGenerator: (request) => `generate:${request.user?.id ?? request.ip}`,
     errorResponseBuilder: (_request, context) => ({
