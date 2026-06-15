@@ -424,9 +424,9 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
               })()}
               <Button
                 size="sm"
-                variant="outline"
                 onClick={() => handleGeneratePrompts()}
                 disabled={generatingPrompts || isAssetPromptGenerating}
+                className="h-10 rounded-lg bg-violet-500 px-4 font-semibold text-white shadow-[0_0_0_1px_rgba(196,181,253,0.32),0_10px_24px_rgba(139,92,246,0.34)] transition-all hover:bg-violet-400 hover:shadow-[0_0_0_1px_rgba(221,214,254,0.45),0_12px_30px_rgba(139,92,246,0.48)] focus-visible:ring-violet-300 disabled:bg-violet-500/50 disabled:text-white/70 disabled:shadow-none"
               >
                 {generatingPrompts ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
                 {promptButtonText}
