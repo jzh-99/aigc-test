@@ -274,6 +274,7 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
   if (assetRow) {
     await getTransferQueue().add('transfer', {
       taskId,
+      batchId,
       assetId: assetRow.id,
       originalUrl: videoUrl,
       assetType: 'video',

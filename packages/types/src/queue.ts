@@ -40,6 +40,7 @@ export interface CompletionJobData {
 
 export interface TransferJobData {
   taskId: string
+  batchId: string
   assetId: string
   originalUrl: string
   assetType?: 'image' | 'video'

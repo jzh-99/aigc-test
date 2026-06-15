@@ -7,7 +7,7 @@ import { get as httpGet } from 'node:http'
 import { get as httpsGet } from 'node:https'
 import { URL } from 'node:url'
 import { HttpsProxyAgent } from 'https-proxy-agent'
-import { getBullMQConnection } from '../lib/redis.js'
+import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
 import { getTos, getBucket, getPublicUrl, getStorageRuntimeInfo } from '../lib/storage.js'
 import { buildLogger } from '../logger.js'
@@ -261,7 +261,7 @@ async function extractVideoThumbnail(videoUrl: string): Promise<Buffer | null> {
 export const transferWorker = new Worker<TransferJobData>(
   'transfer-queue',
   async (job) => {
-    const { taskId, assetId, originalUrl } = job.data
+    const { taskId, batchId, assetId, originalUrl } = job.data
     const assetType = job.data.assetType ?? 'image'
     logger.info({ jobId: job.id, taskId, assetId, assetType }, '开始处理 transfer 任务')
 
@@ -304,6 +304,14 @@ export const transferWorker = new Worker<TransferJobData>(
         })
         .where('id', '=', assetId)
         .execute()
+
+      if (batchId) {
+        try {
+          await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+        } catch (error) {
+          logger.warn({ jobId: job.id, taskId, err: error instanceof Error ? error.message : String(error) }, 'Transfer 完成后发布 SSE 失败')
+        }
+      }
 
       // 同步更新 canvas_node_outputs 中的 URL
       await db
@@ -351,6 +359,13 @@ export const transferWorker = new Worker<TransferJobData>(
           .set({ transfer_status: 'failed' })
           .where('id', '=', assetId)
           .execute()
+        if (batchId) {
+          try {
+            await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+          } catch (publishErr) {
+            logger.warn({ jobId: job.id, taskId, err: publishErr instanceof Error ? publishErr.message : String(publishErr) }, 'Transfer 失败后发布 SSE 失败')
+          }
+        }
         logger.error({
           jobId: job.id,
           taskId,

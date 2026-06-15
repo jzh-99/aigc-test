@@ -125,7 +125,7 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
   }
 
   async function handleSendAllToReference() {
-    if (completedImageUrls.length === 0) return
+    if (referenceImageUrls.length === 0) return
     if (referenceCount >= 10) {
       toast.error('最多添加 10 张参考图')
       return
@@ -133,12 +133,12 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
     setSendingAll(true)
     try {
       const availableSlots = 10 - referenceCount
-      const toAdd = completedImageUrls.slice(0, availableSlots)
+      const toAdd = referenceImageUrls.slice(0, availableSlots)
       for (const url of toAdd) {
         addReferenceImage({ id: generateUUID(), previewUrl: url })
       }
       toast.success('已发送至参考区')
-      if (completedImageUrls.length > availableSlots) {
+      if (referenceImageUrls.length > availableSlots) {
         toast.info(`参考区最多 10 张，已添加前 ${availableSlots} 张`)
       }
       onReferenceAdded?.()
@@ -148,9 +148,9 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
   }
 
   function handleTurnIntoVideo() {
-    if (completedImageUrls.length === 0) return
+    if (referenceImageUrls.length === 0) return
     sendImagesToVideoReference(
-      completedImageUrls.slice(0, 10).map((url) => ({
+      referenceImageUrls.slice(0, 10).map((url) => ({
         id: generateUUID(),
         previewUrl: url,
         dataUrl: url,
@@ -170,6 +170,14 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
   const completedImageUrls = completedAssetItems
     .filter((asset) => asset.type === 'image')
     .map((asset) => asset.url)
+  const referenceImageUrls = batch.tasks
+    .filter((t) =>
+      t.status === 'completed' &&
+      t.asset?.type === 'image' &&
+      t.asset.transfer_status === 'completed' &&
+      Boolean(t.asset.storage_url)
+    )
+    .map((t) => t.asset!.storage_url!)
   const completedVideoUrls = completedAssetItems
     .filter((asset) => asset.type === 'video')
     .map((asset) => asset.url)
@@ -374,13 +382,13 @@ function BatchDetailContent({ batch, onClose, onApplied, onReferenceAdded, onCan
             size="lg"
             className="generation-detail-action generation-detail-action-primary gap-2"
             onClick={handleSendAllToReference}
-            disabled={isVideo || isAudio || completedImageUrls.length === 0 || sendingAll || referenceCount >= 10}
+            disabled={isVideo || isAudio || referenceImageUrls.length === 0 || sendingAll || referenceCount >= 10}
           >
             {sendingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
             参考
           </Button>
 
-          {!isVideo && !isAudio && completedImageUrls.length > 0 && (
+          {!isVideo && !isAudio && referenceImageUrls.length > 0 && (
             <Button
               size="lg"
               className="generation-detail-action generation-detail-action-video gap-2"

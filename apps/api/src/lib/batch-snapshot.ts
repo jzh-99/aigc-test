@@ -71,7 +71,7 @@ export async function getBatchSnapshot(batchId: string) {
                 ? (asset.storage_url.startsWith('http://')
                     ? `/api/v1/assets/proxy?token=${encryptProxyUrl(asset.storage_url)}`
                     : await signAssetUrl(asset.storage_url))
-                : asset.original_url ?? null,
+                : null,
               transfer_status: asset.transfer_status,
               file_size: asset.file_size,
               width: asset.width,

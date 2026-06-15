@@ -6,6 +6,18 @@ import { buildLogger } from '../../logger.js'
 
 const logger = buildLogger()
 
+function hasPendingAssetTransfers(batch: Awaited<ReturnType<typeof getBatchSnapshot>>): boolean {
+  return Boolean(batch?.tasks?.some((task: any) =>
+    task.status === 'completed' &&
+    task.asset &&
+    task.asset.transfer_status === 'pending'
+  ))
+}
+
+function shouldCloseSse(batch: Awaited<ReturnType<typeof getBatchSnapshot>>): boolean {
+  return Boolean(batch && isTerminal(batch.status) && !hasPendingAssetTransfers(batch))
+}
+
 const route: FastifyPluginAsync = async (app) => {
   // GET /sse/batches/:id — 通过 Server-Sent Events 实时推送批次状态更新
   app.get<{ Params: { id: string } }>('/sse/batches/:id', async (request, reply) => {
@@ -108,8 +120,8 @@ const route: FastifyPluginAsync = async (app) => {
     sendEvent(snapshot)
 
     // 若已是终态，直接关闭连接
-    if (isTerminal(snapshot.status)) {
-      logger.info({ batchId, status: snapshot.status }, '初始状态已是终态，关闭连接')
+    if (shouldCloseSse(snapshot)) {
+      logger.info({ batchId, status: snapshot.status }, '初始状态已是终态且资产转存结束，关闭连接')
       raw.end()
       return reply.hijack()
     }
@@ -130,8 +142,8 @@ const route: FastifyPluginAsync = async (app) => {
         if (fresh) {
           logger.info({ batchId, status: fresh.status, completedCount: fresh.completed_count }, '推送 batch_update 事件到客户端')
           sendEvent(fresh)
-          if (isTerminal(fresh.status)) {
-            logger.info({ batchId, status: fresh.status }, '检测到终态，准备关闭连接')
+          if (shouldCloseSse(fresh)) {
+            logger.info({ batchId, status: fresh.status }, '检测到终态且资产转存结束，准备关闭连接')
             cleanup()
           }
         } else {

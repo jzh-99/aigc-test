@@ -11,6 +11,18 @@ interface UseBatchSSEOptions {
   enabled?: boolean
 }
 
+function hasPendingAssetTransfers(batch: BatchResponse): boolean {
+  return batch.tasks.some((task) =>
+    task.status === 'completed' &&
+    task.asset?.transfer_status === 'pending'
+  )
+}
+
+function shouldCloseBatchSSE(batch: BatchResponse): boolean {
+  const isTerminal = batch.status === 'completed' || batch.status === 'failed' || batch.status === 'partial_complete'
+  return isTerminal && !hasPendingAssetTransfers(batch)
+}
+
 export function useBatchSSE({ batchId, onUpdate, enabled = true }: UseBatchSSEOptions) {
   const controllerRef = useRef<AbortController | null>(null)
   const retryCountRef = useRef(0)
@@ -64,7 +76,7 @@ export function useBatchSSE({ batchId, onUpdate, enabled = true }: UseBatchSSEOp
               try {
                 const batch: BatchResponse = JSON.parse(line.slice(5).trim())
                 onUpdateRef.current(batch)
-                if (batch.status === 'completed' || batch.status === 'failed' || batch.status === 'partial_complete') {
+                if (shouldCloseBatchSSE(batch)) {
                   controller.abort()
                   return
                 }

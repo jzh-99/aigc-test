@@ -34,6 +34,17 @@ function isTerminalStatus(status: string): boolean {
   return status === 'completed' || status === 'failed' || status === 'partial_complete'
 }
 
+function hasPendingAssetTransfers(batch: BatchResponse): boolean {
+  return batch.tasks.some((task) =>
+    task.status === 'completed' &&
+    task.asset?.transfer_status === 'pending'
+  )
+}
+
+function isBatchStable(batch: BatchResponse): boolean {
+  return isTerminalStatus(batch.status) && !hasPendingAssetTransfers(batch)
+}
+
 /** 单个 batch 的 SSE 订阅组件，hooks 不能在循环里调用，用组件隔离 */
 interface BatchSSEWatcherProps {
   batchId: string
@@ -47,7 +58,7 @@ function BatchSSEWatcher({ batchId, onUpdate, onTerminal }: BatchSSEWatcherProps
 
   const handleUpdate = useCallback((batch: BatchResponse) => {
     onUpdate(batch)
-    if (isTerminalStatus(batch.status)) {
+    if (isBatchStable(batch)) {
       onTerminalRef.current(batchId, batch)
     }
   }, [batchId, onUpdate])

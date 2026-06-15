@@ -233,7 +233,7 @@ async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promi
 
   const assetRow = await db.selectFrom('assets').select('id').where('task_id', '=', taskId).executeTakeFirst()
   if (assetRow) {
-    await getTransferQueue().add('transfer', { taskId, assetId: assetRow.id, originalUrl: videoUrl, assetType: 'video' }, {
+    await getTransferQueue().add('transfer', { taskId, batchId, assetId: assetRow.id, originalUrl: videoUrl, assetType: 'video' }, {
       attempts: 10,
       backoff: { type: 'exponential', delay: 30_000 },
     })

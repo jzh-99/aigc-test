@@ -192,6 +192,7 @@ export async function completePipeline(
   try {
     const transferJob = await getTransferQueue().add('transfer', {
       taskId,
+      batchId,
       assetId,
       originalUrl: outputUrl,
     }, {
