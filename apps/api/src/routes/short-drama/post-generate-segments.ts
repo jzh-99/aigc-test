@@ -14,6 +14,7 @@ import {
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
+  markShortDramaProjectFailed,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
@@ -240,7 +241,7 @@ const route: FastifyPluginAsync = async (app) => {
       failedEpisode.errorMessage = message
       episode.updatedAt = now
       state.episodes.status = 'failed'
-      await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
+      await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
         app.log.error({ error: saveError, projectId, episodeNumber }, '短剧片段脚本失败状态保存失败')
       })
       app.log.error({ error, projectId, episodeNumber }, message)

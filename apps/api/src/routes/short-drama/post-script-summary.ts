@@ -8,6 +8,7 @@ import {
   parseAndValidateJson,
   applyShortDramaScriptSummaryResult,
   saveShortDramaProjectState,
+  markShortDramaProjectFailed,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
@@ -179,7 +180,7 @@ const route: FastifyPluginAsync = async (app) => {
       } else {
         await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成失败')
         state.script.status = 'failed'
-        await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
+        await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
           app.log.error({ saveError, projectId }, '短剧摘要失败状态保存失败')
         })
         app.log.error({ error, projectId }, '短剧摘要流式生成失败')

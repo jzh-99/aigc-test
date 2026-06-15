@@ -9,6 +9,7 @@ import {
   parseAndValidateJson,
   buildShortDramaOutlineBatches,
   applyShortDramaAssetPromptsBatchResult,
+  markShortDramaProjectFailed,
   type ShortDramaAssetPromptInput,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
@@ -344,6 +345,10 @@ const route: FastifyPluginAsync = async (app) => {
         } catch (error) {
           await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, `第 ${batch.from}-${batch.to} 集素材描述生成失败`)
           app.log.error({ error, projectId, batch }, '短剧素材描述批次生成失败')
+          state.assets.status = 'failed'
+          await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
+            app.log.error({ error: saveError, projectId }, '短剧素材描述失败状态保存失败')
+          })
 
           sendEvent('error', {
             code: 'AI_ERROR',

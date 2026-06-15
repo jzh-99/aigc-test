@@ -179,6 +179,7 @@ async function postShortDramaSSE<T>(
   path: string,
   options: ShortDramaStreamOptions = {},
   projectId?: string,
+  isGenerating?: ShortDramaRecoveryPredicate,
 ): Promise<T> {
   const token = useAuthStore.getState().accessToken
   const headers: Record<string, string> = {}
@@ -200,32 +201,70 @@ async function postShortDramaSSE<T>(
   } catch (err) {
     // 后端主动 error 事件（业务明确失败）：直接抛出，不回查
     if (err instanceof ShortDramaSseError) throw err
-    // 其余（网络中断/连接被代理掐断）：后端可能仍在生成或已成功落库。
-    // 回查项目状态：若未标记失败，按「已同步最新状态」返回，避免误报 network error。
-    if (projectId) {
-      const recovered = await recoverShortDramaStream<T>(projectId)
-      if (recovered) return recovered
+    // 其余（网络中断/连接被代理掐断）：回查项目状态兜底，避免误报 network error
+    if (projectId && isGenerating) {
+      const recovery = await recoverShortDramaStream<T>(projectId, isGenerating)
+      if (recovery.kind === 'success') return recovery.data
+      // 抛明确中文消息（translateError 对中文原样返回），确保用户能看到提示而非静默
+      throw new Error(
+        recovery.kind === 'failed'
+          ? '生成失败，请稍后重试'
+          : '生成仍在进行中，请稍后刷新页面查看结果',
+      )
     }
     throw err
   }
 }
 
+// 断线回查的轮询参数：最多轮询 6 次、每次间隔 5s，覆盖 AI reasoning 静默期 + 落库耗时
+const RECOVER_MAX_POLLS = 6
+const RECOVER_POLL_INTERVAL_MS = 5_000
+
+/** 断线回查时「是否仍在生成」的判断（由各生成函数按业务子状态提供） */
+type ShortDramaRecoveryPredicate = (project: ShortDramaProjectDetail) => boolean
+
+/** 回查结果：已结束（带最新 state）/ 确定失败 / 轮询耗尽仍在生成 */
+type ShortDramaRecoveryResult<T> =
+  | { kind: 'success'; data: T }
+  | { kind: 'failed' }
+  | { kind: 'still-generating' }
+
 /**
- * 流式连接中断后回查项目状态。
- * 后端 AI 生成耗时较长时，连接可能被中间代理（nginx/SLB）掐断，
- * 但后端仍会跑完并落库。此时回查拿到最新状态，避免给用户误报失败。
- * 仅当后端未标记 failed 时视为「已同步」，由上层 onStateChange 刷新 UI。
+ * 流式连接中断后回查项目状态（带轮询）。
+ *
+ * 三种结局：
+ * - 后端项目表 status=failed → 确定失败（后端失败路径已同步标记项目表 failed）
+ * - 业务子状态非 generating（已结束：成功/部分/历史完成态）→ 视为已同步，返回最新 state
+ * - 仍在 generating → 轮询等待（RECOVER_MAX_POLLS × RECOVER_POLL_INTERVAL_MS）；
+ *   耗尽仍未结束 → still-generating，由上层提示「生成仍在进行中，请刷新查看」
+ *
+ * 修复历史缺陷：旧版仅判 `project.status !== 'failed'`，而后端失败时不更新项目表 status，
+ * 导致几乎必然误判为成功、静默无提示。
  */
-async function recoverShortDramaStream<T>(projectId: string): Promise<T | null> {
-  try {
-    const project = await getShortDramaProject(projectId)
-    if (project.status !== 'failed') {
-      return { success: true, state: project.state } as unknown as T
+async function recoverShortDramaStream<T>(
+  projectId: string,
+  isGenerating: ShortDramaRecoveryPredicate,
+): Promise<ShortDramaRecoveryResult<T>> {
+  for (let attempt = 0; attempt < RECOVER_MAX_POLLS; attempt++) {
+    let project: ShortDramaProjectDetail
+    try {
+      project = await getShortDramaProject(projectId)
+    } catch {
+      // 回查请求本身失败：无法判断，按「仍在生成」处理，提示用户刷新
+      return { kind: 'still-generating' }
     }
-    return null
-  } catch {
-    return null
+
+    if (project.status === 'failed') return { kind: 'failed' }
+    if (!isGenerating(project)) {
+      return { kind: 'success', data: { success: true, state: project.state } as unknown as T }
+    }
+
+    // 仍在生成：最后一次轮询不再等待
+    if (attempt < RECOVER_MAX_POLLS - 1) {
+      await new Promise((resolve) => setTimeout(resolve, RECOVER_POLL_INTERVAL_MS))
+    }
   }
+  return { kind: 'still-generating' }
 }
 
 // ============================================================================
@@ -322,6 +361,7 @@ export function generateShortDramaScriptSummary(
     `/short-drama/projects/${projectId}/script/summary`,
     options,
     projectId,
+    (project) => project.state.script.status === 'generating',
   )
 }
 
@@ -333,6 +373,7 @@ export function generateShortDramaEpisodeOutlines(
     `/short-drama/projects/${projectId}/script/episode-outlines`,
     options,
     projectId,
+    (project) => project.state.script.status === 'generating',
   )
 }
 
@@ -344,6 +385,7 @@ export function generateShortDramaAssetPrompts(
     `/short-drama/projects/${projectId}/assets/prompts`,
     options,
     projectId,
+    (project) => project.state.assets.status === 'generating',
   )
 }
 
@@ -393,6 +435,10 @@ export function generateShortDramaEpisodeSegments(
     `/short-drama/projects/${projectId}/episodes/${episodeNumber}/segments`,
     options,
     projectId,
+    (project) => {
+      const episode = project.state.episodes.items.find((item) => item.episodeNumber === episodeNumber)
+      return episode ? episode.status === 'generating' : false
+    },
   )
 }
 

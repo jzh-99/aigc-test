@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { ShortDramaState } from '@aigc/types'
+import { translateError } from '@/lib/error-messages'
 import { exportShortDramaBatch, generateShortDramaEpisodeSegments } from '@/lib/short-drama/api'
 
 interface StepEpisodesProps {
@@ -124,7 +125,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           await generateShortDramaEpisodeSegments(projectId, episodeNumber)
           setGeneratedCount(count => count + 1)
         } catch (err) {
-          const message = err instanceof Error ? err.message : 'AI 生成失败，请稍后重试'
+          const message = translateError(err instanceof Error ? err.message : 'AI 生成失败，请稍后重试')
           setFailedEpisodeErrors(current => ({ ...current, [episodeNumber]: message }))
           toast.error(message)
           break

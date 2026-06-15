@@ -8,6 +8,7 @@ import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { useConfirm } from '@/hooks/use-confirm'
 import type { ShortDramaState, ShortDramaAsset, ShortDramaAssetKind } from '@aigc/types'
 import { areShortDramaAssetsReady } from '@aigc/types'
+import { translateError } from '@/lib/error-messages'
 import {
   generateShortDramaAssetPrompts,
   generateShortDramaAssets,
@@ -169,7 +170,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       onStateChange()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '生成失败'
-      toast.error(errorMessage)
+      toast.error(translateError(errorMessage))
     } finally {
       setGeneratingPrompts(false)
     }

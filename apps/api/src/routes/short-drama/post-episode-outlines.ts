@@ -9,6 +9,7 @@ import {
   calculateTextGenerationCredits,
   applyShortDramaEpisodeOutlinesBatchResult,
   buildShortDramaOutlineBatches,
+  markShortDramaProjectFailed,
 } from './_text-generation.js'
 import { freezeCredits } from '../../services/credit.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
@@ -257,7 +258,7 @@ const route: FastifyPluginAsync = async (app) => {
           await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, `第 ${batch.from}-${batch.to} 集大纲生成失败`)
           app.log.error({ error, projectId, batch }, '短剧分集大纲批次生成失败')
           state.script.status = 'failed'
-          await saveShortDramaProjectState(projectId, state, 0).catch((saveError) => {
+          await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
             app.log.error({ error: saveError, projectId }, '短剧分集大纲失败状态保存失败')
           })
 

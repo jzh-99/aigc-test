@@ -31,6 +31,11 @@ const TEXT_TIMEOUT_MS = 360_000 // 增加到 6 分钟，避免生成超时
 // SSE 独立心跳间隔：必须远小于生产 nginx 的 proxy_read_timeout（默认 60s），
 // 保证 Qwen reasoning 静默期（上游无数据）也能向客户端保活，避免中间代理判定空闲超时掐断连接
 const SSE_HEARTBEAT_INTERVAL_MS = 15_000
+// 客户端 SSE 断开后，AI 无产出的宽限时间：超过此阈值仍无任何 chunk，视为真卡死，中止上游请求。
+// 设计权衡：Qwen reasoning 静默期通常 < 90s，设 120s 给足余量，避免误杀正常思考；
+// 只要 AI 仍在产出（含正常 reasoning 间歇），即便客户端已断开也继续跑完并持久化，用户刷新即可见。
+const CLIENT_DISCONNECT_STALL_MS = 120_000
+const CLIENT_DISCONNECT_STALL_CHECK_INTERVAL_MS = 5_000
 export const SHORT_DRAMA_OUTLINE_BATCH_SIZE = 5 // 减少批次大小到 5 集，降低单次生成压力
 
 export interface ShortDramaTextStreamCallbacks {
@@ -150,11 +155,27 @@ export async function callQwenForTextStream(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TEXT_TIMEOUT_MS)
 
-  // 外部信号（客户端 SSE 断开）触发时，中止 AI 上游请求，避免空跑浪费 token
+  // 最近一次 AI 有效产出（chunk）的时间戳。
+  // 用于「客户端断开后」判断 AI 是否仍在正常推进，避免代理误掐断就杀掉正在进行的生成。
+  let lastProgressAt = Date.now()
+
+  // 客户端 SSE 连接断开（externalSignal abort）后，不立即中止 AI 上游请求——
+  // 因为 SSE 断开极可能是中间代理（nginx/SLB）空闲超时误判，用户仍在等待。
+  // 改为「无进展宽限检测」：客户端断开后，仅当 AI 持续无任何 chunk 产出超过
+  // CLIENT_DISCONNECT_STALL_MS（真卡死）才中止，避免空跑到 TEXT_TIMEOUT_MS 浪费 token；
+  // AI 仍正常产出则继续跑完并持久化，用户刷新即可见结果。
+  let stallChecker: ReturnType<typeof setInterval> | null = null
   const externalSignal = callbacks.externalSignal
   if (externalSignal) {
-    if (externalSignal.aborted) controller.abort()
-    else externalSignal.addEventListener('abort', () => controller.abort(), { once: true })
+    const handleClientAbort = () => {
+      stallChecker = setInterval(() => {
+        if (Date.now() - lastProgressAt > CLIENT_DISCONNECT_STALL_MS) {
+          controller.abort()
+        }
+      }, CLIENT_DISCONNECT_STALL_CHECK_INTERVAL_MS)
+    }
+    if (externalSignal.aborted) handleClientAbort()
+    else externalSignal.addEventListener('abort', handleClientAbort, { once: true })
   }
 
   // 独立心跳：固定间隔触发，不依赖 AI 上游数据流。
@@ -246,6 +267,7 @@ export async function callQwenForTextStream(
       for (const line of lines) {
         const text = extractQwenStreamDeltaText(line.trim())
         if (!text) continue
+        lastProgressAt = Date.now()
         fullText += text
         summarizeLlmStreamChunk(streamSummary, text)
         callbacks.onChunk?.(text)
@@ -255,6 +277,7 @@ export async function callQwenForTextStream(
     if (buffer.trim()) {
       const text = extractQwenStreamDeltaText(buffer.trim())
       if (text) {
+        lastProgressAt = Date.now()
         fullText += text
         summarizeLlmStreamChunk(streamSummary, text)
         callbacks.onChunk?.(text)
@@ -283,6 +306,7 @@ export async function callQwenForTextStream(
   } finally {
     clearTimeout(timer)
     if (heartbeat) clearInterval(heartbeat)
+    if (stallChecker) clearInterval(stallChecker)
   }
 }
 
@@ -308,6 +332,32 @@ export async function saveShortDramaProjectState(
     .set({
       state: JSON.stringify(state),
       actual_credits: sql`actual_credits + ${actualCredits}`,
+      updated_at: sql`now()`,
+    })
+    .where('id', '=', projectId)
+    .execute()
+}
+
+/**
+ * 标记短剧项目为失败：同时更新项目表 `status=failed` 与 state JSON。
+ *
+ * 修复历史缺陷：原失败路径只调用 `saveShortDramaProjectState`（仅写 state JSON），
+ * 不更新项目表 `status`；导致前端回查项目状态时永远拿不到 failed，
+ * 兜底逻辑误判为成功、静默无提示。此函数确保项目表 status 与业务失败一致。
+ *
+ * @param projectId - 项目 ID
+ * @param state - 已置为失败态的短剧状态（调用前自行设置 state.xxx.status = 'failed'）
+ */
+export async function markShortDramaProjectFailed(
+  projectId: string,
+  state: ShortDramaState
+): Promise<void> {
+  const db = getDb()
+  await db
+    .updateTable('short_drama_projects')
+    .set({
+      state: JSON.stringify(state),
+      status: 'failed',
       updated_at: sql`now()`,
     })
     .where('id', '=', projectId)
