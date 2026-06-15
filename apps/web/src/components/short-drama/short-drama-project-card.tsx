@@ -4,19 +4,10 @@ import Link from 'next/link'
 import { ArrowUpRight, Clock3, Film, Layers3 } from 'lucide-react'
 import type { ShortDramaProjectListItem } from '@/lib/short-drama/api'
 import { useNavigationStore } from '@/stores/navigation-store'
+import { useRelativeTimeLabel } from '@/hooks/use-relative-time-label'
 
 interface ShortDramaProjectCardProps {
   project: ShortDramaProjectListItem
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return '刚刚'
-  if (m < 60) return `${m} 分钟前`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} 小时前`
-  return `${Math.floor(h / 24)} 天前`
 }
 
 const STATUS_LABELS: Record<string, { text: string; className: string }> = {
@@ -32,6 +23,7 @@ const STATUS_LABELS: Record<string, { text: string; className: string }> = {
 export function ShortDramaProjectCard({ project }: ShortDramaProjectCardProps) {
   const statusInfo = STATUS_LABELS[project.status] ?? STATUS_LABELS.draft
   const startNavigation = useNavigationStore((s) => s.startNavigation)
+  const updatedAtLabel = useRelativeTimeLabel(project.updatedAt)
 
   return (
     <Link
@@ -68,7 +60,7 @@ export function ShortDramaProjectCard({ project }: ShortDramaProjectCardProps) {
             </span>
             <span className="inline-flex items-center gap-1">
               <Clock3 className="h-3.5 w-3.5" />
-              {timeAgo(project.updatedAt)}
+              {updatedAtLabel}
             </span>
           </div>
           <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${statusInfo.className}`}>
