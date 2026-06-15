@@ -17,44 +17,16 @@ async function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
-/**
- * 将图片 URL 转为 base64 data URL。
- * TOS 预签名 URL 是第三方域名，浏览器直接 fetch 会触发 CORS，
- * 改为通过后端 /assets/fetch 接口代理读取（服务端直接走 TOS SDK，无跨域问题）。
- */
-async function imageUrlToDataUrl(url: string): Promise<string> {
-  // 判断是否为同源 URL（相对路径或同域），同源直接 fetch
-  const isSameOrigin = url.startsWith('/') || url.startsWith(window.location.origin)
-  let fetchUrl = url
-
-  if (!isSameOrigin) {
-    // 尝试从 TOS 预签名 URL 提取 storageKey，走后端代理绕过 CORS
-    // TOS 预签名 URL 格式：https://<bucket>.tos-<region>.volces.com/<key>?X-Tos-...
-    try {
-      const parsed = new URL(url)
-      if (parsed.hostname.includes('.volces.com') || parsed.hostname.includes('.volccdn.com')) {
-        const key = parsed.pathname.replace(/^\//, '')
-        if (key) {
-          fetchUrl = `/api/v1/assets/fetch?key=${encodeURIComponent(key)}`
-        }
-      }
-    } catch {
-      // URL 解析失败，保持原 URL
-    }
-  }
-
-  const token = useAuthStore.getState().accessToken
-  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
-  const resp = await fetch(fetchUrl, { headers })
-  if (!resp.ok) throw new Error('reference image fetch failed')
-  const blob = await resp.blob()
-  return fileToDataUrl(new File([blob], 'reference', { type: blob.type || 'image/jpeg' }))
-}
-
 function getReusableReferenceUrls(referenceImages: Array<{ file?: File; previewUrl: string; dataUrl?: string }>): string[] {
   return referenceImages
     .filter((img) => !img.file && !img.previewUrl.startsWith('blob:') && !img.previewUrl.startsWith('data:'))
     .map((img) => img.previewUrl)
+}
+
+async function resolveReferenceImagePayload(img: { file?: File; previewUrl: string; dataUrl?: string }): Promise<string> {
+  if (img.file) return fileToDataUrl(img.file)
+  if (img.dataUrl?.startsWith('data:')) return img.dataUrl
+  return img.previewUrl
 }
 
 export function useGenerate() {
@@ -91,9 +63,7 @@ export function useGenerate() {
           params.reference_image_urls = reusableReferenceUrls
         }
         params.image = await Promise.all(referenceImages.map(async (img) => {
-          if (img.dataUrl) return img.dataUrl
-          if (img.file) return fileToDataUrl(img.file)
-          return imageUrlToDataUrl(img.previewUrl)
+          return resolveReferenceImagePayload(img)
         }))
       }
 
