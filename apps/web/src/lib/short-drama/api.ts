@@ -216,10 +216,6 @@ async function postShortDramaSSE<T>(
   }
 }
 
-// 断线回查的轮询参数：最多轮询 6 次、每次间隔 5s，覆盖 AI reasoning 静默期 + 落库耗时
-const RECOVER_MAX_POLLS = 6
-const RECOVER_POLL_INTERVAL_MS = 5_000
-
 /** 断线回查时「是否仍在生成」的判断（由各生成函数按业务子状态提供） */
 type ShortDramaRecoveryPredicate = (project: ShortDramaProjectDetail) => boolean
 
@@ -229,13 +225,24 @@ type ShortDramaRecoveryResult<T> =
   | { kind: 'failed' }
   | { kind: 'still-generating' }
 
+// 断线回查轮询间隔（渐进退避）：前期密集快速发现结果，后期稀疏减少请求。
+// 总等待时长 ~350s，对齐后端 TEXT_TIMEOUT_MS(360s)——只要后端仍在 generating 就持续等待，
+// 后端完成（成功/停滞中止/超时）都能在窗口内轮询到，避免过早提示用户刷新；
+// 仅当后端超过 ~6 分钟仍未结束（极端异常）才兜底返回 still-generating。
+const RECOVER_POLL_INTERVALS_MS = [
+  5_000, 5_000, 5_000, 5_000, // 0–20s：密集探测，快速发现立即完成/失败
+  10_000, 10_000, 10_000, // 20–50s
+  15_000, 15_000, 15_000, 15_000, // 50–110s：覆盖后端「无进展 120s 中止」
+  30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, // 110–380s：覆盖后端 TEXT_TIMEOUT_MS
+]
+
 /**
- * 流式连接中断后回查项目状态（带轮询）。
+ * 流式连接中断后回查项目状态（带渐进退避轮询）。
  *
  * 三种结局：
  * - 后端项目表 status=failed → 确定失败（后端失败路径已同步标记项目表 failed）
  * - 业务子状态非 generating（已结束：成功/部分/历史完成态）→ 视为已同步，返回最新 state
- * - 仍在 generating → 轮询等待（RECOVER_MAX_POLLS × RECOVER_POLL_INTERVAL_MS）；
+ * - 仍在 generating → 按 RECOVER_POLL_INTERVALS_MS 退避轮询；
  *   耗尽仍未结束 → still-generating，由上层提示「生成仍在进行中，请刷新查看」
  *
  * 修复历史缺陷：旧版仅判 `project.status !== 'failed'`，而后端失败时不更新项目表 status，
@@ -245,7 +252,7 @@ async function recoverShortDramaStream<T>(
   projectId: string,
   isGenerating: ShortDramaRecoveryPredicate,
 ): Promise<ShortDramaRecoveryResult<T>> {
-  for (let attempt = 0; attempt < RECOVER_MAX_POLLS; attempt++) {
+  for (let attempt = 0; attempt < RECOVER_POLL_INTERVALS_MS.length; attempt++) {
     let project: ShortDramaProjectDetail
     try {
       project = await getShortDramaProject(projectId)
@@ -259,9 +266,9 @@ async function recoverShortDramaStream<T>(
       return { kind: 'success', data: { success: true, state: project.state } as unknown as T }
     }
 
-    // 仍在生成：最后一次轮询不再等待
-    if (attempt < RECOVER_MAX_POLLS - 1) {
-      await new Promise((resolve) => setTimeout(resolve, RECOVER_POLL_INTERVAL_MS))
+    // 仍在生成：按退避间隔等待后重试（最后一次不再等待）
+    if (attempt < RECOVER_POLL_INTERVALS_MS.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, RECOVER_POLL_INTERVALS_MS[attempt]))
     }
   }
   return { kind: 'still-generating' }
