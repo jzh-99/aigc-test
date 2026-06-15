@@ -9,6 +9,14 @@ const MINIMAX_DEMO_TEXT = '欢迎来到toby AI，挑选一个你喜欢的音色�
 const MINIMAX_DEMO_MODEL = 'speech-2.8-turbo'
 const MINIMAX_DEMO_CONTENT_TYPE = 'audio/mpeg'
 
+/**
+ * 构造系统音色 demo 音频的 TOS 对象 key。
+ * key 存原始字符（含空格/括号/中文），URL 编码统一由 uploadToTos 负责，避免存取编码不一致。
+ */
+export function buildSystemVoiceDemoKey(voiceId: string): string {
+  return `system-voices/demos/minimax/${voiceId}.mp3`
+}
+
 function parseProviderConfig(rawConfig: unknown): { api_base_url?: string } {
   if (typeof rawConfig === 'string') {
     try {
@@ -180,7 +188,7 @@ const route: FastifyPluginAsync = async (app) => {
       text: MINIMAX_DEMO_TEXT,
     })
     const storageUrl = await uploadToTos(
-      `system-voices/demos/minimax/${encodeURIComponent(voice.voice_id)}.mp3`,
+      buildSystemVoiceDemoKey(voice.voice_id),
       audioBuffer,
       MINIMAX_DEMO_CONTENT_TYPE,
     )

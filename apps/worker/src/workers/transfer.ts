@@ -219,7 +219,7 @@ async function uploadToTos(key: string, buffer: Buffer, contentType: string): Pr
   const tos = getTos()
   const bucket = getBucket()
   await tos.putObject({ bucket, key, body: buffer, contentType })
-  return `${getPublicUrl()}/${key}`
+  return `${getPublicUrl()}/${encodeURI(key)}`
 }
 
 /**

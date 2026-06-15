@@ -129,7 +129,7 @@ export function normalizeStorageUrl(storageUrl: string | null | undefined): stri
   for (const base of [process.env.TOS_PUBLIC_URL ?? '', process.env.S3_PUBLIC_URL ?? '']) {
     if (!base) continue
     const key = getStorageKeyFromPublicUrl(storageUrl, base)
-    if (key) return `${base.replace(/\/+$/, '')}/${key}`
+    if (key) return `${base.replace(/\/+$/, '')}/${encodeURI(key)}`
   }
 
   return storageUrl
@@ -229,12 +229,12 @@ export async function uploadToTos(
     await getS3().send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: contentType }))
     // S3/MinIO 模式用独立的 S3_PUBLIC_URL，避免覆盖 TOS_PUBLIC_URL（worker 转存用）
     const s3PublicUrl = process.env.S3_PUBLIC_URL ?? process.env.TOS_PUBLIC_URL ?? ''
-    return `${s3PublicUrl}/${key}`
+    return `${s3PublicUrl}/${encodeURI(key)}`
   }
   const tos = getTos()
   await tos.putObject({ bucket: BUCKET, key, body, contentType })
   const publicUrl = process.env.TOS_PUBLIC_URL ?? ''
-  return `${publicUrl}/${key}`
+  return `${publicUrl}/${encodeURI(key)}`
 }
 
 export async function deleteTosObject(key: string): Promise<void> {

@@ -18,8 +18,13 @@ function extractStorageKey(storageUrl: string | null | undefined): string | null
   if (!storageUrl) return null
   const publicUrl = getPublicUrl()
   if (!publicUrl || !storageUrl.startsWith(publicUrl)) return null
-  const key = storageUrl.slice(publicUrl.length + 1).split(/[?#]/)[0]
-  return key || null
+  const rawKey = storageUrl.slice(publicUrl.length + 1).split(/[?#]/)[0]
+  if (!rawKey) return null
+  try {
+    return decodeURIComponent(rawKey)
+  } catch {
+    return rawKey
+  }
 }
 
 /**
