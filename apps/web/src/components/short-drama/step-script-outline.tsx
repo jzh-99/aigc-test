@@ -1393,7 +1393,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
           />
         )}
         {!generatingSummary && isSummaryGenerating && (
-          <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-violet-800">
+          <div className="rounded-lg border border-violet-500/25 bg-[linear-gradient(135deg,rgba(36,31,73,0.72),rgba(12,18,42,0.82))] px-3 py-2.5 text-sm text-violet-100/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_30px_rgba(70,54,170,0.16)]">
             摘要生成中，页面会自动刷新状态...
           </div>
         )}
