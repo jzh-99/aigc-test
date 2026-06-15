@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { pastePlainTextIntoContentEditable } from '@/lib/contenteditable'
 import type { MentionResource } from './types'
 import {
   limitPromptLength,
@@ -50,6 +51,20 @@ export interface MentionEditorProps {
 
 const defaultTokenClassName = (): string =>
   'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold align-baseline text-blue-600 bg-blue-50 border-blue-200'
+
+function renderPlaceholder(placeholder: string): React.ReactNode {
+  const marker = '@ （紫色）参考内容'
+  if (!placeholder.includes(marker)) return placeholder
+
+  const parts = placeholder.split(marker)
+  return (
+    <>
+      {parts[0]}
+      <span className="font-medium text-violet-300">@参考内容</span>
+      {parts.slice(1).join(marker)}
+    </>
+  )
+}
 
 function ResourcePickerItem({
   resource,
@@ -312,12 +327,16 @@ export function MentionEditor({
           isComposingRef.current = false
           syncValueFromEditor()
         }}
+        onPaste={(event) => {
+          pastePlainTextIntoContentEditable(event)
+          window.requestAnimationFrame(syncValueFromEditor)
+        }}
         onKeyDown={handleKeyDown}
       />
 
       {isEmpty && !isFocused && (
         <div className="pointer-events-none absolute left-2 top-2 text-xs text-muted-foreground">
-          {placeholder}
+          {renderPlaceholder(placeholder)}
         </div>
       )}
 

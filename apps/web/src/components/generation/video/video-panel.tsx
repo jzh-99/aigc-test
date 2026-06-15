@@ -6,7 +6,6 @@ import { Check, ChevronDown, Film, Music, ImagePlus, Image as ImageIcon } from '
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVideoGenerate } from '@/hooks/use-video-generate'
-import { useConfirm } from '@/hooks/use-confirm'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ModelBrandIcon } from '../shared/model-brand-icon'
@@ -63,7 +62,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const { watermark, pendingVideoReferenceImages, clearPendingVideoReferenceImages, videoPrompt, setVideoPrompt } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { generate: generateVideo, isGenerating: isVideoGenerating } = useVideoGenerate()
-  const confirm = useConfirm()
   const { models: videoModels, isReady: videoModelsReady } = useModels('video', activeWorkspaceId)
 
   const [videoMode, setVideoMode] = useState<VideoMode>((initialParams?.videoMode as VideoMode) ?? 'multimodal')
@@ -320,13 +318,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const handleVideoGenerate = async () => {
     if (!videoPrompt.trim()) return
     if (!validateModeResources(videoMode)) return
-    const ok = await confirm({
-      title: '确认生成',
-      description: `本次操作预计消耗 ${videoEstimatedCredits} A豆（视频生成），确认是否继续？`,
-      confirmText: '确认生成',
-      destructive: false,
-    })
-    if (!ok) return
     setIsVideoUploading(true)
     try {
       let imagesParam: string[] | undefined

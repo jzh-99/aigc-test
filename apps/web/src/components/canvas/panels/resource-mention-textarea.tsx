@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Film, ImageIcon, Music } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { pastePlainTextIntoContentEditable } from '@/lib/contenteditable'
 import { limitPromptLength, PROMPT_MAX_LENGTH, type CanvasReferenceMentionResource } from './resource-mentions'
 
 interface ResourceMentionTextareaProps {
@@ -307,6 +308,10 @@ export function ResourceMentionTextarea({
         onCompositionEnd={() => {
           isComposingRef.current = false
           syncValueFromEditor()
+        }}
+        onPaste={(event) => {
+          pastePlainTextIntoContentEditable(event)
+          window.requestAnimationFrame(syncValueFromEditor)
         }}
         onKeyDown={handleKeyDown}
       >

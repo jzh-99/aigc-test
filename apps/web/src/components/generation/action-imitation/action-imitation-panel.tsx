@@ -7,7 +7,6 @@ import Image from 'next/image'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { useConfirm } from '@/hooks/use-confirm'
 import { fetchWithAuth, ApiError, getRequestErrorMessage, reportClientSubmissionError, classifyRequestError } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
 import type { FrameImage } from '../shared/types'
@@ -27,7 +26,6 @@ interface ActionImitationPanelProps {
 
 export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitationPanelProps) {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
-  const confirm = useConfirm()
 
   const [actionImage, setActionImage] = useState<FrameImage | null>(null)
   const [actionVideo, setActionVideo] = useState<ActionVideo | null>(null)
@@ -83,14 +81,6 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
       toast.error('请先上传驱动视频')
       return
     }
-    const creditsNum = Math.ceil(actionVideo.duration) * 20
-    const ok = await confirm({
-      title: '确认生成',
-      description: `本次操作预计消耗 ${creditsNum} A豆（动作模仿），确认是否继续？`,
-      confirmText: '确认生成',
-      destructive: false,
-    })
-    if (!ok) return
     setIsActionGenerating(true)
     try {
       const videoForm = new FormData()

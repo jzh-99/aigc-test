@@ -2,7 +2,6 @@
 
 import { Cpu, Play, Ratio, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useConfirm } from '@/hooks/use-confirm'
 import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
 import { ASPECT_RATIOS_IMAGE } from './panel-constants'
 import { ResourceMentionTextarea } from './resource-mention-textarea'
@@ -52,7 +51,6 @@ export function ImageGenPanel({
   onRemoveReference,
   onExecute,
 }: ImageGenPanelProps) {
-  const confirm = useConfirm()
   const currentDbModel = models?.find((m) => m.code === modelType)
 
   const resolutions = extractSchemaEnums(currentDbModel?.params_schema, 'resolution').map((e) => e.value)
@@ -179,16 +177,7 @@ export function ImageGenPanel({
           credits={credits * quantity}
           executing={executing}
           disabled={!hasPrompt}
-          onClick={async () => {
-            const ok = await confirm({
-              title: '确认生成',
-              description: `本次操作预计消耗 ${credits * quantity} A豆（画布图片生成），确认是否继续？`,
-              confirmText: '确认生成',
-              destructive: false,
-            })
-            if (!ok) return
-            onExecute()
-          }}
+          onClick={onExecute}
         />
       </div>
     </div>

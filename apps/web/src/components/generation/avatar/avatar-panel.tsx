@@ -11,7 +11,6 @@ import { cn, generateUUID } from '@/lib/utils'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
-import { useConfirm } from '@/hooks/use-confirm'
 import { fetchWithAuth, ApiError, getRequestErrorMessage, reportClientSubmissionError, classifyRequestError } from '@/lib/api-client'
 import type { BatchResponse } from '@aigc/types'
 import type { FrameImage } from '../shared/types'
@@ -33,7 +32,6 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
   const { videoDefaults, avatarDefaults, userDefaults, avatarPrompt, setAvatarPrompt } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { save: saveDefaults } = useGenerationDefaults()
-  const confirm = useConfirm()
 
   const [avatarImage, setAvatarImage] = useState<FrameImage | null>(null)
   const [avatarAudio, setAvatarAudio] = useState<AvatarAudio | null>(null)
@@ -87,14 +85,6 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
       toast.error('驱动音频时长不能超过 60 秒')
       return
     }
-    const creditsNum = Math.ceil(avatarAudio.duration) * 50
-    const ok = await confirm({
-      title: '确认生成',
-      description: `本次操作预计消耗 ${creditsNum} A豆（数字人生成），确认是否继续？`,
-      confirmText: '确认生成',
-      destructive: false,
-    })
-    if (!ok) return
     setIsAvatarGenerating(true)
     try {
       // 并行上传图片和音频

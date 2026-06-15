@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ImageIcon, Map as MapIcon, Package as PackageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { pastePlainTextIntoContentEditable } from '@/lib/contenteditable'
 
 const PROMPT_MAX_LENGTH = 1200
 const CHARACTER_TOKEN_CLASS = 'border-primary/35 bg-primary/10 text-primary'
@@ -377,6 +378,10 @@ export function StoryboardMentionEditor({
         onCompositionEnd={() => {
           isComposingRef.current = false
           syncValueFromEditor()
+        }}
+        onPaste={(event) => {
+          pastePlainTextIntoContentEditable(event)
+          window.requestAnimationFrame(syncValueFromEditor)
         }}
         onKeyDown={handleKeyDown}
       />

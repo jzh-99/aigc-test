@@ -8,7 +8,6 @@ import type { MentionResource } from '@/components/shared/mention-editor'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerate } from '@/hooks/use-generate'
-import { useConfirm } from '@/hooks/use-confirm'
 import type { BatchResponse } from '@aigc/types'
 import type { ModelItem } from '@aigc/types'
 import { toast } from 'sonner'
@@ -45,7 +44,6 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
   } = useGenerationStore()
 
   const { generate } = useGenerate()
-  const confirm = useConfirm()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
   const currentImageModel = imageModels.find((m) => m.code === modelType)
@@ -180,13 +178,6 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
 
   const handleGenerate = async () => {
     try {
-      const ok = await confirm({
-        title: '确认生成',
-        description: `本次操作预计消耗 ${estimatedCredits} A豆（图片生成），确认是否继续？`,
-        confirmText: '确认生成',
-        destructive: false,
-      })
-      if (!ok) return
       const resolvedPrompt = resolveMentionPrompt(prompt, mentionResources)
       const batch = await generate(resolvedPrompt)
       if (batch) onBatchCreated(batch)
