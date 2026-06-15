@@ -18,6 +18,8 @@ const route: FastifyPluginAsync = async (app) => {
       cover_url?: string
       status?: string
       active_step?: string
+      // 前端 SaveShortDramaProjectInput 使用 camelCase，此处一并兼容
+      activeStep?: string
     }
   }>('/short-drama/projects/:id', async (request, reply) => {
     const { id } = request.params
@@ -88,15 +90,16 @@ const route: FastifyPluginAsync = async (app) => {
       updates.status = body.status
     }
 
-    // 处理 active_step
-    if (body.active_step !== undefined) {
+    // 处理 active_step（兼容前端 camelCase 的 activeStep）
+    const activeStep = body.active_step ?? body.activeStep
+    if (activeStep !== undefined) {
       const validSteps = ['script', 'assets', 'episodes']
-      if (!validSteps.includes(body.active_step)) {
+      if (!validSteps.includes(activeStep)) {
         return reply.status(400).send({
           error: { code: 'VALIDATION_ERROR', message: '步骤值无效' }
         })
       }
-      updates.active_step = body.active_step
+      updates.active_step = activeStep
     }
 
     // 更新 draft_saved_at

@@ -46,9 +46,8 @@ export default function ShortDramaEditorPage() {
   const handleStepClick = async (step: ShortDramaStepId) => {
     if (step === state.steps.active) return
     if (!canEnterShortDramaStep(state, step)) return
-    await saveShortDramaProject(projectId, {
-      state: { ...state, steps: { ...state.steps, active: step } },
-    })
+    // 仅传 activeStep：避免把可能过期的整份 state 回传，覆盖生成中状态（如素材描述 generating）
+    await saveShortDramaProject(projectId, { activeStep: step })
     mutate()
   }
 

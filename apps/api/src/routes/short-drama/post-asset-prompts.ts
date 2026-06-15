@@ -3,6 +3,7 @@ import type { ShortDramaAssetKind } from '@aigc/types'
 import { assertShortDramaProjectAccess } from './_shared.js'
 import {
   callQwenForTextStream,
+  saveShortDramaProjectState,
   saveShortDramaStateAndSettleCredits,
   safeRefundCredits,
   calculateTextGenerationCredits,
@@ -130,6 +131,12 @@ const route: FastifyPluginAsync = async (app) => {
         error: { code: 'ALREADY_GENERATED', message: '素材描述已生成' },
       })
     }
+
+    // 立即把素材描述状态置为 generating 并落库：
+    // 让前端在第一批 AI 返回前就能拿到「生成中」态并持续轮询，
+    // 也避免切步骤等保存动作用过期快照把状态覆盖回 idle。
+    state.assets.status = 'generating'
+    await saveShortDramaProjectState(projectId, state, 0)
 
     let generationLock: RedisLockHandle | null = null
     generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:asset-prompts`)
