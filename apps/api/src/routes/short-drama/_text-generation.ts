@@ -410,6 +410,20 @@ export function applyShortDramaScriptSummaryResult(
   state.script.status = 'completed'
 }
 
+/**
+ * 将分集概述生成结果写回短剧状态。
+ * 概述是一次性全量生成，写回后直接标记 episodeSummaryStatus = 'completed'。
+ * 注意：此函数不修改 script.status，后者属于摘要/剧本流程，避免互相覆盖。
+ */
+export function applyShortDramaEpisodeSummariesResult(
+  state: ShortDramaState,
+  summaries: Array<{ episodeNumber: number; summary: string }>
+): void {
+  state.script.episodeSummaries = summaries
+    .sort((a, b) => a.episodeNumber - b.episodeNumber)
+  state.script.episodeSummaryStatus = 'completed'
+}
+
 export function applyShortDramaEpisodeOutlinesBatchResult(
   state: ShortDramaState,
   outlines: ShortDramaEpisodeOutline[]

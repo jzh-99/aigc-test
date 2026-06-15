@@ -42,6 +42,53 @@ export function getShortDramaSummarySourceText(state: ShortDramaState): {
   return { label: '用户创意', text: prompt }
 }
 
+/**
+ * 构建分集概述生成的 systemPrompt + userPrompt。
+ * 一次性为全部 N 集各生成约 100 字的剧情概述，作为故事蓝图。
+ */
+export function buildShortDramaEpisodeSummariesPrompts(state: ShortDramaState): {
+  systemPrompt: string
+  userPrompt: string
+} {
+  const source = getShortDramaSummarySourceText(state)
+  const episodeCount = state.settings.episodeCount
+
+  const systemPrompt = [
+    '你是专业短剧编剧，擅长规划连续短剧的整体故事脉络。',
+    `根据剧本摘要为 ${episodeCount} 集短剧的每一集生成约 100 字的剧情概述。`,
+    '概述必须形成连贯的故事脉络，覆盖起承转合、人物关系变化与阶段性钩子。',
+    '集与集之间要有因果递进，不能互相矛盾。',
+    '只输出 JSON 数组，每个元素包含 episodeNumber（1-based）和 summary 字段，不要输出 markdown、代码块或额外解释。',
+    '每集概述约 100 字左右（根据剧情内容可适当增减），第 N 集概述必须承接第 N-1 集结尾。',
+  ].join('\n')
+
+  const userPrompt = `${source.label}：${source.text}\n\n项目设置：\n- 集数：${episodeCount}\n- 视觉风格：${state.settings.style}\n- 画面比例：${state.settings.aspectRatio}\n\n请生成 ${episodeCount} 集的剧情概述，返回 JSON 数组：\n[\n  {"episodeNumber": 1, "summary": "第1集概述..."},\n  {"episodeNumber": 2, "summary": "第2集概述..."},\n  ...\n]\n\n要求：\n- 每集概述约 100 字左右（根据剧情内容可适当增减），描述该集核心事件、人物变化和结尾钩子。\n- 概述之间必须因果递进：前一集的结局是后一集的开端。\n- 覆盖完整故事弧线：开头铺设、中段冲突升级、高潮反转、结尾收束。\n- 人物关系变化必须贯穿始终，不能中途遗忘或矛盾。\n- 视觉风格"${state.settings.style}"必须体现在场景选择和表演节奏的描述中。`
+
+  return { systemPrompt, userPrompt }
+}
+
+/**
+ * 构建故事脉络文本，注入分集剧本生成的 prompt。
+ * 取第 1 到 toEpisode 集的概述（当前批次 + 之前所有集数），
+ * 保证 AI 看到完整蓝图至当前点。
+ */
+export function buildShortDramaStoryLineage(state: ShortDramaState, toEpisode: number): string {
+  const summaries = state.script.episodeSummaries
+    .filter(s => s.episodeNumber <= toEpisode)
+    .sort((a, b) => a.episodeNumber - b.episodeNumber)
+
+  if (summaries.length === 0) return ''
+
+  const lines = summaries.map(
+    s => `第 ${s.episodeNumber} 集：${s.summary}`
+  )
+
+  return [
+    '已确定的分集剧情脉络（请严格遵循，保持人物、伏笔、反转前后一致）：',
+    ...lines,
+  ].join('\n')
+}
+
 export function buildShortDramaScriptSummaryPrompts(state: ShortDramaState): {
   systemPrompt: string
   userPrompt: string
