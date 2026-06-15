@@ -72,6 +72,13 @@ export interface ShortDramaEpisodeOutline {
   mentionedScenes?: string[]
 }
 
+/** 单集剧情概述，作为故事脉络与剧本生成的固定蓝图 */
+export interface ShortDramaEpisodeSummary {
+  episodeNumber: number
+  /** 该集剧情概述（约 100 字左右，根据剧情内容可适当增减） */
+  summary: string
+}
+
 export interface ShortDramaAsset {
   id: string
   kind: ShortDramaAssetKind
@@ -148,6 +155,8 @@ export interface ShortDramaState {
     originalPrompt: string
     originalScript: string
     refinedPrompt: string | null
+    episodeSummaries: ShortDramaEpisodeSummary[]
+    episodeSummaryStatus: ShortDramaGenerationStatus
     outlines: ShortDramaEpisodeOutline[]
     status: ShortDramaGenerationStatus
   }
@@ -380,6 +389,8 @@ export function makeDefaultShortDramaState(params: {
       originalPrompt: params.prompt,
       originalScript: '',
       refinedPrompt: null,
+      episodeSummaries: [],
+      episodeSummaryStatus: 'idle',
       outlines: [],
       status: 'idle',
     },
@@ -428,6 +439,8 @@ export function makeUploadedShortDramaState(params: {
       originalPrompt: '',
       originalScript: params.originalScript,
       refinedPrompt: null,
+      episodeSummaries: [],
+      episodeSummaryStatus: 'idle',
       outlines: [],
       status: 'idle',
     },
@@ -456,6 +469,8 @@ export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>):
       originalPrompt: partial.script?.originalPrompt ?? '',
       originalScript: partial.script?.originalScript ?? '',
       refinedPrompt: partial.script?.refinedPrompt ?? null,
+      episodeSummaries: (partial.script?.episodeSummaries ?? []) as ShortDramaEpisodeSummary[],
+      episodeSummaryStatus: partial.script?.episodeSummaryStatus ?? 'idle',
       outlines,
       status: partial.script?.status ?? 'idle',
     },
@@ -486,6 +501,14 @@ export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>):
       episodes: partial.locks?.episodes ?? false,
     },
   }
+}
+
+/**
+ * 判断分集概述是否已全量就绪（数量 >= 设定集数）。
+ * 概述就绪是生成分集剧本的前置条件。
+ */
+export function isShortDramaEpisodeSummariesReady(state: ShortDramaState): boolean {
+  return state.script.episodeSummaries.length >= state.settings.episodeCount
 }
 
 export function canEnterShortDramaStep(state: ShortDramaState, step: ShortDramaStepId): boolean {
