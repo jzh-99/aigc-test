@@ -157,6 +157,45 @@ const route: FastifyPluginAsync = async (app) => {
         reply.raw.write(': ping\n\n')
       }
 
+      // 先创建项目记录（status=generating），让前端立即在列表新增带 loading 的卡片，
+      // 且退出页面重进后状态不丢失（已落库）。生成完成更新为 script_ready，失败更新为 failed。
+      const projectId = randomUUID()
+      const initialState: PictureBookState = {
+        ...makeDefaultPictureBookState({ style: body.style, pageCount: body.page_count, aspectRatio }),
+        steps: { active: 'script', completed: [] },
+        draft: { dirty: false, savedAt: new Date().toISOString() },
+      }
+      await getDb()
+        .insertInto('picture_book_projects')
+        .values({
+          id: projectId,
+          workspace_id: body.workspace_id,
+          team_id: access.teamId,
+          user_id: request.user.id,
+          title: body.title?.trim() || body.prompt.trim().slice(0, 30) || '未命名绘本',
+          prompt: body.prompt,
+          style: body.style,
+          page_count: body.page_count,
+          status: 'generating',
+          active_step: 'script',
+          state: JSON.stringify(initialState),
+          estimated_credits: 1,
+          actual_credits: 0,
+          draft_saved_at: sql`now()`,
+        })
+        .execute()
+
+      // 立即通知前端项目已创建，可插入卡片并清空输入
+      sendEvent('created', {
+        success: true,
+        projectId,
+        title: body.title?.trim() || body.prompt.trim().slice(0, 30) || '未命名绘本',
+        prompt: body.prompt,
+        style: body.style,
+        page_count: body.page_count,
+        status: 'generating',
+      })
+
       try {
         const fullText = await callPictureBookQwenStream(
           process.env.AI_PROMPT_PICTURE_BOOK_SCRIPT ?? DEFAULT_SYSTEM_PROMPT,
@@ -186,26 +225,17 @@ const route: FastifyPluginAsync = async (app) => {
           script: { summaryZh: result.summaryZh, pages: result.pages },
           draft: { dirty: false, savedAt: new Date().toISOString() },
         }
-        const projectId = randomUUID()
 
         await getDb()
-          .insertInto('picture_book_projects')
-          .values({
-            id: projectId,
-            workspace_id: body.workspace_id,
-            team_id: access.teamId,
-            user_id: request.user.id,
+          .updateTable('picture_book_projects')
+          .set({
             title: body.title?.trim() || result.title,
-            prompt: body.prompt,
-            style: body.style,
-            page_count: body.page_count,
             status: 'script_ready',
-            active_step: 'script',
             state: JSON.stringify(state),
-            estimated_credits: 1,
             actual_credits: 1,
-            draft_saved_at: sql`now()`,
+            updated_at: sql`now()`,
           })
+          .where('id', '=', projectId)
           .execute()
 
         await getDb()
@@ -228,6 +258,13 @@ const route: FastifyPluginAsync = async (app) => {
         sendEvent('done', { success: true, projectId, title: result.title, state })
       } catch (err) {
         app.log.error(err, 'picture-book script generate error')
+        // 项目已创建，标记为失败（保留记录让用户可见，可删除或重试）
+        await getDb()
+          .updateTable('picture_book_projects')
+          .set({ status: 'failed', updated_at: sql`now()` })
+          .where('id', '=', projectId)
+          .execute()
+          .catch(() => {})
         sendEvent('error', { code: 'AI_ERROR', message: 'AI 服务暂时不可用，请稍后重试' })
       } finally {
         await releaseRedisLock(app.redis, generationLock)

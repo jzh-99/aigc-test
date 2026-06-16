@@ -24,7 +24,11 @@ function jsonInit(method: string, body?: unknown): RequestInit {
   }
 }
 
-async function consumeSSEStream<T>(res: Response, onChunk?: (text: string) => void): Promise<T> {
+async function consumeSSEStream<T>(
+  res: Response,
+  onChunk?: (text: string) => void,
+  onCreated?: (data: unknown) => void,
+): Promise<T> {
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
   let result: T | null = null
@@ -52,6 +56,8 @@ async function consumeSSEStream<T>(res: Response, onChunk?: (text: string) => vo
         const json = JSON.parse(data)
         if (currentEvent === 'chunk' && onChunk) {
           onChunk(json.text)
+        } else if (currentEvent === 'created' && onCreated) {
+          onCreated(json)
         } else if (currentEvent === 'done') {
           result = json as T
         } else if (currentEvent === 'error') {
@@ -94,6 +100,18 @@ export interface GenerateScriptStreamOptions {
   aspect_ratio: PictureBookAspectRatio
   title?: string
   onChunk?: (text: string) => void
+  /** 项目记录创建完成时回调（剧本仍在流式生成中）。用于前端立即插入卡片。 */
+  onCreated?: (data: GenerateScriptCreated) => void
+}
+
+export interface GenerateScriptCreated {
+  success: boolean
+  projectId: string
+  title: string
+  prompt: string
+  style: PictureBookStyle
+  page_count: PictureBookPageCount
+  status: 'generating'
 }
 
 export interface GenerateScriptResult {
@@ -128,7 +146,9 @@ export async function generatePictureBookScript(input: GenerateScriptStreamOptio
     throw new Error(msg)
   }
 
-  return consumeSSEStream<GenerateScriptResult>(res, input.onChunk)
+  return consumeSSEStream<GenerateScriptResult>(res, input.onChunk, input.onCreated
+    ? (data) => input.onCreated!(data as GenerateScriptCreated)
+    : undefined)
 }
 
 export function savePictureBookProject(projectId: string, input: {

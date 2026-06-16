@@ -1,34 +1,62 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
-import { ArrowRight, BookOpenText, Loader2, Sparkles } from 'lucide-react'
+import { BookOpenText, Loader2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuthStore } from '@/stores/auth-store'
 import { generatePictureBookScript, listRecentPictureBookProjects } from '@/lib/picture-book/api'
-import { PICTURE_BOOK_ASPECT_RATIOS, PICTURE_BOOK_PAGE_COUNTS, PICTURE_BOOK_STYLES, type PictureBookAspectRatio, type PictureBookPageCount, type PictureBookStyle } from '@/lib/picture-book/types'
+import {
+  PICTURE_BOOK_ASPECT_RATIOS,
+  PICTURE_BOOK_PAGE_COUNTS,
+  PICTURE_BOOK_STYLES,
+  type PictureBookAspectRatio,
+  type PictureBookPageCount,
+  type PictureBookProjectListItem,
+  type PictureBookStyle,
+} from '@/lib/picture-book/types'
 import { PictureBookProjectCard } from './picture-book-project-card'
 import { StudioReturnBar } from '@/components/toby-studio/studio-return-bar'
 
+const POLL_INTERVAL = 3_000
+
 export function PictureBookHome() {
-  const router = useRouter()
   const workspaceId = useAuthStore((state) => state.activeWorkspaceId)
   const isInitialized = useAuthStore((state) => state.isInitialized)
   const [prompt, setPrompt] = useState('')
   const [style, setStyle] = useState<PictureBookStyle>('吉卜力风')
   const [pageCount, setPageCount] = useState<PictureBookPageCount>(15)
   const [aspectRatio, setAspectRatio] = useState<PictureBookAspectRatio>('16:9')
+  // 提交中：防重复点击（不作为按钮 loading 视觉，按钮文案不变）
   const [submitting, setSubmitting] = useState(false)
-  const [streamText, setStreamText] = useState('')
   const recent = useSWR(
     isInitialized && workspaceId ? ['picture-book-recent', workspaceId] : null,
     () => listRecentPictureBookProjects(workspaceId!, 4),
   )
+
+  // 列表里存在 generating 项目时启动轮询，直到全部离开 generating（退出重进也能自愈）
+  const hasGenerating = (recent.data ?? []).some((project) => project.status === 'generating')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    if (hasGenerating) {
+      if (!pollRef.current) {
+        pollRef.current = setInterval(() => { void recent.mutate() }, POLL_INTERVAL)
+      }
+    } else if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [hasGenerating, recent])
 
   const handleSubmit = async () => {
     if (!workspaceId) {
@@ -39,24 +67,64 @@ export function PictureBookHome() {
       toast.error('请输入绘本主题')
       return
     }
+    if (submitting) return
     setSubmitting(true)
-    setStreamText('')
+    const submittedPrompt = prompt.trim()
+    let projectCreated = false
+
+    // 后台等待大纲生成完成：项目已创建后，大纲生成是后台任务，
+    // 不阻塞按钮（按钮在 onCreated 时即释放）。完成/失败时刷新卡片状态。
+    const finishGeneration = (isError: boolean) => {
+      void recent.mutate().then(() => {
+        if (isError) {
+          toast.error('绘本大纲生成失败，可在列表中查看或删除后重试')
+        }
+      })
+    }
+
     try {
-      const result = await generatePictureBookScript({
+      await generatePictureBookScript({
         workspace_id: workspaceId,
-        prompt: prompt.trim(),
+        prompt: submittedPrompt,
         style,
         page_count: pageCount,
         aspect_ratio: aspectRatio,
-        onChunk: (text) => setStreamText((prev) => prev + text),
+        onCreated: (data) => {
+          projectCreated = true
+          // 项目已落库（generating）：立即在列表头部插入卡片，清空输入框，释放按钮
+          const optimistic: PictureBookProjectListItem = {
+            id: data.projectId,
+            workspace_id: workspaceId,
+            title: data.title,
+            prompt: data.prompt,
+            style: data.style,
+            page_count: data.page_count,
+            status: 'generating',
+            active_step: 'script',
+            cover_url: null,
+            draft_saved_at: null,
+            estimated_credits: 1,
+            actual_credits: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
+          recent.mutate((current) => [optimistic, ...(current ?? [])], false)
+          setPrompt('')
+          // 项目创建即视为"立即生成"动作完成，按钮恢复，loading 转移到卡片
+          setSubmitting(false)
+        },
       })
-      // 成功后保持加载状态，直接跳转（组件卸载时自然结束）
-      router.push(`/toby-studio/picture-book/${result.projectId}`)
+      // 大纲生成完成（done）：刷新列表拿到落库的 script_ready 状态
+      finishGeneration(false)
     } catch (error) {
-      // 只有失败时才重置状态
-      setSubmitting(false)
-      setStreamText('')
-      toast.error(error instanceof Error ? error.message : '生成剧本失败')
+      if (!projectCreated) {
+        // 项目尚未创建就失败（网络/校验/409）：释放按钮并提示
+        setSubmitting(false)
+        toast.error(error instanceof Error ? error.message : '生成剧本失败')
+      } else {
+        // 项目已创建但大纲生成失败：刷新拿到 failed 状态
+        finishGeneration(true)
+      }
     }
   }
 
@@ -75,16 +143,13 @@ export function PictureBookHome() {
               <Sparkles className="h-4 w-4 text-primary" />
               AI 生成绘本
             </div>
-            {/* <Link href="/toby-studio/picture-book/projects" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-foreground">
-              全部 · 我的绘本
-              <ArrowRight className="h-4 w-4" />
-            </Link> */}
           </div>
           <div className="space-y-4 p-5">
             <Textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              className="min-h-36 resize-none rounded-lg border-muted-foreground/20 bg-background text-base"
+              disabled={submitting}
+              className="min-h-36 resize-none rounded-lg border-muted-foreground/20 bg-background text-base disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="输入绘本主题，例如：一只怕黑的小狗第一次学会帮朋友点亮夜晚"
             />
             <div className="grid gap-3 md:grid-cols-[1fr_160px_160px_150px]">
@@ -120,16 +185,10 @@ export function PictureBookHome() {
               </Select>
               <Button className="h-11 gap-2" onClick={handleSubmit} disabled={submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                立即生成
+                {submitting ? '创建中...' : '立即生成'}
               </Button>
             </div>
           </div>
-          {submitting && streamText && (
-            <div className="border-t px-5 py-4">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">AI 正在生成剧本...</p>
-              <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/50 p-3 text-xs leading-relaxed text-foreground/80">{streamText}</pre>
-            </div>
-          )}
         </div>
       </section>
 

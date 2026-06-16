@@ -1,13 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { BookOpenText, Clock3, Layers3 } from 'lucide-react'
+import { BookOpenText, Clock3, Layers3, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { PictureBookProjectListItem } from '@/lib/picture-book/types'
 import { useNavigationStore } from '@/stores/navigation-store'
 
 const statusText: Record<string, string> = {
   draft: '草稿',
+  generating: '生成中',
   script_ready: '剧本',
   assets_ready: '资产',
   storyboard_ready: '分镜',
@@ -17,15 +18,17 @@ const statusText: Record<string, string> = {
 
 export function PictureBookProjectCard({ project }: { project: PictureBookProjectListItem }) {
   const startNavigation = useNavigationStore((s) => s.startNavigation)
+  const isGenerating = project.status === 'generating'
 
-  return (
-    <Link
-      href={`/toby-studio/picture-book/${project.id}`}
-      className="group block overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary/60"
-      onClick={() => startNavigation(`/toby-studio/picture-book/${project.id}`)}
-    >
+  // 卡片内容（封面 + 信息）
+  const cardContent = (
+    <>
       <div className="aspect-[4/3] bg-muted">
-        {project.cover_url ? (
+        {isGenerating ? (
+          <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.16),transparent_34%),linear-gradient(135deg,hsl(var(--muted)),hsl(var(--background)))]">
+            <Loader2 className="h-9 w-9 animate-spin text-primary" />
+          </div>
+        ) : project.cover_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={project.cover_url} alt={project.title} className="h-full w-full object-cover" />
         ) : (
@@ -53,6 +56,29 @@ export function PictureBookProjectCard({ project }: { project: PictureBookProjec
           </span>
         </div>
       </div>
+    </>
+  )
+
+  // 生成中：项目尚未就绪，不跳转；悬停显示禁止光标提示大纲生成中
+  if (isGenerating) {
+    return (
+      <div
+        className="group block cursor-not-allowed overflow-hidden rounded-lg border bg-card"
+        title="大纲生成中，请稍候"
+        aria-disabled="true"
+      >
+        {cardContent}
+      </div>
+    )
+  }
+
+  return (
+    <Link
+      href={`/toby-studio/picture-book/${project.id}`}
+      className="group block overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary/60"
+      onClick={() => startNavigation(`/toby-studio/picture-book/${project.id}`)}
+    >
+      {cardContent}
     </Link>
   )
 }

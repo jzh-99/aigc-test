@@ -20,7 +20,7 @@ export type PictureBookStyle = typeof PICTURE_BOOK_STYLES[number]
 export type PictureBookPageCount = typeof PICTURE_BOOK_PAGE_COUNTS[number]
 export type PictureBookAspectRatio = typeof PICTURE_BOOK_ASPECT_RATIOS[number]
 export type PictureBookStepId = 'script' | 'assets' | 'storyboard' | 'preview'
-export type PictureBookProjectStatus = 'draft' | 'script_ready' | 'assets_ready' | 'storyboard_ready' | 'completed' | 'failed'
+export type PictureBookProjectStatus = 'draft' | 'generating' | 'script_ready' | 'assets_ready' | 'storyboard_ready' | 'completed' | 'failed'
 export type PictureBookGenerationStatus = 'idle' | 'pending' | 'processing' | 'completed' | 'failed'
 export type PictureBookAssetKind = 'character' | 'background' | 'page_image' | 'page_audio_zh' | 'page_audio_en'
 
