@@ -320,9 +320,11 @@ pnpm dev
 ```
 # 本地打包api服务
 # 项目根目录执行打包命令
-pnpm --filter @aigc/api dev
+bash deploy/build-images.sh api
+bash deploy/build-images.sh web
+bash deploy/build-images.sh worker
 
-# 构建后的地址在 项目根目录/deploy/dist/aigc-api.tar.gz
+# 构建后的地址在 项目根目录/deploy/dist/aigc-xxx.tar.gz
 
 # ssh连接 api/worker 服务器
 ssh vmuser@177.11.219.44
