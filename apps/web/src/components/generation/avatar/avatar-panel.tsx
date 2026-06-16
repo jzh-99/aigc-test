@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Sparkles, Loader2, Coins, ImagePlus, Music, X } from 'lucide-react'
+import { MentionEditor } from '@/components/shared/mention-editor'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import { cn, generateUUID } from '@/lib/utils'
@@ -201,12 +201,17 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
 
         {/* 提示词 */}
         <div className="flex-1 min-h-0">
-          <Textarea
-            placeholder="可选：描述动作、运镜或画面风格..."
+          <MentionEditor
             value={avatarPrompt}
-            onChange={(e) => setAvatarPrompt(e.target.value)}
-            className="h-full resize-none"
+            onChange={setAvatarPrompt}
+            resources={[]}
+            placeholder="可选：描述动作、运镜或画面风格..."
+            className="h-full"
+            editorClassName="h-full min-h-full bg-transparent px-0 py-1 rounded-none cursor-text focus:ring-0"
             disabled={isAvatarGenerating}
+            maxLength={null}
+            showCharacterCount={false}
+            emptyText="暂无可引用资源"
           />
         </div>
 
