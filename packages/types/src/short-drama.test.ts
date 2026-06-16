@@ -19,6 +19,7 @@ import {
   isShortDramaShotDurationSeconds,
   makeDefaultShortDramaState,
   makeUploadedShortDramaState,
+  normalizeShortDramaSegmentPrompt,
   normalizeShortDramaState,
   sortShortDramaSegments,
   updateShortDramaShotDuration,
@@ -207,5 +208,29 @@ const sorted = sortShortDramaSegments([
   { id: 'a', order: 1, title: 'A', prompt: '', mentionRefs: [], durationSeconds: 4, videoUrl: null, status: 'idle' },
 ])
 assert.deepEqual(sorted.map(segment => segment.id), ['a', 'b'])
+
+// normalizeShortDramaSegmentPrompt - 统一每个「分镜N」独占一行
+// 场景一：分镜间用空格分隔（靠 whitespace-pre-wrap 折行）→ 统一为换行
+const spaceSeparated = '本片段场景设定在：@大厅。冷灰蓝色调。 分镜1 · 5s：中景。 分镜2 · 4s：近景。 分镜3 · 4s：特写。'
+const normalizedFromSpace = normalizeShortDramaSegmentPrompt(spaceSeparated)
+assert.equal(normalizedFromSpace, '本片段场景设定在：@大厅。冷灰蓝色调。\n分镜1 · 5s：中景。\n分镜2 · 4s：近景。\n分镜3 · 4s：特写。')
+
+// 场景二：分镜间无分隔，直接接在上一分镜末尾 → 统一为换行
+const noSeparator = '本片段场景设定在：@大厅。冷灰蓝色调。分镜1 · 5s：中景。分镜2 · 5s：近景。分镜3 · 4s：特写。'
+const normalizedFromNone = normalizeShortDramaSegmentPrompt(noSeparator)
+assert.equal(normalizedFromNone, '本片段场景设定在：@大厅。冷灰蓝色调。\n分镜1 · 5s：中景。\n分镜2 · 5s：近景。\n分镜3 · 4s：特写。')
+
+// 场景三：已是标准换行格式 → 幂等，不重复加换行、不破坏既有换行
+const alreadyNormalized = '本片段场景设定在：@大厅。\n分镜1 · 5s：中景。\n分镜2 · 4s：近景。'
+assert.equal(normalizeShortDramaSegmentPrompt(alreadyNormalized), alreadyNormalized)
+
+// 标准化不得破坏分镜时长解析
+assert.deepEqual(extractShortDramaShotDurations(normalizedFromSpace), [
+  { shotNumber: 1, durationSeconds: 5 },
+  { shotNumber: 2, durationSeconds: 4 },
+  { shotNumber: 3, durationSeconds: 4 },
+])
+// 标准化后仍可正常改写时长
+assert.ok(updateShortDramaShotDuration(normalizedFromSpace, 2, 8).includes('分镜2 · 8s：'))
 
 console.log('✓ All tests passed')

@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { ShortDramaSegment, ShortDramaAsset, ShortDramaMentionRef } from '@aigc/types'
 import {
   SHORT_DRAMA_SHOT_DURATION_SECONDS,
   extractShortDramaShotDurations,
   findShortDramaMentionedAssets,
   getShortDramaAssetMentionAliases,
+  normalizeShortDramaSegmentPrompt,
   updateShortDramaShotDuration,
 } from '@aigc/types'
 import {
@@ -33,9 +34,14 @@ export function SegmentPromptEditor({
 }: SegmentPromptEditorProps) {
   const latestPromptRef = useRef(segment.prompt)
 
+  // AI 生成的分镜脚本里分镜间分隔符不稳定（有时「。 分镜」有时「。分镜」），
+  // 这里对外部传入的 prompt 做一次换行标准化，保证每个「分镜N」独占一行。
+  // 仅对外部值标准化；用户在编辑器内的改动经 onChange 原样冒泡，不做二次处理。
+  const prompt = useMemo(() => normalizeShortDramaSegmentPrompt(segment.prompt), [segment.prompt])
+
   useEffect(() => {
-    latestPromptRef.current = segment.prompt
-  }, [segment.prompt])
+    latestPromptRef.current = prompt
+  }, [prompt])
 
   const availableAssets = assets.filter(a => a.imageUrl)
   const mentionResources: StoryboardMentionResource[] = availableAssets.map(asset => ({
@@ -71,7 +77,7 @@ export function SegmentPromptEditor({
     onMentionRefsChange(refs)
   }
 
-  const shotDurations = extractShortDramaShotDurations(segment.prompt)
+  const shotDurations = extractShortDramaShotDurations(prompt)
 
   const handleShotDurationChange = (shotNumber: number, durationSeconds: number) => {
     const currentPrompt = latestPromptRef.current
@@ -83,7 +89,7 @@ export function SegmentPromptEditor({
   return (
     <div className="space-y-3">
       <StoryboardMentionEditor
-        value={segment.prompt}
+        value={prompt}
         onChange={handlePromptChange}
         resources={mentionResources}
         placeholder="描述这个分镜的画面内容..."

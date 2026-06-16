@@ -373,6 +373,30 @@ export function sortShortDramaSegments(segments: ShortDramaSegment[]): ShortDram
   return [...segments].sort((a, b) => a.order - b.order)
 }
 
+/**
+ * 标准化片段脚本里的分镜换行：保证每个「分镜N」独占一行。
+ *
+ * 背景：AI 生成的分镜脚本中，分镜之间的分隔符不稳定——
+ * 有时是「。 分镜1」（空格，靠 whitespace-pre-wrap 自然折行成一行），
+ * 有时是「。分镜2」（无分隔，直接接到上一分镜末尾）。
+ * 此函数统一把每个「分镜N」前置恰好一个换行，让多分镜片段视觉一致、可读。
+ *
+ * 不影响时长解析/改写：SHORT_DRAMA_SHOT_DURATION_PATTERN 从「分镜」向后匹配，
+ * 前置换行不会破坏 extractShortDramaShotDurations / updateShortDramaShotDuration。
+ */
+export function normalizeShortDramaSegmentPrompt(prompt: string): string {
+  if (!prompt) return prompt
+  // 1) 先把「分镜N」前面已有的空白（空格/制表/换行）清理掉，避免残留尾随空白
+  // 2) 再在每个「分镜N」前插入恰好一个换行
+  return prompt
+    .replace(/[ \t\r\n]+(分镜\s*\d+)/g, '$1')
+    .replace(/(分镜\s*\d+)/g, (match, _g1, offset) => {
+      // 第一个分镜若位于字符串开头，前面不再补换行
+      if (offset === 0) return match
+      return `\n${match}`
+    })
+}
+
 export function areShortDramaAssetsReady(state: ShortDramaState): boolean {
   const requiredAssets = state.assets.items.filter(
     asset => asset.kind === 'character' || asset.kind === 'scene' || asset.kind === 'requisite'
