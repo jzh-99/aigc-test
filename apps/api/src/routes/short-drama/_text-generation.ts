@@ -26,7 +26,7 @@ const QWEN_API_KEY = process.env.QWEN_API_KEY ?? ''
 const QWEN_MODEL = process.env.QWEN_MODEL ?? 'qwen3.7-max'
 
 // 文本生成计费：每千字 1 A豆
-const TEXT_CREDITS_PER_THOUSAND_CHARS = 1
+export const TEXT_CREDITS_PER_THOUSAND_CHARS = 1
 const TEXT_TIMEOUT_MS = 360_000 // 增加到 6 分钟，避免生成超时
 // SSE 独立心跳间隔：必须远小于生产 nginx 的 proxy_read_timeout（默认 60s），
 // 保证 Qwen reasoning 静默期（上游无数据）也能向客户端保活，避免中间代理判定空闲超时掐断连接
@@ -376,6 +376,11 @@ export async function markShortDramaProjectFailed(
  */
 export function calculateTextGenerationCredits(inputText: string, outputText: string): number {
   const totalChars = inputText.length + outputText.length
+  return calculateShortDramaTextCredits(totalChars, TEXT_CREDITS_PER_THOUSAND_CHARS)
+}
+
+export function estimateTextGenerationCredits(inputText: string, estimatedOutputChars: number): number {
+  const totalChars = inputText.length + Math.max(0, estimatedOutputChars)
   return calculateShortDramaTextCredits(totalChars, TEXT_CREDITS_PER_THOUSAND_CHARS)
 }
 

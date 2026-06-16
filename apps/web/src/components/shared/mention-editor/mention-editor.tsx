@@ -31,6 +31,8 @@ export interface MentionEditorProps {
   placeholder?: string
   /** 最大字符数，默认 500 */
   maxLength?: number
+  /** 是否显示字数计数 */
+  showCharacterCount?: boolean
   /** 失焦回调 */
   onBlur?: () => void
   /** 是否禁用 */
@@ -140,6 +142,7 @@ export function MentionEditor({
   resources,
   placeholder = '',
   maxLength = DEFAULT_MAX_LENGTH,
+  showCharacterCount = true,
   onBlur,
   disabled = false,
   className,
@@ -340,9 +343,11 @@ export function MentionEditor({
         </div>
       )}
 
-      <div className="mt-1 flex justify-end text-[10px] text-muted-foreground">
-        {Array.from(value).length}/{maxLength}
-      </div>
+      {showCharacterCount && (
+        <div className="mt-1 flex justify-end text-[10px] text-muted-foreground">
+          {Array.from(value).length}/{maxLength}
+        </div>
+      )}
 
       {showPicker && !disabled && (
         <div

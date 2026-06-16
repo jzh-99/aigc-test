@@ -37,6 +37,8 @@ interface ImmersiveEditorProps {
   editorPlaceholder?: string
   /** 是否禁用编辑器 */
   editorDisabled?: boolean
+  /** 是否显示编辑器字数计数 */
+  editorShowCharacterCount?: boolean
   /** @ 标签样式 */
   editorMentionClassName?: (kind: string) => string
   /** @ 标签图标 */
@@ -71,6 +73,7 @@ export function ImmersiveEditor({
   editorResources,
   editorPlaceholder,
   editorDisabled,
+  editorShowCharacterCount,
   editorMentionClassName,
   editorMentionIcon,
   editorEmptyText,
@@ -120,6 +123,7 @@ export function ImmersiveEditor({
           className="h-full"
           editorClassName="h-full min-h-full bg-transparent px-0 py-1 rounded-none cursor-text focus:ring-0"
           disabled={editorDisabled ?? disabled}
+          showCharacterCount={editorShowCharacterCount}
           mentionClassName={editorMentionClassName}
           mentionIcon={editorMentionIcon}
           emptyText={editorEmptyText}

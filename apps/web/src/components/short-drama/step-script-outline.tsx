@@ -72,6 +72,9 @@ const CHARACTER_BIO_MAX_LENGTH = 1200
 const EPISODE_TITLE_MAX_LENGTH = 30
 const EPISODE_SCENE_MAX_LENGTH = 2500
 const ORIGINAL_PROMPT_MAX_LENGTH = 2000
+const TEXT_CREDITS_PER_THOUSAND_CHARS = 1
+const EPISODE_OUTLINE_ESTIMATED_OUTPUT_CHARS_PER_EPISODE = 5000
+const EPISODE_OUTLINE_PROMPT_TEMPLATE_ESTIMATED_CHARS = 4000
 
 const CHARACTER_BIO_FIELDS = [
   '角色类型',
@@ -987,6 +990,23 @@ function getCurrentOutlineProgressMessage(state: StepScriptOutlineProps['state']
   return '正在生成分集剧本，页面会自动刷新状态...'
 }
 
+function estimateTextCredits(totalChars: number): number {
+  if (totalChars <= 0) return 1
+  return Math.max(1, Math.ceil(totalChars / 1000) * TEXT_CREDITS_PER_THOUSAND_CHARS)
+}
+
+function estimateNextEpisodeOutlineCredits(state: ShortDramaState, batchCount: number): number {
+  const currentInputChars =
+    EPISODE_OUTLINE_PROMPT_TEMPLATE_ESTIMATED_CHARS +
+    (state.script.refinedPrompt?.length ?? 0) +
+    state.script.episodeSummaries.reduce((sum, item) => sum + item.summary.length, 0) +
+    state.script.outlines.reduce((sum, item) => sum + item.summary.length + item.title.length, 0) +
+    state.settings.style.length +
+    state.settings.aspectRatio.length
+  const estimatedOutputChars = batchCount * EPISODE_OUTLINE_ESTIMATED_OUTPUT_CHARS_PER_EPISODE
+  return estimateTextCredits(currentInputChars + estimatedOutputChars)
+}
+
 export function StepScriptOutline({ projectId, state, onStateChange }: StepScriptOutlineProps) {
   const [generatingSummary, setGeneratingSummary] = useState(false)
   const [generatingOutlines, setGeneratingOutlines] = useState(false)
@@ -1038,6 +1058,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
   const isSummariesLocked = state.script.outlines.length > 0
   const remainingOutlineCount = Math.max(state.settings.episodeCount - state.script.outlines.length, 0)
   const nextOutlineBatchCount = Math.min(remainingOutlineCount, EPISODE_NAV_GROUP_SIZE)
+  const nextOutlineEstimatedCredits = estimateNextEpisodeOutlineCredits(state, nextOutlineBatchCount)
   const canGenerateSummaries =
     !isSummariesReady &&
     !isSummariesGenerating &&
@@ -1108,7 +1129,7 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
     ) return
     const ok = await confirmDialog({
       title: '确认生成',
-      description: '本次操作预计消耗约 70 A豆（生成本批分集剧本），确认是否继续？',
+      description: `本次操作预计消耗约 ${nextOutlineEstimatedCredits} A豆（生成本批 ${nextOutlineBatchCount} 集分集剧本），确认是否继续？`,
       confirmText: '确认生成',
       destructive: false,
     })
