@@ -29,8 +29,8 @@ export interface MentionEditorProps {
   resources: MentionResource[]
   /** 占位文字 */
   placeholder?: string
-  /** 最大字符数，默认 500 */
-  maxLength?: number
+  /** 最大字符数，默认 500；传 null 表示不限长 */
+  maxLength?: number | null
   /** 是否显示字数计数 */
   showCharacterCount?: boolean
   /** 失焦回调 */
@@ -304,6 +304,9 @@ export function MentionEditor({
         role="textbox"
         aria-label={placeholder}
         contentEditable={!disabled}
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
         suppressContentEditableWarning
         className={cn(
           'w-full whitespace-pre-wrap break-words p-2 text-xs bg-muted/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary max-h-[400px] overflow-y-auto',
@@ -343,7 +346,7 @@ export function MentionEditor({
         </div>
       )}
 
-      {showCharacterCount && (
+      {showCharacterCount && maxLength != null && (
         <div className="mt-1 flex justify-end text-[10px] text-muted-foreground">
           {Array.from(value).length}/{maxLength}
         </div>

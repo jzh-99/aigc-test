@@ -494,6 +494,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
             editorResources={mentionResources}
             editorPlaceholder="输入文字或 @ （紫色）参考内容，自由组合图、文、音、视频多元素，生成创意视频。"
             editorDisabled={isVideoGenerating || isVideoUploading || disabled}
+            editorMaxLength={null}
             editorShowCharacterCount={false}
             editorMentionClassName={(kind) => {
               const base = 'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] align-baseline'

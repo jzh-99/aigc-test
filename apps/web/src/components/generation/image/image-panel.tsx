@@ -259,6 +259,7 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
             editorResources={mentionResources}
             editorPlaceholder={'上传参考图、输入文字或 @ （紫色）参考内容，描述你想生成的图片。'}
             editorDisabled={isGenerating || disabled}
+            editorMaxLength={null}
             editorShowCharacterCount={false}
             editorMentionClassName={() =>
               'inline-flex items-center gap-1 rounded-md border border-primary/35 bg-primary/12 px-1.5 py-0.5 font-semibold text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_12px_rgba(200,156,236,0.12)] align-baseline'

@@ -193,6 +193,10 @@ describe('limitPromptLength', () => {
   test('正确处理 emoji 等多字节字符', () => {
     assert.equal(limitPromptLength('🎉🎊🎈', 2), '🎉🎊')
   })
+
+  test('maxLength 为 null 时不限制长度', () => {
+    assert.equal(limitPromptLength('hello world', null), 'hello world')
+  })
 })
 
 describe('escapeRegExp', () => {

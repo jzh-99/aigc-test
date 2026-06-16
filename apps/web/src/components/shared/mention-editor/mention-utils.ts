@@ -9,8 +9,9 @@ export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/** 按字符截断文本到最大长度 */
-export function limitPromptLength(value: string, maxLength: number): string {
+/** 按字符截断文本到最大长度；maxLength 为 null 时不限制。 */
+export function limitPromptLength(value: string, maxLength: number | null): string {
+  if (maxLength == null) return value
   return Array.from(value).slice(0, maxLength).join('')
 }
 
