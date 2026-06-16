@@ -95,7 +95,7 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     let generationLock: RedisLockHandle | null = null
-    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:episode-segments:${episodeNumber}`)
+    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:episode-segments:${episodeNumber}`, { ttlSeconds: 480, autoRenew: false })
     if (!generationLock) {
       return reply.status(409).send({
         error: { code: 'GENERATION_IN_PROGRESS', message: `第 ${episodeNumber} 集片段脚本正在生成中，请稍后刷新查看进度` },
@@ -170,10 +170,19 @@ const route: FastifyPluginAsync = async (app) => {
     // 调用 AI 生成片段脚本（分镜写入 prompt 内）
     const REDACTED = [
       '你是专业短剧分镜师、导演和摄影指导。请根据剧本摘要、分集分场剧本和素材，为该集生成可直接提交视频模型的片段脚本。',
-      '只输出 JSON 数组，每个元素包含 title、prompt、mentionNames、durationSeconds 字段，不要输出 markdown。',
+      '',
+      '【输出格式契约 · 最高优先级 · 违反即任务失败】',
+      '1. 只输出一个 JSON 数组，第一个字符必须是 [，最后一个字符必须是 ]。',
+      '2. 严禁输出 markdown 代码块标记（``` 或 ```json）、注释、解释、问候、思考过程或任何 JSON 数组以外的文字。',
+      '3. 数组每个元素结构固定，含且仅含四个字段：title（字符串）、prompt（字符串）、mentionNames（字符串数组）、durationSeconds（数字）。',
+      '4. prompt 字段内若需出现双引号，必须做 JSON 转义（反斜杠加引号）；换行用反斜杠加 n 转义；不得破坏外层 JSON 结构。durationSeconds 必须是数字字面量（如 14），不带引号或单位。',
+      '5. 结构示例（仅示范格式，禁止照抄内容）：[{"title":"场1：示例","prompt":"本片段场景设定在：示例文本","mentionNames":["示例素材"],"durationSeconds":14}]',
+      '',
       '片段是视频生成的最小单位；必须基于分集剧本中的场次拆分，优先做到一场对应一个片段，长场可以拆成多个连续片段。',
+      '每个片段必须推进一个明确的剧情节拍：揭露新信息、升级冲突、促使人物做出选择或改变关系；禁止只切换机位、只补充表情反应或环境空镜而不推动剧情。',
+      '片段的价值在于剧情推进密度而非分镜数量；宁可少写一段纯视觉过渡，也要保证每段都有对白交锋、决策或转折。',
       '一集成片时长必须控制在 2.5 分钟左右：总时长目标 150 秒，可接受范围 130-180 秒。',
-      '每集必须生成 10-12 个片段；每个片段 13-15 秒，通过增加动作承接、表情反应、环境压迫、对白停顿和钩子镜头来扩充分段。',
+      '每集必须生成 10-12 个片段；每个片段 13-15 秒。分段必须基于剧情节拍（新对白交锋、新信息揭露、新动作决策、新转折）自然切分，禁止用纯表情反应、纯环境空镜或重复动作来凑时长。',
       '不要脱离分集剧本另写新剧情；片段顺序、场景、人物、动作、对白重点必须来自分集剧本。',
       '必须延续项目选择的视觉风格，并把该风格落实到摄影、灯光、布景、妆造、色彩和表演质感中。',
       '如果项目视觉风格是 2D/3D 动漫、漫画、插画、卡通、国漫、日漫、赛璐璐、黏土/粘土、盲盒、定格动画或虾仁动画风格，片段 prompt 必须使用动画、插画、CG、黏土或对应风格语言描述线条、上色、角色表演、镜头节奏、材质和场景光影，禁止写真人照片、写实摄影、影视剧剧照或真人实拍质感。',
@@ -181,7 +190,7 @@ const route: FastifyPluginAsync = async (app) => {
       '每个片段 prompt 必须包含：第一段“本片段场景设定在：...”，后续 2-5 个“分镜N · Xs：...”描述。',
       '每个片段优先写 3 个分镜，按“近景/中景/特写/平视/跟拍/推镜/手持/低角度/过肩镜头”等镜头语言组织，形成连续动作，不要堆砌抽象概括。',
       '每个分镜要把分场剧本里的动作、对白、OS/VO 或字幕转写成可拍摄画面；不要只写概述。',
-      '每个分镜必须写清楚景别、主体动作、面部微表情、场景背景和情绪变化；如有对白，改写成“人物正在说话/低声说话/声音压抑”等画面描述。',
+      '每个分镜必须写清楚景别、主体动作、面部微表情、场景背景和情绪变化；关键对白必须直接保留台词原文并标注说话人语气状态（例如“祁同伟（压抑）：你早就知道了，对吧”），只在必要时用“低声”“声音颤抖”补充状态，不要把所有对白都模糊成“正在说话”。',
       '情绪和人物神态禁止只写成语或抽象词，例如“愤怒、悲伤、震惊、刀光剑影”；必须拆成眼神、呼吸、喉结、手指、嘴角、停顿、身体重心、动作迟疑等镜头可见细节。',
       '每个分镜必须补足专业视听信息：摄影构图或机位、灯光方向与冷暖、布景/道具细节、妆造状态、演员表演节奏，必要时写清声音或字幕。',
       '每个分镜必须加入动作指导视角：写清演员动作起点、动作过程、动作落点和身体重心变化，保证同一片段内人物位置、手部动作、视线方向、道具状态前后连续。',
@@ -220,7 +229,7 @@ const route: FastifyPluginAsync = async (app) => {
       `- 本集目标总时长约 ${EPISODE_TARGET_DURATION_SECONDS} 秒，最终所有片段 durationSeconds 累加必须在 ${EPISODE_MIN_DURATION_SECONDS}-${EPISODE_MAX_DURATION_SECONDS} 秒之间。`,
       '- 必须生成 10-12 个片段，每个片段 13、14 或 15 秒。',
       '- 每个片段的时长档位根据其剧本内容自行选定：动作/对白密集、情绪推进复杂的长场选 15 秒；叙事简洁、节奏明快的短场选 13 秒；介于两者之间选 14 秒。',
-      '- 如果原分场较少，要把同一场拆成“进入/发现/对峙/反应/推进/钩子”等连续片段，不要减少片段数量。',
+      '- 如果原分场较少，应从分场剧本中挖掘更多实质性节拍（被省略的对白、潜在冲突点、人物隐藏动机）来补充片段，每个拆出的片段必须推进不同的剧情点，禁止把单个动作拆成多段纯视觉分镜。',
       '',
       '每个片段包含：',
       `- title: 片段标题，建议体现对应场号和关键动作，例如“场${episodeNumber}-1：宿舍惊醒”`,
@@ -244,6 +253,8 @@ const route: FastifyPluginAsync = async (app) => {
       '- 灯光、布景、妆造必须与剧情情绪和角色身份一致，不要写成无关的视觉堆砌。',
       '',
       '每个分镜时长必须在 2-10 秒之间。片段总时长必须为 13、14 或 15 秒之一，按本片段剧本复杂度自行选定档位，避免低于 13 秒或高于 15 秒。分镜不是视频生成单位，不要输出分镜 videoUrl、status 或单独任务字段。',
+      '',
+      '【最后强调】直接以 [ 开头、] 结尾输出 JSON 数组，不要包含任何其他字符，也不要用 markdown 代码块包裹。',
     ].join('\n')
 
     reply.raw.writeHead(200, {
@@ -289,53 +300,85 @@ const route: FastifyPluginAsync = async (app) => {
       totalCount: 1,
     })
 
-    let aiResponse: string
-    try {
-      aiResponse = await callQwenForTextStream(REDACTED, userPrompt, 12000, {
-        onChunk: (text) => sendEvent('chunk', { text, episodeNumber }),
-        onPing: sendPing,
-        externalSignal: clientSignal,
-        audit: {
-          userId,
-          teamId,
-          workspaceId: project.workspace_id,
-          module: 'short_drama',
-          provider: 'qwen',
-          operation: 'episodes.segments',
-          endpoint: '/chat/completions',
-        },
-      })
-    } catch (error) {
-      await failStream('AI_ERROR', 'AI 生成失败，请稍后重试', error, '片段脚本生成失败')
-      return
+    // 调用 AI + 解析 JSON：JSON 解析失败时自动重试 1 次（重试降 temperature 至 0.3，提升格式稳定性）。
+    // 前端 step-episodes 不消费 chunk 文本，故重试可静默重放，无需前端清屏。
+    const MAX_PARSE_ATTEMPTS = 2
+    const auditContext = {
+      userId,
+      teamId,
+      workspaceId: project.workspace_id,
+      module: 'short_drama',
+      provider: 'qwen',
+      operation: 'episodes.segments',
+      endpoint: '/chat/completions',
     }
 
-    // 解析 AI 返回的 JSON 数组
-    let segments: unknown
-    try {
-      // 先尝试提取 JSON 对象或数组
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}|\[[\s\S]*\]/)
-      if (!jsonMatch) {
-        throw new Error('未找到有效的 JSON')
+    let aiResponse = ''
+    let lastUserPrompt = userPrompt
+    let segments: unknown = null
+    let parseSucceeded = false
+    let lastParseError: unknown
+
+    for (let attempt = 0; attempt < MAX_PARSE_ATTEMPTS && !parseSucceeded; attempt++) {
+      // 首次失败后的重试：提示用户 + 降 temperature + 末尾追加纠错强约束
+      if (attempt > 0) {
+        sendEvent('progress', {
+          message: `AI 返回格式异常，正在自动重试（第 ${attempt + 1} 次）...`,
+          completedCount: 0,
+          totalCount: 1,
+        })
+      }
+      const temperature = attempt === 0 ? 0.7 : 0.3
+      const effectiveUserPrompt = attempt === 0
+        ? userPrompt
+        : `${userPrompt}\n\n【重要】上一次输出无法解析为合法 JSON。请务必只输出一个 JSON 数组：首字符为 [、尾字符为 ]，不要包含 markdown 代码块、注释或任何 JSON 以外的文字。`
+
+      // 调用 AI（网络/超时类失败直接终止，不重试）
+      try {
+        aiResponse = await callQwenForTextStream(REDACTED, effectiveUserPrompt, 16000, {
+          onChunk: (text) => sendEvent('chunk', { text, episodeNumber }),
+          onPing: sendPing,
+          externalSignal: clientSignal,
+          audit: auditContext,
+        }, temperature)
+        lastUserPrompt = effectiveUserPrompt
+      } catch (error) {
+        await failStream('AI_ERROR', 'AI 生成失败，请稍后重试', error, '片段脚本生成失败')
+        return
       }
 
-      const parsed = JSON.parse(jsonMatch[0])
-
-      // 尝试从对象中提取数组（可能返回 { segments: [...] }）
-      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        if (Array.isArray(parsed.segments)) {
-          segments = parsed.segments
-        } else {
-          throw new Error('未找到 segments 数组')
+      // 解析 JSON（失败则进入下一轮重试）
+      try {
+        // 先尝试提取 JSON 对象或数组
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}|\[[\s\S]*\]/)
+        if (!jsonMatch) {
+          throw new Error('未找到有效的 JSON')
         }
-      } else if (Array.isArray(parsed)) {
-        segments = parsed
-      } else {
-        throw new Error('未找到有效的数组')
+
+        const parsed = JSON.parse(jsonMatch[0])
+
+        // 尝试从对象中提取数组（可能返回 { segments: [...] }）
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          if (Array.isArray((parsed as Record<string, unknown>).segments)) {
+            segments = (parsed as Record<string, unknown>).segments
+          } else {
+            throw new Error('未找到 segments 数组')
+          }
+        } else if (Array.isArray(parsed)) {
+          segments = parsed
+        } else {
+          throw new Error('未找到有效的数组')
+        }
+        parseSucceeded = true
+      } catch (error) {
+        lastParseError = error
+        app.log.warn({ error, projectId, episodeNumber, attempt }, '片段脚本 JSON 解析失败，准备重试')
       }
-    } catch (error) {
-      // JSON 解析失败，退还积分
-      await failStream('VALIDATION_ERROR', 'AI 返回格式错误，请重试', error, 'AI 返回格式错误')
+    }
+
+    if (!parseSucceeded) {
+      // 全部重试均失败，退还积分
+      await failStream('VALIDATION_ERROR', 'AI 返回格式错误，请重试', lastParseError, 'AI 返回格式错误')
       return
     }
 
@@ -492,7 +535,7 @@ const route: FastifyPluginAsync = async (app) => {
         : 'completed'
 
     // 计算实际积分消耗（输入 + 输出字符均计费）
-    const actualCredits = calculateTextGenerationCredits(REDACTED + userPrompt, aiResponse)
+    const actualCredits = calculateTextGenerationCredits(REDACTED + lastUserPrompt, aiResponse)
 
     // 原子化保存状态并结算积分
     let settledCredits: number

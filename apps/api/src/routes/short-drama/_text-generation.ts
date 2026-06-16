@@ -145,7 +145,9 @@ export async function callQwenForTextStream(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,
-  callbacks: ShortDramaTextStreamCallbacks = {}
+  callbacks: ShortDramaTextStreamCallbacks = {},
+  // 采样温度：默认 0.7；JSON 格式重试时可降到 0.3 以提升结构稳定性
+  temperature: number = 0.7,
 ): Promise<string> {
   if (!QWEN_API_KEY) {
     throw new Error('QWEN_API_KEY 未配置，无法调用 AI 生成')
@@ -193,7 +195,7 @@ export async function callQwenForTextStream(
     ],
     stream: true,
     max_tokens: maxTokens,
-    temperature: 0.7,
+    temperature,
   }
   const streamSummary: LlmStreamSummary = {
     stream: true,
