@@ -137,7 +137,7 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     let generationLock: RedisLockHandle | null = null
-    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:episode-summaries`)
+    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:episode-summaries`, { ttlSeconds: 480, autoRenew: false })
     if (!generationLock) {
       return reply.status(409).send({
         error: { code: 'GENERATION_IN_PROGRESS', message: '分集概述正在生成中，请稍后刷新查看进度' },

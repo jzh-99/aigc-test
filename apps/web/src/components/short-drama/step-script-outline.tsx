@@ -23,6 +23,7 @@ import {
   generateShortDramaEpisodeSummaries,
   saveShortDramaProject,
   updateShortDramaScriptSource,
+  ShortDramaStillGeneratingError,
 } from '@/lib/short-drama/api'
 import { EpisodeSummaryCard } from './episode-summary-card'
 
@@ -1106,6 +1107,11 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
       })
       onStateChange()
     } catch (err) {
+      if (err instanceof ShortDramaStillGeneratingError) {
+        // 后台仍在生成：不报错，交给 script.status 轮询自愈
+        onStateChange()
+        return
+      }
       // 持久化失败原因到页面（红色 banner），同时保留 toast 作为即时反馈
       const errorMessage = translateError(err instanceof Error ? err.message : '生成失败')
       setSummaryErrorMessage(errorMessage)
@@ -1149,6 +1155,11 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
       onStateChange()
       if (result.warning) setStreamWarningMessage(result.warning)
     } catch (err) {
+      if (err instanceof ShortDramaStillGeneratingError) {
+        // 后台仍在生成：不报错，交给 outlinesStatus==='generating' 的轮询自愈
+        onStateChange()
+        return
+      }
       const errorMessage = translateError(err instanceof Error ? err.message : '生成失败')
       setOutlineErrorMessage(errorMessage)
       toast.error(errorMessage)
@@ -1189,6 +1200,11 @@ export function StepScriptOutline({ projectId, state, onStateChange }: StepScrip
       })
       onStateChange()
     } catch (err) {
+      if (err instanceof ShortDramaStillGeneratingError) {
+        // 后台仍在生成：不报错，交给 episodeSummaryStatus==='generating' 的轮询自愈
+        onStateChange()
+        return
+      }
       const errorMessage = translateError(err instanceof Error ? err.message : '生成失败')
       setOutlineErrorMessage(errorMessage)
       toast.error(errorMessage)

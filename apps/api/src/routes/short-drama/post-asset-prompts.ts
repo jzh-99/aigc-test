@@ -139,7 +139,7 @@ const route: FastifyPluginAsync = async (app) => {
     await saveShortDramaProjectState(projectId, state, 0)
 
     let generationLock: RedisLockHandle | null = null
-    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:asset-prompts`)
+    generationLock = await acquireRedisLock(app.redis, `lock:short-drama:${projectId}:asset-prompts`, { ttlSeconds: 480, autoRenew: false })
     if (!generationLock) {
       return reply.status(409).send({
         error: { code: 'GENERATION_IN_PROGRESS', message: '素材描述正在生成中，请稍后刷新查看进度' },
@@ -353,6 +353,7 @@ const route: FastifyPluginAsync = async (app) => {
           const assets = parseAssetPromptBatch(aiResponse)
           const actualCredits = calculateTextGenerationCredits(systemPrompt + userPrompt, aiResponse)
           applyShortDramaAssetPromptsBatchResult(state, assets, batch.to)
+          const isAssetsCompleted = state.assets.processedOutlineCount >= totalOutlines
 
           try {
             const settledCredits = (await saveShortDramaStateAndSettleCredits({
@@ -363,7 +364,7 @@ const route: FastifyPluginAsync = async (app) => {
               creditAccountId,
               userId,
               teamId,
-              status: state.assets.status === 'completed' ? 'assets_ready' : undefined,
+              status: isAssetsCompleted ? 'assets_ready' : undefined,
             })).settledCredits
 
             totalCredits += settledCredits

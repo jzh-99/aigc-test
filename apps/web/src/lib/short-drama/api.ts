@@ -54,7 +54,6 @@ export interface ShortDramaProjectDetail {
   status: string
   state: ShortDramaState
   coverUrl: string | null
-  activeStep: string | null
   createdAt: string
   updatedAt: string
 }
@@ -111,6 +110,18 @@ class ShortDramaSseError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'ShortDramaSseError'
+  }
+}
+
+/**
+ * SSE 断线回查后判定「后台仍在生成中」。
+ * 与「真失败」区分：组件 catch 命中本类时应保持 loading、不报错、不显示重试，
+ * 交给 server-generating 状态的既有轮询自愈。
+ */
+export class ShortDramaStillGeneratingError extends Error {
+  constructor(message = '生成仍在进行中，请稍后刷新页面查看结果') {
+    super(message)
+    this.name = 'ShortDramaStillGeneratingError'
   }
 }
 
@@ -206,12 +217,10 @@ async function postShortDramaSSE<T>(
     if (projectId && isGenerating) {
       const recovery = await recoverShortDramaStream<T>(projectId, isGenerating)
       if (recovery.kind === 'success') return recovery.data
-      // 抛明确中文消息（translateError 对中文原样返回），确保用户能看到提示而非静默
-      throw new Error(
-        recovery.kind === 'failed'
-          ? '生成失败，请稍后重试'
-          : '生成仍在进行中，请稍后刷新页面查看结果',
-      )
+      // 三态区分：真失败抛普通 Error（组件显示重试）；后台仍生成抛专用 error（组件保持 loading）
+      throw recovery.kind === 'failed'
+        ? new Error('生成失败，请稍后重试')
+        : new ShortDramaStillGeneratingError()
     }
     throw err
   }
@@ -244,7 +253,8 @@ const RECOVER_POLL_INTERVALS_MS = [
  * - 后端项目表 status=failed → 确定失败（后端失败路径已同步标记项目表 failed）
  * - 业务子状态非 generating（已结束：成功/部分/历史完成态）→ 视为已同步，返回最新 state
  * - 仍在 generating → 按 RECOVER_POLL_INTERVALS_MS 退避轮询；
- *   耗尽仍未结束 → still-generating，由上层提示「生成仍在进行中，请刷新查看」
+ *   耗尽仍未结束 → still-generating，上层抛 ShortDramaStillGeneratingError，
+ *   组件据此保持 loading、不报错，交 server-generating 轮询自愈
  *
  * 修复历史缺陷：旧版仅判 `project.status !== 'failed'`，而后端失败时不更新项目表 status，
  * 导致几乎必然误判为成功、静默无提示。

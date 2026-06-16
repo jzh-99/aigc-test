@@ -1,10 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
-import type { ShortDramaState } from '@aigc/types'
+import type { ShortDramaState, ShortDramaStepId } from '@aigc/types'
 import { normalizeShortDramaState } from '@aigc/types'
 import {
   assertShortDramaProjectAccess,
+  hasShortDramaGeneratingStatus,
   readShortDramaProjectState,
   syncShortDramaSegmentsFromState,
 } from './_shared.js'
@@ -17,8 +18,7 @@ const route: FastifyPluginAsync = async (app) => {
       title?: string
       cover_url?: string
       status?: string
-      active_step?: string
-      // 前端 SaveShortDramaProjectInput 使用 camelCase，此处一并兼容
+      // 切换步骤：后端据此把 state.steps.active 设为该值（state.steps.active 是唯一真相）
       activeStep?: string
     }
   }>('/short-drama/projects/:id', async (request, reply) => {
@@ -44,6 +44,15 @@ const route: FastifyPluginAsync = async (app) => {
 
     // 处理 state
     if (body.state !== undefined) {
+      // 生成中保护：库内任一文本流程在 generating 时，拒绝前端整份 state 覆盖。
+      // 前端 SWR 缓存的 state 可能落后于数据库，直接覆盖会抹掉 generating 标记，
+      // 造成「状态丢失 + Redis 锁仍在」的不一致。
+      const currentState = await readShortDramaProjectState(id)
+      if (hasShortDramaGeneratingStatus(currentState)) {
+        return reply.status(409).send({
+          error: { code: 'GENERATION_IN_PROGRESS', message: '生成进行中，请刷新页面查看最新结果' },
+        })
+      }
       try {
         const normalizedState = normalizeShortDramaState(body.state)
         await syncShortDramaSegmentsFromState(id, normalizedState)
@@ -90,8 +99,10 @@ const route: FastifyPluginAsync = async (app) => {
       updates.status = body.status
     }
 
-    // 处理 active_step（兼容前端 camelCase 的 activeStep）
-    const activeStep = body.active_step ?? body.activeStep
+    // 处理 activeStep：切换步骤。state.steps.active 是步骤唯一真相（前端 stepper / 页面内容 /
+    // 轮询全部依据它）。读库内当前 state（保留生成中等最新状态）→ 设 steps.active → 写回，
+    // 避免前端回传过期整份 state 覆盖生成中状态。
+    const activeStep = body.activeStep
     if (activeStep !== undefined) {
       const validSteps = ['script', 'assets', 'episodes']
       if (!validSteps.includes(activeStep)) {
@@ -99,7 +110,14 @@ const route: FastifyPluginAsync = async (app) => {
           error: { code: 'VALIDATION_ERROR', message: '步骤值无效' }
         })
       }
-      updates.active_step = activeStep
+
+      const baseState: ShortDramaState = updates.state
+        ? (JSON.parse(updates.state as string) as ShortDramaState)
+        : await readShortDramaProjectState(id)
+      updates.state = JSON.stringify({
+        ...baseState,
+        steps: { ...baseState.steps, active: activeStep as ShortDramaStepId },
+      })
     }
 
     // 更新 draft_saved_at
@@ -138,7 +156,6 @@ const route: FastifyPluginAsync = async (app) => {
       aspectRatio: updatedProject.aspect_ratio,
       episodeCount: updatedProject.episode_count,
       status: updatedProject.status,
-      activeStep: updatedProject.active_step,
       coverUrl: updatedProject.cover_url,
       state,
       estimatedCredits: updatedProject.estimated_credits,

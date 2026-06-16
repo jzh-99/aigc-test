@@ -405,6 +405,10 @@ export function applyShortDramaSegmentRowsToState(
       episode.status = 'completed'
     } else if (hasFailed) {
       episode.status = 'failed'
+    } else if (episode.segments.length > 0) {
+      // 有分镜但既不在生成、也未全部完成、也没失败（典型为全部 idle），
+      // 收敛为 idle，避免保留可能过期的 generating 孤儿标记导致保存被 409 拦截。
+      episode.status = 'idle'
     }
   }
 
@@ -418,7 +422,7 @@ export function applyShortDramaSegmentRowsToState(
       ? 'generating'
       : hasEpisodeFailed
         ? 'failed'
-        : state.episodes.status
+        : 'idle'
 
   return state
 }
@@ -520,6 +524,22 @@ export async function readShortDramaProjectState(projectId: string): Promise<Sho
   const state = normalizeShortDramaState(rawState)
   const segmentRows = await listShortDramaSegmentRows(projectId)
   return applyShortDramaSegmentRowsToState(state, segmentRows)
+}
+
+/**
+ * 判断短剧 state 是否存在任一「文本生成中」流程（generating）。
+ * 用于 put-project-id 拒绝前端过期 state 覆盖，避免抹掉生成中标记导致状态与锁不一致。
+ * 注意：只覆盖「文本类」生成（脚本/大纲/概述/素材/片段脚本），不包含 segment 视频任务（走 worker）。
+ */
+export function hasShortDramaGeneratingStatus(state: ShortDramaState): boolean {
+  return (
+    state.script.status === 'generating' ||
+    state.script.outlinesStatus === 'generating' ||
+    state.script.episodeSummaryStatus === 'generating' ||
+    state.assets.status === 'generating' ||
+    state.episodes.status === 'generating' ||
+    state.episodes.items.some(ep => ep.status === 'generating')
+  )
 }
 
 function sleep(ms: number): Promise<void> {

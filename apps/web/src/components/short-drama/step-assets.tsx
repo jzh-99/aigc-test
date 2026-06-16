@@ -13,6 +13,7 @@ import {
   generateShortDramaAssetPrompts,
   generateShortDramaAssets,
   saveShortDramaProject,
+  ShortDramaStillGeneratingError,
 } from '@/lib/short-drama/api'
 
 interface StepAssetsProps {
@@ -169,6 +170,11 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       if (result.warning) setAssetPromptWarningMessage(result.warning)
       onStateChange()
     } catch (err) {
+      if (err instanceof ShortDramaStillGeneratingError) {
+        // 后台仍在生成：不报错，交给 assets.status==='generating' 的轮询自愈
+        onStateChange()
+        return
+      }
       const errorMessage = err instanceof Error ? err.message : '生成失败'
       toast.error(translateError(errorMessage))
     } finally {
@@ -428,8 +434,8 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                 onClick={() => handleGeneratePrompts()}
                 disabled={generatingPrompts || isAssetPromptGenerating}
               >
-                {generatingPrompts ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
-                {promptButtonText}
+                {generatingPrompts || isAssetPromptGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+                {generatingPrompts || isAssetPromptGenerating ? '描述生成中' : promptButtonText}
               </Button>
               <Button
                 size="sm"
@@ -455,15 +461,15 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
         </div>
       )}
 
-      {generatingPrompts && assetPromptProgressMessage && (
+      {(generatingPrompts || isAssetPromptGenerating) && (
         <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-violet-800">
-          {assetPromptProgressMessage}
+          {assetPromptProgressMessage || '素材描述生成中，请稍候...'}
         </div>
       )}
 
       {filteredAssets.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
-          暂无角色、场景或道具素材
+          {isAssetPromptGenerating ? '素材描述生成中，请稍候...' : '暂无角色、场景或道具素材'}
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
