@@ -39,7 +39,6 @@ const route: FastifyPluginAsync = async (app) => {
         aspectRatio: fullProject.aspect_ratio,
         episodeCount: fullProject.episode_count,
         status: fullProject.status,
-        activeStep: fullProject.active_step,
         coverUrl: fullProject.cover_url,
         state,
         estimatedCredits: fullProject.estimated_credits,

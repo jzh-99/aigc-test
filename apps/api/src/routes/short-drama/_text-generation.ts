@@ -472,6 +472,7 @@ export function applyShortDramaEpisodeOutlinesBatchResult(
       summary: outline.summary,
       segments: existing?.segments ?? [],
       status: existing?.status ?? 'idle',
+      segmentsStatus: existing?.segmentsStatus ?? 'idle',
       videoUrl: existing?.videoUrl ?? null,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,

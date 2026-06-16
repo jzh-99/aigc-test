@@ -72,7 +72,14 @@ export default async function postUploadAsset(app: FastifyInstance): Promise<voi
       let finalImageUrl: string | null = null
 
       if (storageKey) {
-        finalImageUrl = storageKey.startsWith('/') ? storageKey : `/${storageKey}`
+        // storageKey 可能是 upload-image 接口返回的完整 TOS URL（https://...），
+        // 也可能是相对存储 key（uploads/... 或 /uploads/...）。
+        // 完整 URL 原样保留，相对 key 统一补上前导斜杠，避免出现 /https://... 这种坏链。
+        if (/^https?:\/\//i.test(storageKey)) {
+          finalImageUrl = storageKey
+        } else {
+          finalImageUrl = storageKey.startsWith('/') ? storageKey : `/${storageKey}`
+        }
       } else if (imageUrl) {
         if (!isInternalUrl(imageUrl)) {
           return reply.status(400).send({

@@ -65,8 +65,8 @@ function hasPendingWork(state: ShortDramaState, scope: ShortDramaPollScope): boo
     b => isPendingStatus(b.status) || b.exports.some(item => isPendingStatus(item.status))
   )
   if (state.steps.active === 'episodes') {
-    // episode.status=generating 为片段「脚本」生成中（区别于 segment 视频状态），同样需轮询自愈
-    const hasGeneratingEpisodes = state.episodes.items.some(ep => ep.status === 'generating')
+    // segmentsStatus=generating 为片段「脚本」生成中（与 segment 视频状态解耦），同样需轮询自愈
+    const hasGeneratingEpisodes = state.episodes.items.some(ep => ep.segmentsStatus === 'generating')
     return hasGeneratingEpisodes || hasPendingSegments || hasPendingExports
   }
 

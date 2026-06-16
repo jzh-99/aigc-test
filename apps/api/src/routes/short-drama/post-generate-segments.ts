@@ -116,9 +116,8 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     const now = new Date().toISOString()
-    episode.status = 'generating'
+    episode.segmentsStatus = 'generating'
     episode.updatedAt = now
-    state.episodes.status = 'generating'
     try {
       await saveShortDramaProjectState(projectId, state, 0)
     } catch (error) {
@@ -279,10 +278,9 @@ const route: FastifyPluginAsync = async (app) => {
       await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, refundContext)
       const now = new Date().toISOString()
       const failedEpisode = episode as typeof episode & { errorMessage?: string | null }
-      episode.status = 'failed'
+      episode.segmentsStatus = 'failed'
       failedEpisode.errorMessage = message
       episode.updatedAt = now
-      state.episodes.status = 'failed'
       await markShortDramaProjectFailed(projectId, state).catch((saveError) => {
         app.log.error({ error: saveError, projectId, episodeNumber }, '短剧片段脚本失败状态保存失败')
       })
@@ -525,14 +523,10 @@ const route: FastifyPluginAsync = async (app) => {
     // 更新 episode 的 segments
     const completedEpisode = episode as typeof episode & { errorMessage?: string | null }
     episode.segments = parsedSegments
+    episode.segmentsStatus = 'completed'
     episode.status = 'idle'
     completedEpisode.errorMessage = null
     episode.updatedAt = now
-    state.episodes.status = state.episodes.items.some(ep => ep.status === 'failed')
-      ? 'failed'
-      : state.episodes.items.some(ep => ep.segments.length === 0)
-        ? 'generating'
-        : 'completed'
 
     // 计算实际积分消耗（输入 + 输出字符均计费）
     const actualCredits = calculateTextGenerationCredits(REDACTED + lastUserPrompt, aiResponse)

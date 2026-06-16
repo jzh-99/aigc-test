@@ -467,7 +467,7 @@ export function generateShortDramaEpisodeSegments(
     projectId,
     (project) => {
       const episode = project.state.episodes.items.find((item) => item.episodeNumber === episodeNumber)
-      return episode ? episode.status === 'generating' : false
+      return episode ? episode.segmentsStatus === 'generating' : false
     },
   )
 }

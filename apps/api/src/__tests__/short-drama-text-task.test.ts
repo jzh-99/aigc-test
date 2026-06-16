@@ -21,6 +21,7 @@ function makeEpisode(overrides: Partial<ShortDramaEpisode>): ShortDramaEpisode {
     summary: 's',
     segments: [],
     status: 'generating',
+    segmentsStatus: 'generating',
     videoUrl: null,
     createdAt: '2026-06-15T00:00:00Z',
     updatedAt: '2026-06-15T00:00:00Z',
@@ -124,11 +125,12 @@ const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000)
 {
   const state = makeState()
   state.episodes.status = 'generating'
-  state.episodes.items = [makeEpisode({ episodeNumber: 1, segments: [], status: 'generating' })]
+  state.episodes.items = [makeEpisode({ episodeNumber: 1, segments: [], segmentsStatus: 'generating', status: 'idle' })]
   assert.equal(resetShortDramaTextTaskState(state, 'episode-segments', 1), true)
-  assert.equal(state.episodes.items[0].status, 'idle')
-  assert.equal(state.episodes.status, 'idle')
-  console.log('✓ episode-segments 僵死 → 该集 status 重置 idle，顶层 episodes.status 重算')
+  assert.equal(state.episodes.items[0].segmentsStatus, 'idle')
+  // 顶层 episodes.status 归视频流程维护，脚本自愈不重算它（保持原值）
+  assert.equal(state.episodes.status, 'generating')
+  console.log('✓ episode-segments 僵死 → 该集 segmentsStatus 重置 idle，顶层 episodes.status 不变（归视频流程）')
 }
 {
   const state = makeState()
@@ -136,17 +138,18 @@ const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000)
     makeEpisode({
       episodeNumber: 1,
       status: 'idle',
+      segmentsStatus: 'completed',
       segments: [
         { id: 's1', order: 1, title: 'x', prompt: 'p', mentionRefs: [], durationSeconds: 5, videoUrl: null, status: 'idle' },
       ],
     }),
   ]
   assert.equal(resetShortDramaTextTaskState(state, 'episode-segments', 1), false)
-  console.log('✓ episode-segments 已有 segments 且非 failed → 不重置')
+  console.log('✓ episode-segments 已有 segments 且脚本非 failed → 不重置')
 }
 {
   const state = makeState()
-  state.episodes.items = [makeEpisode({ episodeNumber: 2, status: 'generating' })]
+  state.episodes.items = [makeEpisode({ episodeNumber: 2, segmentsStatus: 'generating' })]
   assert.equal(resetShortDramaTextTaskState(state, 'episode-segments', 1), false)
   console.log('✓ episode-segments 指定集不存在 → 不重置')
 }

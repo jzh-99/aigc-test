@@ -42,9 +42,9 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
   const episodes = state.episodes.items
   const selectedEpisodeSet = useMemo(() => new Set(selectedEpisodeNumbers), [selectedEpisodeNumbers])
 
-  // 包含后端持久化的 generating 状态，刷新后可从 state 恢复
+  // 包含后端持久化的 generating 状态，刷新后可从 state 恢复（segmentsStatus = 片段脚本生成状态）
   const serverGeneratingEpisodes = useMemo(
-    () => episodes.filter(ep => ep.status === 'generating').map(ep => ep.episodeNumber),
+    () => episodes.filter(ep => ep.segmentsStatus === 'generating').map(ep => ep.episodeNumber),
     [episodes]
   )
   const isServerGenerating = serverGeneratingEpisodes.length > 0
@@ -54,10 +54,10 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
   const remainingSegmentEpisodes = useMemo(
     () => episodes
       .filter(ep =>
-        ep.status !== 'generating' &&
+        ep.segmentsStatus !== 'generating' &&
         (
           ep.segments.length === 0 ||
-          ep.status === 'failed' ||
+          ep.segmentsStatus === 'failed' ||
           Boolean(failedEpisodeErrors[ep.episodeNumber])
         )
       )
@@ -67,7 +67,7 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
   const generatedEpisodeCount = episodes.filter(ep => ep.segments.length > 0).length
   const ungeneratedEpisodeCount = episodes.length - generatedEpisodeCount
   const recentFailedEpisodeCount = episodes.filter(ep =>
-    ep.status === 'failed' || failedEpisodeErrors[ep.episodeNumber]
+    ep.segmentsStatus === 'failed' || failedEpisodeErrors[ep.episodeNumber]
   ).length
   const exportableCount = episodes.filter(ep =>
     ep.segments.length > 0 && ep.segments.every(s => !!s.videoUrl)
@@ -291,10 +291,10 @@ export function StepEpisodes({ projectId, state, onStateChange }: StepEpisodesPr
           {episodes.map(episode => {
             const segmentCount = episode.segments.length
             const completedSegments = episode.segments.filter(s => s.status === 'completed').length
-            const isCurrentGenerating = generatingEpisodeNumber === episode.episodeNumber || episode.status === 'generating'
+            const isCurrentGenerating = generatingEpisodeNumber === episode.episodeNumber || episode.segmentsStatus === 'generating'
             const failureMessage = failedEpisodeErrors[episode.episodeNumber] ?? episode.errorMessage ?? 'AI 生成失败，请稍后重试'
             const isSelected = selectedEpisodeSet.has(episode.episodeNumber)
-            const isFailed = episode.status === 'failed' || !!failedEpisodeErrors[episode.episodeNumber]
+            const isFailed = episode.segmentsStatus === 'failed' || !!failedEpisodeErrors[episode.episodeNumber]
             const canGenerateEpisode = !isGeneratingSegments && !isCurrentGenerating
             const generateButtonLabel = segmentCount > 0 || isFailed ? '重新生成' : '生成片段脚本'
             const failureDisplayMessage = segmentCount > 0

@@ -530,6 +530,8 @@ export async function readShortDramaProjectState(projectId: string): Promise<Sho
  * 判断短剧 state 是否存在任一「文本生成中」流程（generating）。
  * 用于 put-project-id 拒绝前端过期 state 覆盖，避免抹掉生成中标记导致状态与锁不一致。
  * 注意：只覆盖「文本类」生成（脚本/大纲/概述/素材/片段脚本），不包含 segment 视频任务（走 worker）。
+ * 片段脚本生成状态由 episode.segmentsStatus 承载（与视频维度的 episode.status 解耦），
+ * 顶层 episodes.status 归视频流程维护，不在此判断。
  */
 export function hasShortDramaGeneratingStatus(state: ShortDramaState): boolean {
   return (
@@ -537,8 +539,7 @@ export function hasShortDramaGeneratingStatus(state: ShortDramaState): boolean {
     state.script.outlinesStatus === 'generating' ||
     state.script.episodeSummaryStatus === 'generating' ||
     state.assets.status === 'generating' ||
-    state.episodes.status === 'generating' ||
-    state.episodes.items.some(ep => ep.status === 'generating')
+    state.episodes.items.some(ep => ep.segmentsStatus === 'generating')
   )
 }
 

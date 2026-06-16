@@ -110,25 +110,6 @@ export function isShortDramaTextTaskStuck(
   return now.getTime() - new Date(batch.updated_at).getTime() > TEXT_TASK_STUCK_THRESHOLD_MS
 }
 
-/** 根据所有集的综合状态重算顶层 episodes.status（episode-segments 重置后保持一致） */
-function recomputeEpisodesStatus(state: ShortDramaState): void {
-  const items = state.episodes.items
-  if (items.length === 0) {
-    state.episodes.status = 'idle'
-    return
-  }
-  const allCompleted = items.every((ep) => ep.status === 'completed')
-  const hasGenerating = items.some((ep) => ep.status === 'generating')
-  const hasFailed = items.some((ep) => ep.status === 'failed')
-  state.episodes.status = allCompleted
-    ? 'completed'
-    : hasGenerating
-      ? 'generating'
-      : hasFailed
-        ? 'failed'
-        : 'idle'
-}
-
 /**
  * 根据 textType 重置 state 对应字段。先检查"已有结果"，避免覆盖已成功的结果。
  * @returns 是否实际重置（false = 已有结果或无效，调用方据此决定是否标记 batch）
@@ -162,11 +143,12 @@ export function resetShortDramaTextTaskState(
       if (episodeNumber == null) return false
       const episode = state.episodes.items.find((ep) => ep.episodeNumber === episodeNumber)
       if (!episode) return false
-      // 已有片段脚本且非失败 → 保护，不重置
-      if (episode.segments.length > 0 && episode.status !== 'failed') return false
-      episode.status = 'idle'
+      // 已有片段脚本且脚本非失败 → 保护，不重置
+      if (episode.segments.length > 0 && episode.segmentsStatus !== 'failed') return false
+      episode.segmentsStatus = 'idle'
       episode.errorMessage = null
-      recomputeEpisodesStatus(state)
+      // 顶层 episodes.status 归视频流程维护（applyShortDramaSegmentRowsToState / post-sync-batches），
+      // 脚本自愈不碰它，避免脚本重置误改视频维度状态。
       return true
     }
   }

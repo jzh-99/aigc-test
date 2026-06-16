@@ -122,7 +122,10 @@ export interface ShortDramaEpisode {
   title: string
   summary: string
   segments: ShortDramaSegment[]
+  /** 片段视频聚合状态（由 segment 视频状态重算） */
   status: ShortDramaEpisodeStatus
+  /** 片段脚本生成状态（脚本生成流程专用，与视频 status 解耦） */
+  segmentsStatus: ShortDramaEpisodeStatus
   errorMessage?: string | null
   videoUrl: string | null
   createdAt: string
@@ -500,7 +503,11 @@ export function normalizeShortDramaState(partial: DeepPartial<ShortDramaState>):
       processedOutlineCount: normalizedProcessedOutlineCount,
     },
     episodes: {
-      items: (partial.episodes?.items ?? []) as ShortDramaEpisode[],
+      items: (partial.episodes?.items ?? []).map((episode) => ({
+        ...(episode as ShortDramaEpisode),
+        // 兼容旧 state JSON：缺 segmentsStatus 时回退为 idle
+        segmentsStatus: (episode as ShortDramaEpisode).segmentsStatus ?? 'idle',
+      })) as ShortDramaEpisode[],
       status: partial.episodes?.status ?? 'idle',
     },
     exports: {

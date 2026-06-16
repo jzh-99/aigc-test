@@ -515,7 +515,6 @@ export interface ShortDramaProjectsTable {
   aspect_ratio: string
   episode_count: number
   status: string
-  active_step: string
   cover_url: string | null
   state: ColumnType<unknown, string, string>
   estimated_credits: number
@@ -568,6 +567,7 @@ export interface PictureBookProjectsTable {
   page_count: 10 | 15 | 20
   status: Generated<
     | 'draft'
+    | 'generating'
     | 'script_ready'
     | 'assets_ready'
     | 'storyboard_ready'

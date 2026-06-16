@@ -31,6 +31,8 @@ interface GenerateSegmentVideoBody {
 const SEEDANCE_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
 const SEEDANCE_2_ALLOWED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 const NEGATIVE_VIDEO_PROMPT = '画面模糊、人物畸形、光影杂乱、卡通画风、画质糊边、多余杂物、画面卡顿、镜头跳切突兀、人物身份混乱、参考形象不一致、手持道具朝向跳变、关键道具接触点无因果变化、动作断层、人物站位凭空变化、背景虚假、情绪表演抽象空泛'
+// 片段视频画面禁止项：固定硬编码注入最终视频提示词，仅发送给视频模型，不展示给用户
+const VIDEO_CONTENT_FORBIDDEN_RULE = '视频画面严禁出现字幕旁白、背景音乐、文字气泡等相关内容'
 
 interface PromptReferenceAsset {
   asset: ShortDramaAsset
@@ -189,6 +191,8 @@ export function buildShortDramaFinalVideoPrompt(input: {
     '',
     '负面提示词（规避劣质画面）',
     NEGATIVE_VIDEO_PROMPT,
+    '',
+    VIDEO_CONTENT_FORBIDDEN_RULE,
   ].join('\n')
 }
 

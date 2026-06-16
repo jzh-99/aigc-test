@@ -111,7 +111,15 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   }
   const processedOutlineCount = state.assets.processedOutlineCount
   const totalOutlineCount = state.script.outlines.length
-  const isAssetPromptGenerating = state.assets.status === 'generating'
+  // assets.status === 'generating' 同时被「描述生成」与「图片生成」两个流程复用，
+  // 不能直接用来判定是哪一种。这里按业务语义精确区分：
+  // - 描述生成中：描述尚未全部产出（processedOutlineCount < total）且 assets.status=generating
+  // - 图片生成中：有任一必需素材处于 pending/generating（由 /sync 轮询回写真实 task 状态）
+  const isAssetPromptGenerating =
+    state.assets.status === 'generating' && processedOutlineCount < totalOutlineCount
+  const isAssetImageGenerating = requiredAssets.some(
+    asset => asset.status === 'pending' || asset.status === 'generating'
+  )
   const canContinuePrompts = processedOutlineCount > 0 && processedOutlineCount < totalOutlineCount
   const promptButtonText = processedOutlineCount >= totalOutlineCount && totalOutlineCount > 0
     ? '描述已生成'
@@ -441,10 +449,10 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                 size="sm"
                 variant="outline"
                 onClick={handleBatchGenerate}
-                disabled={generatingImages || isAssetPromptGenerating || processedOutlineCount < totalOutlineCount}
+                disabled={generatingImages || isAssetImageGenerating || isAssetPromptGenerating || processedOutlineCount < totalOutlineCount}
               >
-                {generatingImages ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
-                批量生图
+                {generatingImages || isAssetImageGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
+                {generatingImages || isAssetImageGenerating ? '批量生图中' : '批量生图'}
               </Button>
             </div>
           )}
@@ -452,18 +460,26 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       </div>
 
       {assetPromptWarningMessage && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-300">
           <div className="font-medium">生成已暂停</div>
           <p className="mt-1">{assetPromptWarningMessage}</p>
-          <p className="mt-1 text-xs">
+          <p className="mt-1 text-xs text-amber-300/70">
             已提取 {processedOutlineCount} / {totalOutlineCount} 集，可补充 A豆后继续生成剩余集数的角色、场景和道具。
           </p>
         </div>
       )}
 
       {(generatingPrompts || isAssetPromptGenerating) && (
-        <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-sm text-violet-800">
+        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 p-3 text-sm text-primary">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
           {assetPromptProgressMessage || '素材描述生成中，请稍候...'}
+        </div>
+      )}
+
+      {isAssetImageGenerating && !generatingPrompts && !isAssetPromptGenerating && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 p-3 text-sm text-primary">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          素材图片生成中，请稍候...
         </div>
       )}
 

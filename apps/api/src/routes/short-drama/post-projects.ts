@@ -131,7 +131,6 @@ const route: FastifyPluginAsync = async (app) => {
         aspect_ratio: state.settings.aspectRatio,
         episode_count: state.settings.episodeCount,
         status: 'draft',
-        active_step: 'script',
         state: JSON.stringify(state),
         estimated_credits: 0,
         actual_credits: 0,
