@@ -18,7 +18,6 @@ export interface VideoParams {
   videoResolution?: string
   videoDuration?: number
   videoGenerateAudio?: boolean
-  videoCameraFixed?: boolean
   videoMode?: string
   videoFrameImages?: ReferenceImage[]
   videoReferenceImages?: ReferenceImage[]
@@ -38,7 +37,6 @@ interface VideoDefaults {
   videoResolution?: string
   videoDuration: number
   videoGenerateAudio: boolean
-  videoCameraFixed: boolean
 }
 
 interface AvatarDefaults {
@@ -257,7 +255,6 @@ export const useGenerationStore = create<GenerationState>()(
           videoResolution: (params?.resolution as string) || undefined,
           videoDuration: (params?.duration as number) ?? undefined,
           videoGenerateAudio: (params?.generate_audio as boolean) ?? undefined,
-          videoCameraFixed: (params?.camera_fixed as boolean) ?? undefined,
           videoMode,
           videoFrameImages: frameImages,
           videoReferenceImages: referenceImages,

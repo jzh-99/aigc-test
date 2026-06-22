@@ -17,7 +17,6 @@ export interface GenerationDefaults {
     videoResolution?: string
     videoDuration?: number
     videoGenerateAudio?: boolean
-    videoCameraFixed?: boolean
   }
   avatar?: {
     avatarResolution?: string

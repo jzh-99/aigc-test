@@ -4,21 +4,17 @@
 import { Button } from '@/components/ui/button'
 import { Sparkles, Loader2, Coins } from 'lucide-react'
 import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
-import { calculateReferenceVideoDurationSeconds, type ModelItem, type VideoCategory } from '@aigc/types'
+import { calculateReferenceVideoDurationSeconds, type ModelItem } from '@aigc/types'
 import { VideoConfigPopover } from '../shared/video-config-popover'
-
-type VideoMode = VideoCategory
 
 interface VideoParamsProps {
   models?: ModelItem[]
-  videoMode: VideoMode
   videoModel: string
   videoAspectRatio: string
   videoResolution: string
   videoDuration: number
   referenceVideoDurations: number[]
   videoGenerateAudio: boolean
-  videoCameraFixed: boolean
   isSeedance: boolean
   isGenerating: boolean
   isUploading: boolean
@@ -29,16 +25,15 @@ interface VideoParamsProps {
   onResolutionChange: (v: string) => void
   onDurationChange: (v: number) => void
   onGenerateAudioChange: (v: boolean) => void
-  onCameraFixedChange: (v: boolean) => void
   onGenerate: () => void
 }
 
 export function VideoParams({
-  models, videoMode, videoModel, videoAspectRatio, videoResolution, videoDuration,
-  referenceVideoDurations, videoGenerateAudio, videoCameraFixed, isSeedance,
+  models, videoModel, videoAspectRatio, videoResolution, videoDuration,
+  referenceVideoDurations, videoGenerateAudio, isSeedance,
   isGenerating, isUploading, disabled, promptEmpty, showConfigControls = true,
   onAspectRatioChange, onResolutionChange, onDurationChange,
-  onGenerateAudioChange, onCameraFixedChange,
+  onGenerateAudioChange,
   onGenerate,
 }: VideoParamsProps) {
   const isDisabled = isGenerating || isUploading || !!disabled
@@ -68,19 +63,16 @@ export function VideoParams({
           dbResolutions={dbResolutions}
           dbAspectRatios={dbAspectRatios}
           dbDurationOptions={dbDurationOptions}
-          videoMode={videoMode}
           videoAspectRatio={videoAspectRatio}
           videoResolution={activeResolution}
           videoDuration={videoDuration}
           videoGenerateAudio={videoGenerateAudio}
-          videoCameraFixed={videoCameraFixed}
           isSeedance={isSeedance}
           disabled={isDisabled}
           onAspectRatioChange={onAspectRatioChange}
           onResolutionChange={onResolutionChange}
           onDurationChange={onDurationChange}
           onGenerateAudioChange={onGenerateAudioChange}
-          onCameraFixedChange={onCameraFixedChange}
         />
       ) : <div />}
 
@@ -104,36 +96,30 @@ export function VideoConfigControls({
   dbResolutions,
   dbAspectRatios,
   dbDurationOptions,
-  videoMode,
   videoAspectRatio,
   videoResolution,
   videoDuration,
   videoGenerateAudio,
-  videoCameraFixed,
   isSeedance,
   disabled,
   onAspectRatioChange,
   onResolutionChange,
   onDurationChange,
   onGenerateAudioChange,
-  onCameraFixedChange,
 }: {
   dbResolutions: ReturnType<typeof extractSchemaEnums>
   dbAspectRatios: ReturnType<typeof extractSchemaEnums>
   dbDurationOptions: Array<{ value: number; label: string }>
-  videoMode: VideoMode
   videoAspectRatio: string
   videoResolution: string
   videoDuration: number
   videoGenerateAudio: boolean
-  videoCameraFixed: boolean
   isSeedance: boolean
   disabled?: boolean
   onAspectRatioChange: (v: string) => void
   onResolutionChange: (v: string) => void
   onDurationChange: (v: number) => void
   onGenerateAudioChange: (v: boolean) => void
-  onCameraFixedChange: (v: boolean) => void
 }) {
   const currentAspectLabel = dbAspectRatios.find((ar) => ar.value === videoAspectRatio)?.label ?? videoAspectRatio
   const currentDurationLabel = dbDurationOptions.find((opt) => opt.value === videoDuration)?.label ?? `${videoDuration}s`
@@ -156,13 +142,10 @@ export function VideoConfigControls({
         durationOptions={dbDurationOptions}
         isSeedance={isSeedance}
         generateAudio={videoGenerateAudio}
-        cameraFixed={videoCameraFixed}
-        showCameraFixed={videoMode !== 'frames'}
         onResolutionChange={onResolutionChange}
         onAspectRatioChange={onAspectRatioChange}
         onDurationChange={onDurationChange}
         onGenerateAudioChange={onGenerateAudioChange}
-        onCameraFixedChange={onCameraFixedChange}
         disabled={disabled}
       />
     </div>

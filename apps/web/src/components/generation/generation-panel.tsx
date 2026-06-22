@@ -60,7 +60,6 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
           videoResolution: d.video.videoResolution ?? '',
           videoDuration: d.video.videoDuration ?? 5,
           videoGenerateAudio: d.video.videoGenerateAudio ?? true,
-          videoCameraFixed: d.video.videoCameraFixed ?? false,
         } : null,
         avatarDefaults: d.avatar ? {
           avatarResolution: (d.avatar.avatarResolution as never) ?? '720p',

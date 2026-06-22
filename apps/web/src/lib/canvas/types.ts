@@ -100,7 +100,6 @@ export interface VideoGenConfig {
   aspectRatio: string
   duration: number
   generateAudio: boolean
-  cameraFixed: boolean
   watermark: boolean
   categoryReferences?: CategoryReferences
   /** 视频分辨率，可选，如 '720p'、'1080p' 等 */

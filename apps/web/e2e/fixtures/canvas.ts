@@ -82,7 +82,6 @@ export function createVideoNode(params: {
         aspectRatio: 'adaptive',
         duration: 5,
         generateAudio: true,
-        cameraFixed: false,
         watermark: false,
       },
     },

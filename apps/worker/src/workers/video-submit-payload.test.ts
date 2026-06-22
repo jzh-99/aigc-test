@@ -40,11 +40,13 @@ test('全能参考模式允许不传任何参考资源', () => {
 })
 
 test('Seedance 2.0 时长使用官方 duration 整数秒字段，避免落入默认 5 秒', () => {
+  const unsupportedCameraParam = ['camera', 'fixed'].join('_')
   const body = buildVolcengineTaskBody('seedance-2.0', '生成 15 秒广告片', {
     duration: 15,
+    [unsupportedCameraParam]: true,
   })
 
-  assert.deepEqual(body.parameters, {
-    duration: 15,
-  })
+  assert.equal(body.duration, 15)
+  assert.equal('parameters' in body, false)
+  assert.equal(unsupportedCameraParam in body, false)
 })

@@ -42,7 +42,6 @@ export interface VolcengineTaskBody {
   ratio?: string
   duration?: number
   generate_audio?: boolean
-  camera_fixed?: boolean
   enable_upsample?: boolean
   watermark?: boolean
   resolution?: string
@@ -133,7 +132,6 @@ export function buildVolcengineTaskBody(
   if (typeof params.aspect_ratio === 'string') body.ratio = params.aspect_ratio
   if (typeof params.duration === 'number' && params.duration > 0) body.duration = params.duration
   if (typeof params.generate_audio === 'boolean') body.generate_audio = params.generate_audio
-  if (typeof params.camera_fixed === 'boolean') body.camera_fixed = params.camera_fixed
   if (typeof params.enable_upsample === 'boolean') body.enable_upsample = params.enable_upsample
   if (typeof params.watermark === 'boolean') body.watermark = params.watermark
   if (typeof params.resolution === 'string') body.resolution = params.resolution

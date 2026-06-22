@@ -82,7 +82,6 @@ const DEFAULT_VIDEO_CONFIG: VideoGenConfig = {
   aspectRatio: 'adaptive',
   duration: 5,
   generateAudio: true,
-  cameraFixed: false,
   watermark: false,
   categoryReferences: DEFAULT_VIDEO_CATEGORY_LIMITS,
 }
@@ -289,7 +288,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   const videoAspect = videoCfg.aspectRatio
   const videoDuration = videoCfg.duration
   const generateAudio = videoCfg.generateAudio
-  const cameraFixed = videoCfg.cameraFixed
   const videoWatermark = globalWatermark
   // 视频分辨率（可选）
   const videoResolution = videoCfg.resolution ?? ''
@@ -530,7 +528,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           resolution: videoResolution || undefined,
           duration: videoDuration,
           generateAudio,
-          cameraFixed,
           watermark: videoWatermark,
           referenceImages: videoMode === 'multiref' ? multirefImages : undefined,
           referenceVideos: videoMode === 'multiref' ? multirefVideos : undefined,
@@ -575,7 +572,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
       setExecuting(false)
     }
   }, [
-    cameraFixed,
     canvasId,
     currentCategoryReferences,
     displayedKeyframes,
@@ -743,7 +739,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           videoAspect={videoAspect}
           videoDuration={videoDuration}
           generateAudio={generateAudio}
-          cameraFixed={cameraFixed}
           executing={executing}
           hasPrompt={!!hasVideoPrompt}
           models={videoModels}

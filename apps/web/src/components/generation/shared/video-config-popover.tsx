@@ -3,7 +3,7 @@
 
 import { useState, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, Clock, Film, Ratio, Video, Volume2 } from 'lucide-react'
+import { Check, ChevronDown, Clock, Film, Ratio, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ─── ConfigOptionGroup ───────────────────────────────────────
@@ -114,14 +114,10 @@ export interface VideoConfigPopoverProps {
   durationOptions: Array<{ value: number; label: string }>
   isSeedance: boolean
   generateAudio?: boolean
-  cameraFixed?: boolean
-  /** 是否显示镜头选项（仅 Seedance multimodal 模式） */
-  showCameraFixed?: boolean
   onResolutionChange: (value: string) => void
   onAspectRatioChange: (value: string) => void
   onDurationChange: (value: number) => void
   onGenerateAudioChange?: (value: boolean) => void
-  onCameraFixedChange?: (value: boolean) => void
   disabled?: boolean
   children?: ReactNode
 }
@@ -136,13 +132,10 @@ export function VideoConfigPopover({
   durationOptions,
   isSeedance,
   generateAudio = false,
-  cameraFixed = false,
-  showCameraFixed = true,
   onResolutionChange,
   onAspectRatioChange,
   onDurationChange,
   onGenerateAudioChange = () => {},
-  onCameraFixedChange = () => {},
   disabled,
   children,
 }: VideoConfigPopoverProps) {
@@ -215,18 +208,6 @@ export function VideoConfigPopover({
                 ]}
                 onChange={(val) => onGenerateAudioChange(val === 'true')}
               />
-              {showCameraFixed && (
-                <ConfigOptionGroup
-                  icon={<Video className="h-3 w-3" />}
-                  label="镜头"
-                  value={String(cameraFixed)}
-                  options={[
-                    { value: 'false', label: '自由镜头' },
-                    { value: 'true', label: '固定镜头' },
-                  ]}
-                  onChange={(val) => onCameraFixedChange(val === 'true')}
-                />
-              )}
             </>
           )}
         </Popover.Content>

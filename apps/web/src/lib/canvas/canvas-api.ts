@@ -56,7 +56,6 @@ export interface ExecuteVideoNodeParams {
   resolution?: string
   duration?: number
   generateAudio?: boolean
-  cameraFixed?: boolean
   enableUpsample?: boolean
   watermark?: boolean
   // multiref mode: reference images, videos, audios
@@ -476,7 +475,6 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
   if (isSeedance) {
     if (params.duration && params.duration !== 0) body.duration = params.duration
     body.generate_audio = params.generateAudio ?? true
-    body.camera_fixed = params.cameraFixed ?? false
     body.watermark = params.watermark ?? false
   } else {
     body.enable_upsample = params.enableUpsample ?? false

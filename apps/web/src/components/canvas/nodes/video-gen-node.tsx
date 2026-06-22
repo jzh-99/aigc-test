@@ -26,7 +26,6 @@ export interface VideoGenConfig {
   aspectRatio: string
   duration: number
   generateAudio: boolean
-  cameraFixed: boolean
   watermark: boolean
 }
 

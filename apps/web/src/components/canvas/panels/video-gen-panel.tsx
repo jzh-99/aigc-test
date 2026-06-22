@@ -117,7 +117,6 @@ interface VideoGenPanelProps {
   videoAspect: string
   videoDuration: number
   generateAudio: boolean
-  cameraFixed: boolean
   executing: boolean
   hasPrompt: boolean
   models?: ModelItem[]
@@ -148,7 +147,6 @@ export function VideoGenPanel({
   videoAspect,
   videoDuration,
   generateAudio,
-  cameraFixed,
   executing,
   hasPrompt,
   models,
@@ -205,7 +203,6 @@ export function VideoGenPanel({
     currentAspectLabel,
     isSeedance ? currentDurationLabel : null,
     isSeedance ? (generateAudio ? '有声' : '无声') : null,
-    isSeedance ? (cameraFixed ? '固定镜头' : '自由镜头') : null,
   ].filter(Boolean).join(' - ')
 
   return (
@@ -342,13 +339,10 @@ export function VideoGenPanel({
             durationOptions={durationOptions}
             isSeedance={isSeedance}
             generateAudio={generateAudio}
-            cameraFixed={cameraFixed}
-            showCameraFixed={videoMode !== 'keyframe'}
             onResolutionChange={onVideoResolutionChange}
             onAspectRatioChange={(val) => onUpdateCfg({ aspectRatio: val })}
             onDurationChange={(val) => onUpdateCfg({ duration: val })}
             onGenerateAudioChange={(val) => onUpdateCfg({ generateAudio: val })}
-            onCameraFixedChange={(val) => onUpdateCfg({ cameraFixed: val })}
           />
         </PanelToolbar>
 

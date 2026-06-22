@@ -15,7 +15,7 @@ import { resolveBatchSource } from '../../lib/batch-source.js'
 // 视频生成允许的 params 键白名单
 const ALLOWED_PARAM_KEYS = new Set([
   'aspect_ratio', 'resolution', 'duration', 'generate_audio',
-  'camera_fixed', 'enable_upsample', 'watermark',
+  'enable_upsample', 'watermark',
   'images', 'reference_images', 'reference_videos', 'reference_audios',
   'video_category', 'reference_video_durations',
 ])
@@ -28,7 +28,6 @@ interface VideoGenerateBody {
   resolution?: string
   duration?: number
   generate_audio?: boolean
-  camera_fixed?: boolean
   enable_upsample?: boolean
   watermark?: boolean
   images?: string[]
@@ -98,7 +97,6 @@ const route: FastifyPluginAsync = async (app) => {
           resolution:       { type: 'string' },
           duration:         { type: 'number' },
           generate_audio:   { type: 'boolean' },
-          camera_fixed:     { type: 'boolean' },
           enable_upsample:  { type: 'boolean' },
           watermark:        { type: 'boolean' },
           images:           { type: 'array', items: { type: 'string' } },
@@ -118,13 +116,13 @@ const route: FastifyPluginAsync = async (app) => {
     const {
       prompt, workspace_id: workspaceId, model, video_studio_project_id,
       canvas_id: canvasId, canvas_node_id: canvasNodeId,
-      aspect_ratio, resolution, duration, generate_audio, camera_fixed,
+      aspect_ratio, resolution, duration, generate_audio,
       enable_upsample, watermark, images, reference_images, reference_videos, reference_video_durations, reference_audios,
       video_category,
     } = request.body
 
     const params = sanitizeParams({
-      aspect_ratio, resolution, duration, generate_audio, camera_fixed,
+      aspect_ratio, resolution, duration, generate_audio,
       enable_upsample, watermark, images, reference_images, reference_videos, reference_video_durations, reference_audios,
       video_category,
     })

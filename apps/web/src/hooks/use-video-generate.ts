@@ -17,7 +17,6 @@ interface VideoGenerateParams {
   resolution?: string
   duration?: number
   generate_audio?: boolean
-  camera_fixed?: boolean
   watermark?: boolean
 }
 

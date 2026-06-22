@@ -70,7 +70,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const [videoResolution, setVideoResolution] = useState(initialParams?.videoResolution ?? '')
   const [videoDuration, setVideoDuration] = useState(initialParams?.videoDuration ?? -1)
   const [videoGenerateAudio, setVideoGenerateAudio] = useState(initialParams?.videoGenerateAudio ?? true)
-  const [videoCameraFixed, setVideoCameraFixed] = useState(initialParams?.videoCameraFixed ?? false)
   const [isVideoUploading, setIsVideoUploading] = useState(false)
 
   // 从历史记录恢复时，将 prompt 写入 store
@@ -367,7 +366,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         ...(isSeedance ? {
           duration: videoDuration,
           generate_audio: videoGenerateAudio,
-          ...(videoMode !== 'frames' ? { camera_fixed: videoCameraFixed } : {}),
           watermark,
         } : {}),
       })
@@ -533,14 +531,12 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
 
       <VideoParamsPanel
         models={videoModels}
-        videoMode={videoMode}
         videoModel={videoModel}
         videoAspectRatio={videoAspectRatio}
         videoResolution={videoResolution}
         videoDuration={videoDuration}
         referenceVideoDurations={multimodalVideos.map((video) => video.duration)}
         videoGenerateAudio={videoGenerateAudio}
-        videoCameraFixed={videoCameraFixed}
         isSeedance={isSeedance}
         isGenerating={isVideoGenerating}
         isUploading={isVideoUploading}
@@ -550,7 +546,6 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         onResolutionChange={setVideoResolution}
         onDurationChange={setVideoDuration}
         onGenerateAudioChange={setVideoGenerateAudio}
-        onCameraFixedChange={setVideoCameraFixed}
         onGenerate={handleVideoGenerate}
       />
     </>

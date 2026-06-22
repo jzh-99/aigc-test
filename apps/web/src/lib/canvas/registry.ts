@@ -64,7 +64,6 @@ export class NodeRegistry {
         aspectRatio: 'adaptive',
         duration: 5,
         generateAudio: true,
-        cameraFixed: false,
         watermark: false,
         categoryReferences: DEFAULT_VIDEO_CATEGORY_LIMITS,
       },
