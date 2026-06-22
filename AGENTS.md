@@ -185,29 +185,33 @@ bash deploy/build-images.sh all
 bash deploy/build-images.sh api
 bash deploy/build-images.sh web
 bash deploy/build-images.sh worker
+bash deploy/build-images.sh infra        # 拉取并打包基础服务官方镜像（离线环境）
 ```
 
 ### 服务器侧操作（通过跳板机手动执行，按顺序：infra → api → worker → web）
 
-将 `deploy/dist/aigc-<service>.tar.gz` 和 `deploy/<service>/` 目录下的文件传到对应服务器后：
+将 `deploy/dist/*.tar.gz` 和 `deploy/<service>/` 目录下的文件传到对应服务器后：
 
 ```bash
-# ---- 基础设施服务器（只用官方镜像，无需 docker load）----
+# ---- 基础设施服务器（离线环境，需 docker load 官方镜像）----
+sudo bash setup-host.sh                 # 仅首次：创建 swap，防止 PG 内存峰值触发 OOM
+docker load < postgres.tar.gz           # 加载 postgres:16-alpine
+docker load < redis.tar.gz              # 加载 redis:7-alpine
 cp .env.example .env
-vi .env                              # 填写数据库密码、Redis 密码
+vi .env                                 # 填写数据库密码、Redis 密码、PG_* 内存参数
 docker compose up -d
 
 # ---- api / worker / web 服务器（以 api 为例）----
 docker load < aigc-web.tar.gz
 cp .env.example .env
 cp docker-compose.yml docker-compose.yml
-vi .env                              # 填写 INFRA_HOST 及各项密钥
+vi .env                                 # 填写 INFRA_HOST 及各项密钥
 docker compose up -d
 
 # 每次重新构建容器
 docker load < aigc-web.tar.gz
-docker-compose up -d --force-recreate # 强制重新构建容器
-docker logs aigc-web --tail 30 # 查看容器日志
+docker-compose up -d --force-recreate   # 强制重新构建容器
+docker logs aigc-web --tail 30          # 查看容器日志
 ```
 
 **数据库迁移（首次部署，在能访问基础设施服务器的机器上执行）**
@@ -218,6 +222,8 @@ DATABASE_URL=postgresql://aigc:<password>@<INFRA_IP>:5432/aigc_dev pnpm db:migra
 ### 注意事项
 
 - **防火墙**：基础设施服务器的 5432/6379/9000 端口只对 API/Worker 服务器 IP 开放，不要暴露公网。
+- **基础设施内存调优**：PostgreSQL 默认 `shared_buffers=128MB / work_mem=4MB` 在 `credits_ledger` 等流水表上会触发 53200 OOM。`deploy/infra/docker-compose.yml` 已通过 `command:` 覆盖，参数经 `deploy/infra/.env` 的 `PG_*` 变量注入（8GB 服务器默认档位：1GB / 16MB / 256MB / 3GB / 80 连接）。修改 `.env` 后需 `docker compose up -d --force-recreate`。
+- **基础设施 swap**：`deploy/infra/setup-host.sh` 负责创建 2GB swap + `vm.swappiness=10` 并持久化，仅首次执行一次（幂等，重复执行无副作用）。swap 不能在容器内做，必须在宿主机内核层创建。
 - **`NEXT_PUBLIC_STORAGE_HOST`**：该值会被打包进客户端 bundle，必须填写浏览器可访问的公网 IP 或域名，不能用内网地址。
 - **`sharp` 原生模块**：Windows 本机编译的二进制无法在 Linux 容器运行，Dockerfile 已在 Alpine 环境重新安装，无需手动处理。
 - **`output: 'standalone'`**：`apps/web/next.config.mjs` 已开启，web Dockerfile 依赖此配置生成 `server.js`，不可移除。

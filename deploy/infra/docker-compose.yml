@@ -15,10 +15,34 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-aigc}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必须设置 POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-aigc_dev}
+    # PostgreSQL 内存调优（默认配置在 credits_ledger 等大表上会触发 53200 OOM）
+    # 参数说明见 README.md「内存调优」一节，需根据宿主机物理内存调整：
+    #   shared_buffers ≈ 物理内存的 1/4
+    #   effective_cache_size ≈ 物理内存的 1/2 ~ 3/4
+    #   max_connections 需 ≥ 所有应用容器 PG_POOL_MAX 之和 ×1.5（预留运维连接）
+    # 默认值为 8GB 服务器档位，生产环境通过 .env 覆盖
+    command: >
+      postgres
+        -c shared_buffers=${PG_SHARED_BUFFERS:-1GB}
+        -c work_mem=${PG_WORK_MEM:-16MB}
+        -c maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-256MB}
+        -c effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-3GB}
+        -c max_connections=${PG_MAX_CONNECTIONS:-80}
+        -c wal_buffers=16MB
+        -c checkpoint_completion_target=0.9
+        -c random_page_cost=1.1
+        -c default_statistics_target=100
+    shm_size: '256mb'
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: ${PG_CONTAINER_MEMORY_LIMIT:-3g}
+        reservations:
+          memory: 512m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aigc} -d ${POSTGRES_DB:-aigc_dev}"]
       interval: 10s
@@ -29,11 +53,22 @@ services:
     image: redis:7-alpine
     container_name: aigc-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    command: >
+      redis-server
+        --appendonly yes
+        --requirepass ${REDIS_PASSWORD:-}
+        --maxmemory ${REDIS_MAXMEMORY:-512mb}
+        --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_CONTAINER_MEMORY_LIMIT:-768m}
+        reservations:
+          memory: 256m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

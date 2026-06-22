@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # ============================================================
-# build-images.sh — 在本机构建三个应用镜像并导出为 tar 包
-# 用法：bash deploy/build-images.sh [api|web|worker|all]
+# build-images.sh — 在本机构建/拉取镜像并导出为 tar 包
+# 用法：bash deploy/build-images.sh [api|web|worker|infra|all]
+#
+#   api    构建自研 API 镜像（apps/api/Dockerfile）
+#   web    构建自研 Web 镜像（apps/web/Dockerfile，需 deploy/web/.env）
+#   worker 构建自研 Worker 镜像（apps/worker/Dockerfile）
+#   infra  拉取基础服务官方镜像（postgres:16-alpine / redis:7-alpine）
+#   all    构建 api + web + worker（不含 infra，infra 按需单独执行）
 # ============================================================
 set -euo pipefail
 
@@ -25,6 +31,29 @@ build_and_save() {
   echo "====== 导出 $name → dist/$name.tar.gz ======"
   docker save "$name:latest" | gzip > "$OUTPUT_DIR/$name.tar.gz"
   echo "完成：$OUTPUT_DIR/$name.tar.gz ($(du -sh "$OUTPUT_DIR/$name.tar.gz" | cut -f1))"
+}
+
+# ============================================================
+# 拉取官方镜像并打包为 tar（用于离线环境的基础设施部署）
+# 镜像 tag 必须与 deploy/infra/docker-compose.yml 中一致
+# ============================================================
+pull_and_save() {
+  local image="$1"      # 完整镜像名，如 postgres:16-alpine
+  local tar_name="$2"   # 导出的 tar 名（不含扩展名），如 postgres
+
+  echo ""
+  echo "====== 拉取 $image ======"
+  docker pull "$image"
+
+  echo "====== 导出 $image → dist/$tar_name.tar.gz ======"
+  docker save "$image" | gzip > "$OUTPUT_DIR/$tar_name.tar.gz"
+  echo "完成：$OUTPUT_DIR/$tar_name.tar.gz ($(du -sh "$OUTPUT_DIR/$tar_name.tar.gz" | cut -f1))"
+}
+
+build_infra() {
+  echo "====== 基础设施镜像（官方镜像，离线打包）======"
+  pull_and_save "postgres:16-alpine" "postgres"
+  pull_and_save "redis:7-alpine"     "redis"
 }
 
 read_env_value() {
@@ -88,6 +117,9 @@ case "$TARGET" in
   worker)
     build_and_save "aigc-worker" "apps/worker/Dockerfile"
     ;;
+  infra)
+    build_infra
+    ;;
   all)
     build_and_save "aigc-api"    "apps/api/Dockerfile"
     # web 单独处理，需要传入 next.config.mjs 构建期读取的参数
@@ -95,7 +127,8 @@ case "$TARGET" in
     build_and_save "aigc-worker" "apps/worker/Dockerfile"
     ;;
   *)
-    echo "用法：$0 [api|web|worker|all]"
+    echo "用法：$0 [api|web|worker|infra|all]"
+    echo "  all 不含 infra，基础设施镜像请按需单独执行：bash $0 infra"
     exit 1
     ;;
 esac
