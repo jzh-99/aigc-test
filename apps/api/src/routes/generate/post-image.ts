@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import { randomUUID } from 'node:crypto'
-import type { CategoryReferences, GenerateImageRequest } from '@aigc/types'
+import type { CategoryReferences, GenerateImageRequest, ParamsPricingRule } from '@aigc/types'
 import { parseCategoryReferences, resolveImageGenerationCategory, validateImageReferenceLimits } from '@aigc/types'
 import { checkPrompt } from '../../services/prompt-filter.js'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
@@ -34,6 +34,18 @@ const FALLBACK_CATEGORY_REFERENCES: CategoryReferences = {
         text: { min: 0, max: 0 },
     },
   },
+}
+
+function findPricingRuleByModel(paramsPricing: unknown, model: string): ParamsPricingRule | null {
+  if (!Array.isArray(paramsPricing)) return null
+  return paramsPricing.find(
+    (rule): rule is ParamsPricingRule =>
+      typeof rule === 'object' &&
+      rule !== null &&
+      (rule as ParamsPricingRule).model === model &&
+      typeof (rule as ParamsPricingRule).resolution === 'string' &&
+      typeof (rule as ParamsPricingRule).unit_price === 'number',
+  ) ?? null
 }
 
 // 图片生成允许的 params 键白名单
@@ -410,12 +422,15 @@ const route: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // 查找模型
-    const providerModel = await db
+    // 查找模型：优先按 provider_models.code 命中；画布可能直接提交 params_pricing.model，
+    // 此时回退到 pricing 规则归属的 provider model，再继续做权限、计费和入队。
+    let pricingModelRule: ParamsPricingRule | null = null
+    let providerModel = await db
       .selectFrom('provider_models')
       .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
       .select([
         'provider_models.id as modelId',
+        'provider_models.code as modelCode',
         'provider_models.params_pricing',
         'provider_models.category_references',
         'providers.code as providerCode',
@@ -425,6 +440,33 @@ const route: FastifyPluginAsync = async (app) => {
       .where('provider_models.is_active', '=', true)
       .where('providers.is_active', '=', true)
       .executeTakeFirst()
+
+    if (!providerModel) {
+      const activeImageModels = await db
+        .selectFrom('provider_models')
+        .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
+        .select([
+          'provider_models.id as modelId',
+          'provider_models.code as modelCode',
+          'provider_models.params_pricing',
+          'provider_models.category_references',
+          'providers.code as providerCode',
+          'providers.id as providerId',
+        ])
+        .where('provider_models.module', '=', 'image')
+        .where('provider_models.is_active', '=', true)
+        .where('providers.is_active', '=', true)
+        .execute()
+
+      for (const activeModel of activeImageModels) {
+        const matchedRule = findPricingRuleByModel(activeModel.params_pricing, model)
+        if (matchedRule) {
+          providerModel = activeModel
+          pricingModelRule = matchedRule
+          break
+        }
+      }
+    }
 
     if (!providerModel) {
       logGenerateSubmissionError(app, {
@@ -490,7 +532,8 @@ const route: FastifyPluginAsync = async (app) => {
       ...(referenceImageUrls.length > 0 ? { reference_image_urls: referenceImageUrls } : {}),
     }
 
-    const resolution = (params as Record<string, unknown> | undefined)?.resolution as string | undefined
+    const requestResolution = (params as Record<string, unknown> | undefined)?.resolution as string | undefined
+    const resolution = requestResolution ?? pricingModelRule?.resolution
     const { unitPrice, resolvedModel } = resolveUnitPrice(providerModel.params_pricing, resolution)
     // params_pricing 命中时用底层模型 code 替换请求中的 model
     const actualModel = resolvedModel ?? model

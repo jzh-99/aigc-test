@@ -198,8 +198,11 @@ async function executeNode(
       const cfg = node.data.config
       const modelType = params.modelType ?? cfg.modelType
       const resolution = params.resolution ?? cfg.resolution ?? '2k'
-      // 直接用 modelType 作为 model code（DB 体系下 modelType 已是真实 code）
-      const modelCode = modelType ?? 'gemini-3.1-flash-image-preview-2k'
+      const imageModels = useGenerationStore.getState().imageModels
+      const dbModel = imageModels.find((m) => m.code === modelType)
+      const modelCode = dbModel?.params_pricing.find((rule) => rule.resolution === resolution)?.model
+        ?? modelType
+        ?? 'gemini-3.1-flash-image-preview-2k'
 
       // Collect upstream image refs
       const upstreamEdges = edges.filter((e) => e.target === nodeId)

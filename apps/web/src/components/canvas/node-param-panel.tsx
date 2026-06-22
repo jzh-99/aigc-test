@@ -67,7 +67,7 @@ interface Props {
 
 const DEFAULT_IMAGE_CONFIG: ImageGenConfig = {
   prompt: '',
-  modelType: 'gemini',
+  modelType: 'gemini-3.1-flash-image-preview',
   resolution: '2k',
   aspectRatio: '1:1',
   quantity: 1,
@@ -353,7 +353,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
         const rule = dbModel.params_pricing.find((r) => r.resolution === resolution)
         if (rule?.model) return rule.model
       }
-      // 无 pricing 规则时直接用 model code 本身
       return dbModel?.code
     })()
     if (!modelCode) {

@@ -36,7 +36,7 @@ export class NodeRegistry {
         { id: 'any-in', type: 'any', position: 'left', isList: true },
       ],
       outputs: [{ id: 'image-out', type: 'image', position: 'right' }],
-      defaultConfig: { prompt: '', modelType: 'gemini', resolution: '2k', aspectRatio: '1:1', quantity: 1, watermark: false },
+      defaultConfig: { prompt: '', modelType: 'gemini-3.1-flash-image-preview', resolution: '2k', aspectRatio: '1:1', quantity: 1, watermark: false },
     })
 
     this.register({
