@@ -1,6 +1,5 @@
 'use client'
 
-import { Suspense } from 'react'
 import { Topbar } from './topbar'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AiAssistant } from '@/components/ai-assistant/ai-assistant'
@@ -10,11 +9,6 @@ import { cn } from '@/lib/utils'
 import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { CreativeSideRail } from './creative-side-rail'
 import { NavigationOverlay } from './navigation-overlay'
-
-/** useSearchParams 加载期占位，宽度与侧边栏一致避免布局跳变 */
-function SideRailFallback() {
-  return <div className="hidden lg:block w-20 h-screen shrink-0" />
-}
 
 /** 使用暗色全屏背景的页面路径（不需要父级浅色背景和 padding） */
 const DARK_FULLBLEED_PATHS = new Set([
@@ -46,9 +40,7 @@ export function AppShell({ children, title, mainClassName }: AppShellProps) {
           )}>
             <HeroVideoCarousel />
           </div>
-          <Suspense fallback={<SideRailFallback />}>
-            <CreativeSideRail />
-          </Suspense>
+          <CreativeSideRail />
           <div className={cn(
             'relative z-10 min-w-0 flex-1 overflow-hidden transition-colors duration-500',
             isTabSticky && 'bg-black/90'
@@ -71,9 +63,7 @@ export function AppShell({ children, title, mainClassName }: AppShellProps) {
     <TooltipProvider>
       {/* 父容器使用与侧边栏渐变等效的不透明纵向渐变，侧边栏和 main 均透明以共享同一层背景 */}
       <div className="flex h-screen overflow-hidden bg-[linear-gradient(180deg,#0E112B_0%,#0C102E_48%,#06081A_100%)]">
-        <Suspense fallback={<SideRailFallback />}>
-          <CreativeSideRail />
-        </Suspense>
+        <CreativeSideRail />
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="lg:hidden">
             <Topbar title={title} />

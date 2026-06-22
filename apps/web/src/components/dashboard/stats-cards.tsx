@@ -54,8 +54,9 @@ export function StatsCards() {
   }
 
   // Editor quota details for subtitle
+  // 必须在 loading 时返回 null，否则首屏 CSR 若命中 SWR 缓存会与 SSR（无数据）不一致，触发 hydration mismatch
   const me = !isOwnerOrAdmin ? teamData?.members?.find((m) => m.user_id === user?.id) : null
-  const hasQuota = me && me.credit_quota !== null && me.credit_quota !== undefined
+  const hasQuota = !isTeamLoading && me && me.credit_quota !== null && me.credit_quota !== undefined
   const creditSubtitle = hasQuota
     ? `配额 ${me.credit_quota!.toLocaleString()} · 已用 ${(me.credit_used ?? 0).toLocaleString()}`
     : null

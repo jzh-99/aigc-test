@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import type { CreditBalance } from '@aigc/types'
 
 interface CreditsBadgeProps {
@@ -33,6 +34,13 @@ export function CreditsBadge({ collapsed }: CreditsBadgeProps) {
   const { data: balanceData } = useSWR<CreditBalance>(
     activeTeamId ? `/payment/balance?team_id=${activeTeamId}` : '/payment/balance'
   )
+
+  // 用 mounted gate 保证 SSR 与首屏 CSR 输出一致：
+  // SWR 命中缓存时首屏 CSR 的 data 可能与 SSR（undefined）不同，会触发 hydration mismatch。
+  const [hasMounted, setHasMounted] = useState(false)
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
 
   const teamRole = activeTeam()?.role
   const isOwnerOrAdmin = teamRole === 'owner' || teamRole === 'admin' || user?.role === 'admin'
@@ -67,8 +75,8 @@ export function CreditsBadge({ collapsed }: CreditsBadgeProps) {
   }
 
   const me = !isOwnerOrAdmin ? teamData?.members?.find((m) => m.user_id === user?.id) : null
-  const hasQuota = me && me.credit_quota !== null && me.credit_quota !== undefined
-  const allowMemberTopup = activeTeam()?.allow_member_topup ?? false
+  const hasQuota = hasMounted && me && me.credit_quota !== null && me.credit_quota !== undefined
+  const allowMemberTopup = hasMounted ? (activeTeam()?.allow_member_topup ?? false) : false
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -88,7 +96,7 @@ export function CreditsBadge({ collapsed }: CreditsBadgeProps) {
         </div>
       </button>
 
-      {(allowMemberTopup || personalBalance > 0) && (
+      {(hasMounted && allowMemberTopup) || (hasMounted && personalBalance > 0) ? (
         <button
           onClick={() => router.push('/credits')}
           className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 w-full text-left hover:bg-muted/80 transition-colors"
@@ -99,7 +107,7 @@ export function CreditsBadge({ collapsed }: CreditsBadgeProps) {
             <span className="text-sm font-medium">{personalBalance.toLocaleString()}</span>
           </div>
         </button>
-      )}
+      ) : null}
     </div>
   )
 }

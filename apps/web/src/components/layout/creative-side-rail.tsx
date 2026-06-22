@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import useSWR from 'swr'
+import { useEffect, useState } from 'react'
 import { UserRound, Building2, ArrowLeftRight, Check, Coins } from 'lucide-react'
 import {
   DropdownMenu,
@@ -58,9 +59,15 @@ const railTheme: RailTheme = {
 export function CreativeSideRail() {
   const pathname = usePathname()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const query = searchParams.toString()
-  const currentPath = query ? `${pathname}?${query}` : pathname
+  // 不再使用 useSearchParams：它在静态渲染下会让整个 Suspense 边界降级为 client
+  // rendering，并触发 "Text content does not match" / "hydrating this Suspense boundary" 报错。
+  // query string（如 /generation?mode=image）的精确匹配改为 mount 后从 window.location 读取，
+  // 保证 SSR 与首屏 CSR 输出完全一致。
+  const [search, setSearch] = useState('')
+  useEffect(() => {
+    setSearch(window.location.search.slice(1))
+  }, [pathname])
+  const currentPath = search ? `${pathname}?${search}` : pathname
   const isCreativeHome = pathname === '/'
   const isTabSticky = useHomeScrollStore((s) => s.isTabSticky)
   /* 首页且未吸顶时保持透明，其余情况使用实色轨道主题 */
