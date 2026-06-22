@@ -78,9 +78,46 @@ bash deploy/build-images.sh worker
 ### 1. 基础设施服务器（只用官方镜像，无需 docker load）
 
 ```bash
+# 本机执行
+cd D:/haobai/aigc-test
+bash deploy/build-images.sh infra
+# 产出 deploy/dist/postgres.tar.gz、deploy/dist/redis.tar.gz
+
+# 服务器优化
+# 在基础设施服务器执行（root 权限）
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+sudo sysctl vm.swappiness=10                              # 优先用物理内存
+free -h                                                    # 校验 Swap 不再是 0
+
+# 服务器执行
 cd deploy/infra/
 cp .env.example .env
 vi .env  # 填写数据库密码、Redis 密码
+
+cd ~/deploy
+
+# 加载镜像（首次必须做）
+docker load < postgres.tar.gz
+docker load < redis.tar.gz
+docker images | grep -E 'postgres|redis'   # 校验
+
+# 配置 .env
+cd infra
+cp .env.example .env
+vi .env                                     # 必填 POSTGRES_PASSWORD
+
+# 启动（首次 up）
+docker compose up -d
+
+# 校验
+docker compose ps
+docker exec -it aigc-postgres psql -U aigc -d aigc_dev -c \
+  "SHOW shared_buffers; SHOW work_mem; SHOW maintenance_work_mem; SHOW effective_cache_size; SHOW max_connections;"
+# 预期：1GB / 16MB / 256MB / 3GB / 80
 
 docker compose up -d
 ```
