@@ -54,7 +54,6 @@ import { StoryboardSplitterPanel } from './panels/storyboard-splitter-panel'
 import { VideoStitchPanel } from './panels/video-stitch-panel'
 import {
   buildPromptWithResourceMentions,
-  PROMPT_MAX_LENGTH,
   removeResourceReferenceFromPrompt,
 } from './panels/resource-mentions'
 
@@ -344,11 +343,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [agentModels, agentModelsReady, isTextInput, textCfg.categoryReferences, textCfg.model, updateCfg])
 
   const handleExecuteImage = useCallback(async () => {
-    if (Array.from(promptDraft).length > PROMPT_MAX_LENGTH) {
-      toast.error(`提示词不能超过 ${PROMPT_MAX_LENGTH} 字`)
-      return
-    }
-
     const dbModel = imageModels.find((m) => m.code === modelType)
     const modelCode = (() => {
       if (dbModel && dbModel.params_pricing.length > 0) {
@@ -507,11 +501,6 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
   }, [orderedImageRefs, promptDraft, removeEdgeById, setPromptDraft, updateCfg])
 
   const handleExecuteVideo = useCallback(async () => {
-    if (Array.from(promptDraft).length > PROMPT_MAX_LENGTH) {
-      toast.error(`提示词不能超过 ${PROMPT_MAX_LENGTH} 字`)
-      return
-    }
-
     const finalPrompt = buildPromptWithResourceMentions(upstreamTexts, promptDraft, orderedImageRefs)
     if (!canvasId || !finalPrompt.trim()) {
       toast.error('请先填写提示词')

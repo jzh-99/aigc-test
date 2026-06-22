@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Film, ImageIcon, Music } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { pastePlainTextIntoContentEditable } from '@/lib/contenteditable'
-import { limitPromptLength, PROMPT_MAX_LENGTH, type CanvasReferenceMentionResource } from './resource-mentions'
+import { type CanvasReferenceMentionResource } from './resource-mentions'
 
 interface ResourceMentionTextareaProps {
   value: string
@@ -192,11 +192,8 @@ export function ResourceMentionTextarea({
     const editor = editorRef.current
     if (!editor) return
 
-    const nextValue = limitPromptLength(getEditorPlainText(editor))
+    const nextValue = getEditorPlainText(editor)
     if (nextValue !== value) onChange(nextValue)
-    if (nextValue.length !== getEditorPlainText(editor).length) {
-      replaceEditorContent(editor, nextValue, resources)
-    }
 
     const caretIndex = getCaretOffset(editor)
     const beforeCaret = nextValue.slice(0, caretIndex)
@@ -217,7 +214,7 @@ export function ResourceMentionTextarea({
     const insertText = `@${resource.mentionLabel} `
     const before = value.slice(0, mentionStartIndex)
     const after = value.slice(mentionStartIndex + 1)
-    const nextValue = limitPromptLength(`${before}${insertText}${after}`)
+    const nextValue = `${before}${insertText}${after}`
 
     onChange(nextValue)
     setMentionStartIndex(null)
@@ -251,7 +248,7 @@ export function ResourceMentionTextarea({
     if (mentionElement) {
       event.preventDefault()
       const tokenText = (mentionElement as HTMLElement).dataset.mentionText ?? ''
-      const nextValue = limitPromptLength(value.replace(tokenText, ''))
+      const nextValue = value.replace(tokenText, '')
       onChange(nextValue)
       window.requestAnimationFrame(() => {
         replaceEditorContent(editorRef.current!, nextValue, resources)
@@ -265,7 +262,7 @@ export function ResourceMentionTextarea({
     if (neighbor instanceof HTMLElement && neighbor.dataset.mentionText) {
       event.preventDefault()
       const tokenText = neighbor.dataset.mentionText
-      const nextValue = limitPromptLength(value.replace(tokenText, ''))
+      const nextValue = value.replace(tokenText, '')
       onChange(nextValue)
       window.requestAnimationFrame(() => {
         replaceEditorContent(editorRef.current!, nextValue, resources)
@@ -322,10 +319,6 @@ export function ResourceMentionTextarea({
           {placeholder}
         </div>
       )}
-
-      <div className="mt-1 flex justify-end text-[10px] text-muted-foreground">
-        {Array.from(value).length}/{PROMPT_MAX_LENGTH}
-      </div>
 
       {showPicker && (
         <div

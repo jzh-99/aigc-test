@@ -1,5 +1,3 @@
-export const PROMPT_MAX_LENGTH = 500
-
 export type ReferenceMentionType = 'image' | 'video' | 'audio'
 
 export interface CanvasReferenceMentionResource {
@@ -19,10 +17,6 @@ function escapeRegExp(value: string): string {
 
 function normalizePromptLine(line: string): string {
   return line.replace(/\s+/g, ' ').trim()
-}
-
-export function limitPromptLength(value: string): string {
-  return Array.from(value).slice(0, PROMPT_MAX_LENGTH).join('')
 }
 
 function buildMentionPattern(label: string): RegExp {
