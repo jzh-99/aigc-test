@@ -28,6 +28,7 @@ export interface GenerateShortDramaAssetsInput {
   assetIds: string[]
   scope: 'global' | 'episode'
   episodeId?: string
+  model?: string
 }
 
 export interface GenerateShortDramaSegmentVideoInput {

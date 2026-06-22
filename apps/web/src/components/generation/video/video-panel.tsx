@@ -19,7 +19,7 @@ import {
   type VideoReferenceCounts,
   type ModelItem,
 } from '@aigc/types'
-import { extractSchemaEnums, getPriceByResolution } from '../shared/schema-utils'
+import { extractSchemaEnums, getPriceByResolution, hasVideoAudioControl, hasVideoDurationControl } from '../shared/schema-utils'
 import { resolveMentionPrompt, syncMentionResourceLabels } from '@/components/shared/mention-editor'
 import type { MentionResource } from '@/components/shared/mention-editor'
 import { fetchWithAuth, ApiError, getRequestErrorMessage, reportClientSubmissionError, classifyRequestError } from '@/lib/api-client'
@@ -224,7 +224,8 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     }
   }, [videoModelsReady, videoModels, videoModel])
 
-  const isSeedance = videoModel.startsWith('seedance-')
+  const hasDurationControl = hasVideoDurationControl(currentVideoModel)
+  const hasAudioControl = hasVideoAudioControl(currentVideoModel)
 
   /** 多模态上传 Hook（封装验证/拖拽/删除逻辑） */
   const {
@@ -236,7 +237,7 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     images: multimodalImages,
     videos: multimodalVideos,
     audios: multimodalAudios,
-    isSeedance,
+    isSeedance: hasDurationControl,
     referenceLimits: multimodalReferenceLimits,
     onImagesChange: setMultimodalImages,
     onVideosChange: setMultimodalVideos,
@@ -249,8 +250,8 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     if (!model) return 0
     const unitPrice = getPriceByResolution(model, videoResolution)
     const billableDuration = (videoDuration === -1 ? 15 : videoDuration) + calculateReferenceVideoDurationSeconds(multimodalVideos.map((v) => v.duration))
-    return isSeedance ? billableDuration * unitPrice : unitPrice
-  }, [videoModels, videoModel, videoResolution, videoDuration, multimodalVideos, isSeedance])
+    return hasDurationControl ? billableDuration * unitPrice : unitPrice
+  }, [videoModels, videoModel, videoResolution, videoDuration, multimodalVideos, hasDurationControl])
 
   useEffect(() => {
     if (pendingVideoReferenceImages.length === 0) return
@@ -327,8 +328,8 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
 
       if (videoMode === 'frames') {
         const arr: string[] = []
-        if (firstFrame) arr.push(await resolveVideoImageInput(firstFrame, 'first_frame.jpg', isSeedance))
-        if (lastFrame) arr.push(await resolveVideoImageInput(lastFrame, 'last_frame.jpg', isSeedance))
+        if (firstFrame) arr.push(await resolveVideoImageInput(firstFrame, 'first_frame.jpg', hasDurationControl))
+        if (lastFrame) arr.push(await resolveVideoImageInput(lastFrame, 'last_frame.jpg', hasDurationControl))
         imagesParam = arr.length > 0 ? arr : undefined
       } else {
         const [imgs, vids, auds] = await Promise.all([
@@ -363,11 +364,11 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         reference_audios: referenceAudiosParam,
         aspect_ratio: videoAspectRatio || undefined,
         resolution: videoResolution || undefined,
-        ...(isSeedance ? {
+        ...(hasDurationControl ? {
           duration: videoDuration,
-          generate_audio: videoGenerateAudio,
           watermark,
         } : {}),
+        ...(hasAudioControl ? { generate_audio: videoGenerateAudio } : {}),
       })
       if (batch) onBatchCreated(batch)
     } catch (err) {
@@ -537,7 +538,9 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
         videoDuration={videoDuration}
         referenceVideoDurations={multimodalVideos.map((video) => video.duration)}
         videoGenerateAudio={videoGenerateAudio}
-        isSeedance={isSeedance}
+        isSeedance={hasDurationControl}
+        hasDurationControl={hasDurationControl}
+        hasAudioControl={hasAudioControl}
         isGenerating={isVideoGenerating}
         isUploading={isVideoUploading}
         disabled={disabled}

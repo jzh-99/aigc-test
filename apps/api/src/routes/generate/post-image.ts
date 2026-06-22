@@ -2,7 +2,7 @@ import type { FastifyPluginAsync, FastifyInstance } from 'fastify'
 import { getDb } from '@aigc/db'
 import { randomUUID } from 'node:crypto'
 import type { CategoryReferences, GenerateImageRequest } from '@aigc/types'
-import { ACTIVE_IMAGE_CATEGORY, parseCategoryReferences, validateImageReferenceLimits } from '@aigc/types'
+import { parseCategoryReferences, resolveImageGenerationCategory, validateImageReferenceLimits } from '@aigc/types'
 import { checkPrompt } from '../../services/prompt-filter.js'
 import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getImageQueue } from '../../lib/queue.js'
@@ -443,13 +443,14 @@ const route: FastifyPluginAsync = async (app) => {
 
     const categoryReferences = parseCategoryReferences(providerModel.category_references)
     const effectiveCategoryReferences = Object.keys(categoryReferences).length > 0 ? categoryReferences : FALLBACK_CATEGORY_REFERENCES
-    const limitResult = validateImageReferenceLimits(effectiveCategoryReferences, ACTIVE_IMAGE_CATEGORY, imageReferenceCount)
+    const activeImageCategory = resolveImageGenerationCategory(effectiveCategoryReferences, imageReferenceCount)
+    const limitResult = validateImageReferenceLimits(effectiveCategoryReferences, activeImageCategory, imageReferenceCount)
     if (!limitResult.valid) {
       logGenerateSubmissionError(app, {
         userId,
         errorCode: 'INVALID_IMAGE_REFERENCES',
         httpStatus: 400,
-        detail: `category=${ACTIVE_IMAGE_CATEGORY};image_count=${imageReferenceCount};message=${limitResult.message ?? ''}`,
+        detail: `category=${activeImageCategory};image_count=${imageReferenceCount};message=${limitResult.message ?? ''}`,
         model,
         canvasId: canvas_id,
       })

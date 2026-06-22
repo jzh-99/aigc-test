@@ -1,4 +1,5 @@
 import type { ImageGenerationAdapter } from './base.js'
+import { CtyunEdgeImageAdapter } from './ctyun-edge-image.js'
 import { NanoBananaAdapter } from './nano-banana.js'
 import { VolcengineImageAdapter } from './volcengine-image.js'
 
@@ -15,6 +16,9 @@ export function getAdapter(providerCode: string): ImageGenerationAdapter {
       break
     case 'volcengine':
       adapter = new VolcengineImageAdapter()
+      break
+    case 'ctyun-edge':
+      adapter = new CtyunEdgeImageAdapter()
       break
     default:
       throw new Error(`Unknown provider: ${providerCode}`)

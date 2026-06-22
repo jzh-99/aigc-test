@@ -162,6 +162,14 @@ export function validateImageReferenceLimits(
   return { valid: true }
 }
 
+export function resolveImageGenerationCategory(
+  categoryReferences: CategoryReferences,
+  imageCount: number,
+): ImageCategory {
+  if (imageCount > 0) return 'image_to_image'
+  return categoryReferences.text_to_image ? 'text_to_image' : 'image_to_image'
+}
+
 export interface GenerateImageRequest {
   idempotency_key: string
   model: string

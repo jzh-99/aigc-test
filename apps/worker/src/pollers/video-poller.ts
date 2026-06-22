@@ -32,6 +32,8 @@ const VIDEO_POLL_REQUEST_TIMEOUT_MS = 30_000
 
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
+const CTYUN_EDGE_API_URL = (process.env.CTYUN_EDGE_API_BASE_URL || 'https://ai.ctaigw.cn/v1').replace(/\/$/, '')
+const CTYUN_EDGE_API_KEY = process.env.CTYUN_EDGE_API_KEY ?? ''
 const MAX_VIDEO_AGE_MS = 60 * 60 * 1000 // 1 hour
 const VEO_STATUS_MAP: Record<string, VideoPollStatus> = {
   SUCCESS: 'SUCCESS',
@@ -110,6 +112,42 @@ async function checkVolcengineTask(externalTaskId: string): Promise<VideoPollRes
     const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
     const res = await fetch(`${volcengineApiUrl}${endpoint}`, {
       headers: { Authorization: `Bearer ${volcengineApiKey}` },
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return {
+        ...classifyVideoPollHttpError(res.status, errorBody),
+        endpoint,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
+    }
+    const data = await res.json()
+    return {
+      ...parseVolcengineTaskResponse(data),
+      endpoint,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true, endpoint, durationMs: Date.now() - startedAt }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function checkCtyunEdgeTask(externalTaskId: string): Promise<VideoPollResult> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const endpoint = `/contents/generations/tasks/${externalTaskId}`
+  const startedAt = Date.now()
+  try {
+    const res = await fetch(`${CTYUN_EDGE_API_URL}${endpoint}`, {
+      headers: { Authorization: `Bearer ${CTYUN_EDGE_API_KEY}` },
       signal: controller.signal,
     })
     if (!res.ok) {
@@ -372,7 +410,9 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
 
     const result = task.provider === 'volcengine'
       ? await checkVolcengineTask(task.externalTaskId)
-      : await checkVeoTask(task.externalTaskId)
+      : task.provider === 'ctyun-edge'
+        ? await checkCtyunEdgeTask(task.externalTaskId)
+        : await checkVeoTask(task.externalTaskId)
     await auditVideoPoll(task, result)
 
     if (result.status === 'SUCCESS' && result.videoUrl) {

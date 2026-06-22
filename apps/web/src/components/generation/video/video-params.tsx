@@ -16,6 +16,8 @@ interface VideoParamsProps {
   referenceVideoDurations: number[]
   videoGenerateAudio: boolean
   isSeedance: boolean
+  hasDurationControl?: boolean
+  hasAudioControl?: boolean
   isGenerating: boolean
   isUploading: boolean
   disabled?: boolean
@@ -31,6 +33,8 @@ interface VideoParamsProps {
 export function VideoParams({
   models, videoModel, videoAspectRatio, videoResolution, videoDuration,
   referenceVideoDurations, videoGenerateAudio, isSeedance,
+  hasDurationControl = isSeedance,
+  hasAudioControl = isSeedance,
   isGenerating, isUploading, disabled, promptEmpty, showConfigControls = true,
   onAspectRatioChange, onResolutionChange, onDurationChange,
   onGenerateAudioChange,
@@ -53,7 +57,7 @@ export function VideoParams({
   // 积分计算
   const unitPrice = currentDbModel ? getPriceByResolution(currentDbModel, activeResolution) : 0
   const billableDuration = (videoDuration === -1 ? 15 : videoDuration) + calculateReferenceVideoDurationSeconds(referenceVideoDurations)
-  const estimatedCredits = isSeedance ? billableDuration * unitPrice : unitPrice
+  const estimatedCredits = hasDurationControl ? billableDuration * unitPrice : unitPrice
 
   return (
     <div className="flex items-center justify-between gap-3 px-1 py-2">
@@ -68,6 +72,8 @@ export function VideoParams({
           videoDuration={videoDuration}
           videoGenerateAudio={videoGenerateAudio}
           isSeedance={isSeedance}
+          hasDurationControl={hasDurationControl}
+          hasAudioControl={hasAudioControl}
           disabled={isDisabled}
           onAspectRatioChange={onAspectRatioChange}
           onResolutionChange={onResolutionChange}
@@ -101,6 +107,8 @@ export function VideoConfigControls({
   videoDuration,
   videoGenerateAudio,
   isSeedance,
+  hasDurationControl = isSeedance,
+  hasAudioControl = isSeedance,
   disabled,
   onAspectRatioChange,
   onResolutionChange,
@@ -115,6 +123,8 @@ export function VideoConfigControls({
   videoDuration: number
   videoGenerateAudio: boolean
   isSeedance: boolean
+  hasDurationControl?: boolean
+  hasAudioControl?: boolean
   disabled?: boolean
   onAspectRatioChange: (v: string) => void
   onResolutionChange: (v: string) => void
@@ -126,7 +136,7 @@ export function VideoConfigControls({
   const configSummary = [
     videoResolution.toUpperCase(),
     videoAspectRatio === 'adaptive' ? null : currentAspectLabel,
-    isSeedance ? currentDurationLabel : null,
+    hasDurationControl ? currentDurationLabel : null,
   ].filter(Boolean).join(' · ')
   const resolutionOptions = dbResolutions.map((r) => r.value)
 
@@ -141,6 +151,8 @@ export function VideoConfigControls({
         videoDuration={videoDuration}
         durationOptions={dbDurationOptions}
         isSeedance={isSeedance}
+        hasDurationControl={hasDurationControl}
+        hasAudioControl={hasAudioControl}
         generateAudio={videoGenerateAudio}
         onResolutionChange={onResolutionChange}
         onAspectRatioChange={onAspectRatioChange}

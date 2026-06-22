@@ -113,6 +113,8 @@ export interface VideoConfigPopoverProps {
   videoDuration: number
   durationOptions: Array<{ value: number; label: string }>
   isSeedance: boolean
+  hasDurationControl?: boolean
+  hasAudioControl?: boolean
   generateAudio?: boolean
   onResolutionChange: (value: string) => void
   onAspectRatioChange: (value: string) => void
@@ -131,6 +133,8 @@ export function VideoConfigPopover({
   videoDuration,
   durationOptions,
   isSeedance,
+  hasDurationControl = isSeedance,
+  hasAudioControl = isSeedance,
   generateAudio = false,
   onResolutionChange,
   onAspectRatioChange,
@@ -190,14 +194,16 @@ export function VideoConfigPopover({
             onChange={onAspectRatioChange}
           />
           {children}
-          {isSeedance && (
+          {hasDurationControl && (
+            <DurationSlider
+              value={videoDuration}
+              min={durationMin}
+              max={durationMax}
+              onChange={onDurationChange}
+            />
+          )}
+          {hasAudioControl && (
             <>
-              <DurationSlider
-                value={videoDuration}
-                min={durationMin}
-                max={durationMax}
-                onChange={onDurationChange}
-              />
               <ConfigOptionGroup
                 icon={<Volume2 className="h-3 w-3" />}
                 label="音频"

@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { ACTIVE_IMAGE_CATEGORY, calculateVideoEstimatedCredits, parseCategoryReferences, validateImageReferenceLimits, DEFAULT_VIDEO_AUTO_DURATION_SECS } from './api.js'
+import {
+  ACTIVE_IMAGE_CATEGORY,
+  calculateVideoEstimatedCredits,
+  parseCategoryReferences,
+  resolveImageGenerationCategory,
+  validateImageReferenceLimits,
+  DEFAULT_VIDEO_AUTO_DURATION_SECS,
+} from './api.js'
 
 describe('calculateVideoEstimatedCredits', () => {
   test('按生成视频时长和参考视频总时长共同计费', () => {
@@ -67,5 +74,33 @@ describe('category_references 图片参考限制', () => {
 
   test('当前图片生成入口默认使用图生图模式', () => {
     assert.equal(ACTIVE_IMAGE_CATEGORY, 'image_to_image')
+  })
+
+  test('无参考图时优先使用文生图模式', () => {
+    assert.equal(resolveImageGenerationCategory(categories, 0), 'text_to_image')
+  })
+
+  test('有参考图时使用图生图模式', () => {
+    assert.equal(resolveImageGenerationCategory(categories, 1), 'image_to_image')
+  })
+
+  test('只有文生图能力的模型允许 0 张参考图生成', () => {
+    const textOnlyCategories = parseCategoryReferences({
+      text_to_image: {
+        label: '文生图',
+        limits: {
+          image: { min: 0, max: 0 },
+          video: { min: 0, max: 0 },
+          audio: { min: 0, max: 0 },
+          text: { min: 0, max: 0 },
+        },
+      },
+    })
+
+    const category = resolveImageGenerationCategory(textOnlyCategories, 0)
+    const result = validateImageReferenceLimits(textOnlyCategories, category, 0)
+
+    assert.equal(category, 'text_to_image')
+    assert.equal(result.valid, true)
   })
 })

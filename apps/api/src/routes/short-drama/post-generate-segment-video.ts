@@ -337,6 +337,20 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
         })
       }
 
+      const teamModelConfig = await db
+        .selectFrom('team_model_configs')
+        .select('is_active')
+        .where('team_id', '=', teamId)
+        .where('model_id', '=', modelRecord.modelId)
+        .executeTakeFirst()
+
+      if (teamModelConfig && !teamModelConfig.is_active) {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'MODEL_DISABLED', message: `视频模型 "${modelCode}" 在当前团队中已被禁用` },
+        })
+      }
+
       if (!parseCategoryReferences(modelRecord.category_references).multimodal) {
         return reply.status(400).send({
           success: false,

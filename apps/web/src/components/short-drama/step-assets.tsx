@@ -5,9 +5,12 @@ import { ImageIcon, Loader2, Sparkles, Check, Upload, ZoomIn, Coins } from 'luci
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useConfirm } from '@/hooks/use-confirm'
 import type { ShortDramaState, ShortDramaAsset, ShortDramaAssetKind } from '@aigc/types'
-import { areShortDramaAssetsReady } from '@aigc/types'
+import { SHORT_DRAMA_IMAGE_MODEL, areShortDramaAssetsReady } from '@aigc/types'
+import { useAuthStore } from '@/stores/auth-store'
+import { useModels } from '@/hooks/use-models'
 import { translateError } from '@/lib/error-messages'
 import {
   generateShortDramaAssetPrompts,
@@ -98,6 +101,9 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   const [assetPromptStreamText, setAssetPromptStreamText] = useState('')
   const [assetPromptProgressMessage, setAssetPromptProgressMessage] = useState('')
   const [assetPromptWarningMessage, setAssetPromptWarningMessage] = useState('')
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
+  const [assetImageModel, setAssetImageModel] = useState(SHORT_DRAMA_IMAGE_MODEL)
   const isLocked = state.locks.assets
 
   const assets = state.assets.items
@@ -128,6 +134,15 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       : '生成描述'
   const filteredAssets = assets.filter(a => a.kind === activeTab)
   const previewAsset = previewAssetId ? assets.find(asset => asset.id === previewAssetId) : null
+  const selectedImageModel = imageModels.find(model => model.code === assetImageModel)
+  const hasAvailableImageModel = imageModelsReady && imageModels.length > 0 && Boolean(selectedImageModel)
+
+  useEffect(() => {
+    if (!imageModelsReady || imageModels.length === 0) return
+    if (imageModels.some(model => model.code === assetImageModel)) return
+    const defaultModel = imageModels.find(model => model.code === SHORT_DRAMA_IMAGE_MODEL)
+    setAssetImageModel((defaultModel ?? imageModels[0]).code)
+  }, [assetImageModel, imageModels, imageModelsReady])
 
   const getAssetGenerationLabel = (asset: (typeof assets)[number]) => {
     if (generatingAssetId === asset.id) return '提交中...'
@@ -191,6 +206,10 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   }
 
   const handleGenerateOne = async (assetId: string) => {
+    if (!hasAvailableImageModel) {
+      toast.error('当前团队没有可用的图片模型，请联系管理员配置')
+      return
+    }
     const targetAsset = assets.find(asset => asset.id === assetId)
     if (!targetAsset) {
       toast.error('素材不存在，请刷新页面后重试')
@@ -213,6 +232,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
       await generateShortDramaAssets(projectId, {
         assetIds: [assetId],
         scope: 'global',
+        model: assetImageModel,
       })
       setSubmittedAssetIds((prev) => new Set(prev).add(assetId))
       onStateChange()
@@ -306,6 +326,10 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
   }
 
   const handleBatchGenerate = async () => {
+    if (!hasAvailableImageModel) {
+      toast.error('当前团队没有可用的图片模型，请联系管理员配置')
+      return
+    }
     // 过滤出需要生成的素材：没有图片 且 状态不是 pending/generating
     const pendingAssets = requiredAssets.filter(a =>
       !a.imageUrl &&
@@ -348,6 +372,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
         await generateShortDramaAssets(projectId, {
           assetIds: batches[i],
           scope: 'global',
+          model: assetImageModel,
         })
       }
 
@@ -425,7 +450,26 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
             ))}
           </div>
           {!isLocked && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">图片模型</span>
+                <Select
+                  value={assetImageModel}
+                  onValueChange={setAssetImageModel}
+                  disabled={!imageModelsReady || imageModels.length === 0 || generatingImages || isAssetImageGenerating}
+                >
+                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                    <SelectValue placeholder="选择图片模型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {imageModels.map(model => (
+                      <SelectItem key={model.id} value={model.code} className="text-xs">
+                        {model.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               {!generatingPrompts && !isAssetPromptGenerating && processedOutlineCount < totalOutlineCount && (() => {
                 const remaining = totalOutlineCount - processedOutlineCount
                 const batches = Math.ceil(remaining / 5)
@@ -449,7 +493,8 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                 size="sm"
                 variant="outline"
                 onClick={handleBatchGenerate}
-                disabled={generatingImages || isAssetImageGenerating || isAssetPromptGenerating || processedOutlineCount < totalOutlineCount}
+                disabled={!hasAvailableImageModel || generatingImages || isAssetImageGenerating || isAssetPromptGenerating || processedOutlineCount < totalOutlineCount}
+                title={selectedImageModel ? `使用 ${selectedImageModel.name}` : undefined}
               >
                 {generatingImages || isAssetImageGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
                 {generatingImages || isAssetImageGenerating ? '批量生图中' : '批量生图'}
@@ -547,7 +592,7 @@ export function StepAssets({ projectId, state, onStateChange }: StepAssetsProps)
                     size="sm"
                     variant="outline"
                     onClick={() => handleGenerateOne(asset.id)}
-                    disabled={isAssetGenerating || generatingImages}
+                    disabled={!hasAvailableImageModel || isAssetGenerating || generatingImages}
                     className="h-8 w-full text-xs"
                   >
                     {isAssetGenerating ? (

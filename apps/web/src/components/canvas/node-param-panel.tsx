@@ -12,7 +12,7 @@ import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { CanvasApiError, executeAudioNode, executeCanvasNode, executeVideoNode } from '@/lib/canvas/canvas-api'
 import { getCategoryReferencesForModel, validateImageReferencesForModel } from '@/lib/image-categories'
 import { useModels } from '@/hooks/use-models'
-import { getModelResolutions, extractSchemaEnums } from '@/components/generation/shared/schema-utils'
+import { getModelResolutions, extractSchemaEnums, hasVideoAudioControl, hasVideoDurationControl } from '@/components/generation/shared/schema-utils'
 import { parseCategoryReferences, validateCategoryReferenceLimits, type ModelItem, type VideoCategory, type VideoReferenceCounts } from '@aigc/types'
 import type {
   AppNode,
@@ -296,6 +296,12 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     () => parseCategoryReferences(currentVideoDbModel?.category_references),
     [currentVideoDbModel?.category_references],
   )
+  const videoHasDurationControl = hasVideoDurationControl(currentVideoDbModel)
+  const videoHasAudioControl = hasVideoAudioControl(currentVideoDbModel)
+  const usesVideoReferenceResourceFields = Boolean(
+    (currentCategoryReferences.multimodal?.limits.video.max ?? 0) > 0
+      || (currentCategoryReferences.multimodal?.limits.audio.max ?? 0) > 0,
+  )
 
   const handleModelChange = useCallback((val: ModelType) => {
     // 优先从 DB 模型列表获取新模型的首个可用分辨率
@@ -441,13 +447,15 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
 
   const handleVideoModelChange = useCallback((val: string) => {
     const dbModel = videoModels.find((m) => m.code === val)
-    const isSeedanceModel = val.startsWith('seedance-')
     const categories = parseCategoryReferences(dbModel?.category_references)
     const targetCategory = CANVAS_MODE_TO_CATEGORY[videoMode]
     const nextCategory = categories[targetCategory]
       ? targetCategory
       : (categories.multimodal ? 'multimodal' : categories.frames ? 'frames' : targetCategory)
-    const newAspect = isSeedanceModel ? (videoAspect || 'adaptive') : ''
+    const nextAspects = extractSchemaEnums(dbModel?.params_schema, 'aspect_ratio').map((e) => e.value)
+    const newAspect = nextAspects.length > 0
+      ? (videoAspect && nextAspects.includes(videoAspect) ? videoAspect : nextAspects[0])
+      : ''
     const nextResolutions = extractSchemaEnums(dbModel?.params_schema, 'resolution').map((e) => e.value)
     const nextResolution = videoResolution && nextResolutions.includes(videoResolution)
       ? videoResolution
@@ -528,6 +536,9 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
           resolution: videoResolution || undefined,
           duration: videoDuration,
           generateAudio,
+          hasDurationControl: videoHasDurationControl,
+          hasAudioControl: videoHasAudioControl,
+          usesReferenceResourceFields: usesVideoReferenceResourceFields,
           watermark: videoWatermark,
           referenceImages: videoMode === 'multiref' ? multirefImages : undefined,
           referenceVideos: videoMode === 'multiref' ? multirefVideos : undefined,
@@ -593,8 +604,11 @@ export function NodeParamPanel({ node, canvasId, onClose, onExecuted, onStoryboa
     videoDuration,
     videoMode,
     videoModel,
+    videoHasAudioControl,
+    videoHasDurationControl,
     videoResolution,
     videoWatermark,
+    usesVideoReferenceResourceFields,
     workspaceId,
   ])
 

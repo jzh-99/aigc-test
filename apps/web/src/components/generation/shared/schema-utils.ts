@@ -50,7 +50,15 @@ export function getModelAspectRatios(modelCode: string, dbModels?: ModelItem[]):
 }
 
 export function isSeedanceModel(model: ModelItem): boolean {
-  return model.code.startsWith('seedance-')
+  return hasVideoDurationControl(model)
+}
+
+export function hasVideoDurationControl(model?: ModelItem): boolean {
+  return extractSchemaEnums(model?.params_schema, 'time_length').length > 0
+}
+
+export function hasVideoAudioControl(model?: ModelItem): boolean {
+  return extractSchemaEnums(model?.params_schema, 'video_voice').length > 0
 }
 
 /**

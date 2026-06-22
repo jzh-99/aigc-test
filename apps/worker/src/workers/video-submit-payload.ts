@@ -6,6 +6,11 @@ const VOLCENGINE_MODEL_ID: Record<string, string> = {
   'seedance-2.0-fast': 'doubao-seedance-2-0-fast-260128',
 }
 
+const CTYUN_EDGE_MODEL_ID: Record<string, string> = {
+  'ctyun-seedance-2.0': 'cdance2.0-0611',
+  'ctyun-seedance-2.0-fast': 'cdance2.0-fast-0611',
+}
+
 const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
 
 type ReferenceRole = 'first_frame' | 'last_frame' | 'reference_image' | 'reference_video' | 'reference_audio'
@@ -123,8 +128,27 @@ export function buildVolcengineTaskBody(
   const volcModel = VOLCENGINE_MODEL_ID[model]
   if (!volcModel) throw new Error(`未知的火山引擎视频模型: ${model}`)
 
+  return buildTaskBody(volcModel, prompt, params)
+}
+
+export function buildCtyunEdgeTaskBody(
+  model: string,
+  prompt: string,
+  params: Record<string, unknown>,
+): VolcengineTaskBody {
+  const ctyunModel = CTYUN_EDGE_MODEL_ID[model]
+  if (!ctyunModel) throw new Error(`未知的天翼云边缘视频模型: ${model}`)
+
+  return buildTaskBody(ctyunModel, prompt, params)
+}
+
+function buildTaskBody(
+  providerModel: string,
+  prompt: string,
+  params: Record<string, unknown>,
+): VolcengineTaskBody {
   const body: VolcengineTaskBody = {
-    model: volcModel,
+    model: providerModel,
     content: [{ type: 'text', text: prompt }],
   }
 

@@ -174,6 +174,20 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: `模型 "${model}" 未找到或已停用` } })
     }
 
+    const teamModelConfig = await db
+      .selectFrom('team_model_configs')
+      .select('is_active')
+      .where('team_id', '=', teamId)
+      .where('model_id', '=', providerModel.modelId)
+      .executeTakeFirst()
+
+    if (teamModelConfig && !teamModelConfig.is_active) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'MODEL_DISABLED', message: `模型 "${model}" 在当前团队中已被禁用` },
+      })
+    }
+
     const categoryReferences = parseCategoryReferences(providerModel.category_references)
     const requestCategory = resolveRequestCategory(request.body)
 

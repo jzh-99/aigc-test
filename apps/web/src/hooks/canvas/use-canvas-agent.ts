@@ -7,6 +7,7 @@ import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig, isVideoStitchConfig, normalizeStoryboardShots } from '@/lib/canvas/types'
+import { parseCategoryReferences } from '@aigc/types'
 import { callCanvasAgent } from '@/lib/canvas/agent-api'
 import { generateUUID } from '@/lib/utils'
 import {
@@ -249,6 +250,11 @@ async function executeNode(
       const cfg = node.data.config
       const videoModel = params.videoModel ?? cfg.model ?? 'seedance-2.0'
       const videoMode = cfg.videoMode ?? 'multiref'
+      const categories = parseCategoryReferences(cfg.categoryReferences)
+      const usesReferenceResourceFields = Boolean(
+        (categories.multimodal?.limits.video.max ?? 0) > 0
+          || (categories.multimodal?.limits.audio.max ?? 0) > 0,
+      )
 
       const upstreamEdges = edges.filter((e) => e.target === nodeId)
       const refImages: string[] = []
@@ -300,6 +306,10 @@ async function executeNode(
           videoMode,
           aspectRatio: params.aspectRatio ?? cfg.aspectRatio ?? undefined,
           duration: params.duration ?? cfg.duration ?? undefined,
+          generateAudio: cfg.generateAudio,
+          hasDurationControl: usesReferenceResourceFields,
+          hasAudioControl: usesReferenceResourceFields,
+          usesReferenceResourceFields,
           referenceImages: videoMode === 'multiref' ? refImages : undefined,
           referenceVideos: videoMode === 'multiref' ? refVideos : undefined,
           referenceAudios: videoMode === 'multiref' ? refAudios : undefined,

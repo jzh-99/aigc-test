@@ -56,6 +56,9 @@ export interface ExecuteVideoNodeParams {
   resolution?: string
   duration?: number
   generateAudio?: boolean
+  hasDurationControl?: boolean
+  hasAudioControl?: boolean
+  usesReferenceResourceFields?: boolean
   enableUpsample?: boolean
   watermark?: boolean
   // multiref mode: reference images, videos, audios
@@ -455,8 +458,9 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
     throw new Error('缺少工作区信息，请刷新页面后重试')
   }
 
-  const isSeedance = params.model.startsWith('seedance-')
-  const isSeedance2 = params.model === 'seedance-2.0' || params.model === 'seedance-2.0-fast'
+  const hasDurationControl = params.hasDurationControl === true
+  const hasAudioControl = params.hasAudioControl === true
+  const usesReferenceResourceFields = params.usesReferenceResourceFields === true
 
   const body: Record<string, unknown> = {
     idempotency_key: params.idempotencyKey ?? `cv_${(params.canvasNodeId ?? '').slice(-8)}_${Date.now()}`,
@@ -472,12 +476,14 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
   // 透传分辨率参数（可选）
   if (params.resolution) body.resolution = params.resolution
 
-  if (isSeedance) {
+  if (hasDurationControl) {
     if (params.duration && params.duration !== 0) body.duration = params.duration
-    body.generate_audio = params.generateAudio ?? true
     body.watermark = params.watermark ?? false
   } else {
     body.enable_upsample = params.enableUpsample ?? false
+  }
+  if (hasAudioControl) {
+    body.generate_audio = params.generateAudio ?? true
   }
 
   if (params.videoMode === 'keyframe') {
@@ -489,7 +495,7 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
     const refImages = (params.referenceImages ?? []).filter(Boolean)
     const refVideos = (params.referenceVideos ?? []).filter(Boolean)
     const refAudios = (params.referenceAudios ?? []).filter(Boolean)
-    if (isSeedance2) {
+    if (usesReferenceResourceFields) {
       if (refImages.length > 0) body.reference_images = refImages
       if (refVideos.length > 0) body.reference_videos = refVideos
       if (params.referenceVideoDurations?.length) body.reference_video_durations = params.referenceVideoDurations

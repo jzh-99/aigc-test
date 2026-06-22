@@ -1,7 +1,7 @@
 import { Cpu, Music, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { VideoMode } from '@/lib/canvas/types'
-import { extractSchemaEnums, getPriceByResolution } from '@/components/generation/shared/schema-utils'
+import { extractSchemaEnums, getPriceByResolution, hasVideoAudioControl, hasVideoDurationControl } from '@/components/generation/shared/schema-utils'
 import { calculateReferenceVideoDurationSeconds, getVideoCategoryKeys, parseCategoryReferences, type ModelItem, type VideoCategory } from '@aigc/types'
 import { VideoConfigPopover } from '@/components/generation/shared/video-config-popover'
 import { ResourceMentionTextarea } from './resource-mention-textarea'
@@ -159,7 +159,8 @@ export function VideoGenPanel({
   onExecute,
 }: VideoGenPanelProps) {
   const currentDbModel = models?.find((m) => m.code === videoModel)
-  const isSeedance = currentDbModel ? currentDbModel.code.startsWith('seedance-') : false
+  const hasDurationControl = hasVideoDurationControl(currentDbModel)
+  const hasAudioControl = hasVideoAudioControl(currentDbModel)
 
   const filteredModels = (models ?? []).filter((m) => {
     const categories = parseCategoryReferences(m.category_references)
@@ -183,7 +184,7 @@ export function VideoGenPanel({
   const referenceDuration = videoMode === 'multiref' ? calculateReferenceVideoDurationSeconds(multirefVideoDurations) : 0
   // 自动时长时用默认秒数预估（与后端 calculateVideoEstimatedCredits 逻辑一致）
   const DEFAULT_VIDEO_AUTO_DURATION_SECS = 5
-  const videoCredits = currentDbModel && isSeedance
+  const videoCredits = currentDbModel && hasDurationControl
     ? (videoDuration > 0
       ? (videoDuration + referenceDuration) * videoUnitPrice
       : videoUnitPrice * DEFAULT_VIDEO_AUTO_DURATION_SECS + referenceDuration * videoUnitPrice)
@@ -201,8 +202,8 @@ export function VideoGenPanel({
   const configSummary = [
     currentResolutionLabel,
     currentAspectLabel,
-    isSeedance ? currentDurationLabel : null,
-    isSeedance ? (generateAudio ? '有声' : '无声') : null,
+    hasDurationControl ? currentDurationLabel : null,
+    hasAudioControl ? (generateAudio ? '有声' : '无声') : null,
   ].filter(Boolean).join(' - ')
 
   return (
@@ -337,7 +338,9 @@ export function VideoGenPanel({
             aspectOptions={aspectPopOptions}
             videoDuration={videoDuration}
             durationOptions={durationOptions}
-            isSeedance={isSeedance}
+            isSeedance={hasDurationControl}
+            hasDurationControl={hasDurationControl}
+            hasAudioControl={hasAudioControl}
             generateAudio={generateAudio}
             onResolutionChange={onVideoResolutionChange}
             onAspectRatioChange={(val) => onUpdateCfg({ aspectRatio: val })}

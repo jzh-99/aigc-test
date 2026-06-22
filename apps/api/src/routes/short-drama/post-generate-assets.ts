@@ -14,6 +14,12 @@ interface GenerateAssetsBody {
   assetIds: string[]
   scope: 'global' | 'episode'
   episodeId?: string
+  model?: string
+}
+
+export function resolveShortDramaAssetImageModel(model?: string): string {
+  const trimmed = model?.trim()
+  return trimmed || SHORT_DRAMA_IMAGE_MODEL
 }
 
 function buildAssetImagePrompt(
@@ -74,6 +80,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
             assetIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 20 },
             scope: { type: 'string', enum: ['global', 'episode'] },
             episodeId: { type: 'string' },
+            model: { type: 'string', maxLength: 100 },
           },
           additionalProperties: false,
         },
@@ -106,7 +113,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
 
       // 查找图片生成模型
       const db = getDb()
-      const modelCode = SHORT_DRAMA_IMAGE_MODEL
+      const modelCode = resolveShortDramaAssetImageModel(request.body.model)
       const providerModel = await db
         .selectFrom('provider_models')
         .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
@@ -124,6 +131,20 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
         return reply.status(400).send({
           success: false,
           error: { code: 'MODEL_NOT_FOUND', message: `图片模型 "${modelCode}" 未找到或已停用` },
+        })
+      }
+
+      const teamModelConfig = await db
+        .selectFrom('team_model_configs')
+        .select('is_active')
+        .where('team_id', '=', teamId)
+        .where('model_id', '=', providerModel.modelId)
+        .executeTakeFirst()
+
+      if (teamModelConfig && !teamModelConfig.is_active) {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'MODEL_DISABLED', message: `图片模型 "${modelCode}" 在当前团队中已被禁用` },
         })
       }
 

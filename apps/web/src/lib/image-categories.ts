@@ -1,6 +1,6 @@
 import {
-  ACTIVE_IMAGE_CATEGORY,
   parseCategoryReferences,
+  resolveImageGenerationCategory,
   validateImageReferenceLimits,
   type CategoryReferences,
   type ModelItem,
@@ -38,5 +38,5 @@ export function getMaxImageReferenceCount(model?: ModelItem): number {
 
 export function validateImageReferencesForModel(model: ModelItem | undefined, imageCount: number) {
   const categoryReferences = getCategoryReferencesForModel(model)
-  return validateImageReferenceLimits(categoryReferences, ACTIVE_IMAGE_CATEGORY, imageCount)
+  return validateImageReferenceLimits(categoryReferences, resolveImageGenerationCategory(categoryReferences, imageCount), imageCount)
 }

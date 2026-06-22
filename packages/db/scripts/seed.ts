@@ -899,6 +899,125 @@ async function main() {
     console.log(`  provider_models seeded (${m.code})`)
   }
 
+  const ctyunResult = await db
+    .insertInto('providers')
+    .values({
+      code: 'ctyun-edge',
+      name: '天翼云边缘AI网关',
+      region: 'cn',
+      modules: JSON.stringify(['image', 'video']),
+      is_active: true,
+      config: JSON.stringify({ api_base_url: 'https://ai.ctaigw.cn/v1' }),
+    })
+    .onConflict((oc: any) => oc.column('code').doUpdateSet({
+      name: '天翼云边缘AI网关',
+      region: 'cn',
+      modules: JSON.stringify(['image', 'video']),
+      is_active: true,
+      config: JSON.stringify({ api_base_url: 'https://ai.ctaigw.cn/v1' }),
+    }))
+    .returningAll()
+    .execute()
+  const ctyunProvider = ctyunResult[0]
+  console.log(`  providers seeded (ctyun-edge, id=${ctyunProvider.id})`)
+
+  const ctyunModels = [
+    {
+      code: 'ctyun-seedream-5.0-lite',
+      name: 'Cdream 5.0 Lite',
+      description: '天翼云边缘AI网关 Doubao-Seedream-5.0-lite 图片生成',
+      module: 'image' as const,
+      category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '2k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+        { resolution: '3k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+        { resolution: '4k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+      ],
+      params_schema: JSON.stringify({
+        resolution: ['2k', '3k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      }),
+      resolution: '2k',
+      avatar: llmAvatar('volcengine'),
+      is_active: false,
+    },
+    {
+      code: 'ctyun-seedance-2.0',
+      name: 'Cdance 2.0',
+      description: '天翼云边缘AI网关 cdance2.0-0611 视频生成',
+      module: 'video' as const,
+      category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '480p', model: 'cdance2.0-0611', unit_price: 7 },
+        { resolution: '720p', model: 'cdance2.0-0611', unit_price: 15 },
+        { resolution: '1080p', model: 'cdance2.0-0611', unit_price: 35 },
+      ],
+      params_schema: JSON.stringify({
+        aspect_ratio: volcAspectRatioArr,
+        resolution: ['480p', '720p', '1080p'],
+        time_length: volcTimeLengthArr,
+        video_voice: volcVideoVoiceArr,
+        image: [],
+      }),
+      resolution: '720p',
+      avatar: llmAvatar('volcengine'),
+      is_active: true,
+    },
+    {
+      code: 'ctyun-seedance-2.0-fast',
+      name: 'Cdance 2.0 Fast',
+      description: '天翼云边缘AI网关 cdance2.0-fast-0611 视频生成',
+      module: 'video' as const,
+      category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '480p', model: 'cdance2.0-fast-0611', unit_price: 5 },
+        { resolution: '720p', model: 'cdance2.0-fast-0611', unit_price: 12 },
+      ],
+      params_schema: JSON.stringify({
+        aspect_ratio: volcAspectRatioArr,
+        resolution: ['480p', '720p'],
+        time_length: volcTimeLengthArr,
+        video_voice: volcVideoVoiceArr,
+        image: [],
+      }),
+      resolution: '720p',
+      avatar: llmAvatar('volcengine'),
+      is_active: true,
+    },
+  ]
+
+  for (const m of ctyunModels) {
+    await db
+      .insertInto('provider_models')
+      .values({
+        provider_id: ctyunProvider.id,
+        code: m.code,
+        name: m.name,
+        description: m.description,
+        module: m.module,
+        category_references: JSON.stringify(m.category_references),
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: m.params_schema,
+        resolution: m.resolution,
+        avatar: m.avatar,
+        is_active: m.is_active,
+      })
+      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+        name: m.name,
+        description: m.description,
+        module: m.module,
+        category_references: JSON.stringify(m.category_references),
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: m.params_schema,
+        resolution: m.resolution,
+        avatar: m.avatar,
+        is_active: m.is_active,
+      }))
+      .execute()
+    console.log(`  provider_models seeded (${m.code})`)
+  }
+
   const volcSingleModels = [
     { code: 'jimeng_realman_avatar_picture_omni_v15', name: '数字人生成', module: 'avatar' as const, params_pricing: [{ resolution: 'default', model: 'jimeng_realman_avatar_picture_omni_v15', unit_price: 50 }] },
     { code: 'jimeng_dreamactor_m20_gen_video', name: '动作模仿', module: 'action_imitation' as const, params_pricing: [{ resolution: 'default', model: 'jimeng_dreamactor_m20_gen_video', unit_price: 20 }] },

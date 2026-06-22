@@ -4,11 +4,12 @@ import { sql } from 'kysely'
 import type { VideoSubmitJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { buildLogger } from '../logger.js'
-import { buildVolcengineTaskBody } from './video-submit-payload.js'
+import { buildCtyunEdgeTaskBody, buildVolcengineTaskBody } from './video-submit-payload.js'
 
 const logger = buildLogger()
 
 const VOLCENGINE_API_URL = 'https://ark.cn-beijing.volces.com/api/v3'
+const CTYUN_EDGE_API_URL = (process.env.CTYUN_EDGE_API_BASE_URL || 'https://ai.ctaigw.cn/v1').replace(/\/$/, '')
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 
 interface VideoSubmitAuditContext {
@@ -105,6 +106,83 @@ async function submitVolcengine(
       ...audit,
       module: 'video',
       provider: 'volcengine',
+      model,
+      operation: 'video.submit',
+      method: 'POST',
+      endpoint,
+      requestPayload: body,
+      responseStatus,
+      durationMs: Date.now() - startedAt,
+      status: 'failed',
+      errorMessage: message,
+    })
+    throw error
+  }
+}
+
+async function submitCtyunEdge(
+  model: string,
+  prompt: string,
+  params: Record<string, unknown>,
+  audit: VideoSubmitAuditContext,
+): Promise<string> {
+  const body = buildCtyunEdgeTaskBody(model, prompt, params)
+  const endpoint = '/contents/generations/tasks'
+  const apiKey = process.env.CTYUN_EDGE_API_KEY ?? ''
+  const startedAt = Date.now()
+  let responseStatus: number | null = null
+  try {
+    const res = await fetch(`${CTYUN_EDGE_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    })
+    responseStatus = res.status
+    const data = await readJsonResponse(res)
+    const id = responseId(data)
+    if (!res.ok || !id) {
+      const message = responseError(data) ?? `天翼云边缘AI网关 API 错误 ${res.status}`
+      await recordProviderApiLog({
+        ...audit,
+        module: 'video',
+        provider: 'ctyun-edge',
+        model,
+        operation: 'video.submit',
+        method: 'POST',
+        endpoint,
+        requestPayload: body,
+        responseStatus: res.status,
+        responsePayload: data,
+        durationMs: Date.now() - startedAt,
+        status: 'failed',
+        errorMessage: message,
+      })
+      throw new Error(message)
+    }
+    await recordProviderApiLog({
+      ...audit,
+      module: 'video',
+      provider: 'ctyun-edge',
+      model,
+      operation: 'video.submit',
+      method: 'POST',
+      endpoint,
+      requestPayload: body,
+      responseStatus: res.status,
+      responsePayload: data,
+      externalTaskId: id,
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    })
+    return id
+  } catch (error) {
+    if (responseStatus !== null) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    await recordProviderApiLog({
+      ...audit,
+      module: 'video',
+      provider: 'ctyun-edge',
       model,
       operation: 'video.submit',
       method: 'POST',
@@ -225,7 +303,9 @@ export const videoSubmitWorker = new Worker<VideoSubmitJobData>(
       const audit = { taskId, batchId, userId, teamId }
       const externalTaskId = provider === 'volcengine'
         ? await submitVolcengine(model, prompt, params, audit)
-        : await submitVeo(model, prompt, params, audit)
+        : provider === 'ctyun-edge'
+          ? await submitCtyunEdge(model, prompt, params, audit)
+          : await submitVeo(model, prompt, params, audit)
 
       // 写入 external_task_id，poller 开始轮询
       await db.updateTable('tasks')
