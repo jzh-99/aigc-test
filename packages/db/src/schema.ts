@@ -156,7 +156,9 @@ export interface TaskBatchesTable {
   credit_account_id: string
   parent_batch_id: string | null
   idempotency_key: string
-  source: 'generation' | 'studio' | 'canvas'
+  // 开放接口迁移扩展：新增 'open_api'
+  source: 'generation' | 'studio' | 'canvas' | 'open_api'
+  // 开放接口迁移扩展：新增 'podcast' | 'news' | 'storybook'
   module:
     | 'image'
     | 'video'
@@ -172,6 +174,9 @@ export interface TaskBatchesTable {
     | 'picture_book'
     | 'short_drama'
     | 'text'
+    | 'podcast'
+    | 'news'
+    | 'storybook'
   provider: string
   model: string
   prompt: string
@@ -192,6 +197,17 @@ export interface TaskBatchesTable {
   short_drama_project_id: string | null
   short_drama_episode_id: string | null
   short_drama_segment_id: string | null
+  // ─── 开放接口（Open API）扩展字段 ──────────────────────────────────────
+  // 内部 DB 列名采用规范拼写 business_id（路由层做 bussiness_id ↔ business_id 映射，对客户端零改动）
+  business_id: string | null
+  callback_url: string | null
+  callback_attempts: Generated<number>
+  callback_status: 'pending' | 'succeeded' | 'failed' | null
+  // image | song | video | news | podcast | storybook | text
+  service_type: string | null
+  // 对外契约 task_id（区别于内部 batch id）
+  task_id: string | null
+  finished_at: Timestamp | null
   created_at: Generated<Date>
   updated_at: Generated<Date>
 }
@@ -211,6 +227,9 @@ export interface TasksTable {
   processing_started_at: Timestamp | null
   completed_at: Timestamp | null
   error_message: string | null
+  // ─── 开放接口（Open API）扩展：外部任务轮询载荷 ─────────────────────────
+  external_status: string | null
+  last_polled_at: Timestamp | null
 }
 
 export interface AssetsTable {
@@ -646,6 +665,29 @@ export interface SubmissionErrorsTable {
   created_at: Generated<Date>
 }
 
+// ─── Open API Clients ─────────────────────────────────────────────────────────
+
+/**
+ * 开放接口调用方（API Key 鉴权）。
+ * 归属真实租户（team_id / workspace_id / system_user_id），方案 B'：
+ * 开放接口流量挂到调用方所属团队，而非平台级幽灵账号。
+ */
+export interface ApiClientsTable {
+  id: Generated<string>
+  name: string
+  // sha256(api_key) 摘要，明文 key 仅在创建时返回一次
+  api_key_hash: string
+  status: 'active' | 'disabled'
+  // 归属团队
+  team_id: string | null
+  // 默认工作区
+  workspace_id: string | null
+  // 归属系统用户（写入 task_batches.user_id）
+  system_user_id: string | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── Database Interface ───────────────────────────────────────────────────────
 
 export interface Database {
@@ -688,4 +730,5 @@ export interface Database {
   short_drama_segments: ShortDramaSegmentsTable
   ai_assistant_errors: AiAssistantErrorsTable
   submission_errors: SubmissionErrorsTable
+  api_clients: ApiClientsTable
 }
