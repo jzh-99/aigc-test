@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq'
 import type { RedisOptions } from 'ioredis'
-import type { MusicJobData, MusicVoiceCloneJobData, OpenApiCallbackJobData } from '@aigc/types'
+import type { MusicJobData, MusicVoiceCloneJobData, OpenApiCallbackJobData, StorybookJobData } from '@aigc/types'
 
 const DEFAULT_JOB_OPTIONS = {
   removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
@@ -35,6 +35,8 @@ let _musicVoiceCloneQueue: Queue<MusicVoiceCloneJobData> | null = null
 let _shortDramaExportQueue: Queue | null = null
 // 开放接口异步回调队列（worker 消费）
 let _openApiCallbackQueue: Queue<OpenApiCallbackJobData> | null = null
+// 开放接口绘本生成队列（storybook worker 消费，Phase 4）
+let _storybookQueue: Queue<StorybookJobData> | null = null
 
 type CloseableQueue = Pick<Queue, 'close'>
 
@@ -46,6 +48,7 @@ export function __setQueuesForTest(queues: {
   musicQueue?: CloseableQueue | null
   musicVoiceCloneQueue?: CloseableQueue | null
   openApiCallbackQueue?: CloseableQueue | null
+  storybookQueue?: CloseableQueue | null
 }): void {
   _imageQueue = (queues.imageQueue as Queue | null | undefined) ?? null
   _transferQueue = (queues.transferQueue as Queue | null | undefined) ?? null
@@ -54,6 +57,7 @@ export function __setQueuesForTest(queues: {
   _musicQueue = (queues.musicQueue as Queue<MusicJobData> | null | undefined) ?? null
   _musicVoiceCloneQueue = (queues.musicVoiceCloneQueue as Queue<MusicVoiceCloneJobData> | null | undefined) ?? null
   _openApiCallbackQueue = (queues.openApiCallbackQueue as Queue<OpenApiCallbackJobData> | null | undefined) ?? null
+  _storybookQueue = (queues.storybookQueue as Queue<StorybookJobData> | null | undefined) ?? null
 }
 
 export function getImageQueue(): Queue {
@@ -105,6 +109,17 @@ export function getShortDramaExportQueue(): Queue {
   return _shortDramaExportQueue
 }
 
+// 开放接口绘本生成队列：worker 侧通过同名队列消费（Phase 4）
+export function getStorybookQueue(): Queue<StorybookJobData> {
+  if (!_storybookQueue) {
+    _storybookQueue = new Queue<StorybookJobData>('storybook-queue', {
+      connection: getRedisOptions(),
+      defaultJobOptions: DEFAULT_JOB_OPTIONS,
+    })
+  }
+  return _storybookQueue
+}
+
 // 开放接口回调队列：worker 侧通过同名队列消费
 export function getOpenApiCallbackQueue(): Queue<OpenApiCallbackJobData> {
   if (!_openApiCallbackQueue) {
@@ -126,6 +141,7 @@ export async function closeQueues(): Promise<void> {
     _musicVoiceCloneQueue,
     _shortDramaExportQueue,
     _openApiCallbackQueue,
+    _storybookQueue,
   ]
 
   _imageQueue = null
@@ -136,6 +152,7 @@ export async function closeQueues(): Promise<void> {
   _musicVoiceCloneQueue = null
   _shortDramaExportQueue = null
   _openApiCallbackQueue = null
+  _storybookQueue = null
 
   await Promise.all(queues.map((queue) => queue?.close()))
 }

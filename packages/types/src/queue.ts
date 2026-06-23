@@ -98,6 +98,44 @@ export interface MusicVoiceCloneJobData {
   estimatedCredits: number
 }
 
+/**
+ * 开放接口绘本生成任务数据（Phase 4）。
+ *
+ * 对齐源项目 app/schemas/storybook.py 的 StorybookGenerateRequest：
+ * - age：'0-3' | '3-6' | '6+'（字符串枚举，源 field_validator 校验）
+ * - category：0-4（int，故事类别）
+ * - style：0-3（int，画风）
+ * - pages：1-10（int，分镜页数）
+ *
+ * worker 消费此数据执行两步流程：
+ *   ① Ark chat/completions 润色分镜 → scenes_detail[N]
+ *   ② seedream /images/generations 组图（sequential_image_generation）→ N 张临时 URL
+ *   ③ 逐张转存 TOS → images_url[TOS URLs]
+ *   ④ dispatchBatchResult({serviceType:'storybook', media:{images_url}})
+ */
+export interface StorybookJobData {
+  taskId: string
+  batchId: string
+  userId: string
+  teamId: string
+  workspaceId: string
+  creditAccountId: string
+  estimatedCredits: number
+  // 源 StorybookGenerateRequest 业务字段
+  prompt: string
+  age: string
+  category: number
+  style: number
+  pages: number
+  // 开放接口回调用字段（对齐 GenerationJobData 语义）
+  callbackUrl?: string | null
+  businessId?: string | null
+  // image|song|video|news|podcast|storybook|text
+  serviceType?: string | null
+  // 对外 task_id（源项目契约字段，内部拼写 task_id）
+  openApiTaskId?: string | null
+}
+
 export interface ShortDramaExportEpisodeJobData {
   projectId: string
   episodeId: string

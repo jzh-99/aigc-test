@@ -20,6 +20,7 @@ import { musicVoiceCloneWorker } from './workers/music-voice-clone.js'
 import { cronWorker, scheduleCronJobs } from './workers/cron-worker.js'
 import { shortDramaExportWorker } from './workers/short-drama-export.js'
 import { openApiCallbackWorker } from './workers/open-api-callback.js'
+import { storybookWorker } from './workers/storybook.js'
 import { getRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from './lib/queue-options.js'
 import { startVideoPoller } from './pollers/video-poller.js'
@@ -202,6 +203,7 @@ logger.info('Storyboard worker started — listening on storyboard-queue')
 logger.info('Music worker started — listening on music-queue')
 logger.info('Music voice clone worker started — listening on music-voice-clone-queue')
 logger.info('Open API callback worker started — listening on open-api-callback-queue')
+logger.info('Storybook worker started — listening on storybook-queue')
 
 // ─── 启动时恢复 stalled/active job ──────────────────────────────────────────
 // Worker 重启后，之前正在执行的 job lock 可能还没过期，手动将它们标记为 failed 并重试
@@ -278,6 +280,7 @@ const shutdown = async () => {
     cronWorker.close(),
     shortDramaExportWorker.close(),
     openApiCallbackWorker.close(),
+    storybookWorker.close(),
   ])
   await closeRedis()
   process.exit(0)
