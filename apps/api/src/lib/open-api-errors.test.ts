@@ -4,7 +4,6 @@ import assert from 'node:assert/strict'
 import {
   ErrorCode,
   errorMessage,
-  httpStatusForErrorCode,
   successResponse,
   OpenApiError,
 } from './open-api-errors.js'
@@ -62,23 +61,4 @@ describe('open-api-errors', () => {
     assert.equal(err2.rawMessage, undefined)
   })
 
-  test('httpStatusForErrorCode：各码 HTTP 状态码对齐源项目 HTTPException 抛出点', () => {
-    // 源项目核实：app/api/deps.py AUTH=401、MODEL_CONFIG=400；app/main.py RequestValidation=422
-    assert.equal(httpStatusForErrorCode(ErrorCode.AUTH_FAILED), 401)
-    assert.equal(httpStatusForErrorCode(ErrorCode.MODEL_CONFIG_ERROR), 400)
-    assert.equal(httpStatusForErrorCode(ErrorCode.PARAM_ERROR), 422)
-    // 其余业务码：源项目路由内 return error_response()（HTTP 200），此处按 Task 0.6 契约显式映射
-    assert.equal(httpStatusForErrorCode(ErrorCode.SECURITY_CHECK_FAILED), 400)
-    assert.equal(httpStatusForErrorCode(ErrorCode.DUPLICATE_TASK), 400)
-    assert.equal(httpStatusForErrorCode(ErrorCode.EXTERNAL_SERVICE_FAILED), 400)
-    assert.equal(httpStatusForErrorCode(ErrorCode.FILE_PROCESS_FAILED), 400)
-    assert.equal(httpStatusForErrorCode(ErrorCode.STORAGE_FAILED), 400)
-    assert.equal(httpStatusForErrorCode(ErrorCode.CALLBACK_FAILED), 400)
-    assert.equal(httpStatusForErrorCode(ErrorCode.SYSTEM_FAILED), 500)
-  })
-
-  test('httpStatusForErrorCode：未知码兜底 400', () => {
-    assert.equal(httpStatusForErrorCode('9999'), 400)
-    assert.equal(httpStatusForErrorCode('unknown'), 400)
-  })
 })
