@@ -178,4 +178,54 @@ describe('dispatchBatchResult', () => {
     assert.equal(result.bussiness_id, undefined)
     assert.equal(result.task_id, 't5')
   })
+
+  // ─── Phase 2 视频接入契约（video-poller.handleVideoFailure + transfer.ts 视频分支）───
+  // 这两个用例锁定视频回调的关键契约：
+  //   1. 成功：media.video_url 为 TOS URL（transfer.ts 已修正 assetType=video 时用 video_url）
+  //   2. 失败：failureCode=EXTERNAL_SERVICE_FAILED（video-poller.handleVideoFailure 传入）
+
+  test('video 成功 → meta.video_url 为传入的 TOS URL（transfer.ts 视频分支契约）', async () => {
+    const { queue, calls: queueCalls } = makeMockQueue()
+    await dispatchBatchResult(
+      {
+        batchId: 'b6',
+        status: 'succeeded',
+        serviceType: 'video',
+        media: { video_url: 'https://tos/v.mp4' },
+        businessId: 'biz6',
+        taskId: 't6',
+        callbackUrl: 'https://cb.example/open',
+      },
+      { queue },
+    )
+    assert.equal(queueCalls.length, 1)
+    const meta = queueCalls[0].data.payload.meta as Record<string, unknown>
+    assert.equal(meta.status, 'succeeded')
+    assert.equal(meta.video_url, 'https://tos/v.mp4')
+    // video meta 不应含 image_url（对齐 buildAsyncCallbackPayload 的 video 分支）
+    assert.equal(meta.image_url, undefined)
+  })
+
+  test('video 失败 + failureCode=EXTERNAL_SERVICE_FAILED → result.code=4001，media 为空', async () => {
+    const { queue, calls: queueCalls } = makeMockQueue()
+    await dispatchBatchResult(
+      {
+        batchId: 'b7',
+        status: 'failed',
+        serviceType: 'video',
+        media: {},
+        businessId: 'biz7',
+        taskId: 't7',
+        callbackUrl: 'https://cb.example/open',
+        failureCode: '4001',
+      },
+      { queue },
+    )
+    assert.equal(queueCalls.length, 1)
+    const result = queueCalls[0].data.payload.result as Record<string, unknown>
+    const meta = queueCalls[0].data.payload.meta as Record<string, unknown>
+    assert.equal(result.code, '4001')
+    assert.equal(meta.status, 'failed')
+    assert.equal(meta.video_url, null)
+  })
 })

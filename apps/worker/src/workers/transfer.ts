@@ -316,12 +316,18 @@ export const transferWorker = new Worker<TransferJobData>(
           .executeTakeFirst()
 
         if (oa?.source === 'open_api') {
-          // 图片最终回调：media.image_url = storageUrl（已转存的 TOS 永久 URL）
+          // 开放接口最终回调：media 字段按 assetType 区分
+          // - video → video_url（对齐 buildAsyncCallbackPayload 的 video meta 契约）
+          // - image → image_url
+          // storageUrl 为已转存的 TOS 永久 URL
+          const media = assetType === 'video'
+            ? { video_url: storageUrl }
+            : { image_url: storageUrl }
           await dispatchBatchResult({
             batchId,
             status: 'succeeded',
-            serviceType: oa.service_type ?? 'image',
-            media: { image_url: storageUrl },
+            serviceType: oa.service_type ?? (assetType === 'video' ? 'video' : 'image'),
+            media,
             businessId: oa.business_id ?? '',
             taskId: oa.task_id ?? '',
             callbackUrl: oa.callback_url,
