@@ -46,6 +46,10 @@ export const jwtAuthPlugin = fp(async function jwtAuth(app: FastifyInstance): Pr
   const redis = (app as any).redis as import('ioredis').default
 
   app.addHook('onRequest', async (request, reply) => {
+    // 开放接口 /api/v3 走独立 API Key 认证（app.ts 内 /api/v3 实例的 requireApiKey + preHandler），
+    // 必须在 JWT 流程之前放行，否则会被下方 Bearer 校验误判为 JWT 失败。
+    if (request.url.startsWith('/api/v3/')) return
+
     if (PUBLIC_ROUTES.some((r) => request.url.startsWith(r))) return
 
     const authHeader = request.headers.authorization
