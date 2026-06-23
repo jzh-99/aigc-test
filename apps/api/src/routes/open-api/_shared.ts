@@ -106,6 +106,9 @@ export interface CreateBatchResult {
   batchId: string
   // tasks.id（内部任务标识，version_index=0 的单任务）
   internalTaskId: string
+  // 归属 team 的 credit_account.id（路由投递 jobData 时 completePipeline/failPipeline 必需，
+  // 此处一并返回避免调用方重复查 findTeamCreditAccountId）
+  creditAccountId: string
 }
 
 // 判定 PG unique_violation（SQLSTATE 23505）。
@@ -190,7 +193,7 @@ export async function createOpenApiBatch(input: CreateBatchInput): Promise<Creat
         .returning('id')
         .executeTakeFirstOrThrow()
 
-      return { batchId: batch.id, internalTaskId: task.id }
+      return { batchId: batch.id, internalTaskId: task.id, creditAccountId }
     })
   } catch (err) {
     if (isPgUniqueViolation(err)) {

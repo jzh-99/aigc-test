@@ -117,6 +117,7 @@ describe('createOpenApiBatch', () => {
 
     assert.ok(res.batchId, '应返回 batchId')
     assert.ok(res.internalTaskId, '应返回 internalTaskId')
+    assert.ok(res.creditAccountId, '应返回 creditAccountId 供路由投递 jobData')
     assert.notEqual(res.batchId, res.internalTaskId)
 
     const db = getDb()
@@ -157,6 +158,8 @@ describe('createOpenApiBatch', () => {
       .where('id', '=', batch.credit_account_id)
       .executeTakeFirstOrThrow()
     assert.equal(acc.owner_type, 'team')
+    // createOpenApiBatch 返回的 creditAccountId 应与 task_batches.credit_account_id 一致
+    assert.equal(res.creditAccountId, batch.credit_account_id)
 
     // tasks 行：version_index=0、status=pending、归属 batch + system_user
     const task = await db
