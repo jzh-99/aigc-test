@@ -11,6 +11,14 @@ export interface GenerationJobData {
   estimatedCredits: number
   canvasId?: string
   canvasNodeId?: string
+  // 开放接口（Open API）回调用字段，全部可选，对非开放接口任务零影响：
+  // 仅当 task_batches.source === 'open_api' 时由 dispatchBatchResult 读取使用
+  callbackUrl?: string | null
+  businessId?: string | null
+  // image|song|video|news|podcast|storybook|text
+  serviceType?: string | null
+  // 对外 task_id（源项目契约字段，内部拼写 task_id）
+  openApiTaskId?: string | null
 }
 
 export interface VideoSubmitJobData {

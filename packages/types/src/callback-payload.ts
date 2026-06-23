@@ -1,18 +1,56 @@
-// 异步回调载荷构建器
-// 逐字对齐源项目 app/services/callbacks.py 的 build_async_callback_payload
-// 及其调用的 6 个 meta 构造函数：_song_meta / _image_meta / _text_meta /
-// _video_meta / _news_meta / _storybook_meta。podcast 在源项目里走 else
-// 默认分支（{status, failed_reason} + media 展开 + 成功时 extra 展开）。
+// 开放接口异步回调载荷与错误码常量（api 与 worker 共享）
 //
-// 对外 JSON 契约字段拼写保持源项目原样：task_id / bussiness_id /
-// image_url / music_url / audio_url 等，不得"修正"。
+// 本文件逐字对齐源项目：
+// - app/services/callbacks.py 的 build_async_callback_payload 及其调用的 6 个
+//   meta 构造函数（_song_meta / _image_meta / _text_meta / _video_meta /
+//   _news_meta / _storybook_meta）。podcast 走 else 默认分支
+//   （{status, failed_reason} + media 展开 + 成功时 extra 展开）。
+// - app/schemas/errors.py 的码值与用户可见文案。
 //
-// 错误码与对外文案统一走 open-api-errors.ts：
-// - 失败时 message 取 errorMessage(failureCode)（或 publicMessage 覆盖）
-// - failed_reason 同上，成功时为 null
-// - 不向客户端暴露内部异常文本
+// 约定：
+// - 对外只暴露固定中文文案，不向客户端泄漏内部异常文本
+// - 对外 JSON 契约字段拼写保持源项目原样：task_id / bussiness_id /
+//   image_url / music_url / audio_url 等，不得"修正"
+//
+// OpenApiError 异常类与 successResponse 是 api 专用（HTTP 层），仍留在
+// apps/api/src/lib/open-api-errors.ts，并通过 re-export 复用此处的常量。
 
-import { ErrorCode, errorMessage } from './open-api-errors.js'
+// 错误码枚举（值锁定，新增码值必须同步更新 ERROR_MESSAGES）
+export const ErrorCode = {
+  SUCCESS: '0000',
+  PARAM_ERROR: '1001',
+  AUTH_FAILED: '1002',
+  MODEL_CONFIG_ERROR: '1003',
+  SECURITY_CHECK_FAILED: '2001',
+  DUPLICATE_TASK: '2002',
+  EXTERNAL_SERVICE_FAILED: '4001',
+  FILE_PROCESS_FAILED: '4002',
+  STORAGE_FAILED: '4003',
+  CALLBACK_FAILED: '4004',
+  SYSTEM_FAILED: '5001',
+} as const
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]
+
+// 用户可见文案映射（除 SECURITY_CHECK_FAILED 外，其余统一文案，避免泄漏内部细节）
+const ERROR_MESSAGES: Record<string, string> = {
+  [ErrorCode.SUCCESS]: '正在加速生成中，请稍等',
+  [ErrorCode.SECURITY_CHECK_FAILED]: '含敏感信息',
+  // 其余码统一文案（不向客户端暴露内部异常文本）
+  [ErrorCode.PARAM_ERROR]: '不符合创作规范',
+  [ErrorCode.AUTH_FAILED]: '不符合创作规范',
+  [ErrorCode.MODEL_CONFIG_ERROR]: '不符合创作规范',
+  [ErrorCode.DUPLICATE_TASK]: '不符合创作规范',
+  [ErrorCode.EXTERNAL_SERVICE_FAILED]: '不符合创作规范',
+  [ErrorCode.FILE_PROCESS_FAILED]: '不符合创作规范',
+  [ErrorCode.STORAGE_FAILED]: '不符合创作规范',
+  [ErrorCode.CALLBACK_FAILED]: '不符合创作规范',
+  [ErrorCode.SYSTEM_FAILED]: '不符合创作规范',
+}
+
+// 根据错误码取用户可见文案；未知码兜底为「不符合创作规范」
+export function errorMessage(code: string): string {
+  return ERROR_MESSAGES[code] ?? '不符合创作规范'
+}
 
 // 支持的 service_type 集合（对齐源项目 6 类业务 + text 同步链路 + podcast）
 export type CallbackServiceType =
