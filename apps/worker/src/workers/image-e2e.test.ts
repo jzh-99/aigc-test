@@ -161,7 +161,7 @@ function stopMockServer(): Promise<void> {
 // ─── 内联 provisionCaller（对齐 apps/api/src/lib/provision-caller.ts）──────────
 // 字段逻辑与源文件保持一致；仅为避免跨包 import fastify 依赖而内联。
 
-async function provisionCallerInline(name: string): Promise<{ clientId: string; teamId: string; systemUserId: string }> {
+async function provisionCallerInline(name: string): Promise<{ clientId: string; teamId: string; systemUserId: string; workspaceId: string; creditAccountId: string }> {
   const db = getDb()
   const apiKey = 'aigc_' + crypto.randomUUID().replace(/-/g, '')
   const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex')
