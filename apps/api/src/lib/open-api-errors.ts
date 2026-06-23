@@ -41,6 +41,32 @@ export function errorMessage(code: string): string {
   return ERROR_MESSAGES[code] ?? '不符合创作规范'
 }
 
+// 业务错误码 → HTTP 状态码（对齐源项目 app/api 抛 HTTPException 的 status_code）
+// 源项目核实结果（D:/haobai/aigc-miniapp-server）：
+//   - AUTH_FAILED → 401（app/api/deps.py:22-25 缺 Bearer、:39-42 无效 key）
+//   - MODEL_CONFIG_ERROR → 400（app/api/deps.py:66-69 缺供应商 key）
+//   - PARAM_ERROR → 422（app/main.py:39 RequestValidationError 全局 handler）
+//   - 其余业务码（DUPLICATE/SYSTEM/EXTERNAL/...）：源项目路由内 return error_response() 即 HTTP 200，
+//     此处按 Task 0.6 显式契约将其映射为 4xx/5xx（小程序按 body.code 判定，HTTP 码兼容不影响）。
+//   - 未知码默认 400（与源项目 deps 缺 key 一致，避免 200 误导客户端）。
+const ERROR_HTTP_STATUS: Record<string, number> = {
+  [ErrorCode.PARAM_ERROR]: 422,
+  [ErrorCode.AUTH_FAILED]: 401,
+  [ErrorCode.MODEL_CONFIG_ERROR]: 400,
+  [ErrorCode.SECURITY_CHECK_FAILED]: 400,
+  [ErrorCode.DUPLICATE_TASK]: 400,
+  [ErrorCode.EXTERNAL_SERVICE_FAILED]: 400,
+  [ErrorCode.FILE_PROCESS_FAILED]: 400,
+  [ErrorCode.STORAGE_FAILED]: 400,
+  [ErrorCode.CALLBACK_FAILED]: 400,
+  [ErrorCode.SYSTEM_FAILED]: 500,
+}
+
+// 根据错误码取 HTTP 状态码；未知码兜底 400
+export function httpStatusForErrorCode(code: string): number {
+  return ERROR_HTTP_STATUS[code] ?? 400
+}
+
 // 统一成功响应信封（对齐源项目 success_response）
 // 注意：函数名用 camelCase(successResponse)，JSON 字段保持对外契约拼写
 export function successResponse(taskId: string) {
