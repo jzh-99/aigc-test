@@ -1,8 +1,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { ErrorCode } from './open-api-errors'
-import { buildAsyncCallbackPayload } from './callback-payload'
+import { ErrorCode } from './open-api-errors.js'
+import { buildAsyncCallbackPayload } from './callback-payload.js'
 
 // 测试覆盖 7 种 service_type（image/song/video/news/podcast/storybook/text）
 // + 成功/失败 + text 无 bussiness_id + publicMessage 覆盖 + failureCode 默认值

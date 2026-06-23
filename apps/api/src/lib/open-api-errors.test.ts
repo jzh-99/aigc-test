@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { ErrorCode, errorMessage, successResponse, OpenApiError } from './open-api-errors'
+import { ErrorCode, errorMessage, successResponse, OpenApiError } from './open-api-errors.js'
 
 describe('open-api-errors', () => {
   test('ErrorCode 值与文案锁定（逐字对齐源项目 errors.py）', () => {

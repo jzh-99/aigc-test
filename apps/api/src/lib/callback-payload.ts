@@ -12,7 +12,7 @@
 // - failed_reason 同上，成功时为 null
 // - 不向客户端暴露内部异常文本
 
-import { ErrorCode, errorMessage } from './open-api-errors'
+import { ErrorCode, errorMessage } from './open-api-errors.js'
 
 // 支持的 service_type 集合（对齐源项目 6 类业务 + text 同步链路 + podcast）
 export type CallbackServiceType =
