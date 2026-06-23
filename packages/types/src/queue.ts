@@ -76,6 +76,15 @@ export interface MusicJobData {
   workspaceId: string
   creditAccountId: string
   estimatedCredits: number
+  // 开放接口（Open API）回调用字段，全部可选，对非开放接口任务零影响：
+  // music worker 完成后通过查 task_batches 表获取 source/callback_url 做分流，
+  // 此处保留字段对齐 GenerationJobData，便于排查与未来直传使用
+  callbackUrl?: string | null
+  businessId?: string | null
+  // image|song|video|news|podcast|storybook|text
+  serviceType?: string | null
+  // 对外 task_id（源项目契约字段，内部拼写 task_id）
+  openApiTaskId?: string | null
 }
 
 export interface MusicVoiceCloneJobData {

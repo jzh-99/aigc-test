@@ -228,4 +228,79 @@ describe('dispatchBatchResult', () => {
     assert.equal(meta.status, 'failed')
     assert.equal(meta.video_url, null)
   })
+
+  // ─── Phase 3 音乐接入契约（music.ts 完成点 + 失败点）───
+  // 这两个用例锁定音乐回调的关键契约（对齐源 callbacks.py 的 _song_meta）：
+  //   1. 成功：meta 含 music_url/image_url/title/duration/lyrics_sections/status
+  //   2. 失败：failureCode=EXTERNAL_SERVICE_FAILED（music.ts failMusicJob 接入点传入）
+
+  test('song 成功 → meta 含 music_url/image_url/title/duration/lyrics_sections（对齐 _song_meta）', async () => {
+    const { queue, calls: queueCalls } = makeMockQueue()
+    const lyricsSections = [
+      { section_type: 'verse', start: 0, end: 30, lines: [{ start: 0, end: 10, text: '夏日微风' }] },
+    ]
+    await dispatchBatchResult(
+      {
+        batchId: 'b8',
+        status: 'succeeded',
+        serviceType: 'song',
+        media: {
+          music_url: 'https://tos/song.mp3',
+          image_url: 'https://tos/cover.png',
+        },
+        extraMeta: {
+          title: '夏日之歌',
+          duration: 120,
+          lyrics_sections: lyricsSections,
+        },
+        businessId: 'biz8',
+        taskId: 't8',
+        callbackUrl: 'https://cb.example/open',
+      },
+      { queue },
+    )
+    assert.equal(queueCalls.length, 1)
+    const result = queueCalls[0].data.payload.result as Record<string, unknown>
+    const meta = queueCalls[0].data.payload.meta as Record<string, unknown>
+    // result 契约（非 text 分支含 bussiness_id）
+    assert.equal(result.task_id, 't8')
+    assert.equal(result.bussiness_id, 'biz8')
+    assert.equal(result.code, '0000')
+    // meta 契约（逐项对齐 _song_meta）
+    assert.equal(meta.status, 'succeeded')
+    assert.equal(meta.failed_reason, null)
+    assert.equal(meta.title, '夏日之歌')
+    assert.equal(meta.music_url, 'https://tos/song.mp3')
+    assert.equal(meta.image_url, 'https://tos/cover.png')
+    assert.equal(meta.duration, 120)
+    assert.deepEqual(meta.lyrics_sections, lyricsSections)
+  })
+
+  test('song 失败 + failureCode=EXTERNAL_SERVICE_FAILED → result.code=4001，media 字段为 null', async () => {
+    const { queue, calls: queueCalls } = makeMockQueue()
+    await dispatchBatchResult(
+      {
+        batchId: 'b9',
+        status: 'failed',
+        serviceType: 'song',
+        media: {},
+        businessId: 'biz9',
+        taskId: 't9',
+        callbackUrl: 'https://cb.example/open',
+        failureCode: '4001',
+      },
+      { queue },
+    )
+    assert.equal(queueCalls.length, 1)
+    const result = queueCalls[0].data.payload.result as Record<string, unknown>
+    const meta = queueCalls[0].data.payload.meta as Record<string, unknown>
+    assert.equal(result.code, '4001')
+    // 失败时 _song_meta 各字段兜底为 null
+    assert.equal(meta.status, 'failed')
+    assert.equal(meta.music_url, null)
+    assert.equal(meta.image_url, null)
+    assert.equal(meta.title, null)
+    assert.equal(meta.duration, null)
+    assert.equal(meta.lyrics_sections, null)
+  })
 })

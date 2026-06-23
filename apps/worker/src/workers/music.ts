@@ -1,12 +1,14 @@
 import { Worker } from 'bullmq'
 import { getDb, recordProviderApiLog } from '@aigc/db'
 import { sql } from 'kysely'
+import { ErrorCode } from '@aigc/types'
 import type { MusicJobData, MusicModel, MusicTrackStatus } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { buildLogger } from '../logger.js'
 import { MurekaClient, type MurekaMediaResult } from '../lib/mureka.js'
 import { transferMusicUrl } from '../lib/music-storage.js'
 import { VolcengineImageAdapter } from '../adapters/volcengine-image.js'
+import { dispatchBatchResult } from '../lib/dispatch-result.js'
 import {
   buildCoverPrompt,
   buildMurekaGenerationPrompt,
@@ -134,6 +136,33 @@ async function failMusicJob(data: MusicJobData, message: string): Promise<void> 
     }).where('id', '=', data.batchId).execute()
   })
   await publishTrackEvent(data.trackId, { event: 'failed', error_message: message })
+
+  // 开放接口分流：source='open_api' 走失败回调（HMAC POST callback_url），
+  // 非 open_api 保持原 SSE（上面 publishTrackEvent 已发 sse:music_track:<id>）。
+  const oaFail = await db.selectFrom('task_batches')
+    .select(['callback_url', 'business_id', 'service_type', 'task_id', 'source'])
+    .where('id', '=', data.batchId)
+    .executeTakeFirst()
+  if (oaFail?.source === 'open_api') {
+    try {
+      await dispatchBatchResult({
+        batchId: data.batchId,
+        status: 'failed',
+        serviceType: oaFail.service_type ?? 'song',
+        media: {},
+        businessId: oaFail.business_id ?? '',
+        taskId: oaFail.task_id ?? '',
+        callbackUrl: oaFail.callback_url,
+        failureCode: ErrorCode.EXTERNAL_SERVICE_FAILED,
+      })
+    } catch (cbErr) {
+      logger.warn({
+        taskId: data.taskId,
+        batchId: data.batchId,
+        err: cbErr instanceof Error ? cbErr.message : String(cbErr),
+      }, '音乐生成失败后开放接口回调入队失败')
+    }
+  }
   logger.info({
     taskId: data.taskId,
     batchId: data.batchId,
@@ -424,6 +453,47 @@ export const musicWorker = new Worker<MusicJobData>(
 
       await confirmMusicCredits(data, data.estimatedCredits)
       await publishTrackEvent(row.id, { event: 'completed', track_id: row.id })
+
+      // 开放接口分流：source='open_api' 走最终回调（HMAC POST callback_url），
+      // 非 open_api 保持原 SSE（publishTrackEvent 已发 sse:music_track:<id>）。
+      // 查 task_batches 判定 source，并取回调契约字段。
+      // media/extraMeta 对齐源 callbacks.py 的 _song_meta：
+      //   music_url（音频永久 URL，优先 audio_storage_url 转存地址）
+      //   image_url（封面永久 URL，cover_storage_url）
+      //   title/duration/lyrics_sections（extra_meta）
+      const oaRow = await db.selectFrom('task_batches')
+        .select(['callback_url', 'business_id', 'service_type', 'task_id', 'source'])
+        .where('id', '=', data.batchId)
+        .executeTakeFirst()
+      if (oaRow?.source === 'open_api') {
+        // 重新查 music_tracks 取最终落库的 cover_storage_url/title/duration/lyrics_sections
+        const finalTrack = await db.selectFrom('music_tracks')
+          .select(['title', 'cover_storage_url', 'cover_url', 'audio_storage_url', 'audio_url', 'duration_seconds', 'lyrics_sections'])
+          .where('id', '=', row.id)
+          .executeTakeFirst()
+        // 音频优先用转存后的永久地址（audio_storage_url），回退到供应商原始地址
+        const musicUrl = finalTrack?.audio_storage_url ?? finalTrack?.audio_url ?? media.url ?? null
+        // 封面优先用转存后的永久地址
+        const imageUrl = finalTrack?.cover_storage_url ?? finalTrack?.cover_url ?? null
+        await dispatchBatchResult({
+          batchId: data.batchId,
+          status: 'succeeded',
+          serviceType: oaRow.service_type ?? 'song',
+          media: {
+            music_url: musicUrl,
+            image_url: imageUrl,
+          },
+          extraMeta: {
+            title: finalTrack?.title ?? media.title ?? generatedTitle ?? null,
+            duration: finalTrack?.duration_seconds ?? media.duration ?? null,
+            lyrics_sections: finalTrack?.lyrics_sections ?? normalizeMurekaLyricsSections(media.lyrics_sections),
+          },
+          businessId: oaRow.business_id ?? '',
+          taskId: oaRow.task_id ?? '',
+          callbackUrl: oaRow.callback_url,
+        })
+      }
+
       logger.info({
         ...musicCtx,
         murekaTaskId: media.task_id ?? media.id ?? null,
