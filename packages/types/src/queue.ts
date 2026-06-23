@@ -91,3 +91,20 @@ export interface ShortDramaExportEpisodeJobData {
   creditAccountId: string
   estimatedCredits: number
 }
+
+/**
+ * 开放接口（Open API）异步回调任务数据
+ *
+ * 对齐源项目 app/services/callbacks.py 的 build_async_callback_payload 输出结构：
+ * - result：对调用方可见的结果信封（task_id / bussiness_id / code / message）
+ * - meta：业务相关的媒体产物与状态元数据
+ *
+ * 投递方在生成完成后构造此 payload，回调 worker 负责 HMAC 签名后 POST 到 task_batches.callback_url。
+ */
+export interface OpenApiCallbackJobData {
+  batchId: string
+  payload: {
+    result: Record<string, unknown>
+    meta: Record<string, unknown>
+  }
+}
