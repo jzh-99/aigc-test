@@ -7,8 +7,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { ErrorCode, OpenApiError } from '../../lib/open-api-errors.js'
-import { sendOpenApiError } from './_shared.js'
+import { ErrorCode, OpenApiError } from '../lib/open-api-errors.js'
+import { sendOpenApiError } from '../routes/open-api/_shared.js'
 
 // 轻量 mock reply：记录最后一次 status/send 的值
 function createMockReply() {

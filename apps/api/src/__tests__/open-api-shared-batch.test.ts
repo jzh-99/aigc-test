@@ -1,18 +1,18 @@
 // 必须在 import @aigc/db 之前加载 .env（ESM 按源码顺序实例化 side-effect import）
-import '../../lib/test-env.js'
+import '../lib/test-env.js'
 
 import { describe, test, after } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { closeDb, getDb } from '@aigc/db'
 
-import { ErrorCode, OpenApiError } from '../../lib/open-api-errors.js'
-import { provisionCaller } from '../../lib/provision-caller.js'
+import { ErrorCode, OpenApiError } from '../lib/open-api-errors.js'
+import { provisionCaller } from '../lib/provision-caller.js'
 import {
   createOpenApiBatch,
   isPgUniqueViolation,
   type CreateBatchInput,
-} from './_shared.js'
+} from '../routes/open-api/_shared.js'
 
 // 本文件覆盖：createOpenApiBatch 共用提交骨架（7 种开放接口业务路由复用）。
 //

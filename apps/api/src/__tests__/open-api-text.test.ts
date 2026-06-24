@@ -1,5 +1,5 @@
 // 必须在 import 拉入 db 之前加载 .env（ESM 按源码顺序实例化 side-effect import）
-import '../../lib/test-env.js'
+import '../lib/test-env.js'
 
 // 开放接口文本润色路由测试（Phase 7，同步链路）。
 //
@@ -26,10 +26,10 @@ import { dirname, join } from 'node:path'
 
 import { closeDb, getDb } from '@aigc/db'
 
-import { requireApiKey } from '../../plugins/api-key-auth.js'
-import { sendOpenApiError } from './_shared.js'
-import { ErrorCode } from '../../lib/open-api-errors.js'
-import { provisionCaller } from '../../lib/provision-caller.js'
+import { requireApiKey } from '../plugins/api-key-auth.js'
+import { sendOpenApiError } from '../routes/open-api/_shared.js'
+import { ErrorCode } from '../lib/open-api-errors.js'
+import { provisionCaller } from '../lib/provision-caller.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -78,7 +78,7 @@ async function buildTestApp() {
     sendOpenApiError(reply, err)
   })
   await instance.register(autoload, {
-    dir: join(__dirname),
+    dir: join(__dirname, '../routes/open-api'),
     dirNameRoutePrefix: false,
     forceESM: true,
     autoHooks: false,

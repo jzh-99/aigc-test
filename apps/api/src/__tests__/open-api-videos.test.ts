@@ -1,24 +1,6 @@
 // 必须在 import 拉入 storage/db 之前加载 .env（ESM 按源码顺序实例化 side-effect import）
-import '../../lib/test-env.js'
+import '../lib/test-env.js'
 
-// 开放接口绘本生成路由测试（Phase 4）。
-//
-// 测试搭建（对齐 lyrics.test.ts）：
-//   - 真实库（provisionCaller 建调用方 + 归属容器，拿明文 apiKey 做 Bearer）
-//   - Fastify 最小实例：autoload open-api 路由 + requireApiKey + scoped setErrorHandler
-//   - mock getStorybookQueue：用 __setQueuesForTest 注入假 queue，记录 add 调用的 jobData
-//   - after：清理 tasks/task_batches + provisionCaller 归属容器
-//
-// 红线验证：
-//   1. 合法 Bearer + 完整 body → 200 + successResponse
-//   2. storybookQueue.add 被调用，jobData 字段对齐 StorybookJobData + 回调字段
-//   3. task_batches 落库 source=open_api、service_type=storybook、module=storybook
-//   4. 无 Authorization → 401 + AUTH_FAILED
-//   5. 缺必填字段 → 422 + PARAM_ERROR
-//   6. age 非法枚举 → 422
-//   7. category 越界 → 422
-//   8. pages 越界（>10）→ 422
-//   9. 重复 task_id → 200 + DUPLICATE_TASK
 import { describe, test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import Fastify from 'fastify'
@@ -28,11 +10,29 @@ import { dirname, join } from 'node:path'
 
 import { closeDb, getDb } from '@aigc/db'
 
-import { __setQueuesForTest } from '../../lib/queue.js'
-import { requireApiKey } from '../../plugins/api-key-auth.js'
-import { sendOpenApiError } from './_shared.js'
-import { ErrorCode } from '../../lib/open-api-errors.js'
-import { provisionCaller } from '../../lib/provision-caller.js'
+import { __setQueuesForTest } from '../lib/queue.js'
+import { requireApiKey } from '../plugins/api-key-auth.js'
+import { sendOpenApiError } from '../routes/open-api/_shared.js'
+import { ErrorCode } from '../lib/open-api-errors.js'
+import { provisionCaller } from '../lib/provision-caller.js'
+
+// 开放接口视频生成路由测试（Phase 2）。
+//
+// 测试搭建（对齐 images.test.ts）：
+//   - 真实库（provisionCaller 建调用方 + 归属容器，拿明文 apiKey 做 Bearer）
+//   - Fastify 最小实例：autoload open-api 路由 + requireApiKey + scoped setErrorHandler
+//   - mock getVideoQueue：用 __setQueuesForTest 注入假 queue，记录 add 调用的 jobData
+//   - after：清理 tasks/task_batches + provisionCaller 归属容器
+//
+// 红线验证：
+//   1. 合法 Bearer + 完整 body → 200 + successResponse
+//   2. videoQueue.add 被调用，jobData 字段对齐 VideoSubmitJobData + 回调字段
+//   3. 参考图 base64 → DB/jobData params 只有 TOS URL，无 base64 明文
+//   4. 无 Authorization → 401 + AUTH_FAILED
+//   5. 缺必填字段 → 422 + PARAM_ERROR
+//   6. duration 非法枚举 → 422
+//   7. 重复 task_id → 200 + DUPLICATE_TASK
+//   8. ratio 映射到 params.aspect_ratio（worker 契约）
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -41,7 +41,7 @@ interface CapturedJob {
   data: Record<string, unknown>
 }
 const capturedJobs: CapturedJob[] = []
-const fakeStorybookQueue = {
+const fakeVideoQueue = {
   async add(name: string, data: Record<string, unknown>) {
     capturedJobs.push({ name, data })
     return { id: 'fake-job-id' }
@@ -63,7 +63,7 @@ async function buildTestApp() {
     sendOpenApiError(reply, err)
   })
   await instance.register(autoload, {
-    dir: join(__dirname),
+    dir: join(__dirname, '../routes/open-api'),
     dirNameRoutePrefix: false,
     forceESM: true,
     autoHooks: false,
@@ -94,20 +94,9 @@ async function cleanup() {
   const teamIds = teams.map((t) => t.id)
   const userIds = teams.map((t) => t.owner_id)
 
-  const acctIds = teamIds.length
-    ? (await db
-        .selectFrom('credit_accounts')
-        .select('id')
-        .where('team_id', 'in', teamIds)
-        .execute()).map((r) => r.id)
-    : []
-
   await db.transaction().execute(async (trx) => {
     if (teamIds.length > 0) {
       await trx.deleteFrom('api_clients').where('team_id', 'in', teamIds).execute()
-      if (acctIds.length > 0) {
-        await trx.deleteFrom('credits_ledger').where('credit_account_id', 'in', acctIds).execute()
-      }
       await trx.deleteFrom('credit_accounts').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('team_members').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('workspaces').where('team_id', 'in', teamIds).execute()
@@ -124,36 +113,37 @@ function uniqueName(label: string): string {
   return `test:${label}:${tag}`
 }
 
-// 合法请求体模板（对齐源 StorybookGenerateRequest 必填字段）
+// 合法请求体模板（对齐源 VideoGenerateRequest 必填字段）
 function validBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     task_id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     bussiness_id: `biz-${Date.now()}`,
-    prompt: '一只小兔子的森林冒险',
-    age: '3-6',
-    category: 0,
-    style: 1,
-    pages: 4,
+    model: 'seedance-2.0',
+    create_mode: 'text_2_video',
+    prompt: '一只猫在奔跑',
+    resolution: '720p',
+    duration: 5,
+    ratio: '16:9',
     callback_url: 'https://example.com/cb',
     ...overrides,
   }
 }
 
-describe('POST /api/v3/storybooks/generations', () => {
+describe('POST /api/v3/videos/generations', () => {
   before(async () => {
-    __setQueuesForTest({ storybookQueue: fakeStorybookQueue })
+    __setQueuesForTest({ videoQueue: fakeVideoQueue })
     app = await buildTestApp()
   })
 
   after(async () => {
     await app.close()
-    __setQueuesForTest({ storybookQueue: null })
+    __setQueuesForTest({ videoQueue: null })
     await cleanup()
     await closeDb()
   })
 
-  test('合法请求 → 200 + successResponse，jobData 字段对齐 StorybookJobData', async () => {
-    const name = uniqueName('sb-ok')
+  test('合法 Bearer + 完整 body → 200 + successResponse，jobData 投递齐全', async () => {
+    const name = uniqueName('vid-ok')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
     const taskId = `task-ok-${Date.now()}`
@@ -161,7 +151,7 @@ describe('POST /api/v3/storybooks/generations', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/storybooks/generations',
+      url: '/videos/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
@@ -171,8 +161,8 @@ describe('POST /api/v3/storybooks/generations', () => {
     assert.equal(json.result.task_id, taskId)
     assert.equal(json.result.code, ErrorCode.SUCCESS)
 
-    // 验证 jobData 投递：字段对齐 StorybookJobData + 回调字段
-    assert.equal(capturedJobs.length >= 1, true, 'storybookQueue.add 应被调用')
+    // 验证 jobData 投递：字段对齐 VideoSubmitJobData + 回调字段
+    assert.equal(capturedJobs.length, 1, 'videoQueue.add 应被调用 1 次')
     const job = capturedJobs[capturedJobs.length - 1]
     assert.equal(job.name, 'generate')
     const data = job.data as Record<string, unknown>
@@ -180,86 +170,42 @@ describe('POST /api/v3/storybooks/generations', () => {
     assert.equal(typeof data.batchId, 'string')
     assert.equal(typeof data.userId, 'string')
     assert.equal(typeof data.teamId, 'string')
-    assert.equal(typeof data.workspaceId, 'string')
     assert.equal(typeof data.creditAccountId, 'string')
+    assert.equal(data.provider, 'volcengine')
+    assert.equal(data.model, 'seedance-2.0')
+    assert.equal(data.prompt, '一只猫在奔跑')
     assert.equal(data.estimatedCredits, 0)
-    // 业务字段
-    assert.equal(data.prompt, '一只小兔子的森林冒险')
-    assert.equal(data.age, '3-6')
-    assert.equal(data.category, 0)
-    assert.equal(data.style, 1)
-    assert.equal(data.pages, 4)
-    // 开放接口回调字段
+    // 开放接口回调字段（video-poller/transfer 通过查表获取，jobData 透传便于排查）
     assert.equal(data.callbackUrl, 'https://example.com/cb')
     assert.equal(data.businessId, body.bussiness_id)
-    assert.equal(data.serviceType, 'storybook')
+    assert.equal(data.serviceType, 'video')
     assert.equal(data.openApiTaskId, taskId)
 
-    createdBatchIds.push(data.batchId as string)
+    // params 映射：ratio → aspect_ratio，duration 为 number
+    const params = data.params as Record<string, unknown>
+    assert.equal(params.aspect_ratio, '16:9', '源 ratio 映射到 worker aspect_ratio')
+    assert.equal(params.duration, 5)
+    assert.equal(params.resolution, '720p')
+    assert.equal(params.create_mode, 'text_2_video')
 
-    // 验证 task_batches 落库
+    // DB 验证：task_batches 落库 source=open_api
     const db = getDb()
     const batch = await db
       .selectFrom('task_batches')
       .selectAll()
       .where('id', '=', data.batchId as string)
       .executeTakeFirstOrThrow()
+    createdBatchIds.push(batch.id)
     assert.equal(batch.source, 'open_api')
     assert.equal(batch.task_id, taskId)
-    assert.equal(batch.module, 'storybook')
-    assert.equal(batch.service_type, 'storybook')
-    assert.equal(batch.provider, 'volcengine')
-
-    // 验证 params 含 worker 消费的业务字段
-    const params = typeof batch.params === 'string' ? JSON.parse(batch.params) : batch.params
-    assert.equal(params.age, '3-6')
-    assert.equal(params.category, 0)
-    assert.equal(params.style, 1)
-    assert.equal(params.pages, 4)
-  })
-
-  test('age=6+ 合法边界 → 200', async () => {
-    const name = uniqueName('sb-age')
-    createdNames.push(name)
-    const { apiKey } = await provisionCaller(name)
-    const taskId = `task-age-${Date.now()}`
-    const body = validBody({ task_id: taskId, age: '6+' })
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/storybooks/generations',
-      headers: { authorization: `Bearer ${apiKey}` },
-      payload: body,
-    })
-
-    assert.equal(res.statusCode, 200, `期望 200，实际 ${res.statusCode}：${res.body}`)
-    const job = capturedJobs[capturedJobs.length - 1]
-    createdBatchIds.push((job.data as { batchId: string }).batchId)
-  })
-
-  test('pages=10 合法上界 → 200', async () => {
-    const name = uniqueName('sb-pages')
-    createdNames.push(name)
-    const { apiKey } = await provisionCaller(name)
-    const taskId = `task-pages-${Date.now()}`
-    const body = validBody({ task_id: taskId, pages: 10 })
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/storybooks/generations',
-      headers: { authorization: `Bearer ${apiKey}` },
-      payload: body,
-    })
-
-    assert.equal(res.statusCode, 200)
-    const job = capturedJobs[capturedJobs.length - 1]
-    createdBatchIds.push((job.data as { batchId: string }).batchId)
+    assert.equal(batch.module, 'video')
+    assert.equal(batch.service_type, 'video')
   })
 
   test('无 Authorization → 401 + AUTH_FAILED', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/storybooks/generations',
+      url: '/videos/generations',
       payload: validBody(),
     })
     assert.equal(res.statusCode, 401)
@@ -267,16 +213,16 @@ describe('POST /api/v3/storybooks/generations', () => {
     assert.equal(json.result.code, ErrorCode.AUTH_FAILED)
   })
 
-  test('缺必填字段（无 pages）→ 422 + PARAM_ERROR', async () => {
-    const name = uniqueName('sb-422')
+  test('缺必填字段（无 model）→ 422 + PARAM_ERROR', async () => {
+    const name = uniqueName('vid-422')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
     const body = validBody()
-    delete body.pages
+    delete body.model
 
     const res = await app.inject({
       method: 'POST',
-      url: '/storybooks/generations',
+      url: '/videos/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
@@ -285,15 +231,15 @@ describe('POST /api/v3/storybooks/generations', () => {
     assert.equal(json.result.code, ErrorCode.PARAM_ERROR)
   })
 
-  test('age 非法枚举（4-6）→ 422', async () => {
-    const name = uniqueName('sb-age-422')
+  test('duration 非法枚举值（20）→ 422 + PARAM_ERROR', async () => {
+    const name = uniqueName('vid-dur')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
-    const body = validBody({ age: '4-6' })
+    const body = validBody({ duration: 20 })
 
     const res = await app.inject({
       method: 'POST',
-      url: '/storybooks/generations',
+      url: '/videos/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
@@ -302,38 +248,25 @@ describe('POST /api/v3/storybooks/generations', () => {
     assert.equal(json.result.code, ErrorCode.PARAM_ERROR)
   })
 
-  test('category 越界（5）→ 422', async () => {
-    const name = uniqueName('sb-cat')
+  test('ratio 非法枚举值 → 422 + PARAM_ERROR', async () => {
+    const name = uniqueName('vid-ratio')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
-    const body = validBody({ category: 5 })
+    const body = validBody({ ratio: '5:4' })
 
     const res = await app.inject({
       method: 'POST',
-      url: '/storybooks/generations',
+      url: '/videos/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
     assert.equal(res.statusCode, 422)
-  })
-
-  test('pages 越界（11）→ 422', async () => {
-    const name = uniqueName('sb-pages-422')
-    createdNames.push(name)
-    const { apiKey } = await provisionCaller(name)
-    const body = validBody({ pages: 11 })
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/storybooks/generations',
-      headers: { authorization: `Bearer ${apiKey}` },
-      payload: body,
-    })
-    assert.equal(res.statusCode, 422)
+    const json = res.json() as { result: { code: string } }
+    assert.equal(json.result.code, ErrorCode.PARAM_ERROR)
   })
 
   test('重复 task_id → 200 + DUPLICATE_TASK', async () => {
-    const name = uniqueName('sb-dup')
+    const name = uniqueName('vid-dup')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
     const taskId = `task-dup-${Date.now()}`
@@ -341,7 +274,7 @@ describe('POST /api/v3/storybooks/generations', () => {
 
     const r1 = await app.inject({
       method: 'POST',
-      url: '/storybooks/generations',
+      url: '/videos/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
@@ -351,12 +284,62 @@ describe('POST /api/v3/storybooks/generations', () => {
 
     const r2 = await app.inject({
       method: 'POST',
-      url: '/storybooks/generations',
+      url: '/videos/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
     assert.equal(r2.statusCode, 200, '业务错误走 HTTP 200')
     const json2 = r2.json() as { result: { code: string } }
     assert.equal(json2.result.code, ErrorCode.DUPLICATE_TASK)
+  })
+
+  test('参考图 base64 → DB/jobData params 只有 TOS URL，无 base64 明文（脱敏红线）', async () => {
+    const name = uniqueName('vid-ref')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+
+    const base64Content = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
+    const dataUri = `data:image/png;base64,${base64Content}`
+    const taskId = `task-ref-${Date.now()}`
+    const body = validBody({
+      task_id: taskId,
+      create_mode: 'start_end_frame',
+      images: [dataUri],
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/videos/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+    assert.equal(res.statusCode, 200, res.body)
+
+    // ① jobData.params 不得含 base64 明文
+    const job = capturedJobs[capturedJobs.length - 1] as CapturedJob
+    const params = (job.data as { params: Record<string, unknown> }).params
+    const paramsStr = JSON.stringify(params)
+    assert.equal(paramsStr.includes(base64Content), false, 'jobData.params 不得残留 base64 明文')
+    assert.equal(paramsStr.includes('base64'), false, 'jobData.params 不得含 base64 标记')
+    // params.images 应是 URL 数组（worker 首尾帧契约）
+    const imagesField = params.images as unknown
+    assert.ok(Array.isArray(imagesField) && imagesField.length === 1, 'params.images 应为长度 1 的 URL 数组')
+    assert.ok(typeof (imagesField as string[])[0] === 'string')
+    assert.ok(/^https?:\/\//.test((imagesField as string[])[0]), 'params.images[0] 应为 http(s) URL')
+
+    // ② DB task_batches.params jsonb 不得含 base64 明文
+    const db = getDb()
+    const batch = await db
+      .selectFrom('task_batches')
+      .selectAll()
+      .where('task_id', '=', taskId)
+      .executeTakeFirstOrThrow()
+    createdBatchIds.push(batch.id)
+    const dbParamsStr = JSON.stringify(batch.params)
+    assert.equal(dbParamsStr.includes(base64Content), false, 'DB params 不得残留 base64 明文')
+    assert.equal(dbParamsStr.includes('base64'), false, 'DB params 不得含 base64 标记')
+
+    // ③ HTTP 响应体也不得泄漏 base64
+    assert.equal(res.body.includes(base64Content), false, '响应体不得残留 base64 明文')
   })
 })

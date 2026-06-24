@@ -1,23 +1,24 @@
 // 必须在 import 拉入 storage/db 之前加载 .env（ESM 按源码顺序实例化 side-effect import）
-import '../../lib/test-env.js'
+import '../lib/test-env.js'
 
-// 开放接口资讯生成路由测试（Phase 6）。
+// 开放接口绘本生成路由测试（Phase 4）。
 //
-// 测试搭建（对齐 podcasts.test.ts）：
+// 测试搭建（对齐 lyrics.test.ts）：
 //   - 真实库（provisionCaller 建调用方 + 归属容器，拿明文 apiKey 做 Bearer）
 //   - Fastify 最小实例：autoload open-api 路由 + requireApiKey + scoped setErrorHandler
-//   - mock getNewsQueue：用 __setQueuesForTest 注入假 queue，记录 add 调用的 jobData
+//   - mock getStorybookQueue：用 __setQueuesForTest 注入假 queue，记录 add 调用的 jobData
 //   - after：清理 tasks/task_batches + provisionCaller 归属容器
 //
 // 红线验证：
 //   1. 合法 Bearer + 完整 body → 200 + successResponse
-//   2. newsQueue.add 被调用，jobData 字段对齐 NewsJobData + 回调字段
-//   3. task_batches 落库 source=open_api、service_type=news、module=news
-//   4. date 格式校验：合法 YYYY-MM-DD 通过
-//   5. date 格式非法（非 YYYY-MM-DD）→ 422
-//   6. 缺必填字段 → 422
-//   7. 无 Authorization → 401
-//   8. 重复 task_id → 200 + DUPLICATE_TASK
+//   2. storybookQueue.add 被调用，jobData 字段对齐 StorybookJobData + 回调字段
+//   3. task_batches 落库 source=open_api、service_type=storybook、module=storybook
+//   4. 无 Authorization → 401 + AUTH_FAILED
+//   5. 缺必填字段 → 422 + PARAM_ERROR
+//   6. age 非法枚举 → 422
+//   7. category 越界 → 422
+//   8. pages 越界（>10）→ 422
+//   9. 重复 task_id → 200 + DUPLICATE_TASK
 import { describe, test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import Fastify from 'fastify'
@@ -27,11 +28,11 @@ import { dirname, join } from 'node:path'
 
 import { closeDb, getDb } from '@aigc/db'
 
-import { __setQueuesForTest } from '../../lib/queue.js'
-import { requireApiKey } from '../../plugins/api-key-auth.js'
-import { sendOpenApiError } from './_shared.js'
-import { ErrorCode } from '../../lib/open-api-errors.js'
-import { provisionCaller } from '../../lib/provision-caller.js'
+import { __setQueuesForTest } from '../lib/queue.js'
+import { requireApiKey } from '../plugins/api-key-auth.js'
+import { sendOpenApiError } from '../routes/open-api/_shared.js'
+import { ErrorCode } from '../lib/open-api-errors.js'
+import { provisionCaller } from '../lib/provision-caller.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -40,7 +41,7 @@ interface CapturedJob {
   data: Record<string, unknown>
 }
 const capturedJobs: CapturedJob[] = []
-const fakeNewsQueue = {
+const fakeStorybookQueue = {
   async add(name: string, data: Record<string, unknown>) {
     capturedJobs.push({ name, data })
     return { id: 'fake-job-id' }
@@ -62,7 +63,7 @@ async function buildTestApp() {
     sendOpenApiError(reply, err)
   })
   await instance.register(autoload, {
-    dir: join(__dirname),
+    dir: join(__dirname, '../routes/open-api'),
     dirNameRoutePrefix: false,
     forceESM: true,
     autoHooks: false,
@@ -94,13 +95,11 @@ async function cleanup() {
   const userIds = teams.map((t) => t.owner_id)
 
   const acctIds = teamIds.length
-    ? (
-        await db
-          .selectFrom('credit_accounts')
-          .select('id')
-          .where('team_id', 'in', teamIds)
-          .execute()
-      ).map((r) => r.id)
+    ? (await db
+        .selectFrom('credit_accounts')
+        .select('id')
+        .where('team_id', 'in', teamIds)
+        .execute()).map((r) => r.id)
     : []
 
   await db.transaction().execute(async (trx) => {
@@ -125,67 +124,75 @@ function uniqueName(label: string): string {
   return `test:${label}:${tag}`
 }
 
-// 合法请求体模板（对齐源 NewsGenerateRequest 必填字段）
+// 合法请求体模板（对齐源 StorybookGenerateRequest 必填字段）
 function validBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     task_id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     bussiness_id: `biz-${Date.now()}`,
-    prompt: '生成一份关于人工智能行业的资讯简报',
-    date: '2026-06-23',
+    prompt: '一只小兔子的森林冒险',
+    age: '3-6',
+    category: 0,
+    style: 1,
+    pages: 4,
     callback_url: 'https://example.com/cb',
     ...overrides,
   }
 }
 
-describe('POST /api/v3/news/generations', () => {
+describe('POST /api/v3/storybooks/generations', () => {
   before(async () => {
-    __setQueuesForTest({ newsQueue: fakeNewsQueue })
+    __setQueuesForTest({ storybookQueue: fakeStorybookQueue })
     app = await buildTestApp()
   })
 
   after(async () => {
     await app.close()
-    __setQueuesForTest({ newsQueue: null })
+    __setQueuesForTest({ storybookQueue: null })
     await cleanup()
     await closeDb()
   })
 
-  test('合法请求 → 200 + successResponse，jobData 对齐 NewsJobData', async () => {
-    const name = uniqueName('news-ok')
+  test('合法请求 → 200 + successResponse，jobData 字段对齐 StorybookJobData', async () => {
+    const name = uniqueName('sb-ok')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
-    const taskId = `task-news-${Date.now()}`
+    const taskId = `task-ok-${Date.now()}`
     const body = validBody({ task_id: taskId })
 
     const res = await app.inject({
       method: 'POST',
-      url: '/news/generations',
+      url: '/storybooks/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
 
     assert.equal(res.statusCode, 200, `期望 200，实际 ${res.statusCode}：${res.body}`)
-    const json = res.json() as { result: { task_id: string; code: string } }
+    const json = res.json() as { result: { task_id: string; code: string; message: string } }
     assert.equal(json.result.task_id, taskId)
     assert.equal(json.result.code, ErrorCode.SUCCESS)
 
-    // 验证 jobData 投递
-    assert.ok(capturedJobs.length >= 1, 'newsQueue.add 应被调用')
+    // 验证 jobData 投递：字段对齐 StorybookJobData + 回调字段
+    assert.equal(capturedJobs.length >= 1, true, 'storybookQueue.add 应被调用')
     const job = capturedJobs[capturedJobs.length - 1]
     assert.equal(job.name, 'generate')
     const data = job.data as Record<string, unknown>
     assert.equal(typeof data.taskId, 'string')
     assert.equal(typeof data.batchId, 'string')
     assert.equal(typeof data.userId, 'string')
+    assert.equal(typeof data.teamId, 'string')
+    assert.equal(typeof data.workspaceId, 'string')
     assert.equal(typeof data.creditAccountId, 'string')
     assert.equal(data.estimatedCredits, 0)
     // 业务字段
-    assert.equal(data.prompt, '生成一份关于人工智能行业的资讯简报')
-    assert.equal(data.date, '2026-06-23')
-    // 回调字段
+    assert.equal(data.prompt, '一只小兔子的森林冒险')
+    assert.equal(data.age, '3-6')
+    assert.equal(data.category, 0)
+    assert.equal(data.style, 1)
+    assert.equal(data.pages, 4)
+    // 开放接口回调字段
     assert.equal(data.callbackUrl, 'https://example.com/cb')
     assert.equal(data.businessId, body.bussiness_id)
-    assert.equal(data.serviceType, 'news')
+    assert.equal(data.serviceType, 'storybook')
     assert.equal(data.openApiTaskId, taskId)
 
     createdBatchIds.push(data.batchId as string)
@@ -199,92 +206,157 @@ describe('POST /api/v3/news/generations', () => {
       .executeTakeFirstOrThrow()
     assert.equal(batch.source, 'open_api')
     assert.equal(batch.task_id, taskId)
-    assert.equal(batch.module, 'news')
-    assert.equal(batch.service_type, 'news')
-    assert.equal(batch.provider, 'ark')
+    assert.equal(batch.module, 'storybook')
+    assert.equal(batch.service_type, 'storybook')
+    assert.equal(batch.provider, 'volcengine')
 
-    // params 含 date 业务字段
+    // 验证 params 含 worker 消费的业务字段
     const params = typeof batch.params === 'string' ? JSON.parse(batch.params) : batch.params
-    assert.equal(params.date, '2026-06-23')
+    assert.equal(params.age, '3-6')
+    assert.equal(params.category, 0)
+    assert.equal(params.style, 1)
+    assert.equal(params.pages, 4)
   })
 
-  test('date 格式非法（非 YYYY-MM-DD）→ 422', async () => {
-    const name = uniqueName('news-date')
+  test('age=6+ 合法边界 → 200', async () => {
+    const name = uniqueName('sb-age')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
-    const body = validBody({ date: '2026/06/23' })
+    const taskId = `task-age-${Date.now()}`
+    const body = validBody({ task_id: taskId, age: '6+' })
 
     const res = await app.inject({
       method: 'POST',
-      url: '/news/generations',
+      url: '/storybooks/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
 
-    assert.equal(res.statusCode, 422)
-    const json = res.json() as { result: { code: string } }
-    assert.equal(json.result.code, ErrorCode.PARAM_ERROR)
+    assert.equal(res.statusCode, 200, `期望 200，实际 ${res.statusCode}：${res.body}`)
+    const job = capturedJobs[capturedJobs.length - 1]
+    createdBatchIds.push((job.data as { batchId: string }).batchId)
   })
 
-  test('缺必填字段 prompt → 422', async () => {
-    const name = uniqueName('news-missing')
+  test('pages=10 合法上界 → 200', async () => {
+    const name = uniqueName('sb-pages')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
-    const body = validBody()
-    delete body.prompt
+    const taskId = `task-pages-${Date.now()}`
+    const body = validBody({ task_id: taskId, pages: 10 })
 
     const res = await app.inject({
       method: 'POST',
-      url: '/news/generations',
+      url: '/storybooks/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
 
-    assert.equal(res.statusCode, 422)
+    assert.equal(res.statusCode, 200)
+    const job = capturedJobs[capturedJobs.length - 1]
+    createdBatchIds.push((job.data as { batchId: string }).batchId)
   })
 
-  test('无 Authorization → 401', async () => {
-    const body = validBody()
+  test('无 Authorization → 401 + AUTH_FAILED', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/news/generations',
-      payload: body,
+      url: '/storybooks/generations',
+      payload: validBody(),
     })
-
     assert.equal(res.statusCode, 401)
     const json = res.json() as { result: { code: string } }
     assert.equal(json.result.code, ErrorCode.AUTH_FAILED)
   })
 
+  test('缺必填字段（无 pages）→ 422 + PARAM_ERROR', async () => {
+    const name = uniqueName('sb-422')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const body = validBody()
+    delete body.pages
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/storybooks/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+    assert.equal(res.statusCode, 422)
+    const json = res.json() as { result: { code: string } }
+    assert.equal(json.result.code, ErrorCode.PARAM_ERROR)
+  })
+
+  test('age 非法枚举（4-6）→ 422', async () => {
+    const name = uniqueName('sb-age-422')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const body = validBody({ age: '4-6' })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/storybooks/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+    assert.equal(res.statusCode, 422)
+    const json = res.json() as { result: { code: string } }
+    assert.equal(json.result.code, ErrorCode.PARAM_ERROR)
+  })
+
+  test('category 越界（5）→ 422', async () => {
+    const name = uniqueName('sb-cat')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const body = validBody({ category: 5 })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/storybooks/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+    assert.equal(res.statusCode, 422)
+  })
+
+  test('pages 越界（11）→ 422', async () => {
+    const name = uniqueName('sb-pages-422')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const body = validBody({ pages: 11 })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/storybooks/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+    assert.equal(res.statusCode, 422)
+  })
+
   test('重复 task_id → 200 + DUPLICATE_TASK', async () => {
-    const name = uniqueName('news-dup')
+    const name = uniqueName('sb-dup')
     createdNames.push(name)
     const { apiKey } = await provisionCaller(name)
     const taskId = `task-dup-${Date.now()}`
     const body = validBody({ task_id: taskId })
 
-    // 第一次：成功
-    const res1 = await app.inject({
+    const r1 = await app.inject({
       method: 'POST',
-      url: '/news/generations',
+      url: '/storybooks/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
-    assert.equal(res1.statusCode, 200)
+    assert.equal(r1.statusCode, 200)
+    const job1 = capturedJobs[capturedJobs.length - 1] as CapturedJob
+    createdBatchIds.push((job1.data as { batchId: string }).batchId)
 
-    // 记录 batchId 用于清理
-    const job1 = capturedJobs[capturedJobs.length - 1]
-    createdBatchIds.push((job1.data as Record<string, unknown>).batchId as string)
-
-    // 第二次：重复 task_id
-    const res2 = await app.inject({
+    const r2 = await app.inject({
       method: 'POST',
-      url: '/news/generations',
+      url: '/storybooks/generations',
       headers: { authorization: `Bearer ${apiKey}` },
       payload: body,
     })
-    assert.equal(res2.statusCode, 200)
-    const json2 = res2.json() as { result: { code: string } }
+    assert.equal(r2.statusCode, 200, '业务错误走 HTTP 200')
+    const json2 = r2.json() as { result: { code: string } }
     assert.equal(json2.result.code, ErrorCode.DUPLICATE_TASK)
   })
 })
