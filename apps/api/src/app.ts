@@ -122,6 +122,7 @@ export async function buildApp() {
       admin: '管理后台',
       'company-a': '外部图库',
       proxy: '资源代理',
+      external: '外部接口',
       healthz: '健康检查',
       'client-errors': '客户端错误上报',
     }
