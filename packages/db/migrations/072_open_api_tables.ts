@@ -2,7 +2,7 @@ import type { Kysely } from 'kysely'
 import { sql } from 'kysely'
 
 /**
- * 071_open_api_tables.ts
+ * 072_open_api_tables.ts
  *
  * 开放接口（Open API）迁移：
  * 1. task_batches 新增回调与对外契约字段（business_id / callback_* / service_type / task_id / finished_at）
