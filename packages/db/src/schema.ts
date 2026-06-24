@@ -2,6 +2,12 @@ import type { ColumnType, Generated } from 'kysely'
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>
 type JsonArrayInput<T> = T[] | string
+export type ClientScope = 'mini_program' | 'enterprise' | 'screen'
+export type ClientScopesColumn = ColumnType<
+  ClientScope[],
+  JsonArrayInput<ClientScope> | undefined,
+  JsonArrayInput<ClientScope>
+>
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
 
@@ -71,7 +77,7 @@ export interface TeamsTable {
   name: string
   owner_id: string
   plan_tier: 'free' | 'basic' | 'pro' | 'enterprise'
-  team_type: Generated<'standard' | 'company_a' | 'avatar_enabled'>
+  team_type: Generated<'standard' | 'company_a' | 'avatar_enabled' | 'personal'>
   allow_member_topup: Generated<boolean>
   is_deleted: Generated<boolean>
   deleted_at: Timestamp | null
@@ -322,8 +328,90 @@ export interface ProviderSystemVoicesTable {
   language: string
   metadata: ColumnType<unknown, string, string>
   demo_audio_url: string | null
+  client_scopes: ClientScopesColumn
+  sort_order: Generated<number>
   is_active: Generated<boolean>
   created_at: Generated<Date>
+}
+
+// ─── C Client Configs ─────────────────────────────────────────────────────────
+
+export interface CreationTemplatesTable {
+  id: Generated<string>
+  title: string
+  description: string | null
+  cover_url: string | null
+  work_type: string
+  client_scopes: ClientScopesColumn
+  sort_order: Generated<number>
+  is_active: Generated<boolean>
+  config: ColumnType<unknown, string | undefined, string>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface DailyNewsTable {
+  id: Generated<string>
+  title: string
+  summary: string | null
+  content: string
+  source: string | null
+  published_at: Timestamp | null
+  client_scopes: ClientScopesColumn
+  is_active: Generated<boolean>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface PromptInspirationsTable {
+  id: Generated<string>
+  word: string
+  content: string
+  work_type: string
+  client_scopes: ClientScopesColumn
+  sort_order: Generated<number>
+  is_active: Generated<boolean>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface MusicStylesTable {
+  id: Generated<string>
+  name: string
+  style_key: string
+  client_scopes: ClientScopesColumn
+  sort_order: Generated<number>
+  is_active: Generated<boolean>
+  metadata: ColumnType<unknown, string | undefined, string>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface MiniUserAuthRecordsTable {
+  id: Generated<string>
+  user_id: string | null
+  openid: string
+  unionid: string | null
+  auth_type: string
+  auth_scope: string
+  auth_status: Generated<'authorized' | 'revoked'>
+  metadata: ColumnType<unknown, string | undefined, string>
+  authorized_at: Timestamp | null
+  revoked_at: Timestamp | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface MiniUserPushRulesTable {
+  id: Generated<string>
+  user_id: string
+  openid: string | null
+  scene: string
+  template_id: string | null
+  is_enabled: Generated<boolean>
+  metadata: ColumnType<unknown, string | undefined, string>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
 }
 
 export interface VoiceProfilesTable {
@@ -672,6 +760,12 @@ export interface Database {
   providers: ProvidersTable
   provider_models: ProviderModelsTable
   provider_system_voices: ProviderSystemVoicesTable
+  creation_templates: CreationTemplatesTable
+  daily_news: DailyNewsTable
+  prompt_inspirations: PromptInspirationsTable
+  music_styles: MusicStylesTable
+  mini_user_auth_records: MiniUserAuthRecordsTable
+  mini_user_push_rules: MiniUserPushRulesTable
   team_model_configs: TeamModelConfigsTable
   voice_profiles: VoiceProfilesTable
   prompt_filter_rules: PromptFilterRulesTable

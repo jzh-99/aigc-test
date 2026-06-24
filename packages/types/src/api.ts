@@ -258,6 +258,25 @@ export interface LoginRequest {
 export interface AuthResponse {
   access_token: string
   user: UserProfile
+  account_scopes?: UserAccountScope[]
+  accountScopes?: UserAccountScope[]
+  require_scope_selection?: boolean
+  requireScopeSelection?: boolean
+}
+
+export type AccountScopeType = 'personal' | 'team'
+
+export interface UserAccountScope {
+  id: string
+  team_id: string
+  teamId: string
+  name: string
+  role: string
+  type: AccountScopeType
+  account_scope: AccountScopeType
+  accountScope: AccountScopeType
+  team_type: UserTeamType
+  workspaces: UserWorkspace[]
 }
 
 export interface UserProfile {
@@ -269,13 +288,22 @@ export interface UserProfile {
   role: 'admin' | 'member'
   password_change_required: boolean
   teams: UserTeam[]
+  account_scopes?: UserAccountScope[]
+  accountScopes?: UserAccountScope[]
+  require_scope_selection?: boolean
+  requireScopeSelection?: boolean
 }
+
+export type UserTeamType = 'standard' | 'company_a' | 'avatar_enabled' | 'personal'
 
 export interface UserTeam {
   id: string
   name: string
   role: string
-  team_type: 'standard' | 'company_a' | 'avatar_enabled'
+  team_type: UserTeamType
+  account_scope?: AccountScopeType
+  accountScope?: AccountScopeType
+  type?: AccountScopeType
   owner: { email: string | null; username: string } | null
   workspaces: UserWorkspace[]
   allow_member_topup: boolean

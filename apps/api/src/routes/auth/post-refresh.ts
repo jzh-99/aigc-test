@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import crypto from 'node:crypto'
 import { sql } from 'kysely'
-import { buildUserProfile } from '../../services/user-profile.js'
+import { ensurePersonalAccountScope } from '../../services/account-scope.js'
+import { buildAuthResponse, buildUserProfile } from '../../services/user-profile.js'
 import { signAccessToken, signRefreshToken } from '../../lib/auth-tokens.js'
 
 const route: FastifyPluginAsync = async (app) => {
@@ -100,8 +101,9 @@ const route: FastifyPluginAsync = async (app) => {
     })
 
     const accessToken = signAccessToken({ id: stored.id, account: stored.account, role: stored.role })
+    await ensurePersonalAccountScope(db, stored.id)
     const profile = await buildUserProfile(db, stored.id)
-    return { access_token: accessToken, user: profile }
+    return buildAuthResponse(accessToken, profile)
   })
 }
 

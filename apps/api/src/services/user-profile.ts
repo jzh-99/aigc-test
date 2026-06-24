@@ -1,4 +1,5 @@
 import { getDb } from '@aigc/db'
+import { resolveAccountScope } from './account-scope.js'
 
 export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: string) {
   const user = await db
@@ -54,15 +55,37 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
     wsByTeam.set(w.team_id, list)
   }
 
-  const teams = teamRows.map((t) => ({
-    id: t.team_id,
-    name: t.team_name,
-    role: t.role,
-    team_type: (t as any).team_type ?? 'standard',
-    allow_member_topup: (t as any).allow_member_topup ?? false,
-    owner: ownerMap.get(t.owner_id) ?? null,
-    workspaces: wsByTeam.get(t.team_id) ?? [],
+  const teams = teamRows.map((t) => {
+    const teamType = String((t as any).team_type ?? 'standard')
+    const accountScope = resolveAccountScope(teamType)
+
+    return {
+      id: t.team_id,
+      name: t.team_name,
+      role: t.role,
+      team_type: teamType,
+      account_scope: accountScope,
+      accountScope,
+      type: accountScope,
+      allow_member_topup: (t as any).allow_member_topup ?? false,
+      owner: ownerMap.get(t.owner_id) ?? null,
+      workspaces: wsByTeam.get(t.team_id) ?? [],
+    }
+  })
+
+  const accountScopes = teams.map((team) => ({
+    id: team.id,
+    team_id: team.id,
+    teamId: team.id,
+    name: team.name,
+    role: team.role,
+    type: team.type,
+    account_scope: team.account_scope,
+    accountScope: team.accountScope,
+    team_type: team.team_type,
+    workspaces: team.workspaces,
   }))
+  const requireScopeSelection = accountScopes.length > 1
 
   return {
     id: user.id,
@@ -73,5 +96,23 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
     role: user.role,
     password_change_required: user.password_change_required,
     teams,
+    account_scopes: accountScopes,
+    accountScopes,
+    require_scope_selection: requireScopeSelection,
+    requireScopeSelection,
+  }
+}
+
+export function buildAuthResponse(
+  accessToken: string,
+  profile: Awaited<ReturnType<typeof buildUserProfile>>,
+) {
+  return {
+    access_token: accessToken,
+    user: profile,
+    account_scopes: profile.account_scopes,
+    accountScopes: profile.accountScopes,
+    require_scope_selection: profile.require_scope_selection,
+    requireScopeSelection: profile.requireScopeSelection,
   }
 }

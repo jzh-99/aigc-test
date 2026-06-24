@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import bcrypt from 'bcryptjs'
 import type { CreateTeamRequest } from '@aigc/types'
+import { PERSONAL_TEAM_TYPE } from '../../services/account-scope.js'
 
 // POST /admin/teams — 创建团队 + 组长用户 + 积分账户 + 默认工作区
 const route: FastifyPluginAsync = async (app) => {
@@ -99,6 +100,7 @@ const route: FastifyPluginAsync = async (app) => {
       .select('id')
       .where('owner_id', '=', owner.id)
       .where('is_deleted', '=', false)
+      .where('team_type', '!=', PERSONAL_TEAM_TYPE)
       .executeTakeFirst()
     if (existingOwnership) {
       return reply.status(409).send({
