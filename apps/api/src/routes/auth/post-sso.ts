@@ -3,7 +3,8 @@ import { getDb } from '@aigc/db'
 import jwt from 'jsonwebtoken'
 import crypto from 'node:crypto'
 import { sql } from 'kysely'
-import { buildUserProfile } from '../../services/user-profile.js'
+import { ensurePersonalAccountScope } from '../../services/account-scope.js'
+import { buildAuthResponse, buildUserProfile } from '../../services/user-profile.js'
 import { signAccessToken, signRefreshToken } from '../../lib/auth-tokens.js'
 
 const route: FastifyPluginAsync = async (app) => {
@@ -86,8 +87,9 @@ const route: FastifyPluginAsync = async (app) => {
       maxAge: 7 * 24 * 60 * 60,
     })
 
+    await ensurePersonalAccountScope(db, user.id)
     const profile = await buildUserProfile(db, user.id)
-    return { access_token: accessToken, user: profile }
+    return buildAuthResponse(accessToken, profile)
   })
 }
 

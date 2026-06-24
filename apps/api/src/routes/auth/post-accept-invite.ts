@@ -4,7 +4,8 @@ import bcrypt from 'bcryptjs'
 import crypto from 'node:crypto'
 import { sql } from 'kysely'
 import type { AcceptInviteRequest } from '@aigc/types'
-import { buildUserProfile } from '../../services/user-profile.js'
+import { ensurePersonalAccountScope } from '../../services/account-scope.js'
+import { buildAuthResponse, buildUserProfile } from '../../services/user-profile.js'
 import { signAccessToken, signRefreshToken } from '../../lib/auth-tokens.js'
 
 // bcrypt 最大处理字节数
@@ -151,8 +152,9 @@ const route: FastifyPluginAsync = async (app) => {
       maxAge: 7 * 24 * 60 * 60,
     })
 
+    await ensurePersonalAccountScope(db, user.id)
     const profile = await buildUserProfile(db, user.id)
-    return reply.status(201).send({ access_token: accessToken, user: profile })
+    return reply.status(201).send(buildAuthResponse(accessToken, profile))
   })
 }
 
