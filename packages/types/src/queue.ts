@@ -202,3 +202,39 @@ export interface OpenApiCallbackJobData {
     meta: Record<string, unknown>
   }
 }
+
+/**
+ * 开放接口资讯生成任务数据（Phase 6）。
+ *
+ * 对齐源项目 app/schemas/news.py:NewsGenerateRequest：
+ * - prompt：资讯生成要求
+ * - date：YYYY-MM-DD 日期字符串（源 field_validator 校验格式）
+ *
+ * worker 消费此数据执行资讯生成流程：
+ *   ① Ark /responses 生成完整 HTML（web_search + thinking）
+ *   ② 正则解析 HTML 提取 news-title / news-abstract meta
+ *   ③ 「安全不通过则重新生成」重试循环（最多 3 次）
+ *   ④ HTML base64 转存 TOS（kind='html'）→ 永久 news_url
+ *   ⑤ dispatchBatchResult({serviceType:'news', media:{news_url}, extraMeta:{title, abstract}})，
+ *      buildMeta 内 abstract → news_abstract 映射（对齐源 _news_meta）
+ */
+export interface NewsJobData {
+  taskId: string
+  batchId: string
+  userId: string
+  teamId: string
+  workspaceId: string
+  creditAccountId: string
+  estimatedCredits: number
+  // 源 NewsGenerateRequest 业务字段
+  prompt: string
+  // YYYY-MM-DD 日期字符串（源 field_validator 校验格式）
+  date: string
+  // 开放接口回调用字段（对齐 GenerationJobData 语义）
+  callbackUrl?: string | null
+  businessId?: string | null
+  // image|song|video|news|podcast|storybook|text
+  serviceType?: string | null
+  // 对外 task_id（源项目契约字段，内部拼写 task_id）
+  openApiTaskId?: string | null
+}

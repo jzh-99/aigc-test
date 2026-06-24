@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq'
 import type { RedisOptions } from 'ioredis'
-import type { MusicJobData, MusicVoiceCloneJobData, OpenApiCallbackJobData, PodcastJobData, StorybookJobData } from '@aigc/types'
+import type { MusicJobData, MusicVoiceCloneJobData, NewsJobData, OpenApiCallbackJobData, PodcastJobData, StorybookJobData } from '@aigc/types'
 
 const DEFAULT_JOB_OPTIONS = {
   removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
@@ -39,6 +39,8 @@ let _openApiCallbackQueue: Queue<OpenApiCallbackJobData> | null = null
 let _storybookQueue: Queue<StorybookJobData> | null = null
 // 开放接口播客生成队列（podcast worker 消费，Phase 5）
 let _podcastQueue: Queue<PodcastJobData> | null = null
+// 开放接口资讯生成队列（news worker 消费，Phase 6）
+let _newsQueue: Queue<NewsJobData> | null = null
 
 type CloseableQueue = Pick<Queue, 'close'>
 
@@ -52,6 +54,7 @@ export function __setQueuesForTest(queues: {
   openApiCallbackQueue?: CloseableQueue | null
   storybookQueue?: CloseableQueue | null
   podcastQueue?: CloseableQueue | null
+  newsQueue?: CloseableQueue | null
 }): void {
   _imageQueue = (queues.imageQueue as Queue | null | undefined) ?? null
   _transferQueue = (queues.transferQueue as Queue | null | undefined) ?? null
@@ -62,6 +65,7 @@ export function __setQueuesForTest(queues: {
   _openApiCallbackQueue = (queues.openApiCallbackQueue as Queue<OpenApiCallbackJobData> | null | undefined) ?? null
   _storybookQueue = (queues.storybookQueue as Queue<StorybookJobData> | null | undefined) ?? null
   _podcastQueue = (queues.podcastQueue as Queue<PodcastJobData> | null | undefined) ?? null
+  _newsQueue = (queues.newsQueue as Queue<NewsJobData> | null | undefined) ?? null
 }
 
 export function getImageQueue(): Queue {
@@ -146,6 +150,17 @@ export function getPodcastQueue(): Queue<PodcastJobData> {
   return _podcastQueue
 }
 
+// 开放接口资讯生成队列：worker 侧通过同名队列消费（Phase 6）
+export function getNewsQueue(): Queue<NewsJobData> {
+  if (!_newsQueue) {
+    _newsQueue = new Queue<NewsJobData>('news-queue', {
+      connection: getRedisOptions(),
+      defaultJobOptions: DEFAULT_JOB_OPTIONS,
+    })
+  }
+  return _newsQueue
+}
+
 export async function closeQueues(): Promise<void> {
   const queues = [
     _imageQueue,
@@ -158,6 +173,7 @@ export async function closeQueues(): Promise<void> {
     _openApiCallbackQueue,
     _storybookQueue,
     _podcastQueue,
+    _newsQueue,
   ]
 
   _imageQueue = null
@@ -170,6 +186,7 @@ export async function closeQueues(): Promise<void> {
   _openApiCallbackQueue = null
   _storybookQueue = null
   _podcastQueue = null
+  _newsQueue = null
 
   await Promise.all(queues.map((queue) => queue?.close()))
 }

@@ -22,6 +22,7 @@ import { shortDramaExportWorker } from './workers/short-drama-export.js'
 import { openApiCallbackWorker } from './workers/open-api-callback.js'
 import { storybookWorker } from './workers/storybook.js'
 import { podcastWorker } from './workers/podcast.js'
+import { newsWorker } from './workers/news.js'
 import { getRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from './lib/queue-options.js'
 import { startVideoPoller } from './pollers/video-poller.js'
@@ -206,6 +207,7 @@ logger.info('Music voice clone worker started — listening on music-voice-clone
 logger.info('Open API callback worker started — listening on open-api-callback-queue')
 logger.info('Storybook worker started — listening on storybook-queue')
 logger.info('Podcast worker started — listening on podcast-queue')
+logger.info('News worker started — listening on news-queue')
 
 // ─── 启动时恢复 stalled/active job ──────────────────────────────────────────
 // Worker 重启后，之前正在执行的 job lock 可能还没过期，手动将它们标记为 failed 并重试
@@ -284,6 +286,7 @@ const shutdown = async () => {
     openApiCallbackWorker.close(),
     storybookWorker.close(),
     podcastWorker.close(),
+    newsWorker.close(),
   ])
   await closeRedis()
   process.exit(0)
