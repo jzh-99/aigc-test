@@ -14,12 +14,12 @@ import { buildLogger } from '../logger.js'
 
 const logger = buildLogger()
 
-// 火山方舟 API 基址（Ark）
-const ARK_API_BASE = process.env.ARK_BASE_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
+// 火山方舟 API 基址（统一用 DOUBAO_API_URL，与主线一致）
+const DOUBAO_API_BASE = process.env.DOUBAO_API_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
 // 绘本润色分镜模型（Ark chat/completions）
-const STORYBOOK_POLISH_MODEL = process.env.ARK_STORYBOOK_POLISH_MODEL ?? 'doubao-pro-32k'
+const STORYBOOK_POLISH_MODEL = process.env.DOUBAO_STORYBOOK_POLISH_MODEL ?? 'doubao-pro-32k'
 // 绘本组图模型（seedream，支持 sequential_image_generation）
-const STORYBOOK_IMAGE_MODEL = process.env.ARK_STORYBOOK_IMAGE_MODEL ?? 'seedream-4.5'
+const STORYBOOK_IMAGE_MODEL = process.env.DOUBAO_STORYBOOK_IMAGE_MODEL ?? 'seedream-4.5'
 // seedream 模型 ID 映射（对齐 volcengine-image.ts 的 MODEL_ID_MAP）
 const SEEDREAM_MODEL_ID_MAP: Record<string, string> = {
   'seedream-5.0-lite': 'doubao-seedream-5-0-lite-260128',
@@ -218,7 +218,7 @@ export async function polishPrompt(params: {
   const timer = setTimeout(() => controller.abort(), POLISH_TIMEOUT_MS)
   let response: Response
   try {
-    response = await fetch(`${ARK_API_BASE}/chat/completions`, {
+    response = await fetch(`${DOUBAO_API_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -288,7 +288,7 @@ export async function generateGroupImages(params: {
   const timer = setTimeout(() => controller.abort(), GROUP_IMAGE_TIMEOUT_MS)
   let response: Response
   try {
-    response = await fetch(`${ARK_API_BASE}/images/generations`, {
+    response = await fetch(`${DOUBAO_API_BASE}/images/generations`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -23,11 +23,10 @@ import { buildLogger } from '../logger.js'
 const logger = buildLogger()
 
 // 火山方舟 API 基址（Ark /responses 端点）
-// 对齐源 config.py:ark_base_url_text（资讯用文本基址，非 ark_base_url）
-const ARK_TEXT_API_BASE =
-  process.env.ARK_BASE_URL_TEXT ?? process.env.ARK_BASE_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
+// 统一用 DOUBAO_API_URL（与 aigc-test 主线一致，官方 Ark 域名）
+const DOUBAO_API_BASE = process.env.DOUBAO_API_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
 // 资讯生成模型（对齐源 config.py:ark_news_model，默认 doubao-seed-2-0-code-preview）
-const ARK_NEWS_MODEL = process.env.ARK_NEWS_MODEL ?? 'doubao-seed-2-0-code-preview-260215'
+const DOUBAO_NEWS_MODEL = process.env.DOUBAO_NEWS_MODEL ?? 'doubao-seed-2-0-code-preview-260215'
 // 资讯生成超时（对齐源 httpx.Client(timeout=900)，15 分钟）
 const NEWS_GENERATE_TIMEOUT_MS = 900_000
 
@@ -251,7 +250,7 @@ export async function callArkResponses(params: {
   deps?: ArkResponsesDeps
 }): Promise<NewsGenerationResult> {
   const { apiKey, prompt, date } = params
-  const model = params.model ?? ARK_NEWS_MODEL
+  const model = params.model ?? DOUBAO_NEWS_MODEL
   const text = buildNewsPrompt(prompt, date)
 
   // payload 对齐源 news_provider.py:176-190
@@ -278,7 +277,7 @@ export async function callArkResponses(params: {
   const fetchFn = params.deps?.fetch ?? fetch
   let response: Awaited<ReturnType<typeof fetchFn>>
   try {
-    response = await fetchFn(`${ARK_TEXT_API_BASE}/responses`, {
+    response = await fetchFn(`${DOUBAO_API_BASE}/responses`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),

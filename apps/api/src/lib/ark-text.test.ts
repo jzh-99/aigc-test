@@ -57,7 +57,7 @@ function restoreFetch(): void {
 }
 
 before(() => {
-  if (!process.env.ARK_API_KEY) process.env.ARK_API_KEY = 'test-ark-key'
+  if (!process.env.DOUBAO_API_KEY) process.env.DOUBAO_API_KEY = 'test-ark-key'
 })
 
 after(() => {

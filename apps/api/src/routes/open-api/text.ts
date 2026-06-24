@@ -2,7 +2,7 @@
 //
 // 移植源项目 app/api/routes_text.py:polish_text：
 //   ① 校验 schema（task_id 1-50 / create_mode 枚举 0-4 / input_text 非空）
-//   ② 校验 ARK_API_KEY 配置 → 空则 MODEL_CONFIG_ERROR（HTTP 400，对齐源 HTTPException(400)）
+//   ② 校验 DOUBAO_API_KEY 配置 → 空则 MODEL_CONFIG_ERROR（HTTP 400，对齐源 HTTPException(400)）
 //   ③ createOpenApiBatch 事务建 task_batches + tasks（source=open_api，幂等防重复 task_id）
 //   ④ 同步调 polishText（Ark /chat/completions）→ 失败转 EXTERNAL_SERVICE_FAILED
 //   ⑤ 输出安全检测：aigc-test 暂无对应能力，跳过（与图片/视频等各 phase 一致，Phase 8 统一接入）
@@ -48,7 +48,7 @@ const TEXT_BODY = {
 }
 
 // 文本润色模型（对齐源 config.py:ark_text_model；与 ark-text.ts 同源，此处仅 params 快照用）
-const ARK_TEXT_MODEL = process.env.ARK_TEXT_MODEL ?? 'doubao-seed-2-0-lite-260215'
+const DOUBAO_TEXT_MODEL = process.env.DOUBAO_TEXT_MODEL ?? 'doubao-seed-2-0-lite-260215'
 
 // ─── 同步状态流转：task pending → completed/failed（零积分，不建 ledger）────────
 // 文本润色 estimated_credits=0，不涉及冻结/扣减/退还，故跳过 credit_accounts 与 ledger 变动，
@@ -126,9 +126,9 @@ const route: FastifyPluginAsync = async (app) => {
       // preHandler 已挂载 request.apiClient（非空断言：openApiPreHandler 失败会抛 AUTH_FAILED）
       const apiClient = request.apiClient!
 
-      // 步骤①：校验 ARK_API_KEY 配置（对齐源 _provider_key 的 MODEL_CONFIG_ERROR）
+      // 步骤①：校验 DOUBAO_API_KEY 配置（对齐源 _provider_key 的 MODEL_CONFIG_ERROR）
       // 源项目通过 HTTPException(400) 抛出，此处对齐 HTTP 400 + body code + meta:{}
-      const arkApiKey = process.env.ARK_API_KEY
+      const arkApiKey = process.env.DOUBAO_API_KEY
       if (!arkApiKey) {
         return reply.status(400).send({
           result: {
@@ -154,7 +154,7 @@ const route: FastifyPluginAsync = async (app) => {
           callbackUrl: '',
           module: 'text',
           provider: 'ark',
-          model: ARK_TEXT_MODEL,
+          model: DOUBAO_TEXT_MODEL,
           prompt: b.input_text,
           params: { create_mode: b.create_mode, input_text: b.input_text },
         })

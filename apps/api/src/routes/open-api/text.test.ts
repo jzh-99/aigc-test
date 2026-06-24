@@ -16,7 +16,7 @@ import '../../lib/test-env.js'
 //   4. 无 Authorization → 401
 //   5. 重复 task_id → 200 + DUPLICATE_TASK + meta:{}
 //   6. Ark 失败 → 200 + EXTERNAL_SERVICE_FAILED + meta.output_text=""
-//   7. ARK_API_KEY 缺失 → 400 + MODEL_CONFIG_ERROR（对齐源 HTTPException(400)）
+//   7. DOUBAO_API_KEY 缺失 → 400 + MODEL_CONFIG_ERROR（对齐源 HTTPException(400)）
 import { describe, test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import Fastify from 'fastify'
@@ -153,16 +153,16 @@ function validBody(overrides: Record<string, unknown> = {}): Record<string, unkn
 
 describe('POST /api/v3/chat/completions（文本润色，同步链路）', () => {
   before(async () => {
-    // 文本润色路由检查 process.env.ARK_API_KEY，测试环境兜底设值
-    savedArkKey = process.env.ARK_API_KEY
-    process.env.ARK_API_KEY = 'test-ark-key'
+    // 文本润色路由检查 process.env.DOUBAO_API_KEY，测试环境兜底设值
+    savedArkKey = process.env.DOUBAO_API_KEY
+    process.env.DOUBAO_API_KEY = 'test-ark-key'
     app = await buildTestApp()
   })
 
   after(async () => {
     await app.close()
     restoreFetch()
-    process.env.ARK_API_KEY = savedArkKey
+    process.env.DOUBAO_API_KEY = savedArkKey
     await cleanup()
     await closeDb()
   })
@@ -358,10 +358,10 @@ describe('POST /api/v3/chat/completions（文本润色，同步链路）', () =>
     }
   })
 
-  test('ARK_API_KEY 缺失 → 400 + MODEL_CONFIG_ERROR', async () => {
-    // 临时删除 ARK_API_KEY（对齐源 _provider_key 的 MODEL_CONFIG_ERROR，HTTPException(400)）
-    const saved = process.env.ARK_API_KEY
-    delete process.env.ARK_API_KEY
+  test('DOUBAO_API_KEY 缺失 → 400 + MODEL_CONFIG_ERROR', async () => {
+    // 临时删除 DOUBAO_API_KEY（对齐源 _provider_key 的 MODEL_CONFIG_ERROR，HTTPException(400)）
+    const saved = process.env.DOUBAO_API_KEY
+    delete process.env.DOUBAO_API_KEY
     try {
       const name = uniqueName('text-nokey')
       createdNames.push(name)
@@ -380,7 +380,7 @@ describe('POST /api/v3/chat/completions（文本润色，同步链路）', () =>
       assert.equal(json.result.code, ErrorCode.MODEL_CONFIG_ERROR)
       assert.deepEqual(json.meta, {})
     } finally {
-      process.env.ARK_API_KEY = saved
+      process.env.DOUBAO_API_KEY = saved
     }
   })
 })

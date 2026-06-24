@@ -39,7 +39,7 @@ import {
 const logger = buildLogger()
 
 // 绘本组图模型（seedream，支持 sequential_image_generation）
-const STORYBOOK_IMAGE_MODEL = process.env.ARK_STORYBOOK_IMAGE_MODEL ?? 'seedream-4.5'
+const STORYBOOK_IMAGE_MODEL = process.env.DOUBAO_STORYBOOK_IMAGE_MODEL ?? 'seedream-4.5'
 
 // ─── 状态流转：task → processing（对齐 image worker）──────────────────────────
 async function markTaskProcessing(taskId: string, batchId: string, jobId: string | undefined): Promise<void> {

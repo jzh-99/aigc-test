@@ -35,7 +35,7 @@ const NEWS_BODY = {
 }
 
 // 资讯生成模型（对齐源 config.py:ark_news_model，worker 侧也从 env 读，此处仅用于 params 快照）
-const ARK_NEWS_MODEL = process.env.ARK_NEWS_MODEL ?? 'doubao-seed-2-0-code-preview-260215'
+const DOUBAO_NEWS_MODEL = process.env.DOUBAO_NEWS_MODEL ?? 'doubao-seed-2-0-code-preview-260215'
 
 const route: FastifyPluginAsync = async (app) => {
   app.post(
@@ -67,7 +67,7 @@ const route: FastifyPluginAsync = async (app) => {
         callbackUrl: b.callback_url,
         module: 'news',
         provider: 'ark',
-        model: ARK_NEWS_MODEL,
+        model: DOUBAO_NEWS_MODEL,
         prompt: b.prompt,
         params: { date: b.date },
       })

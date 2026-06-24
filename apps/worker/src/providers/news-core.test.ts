@@ -124,8 +124,8 @@ function buildTextWithoutHtml(): string {
 }
 
 before(() => {
-  // 测试前确保 ARK_API_KEY 存在（callArkResponses 需要）
-  if (!process.env.ARK_API_KEY) process.env.ARK_API_KEY = 'test-ark-key'
+  // 测试前确保 DOUBAO_API_KEY 存在（callArkResponses 需要）
+  if (!process.env.DOUBAO_API_KEY) process.env.DOUBAO_API_KEY = 'test-ark-key'
 })
 
 after(() => {

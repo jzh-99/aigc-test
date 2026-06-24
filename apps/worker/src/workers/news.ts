@@ -236,7 +236,7 @@ export function createNewsWorker(deps: NewsWorkerDeps = {}) {
         // 对齐源 process_news_generation 的循环：HTML 验证失败/安全检测失败均重试
         const generateStart = Date.now()
         const result = await generateNewsWithRetry({
-          apiKey: process.env.ARK_API_KEY ?? '',
+          apiKey: process.env.DOUBAO_API_KEY ?? '',
           prompt: data.prompt,
           date: data.date,
           deps: deps.arkDeps,
@@ -252,7 +252,7 @@ export function createNewsWorker(deps: NewsWorkerDeps = {}) {
           teamId: data.teamId,
           module: 'news',
           provider: 'ark',
-          model: process.env.ARK_NEWS_MODEL ?? 'doubao-seed-2-0-code-preview-260215',
+          model: process.env.DOUBAO_NEWS_MODEL ?? 'doubao-seed-2-0-code-preview-260215',
           operation: 'news.generate',
           method: 'POST',
           endpoint: '/responses',
