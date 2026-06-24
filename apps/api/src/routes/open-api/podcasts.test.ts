@@ -1,0 +1,384 @@
+// 必须在 import 拉入 storage/db 之前加载 .env（ESM 按源码顺序实例化 side-effect import）
+import '../../lib/test-env.js'
+
+// 开放接口播客生成路由测试（Phase 5）。
+//
+// 测试搭建（对齐 storybooks.test.ts）：
+//   - 真实库（provisionCaller 建调用方 + 归属容器，拿明文 apiKey 做 Bearer）
+//   - Fastify 最小实例：autoload open-api 路由 + requireApiKey + scoped setErrorHandler
+//   - mock getPodcastQueue：用 __setQueuesForTest 注入假 queue，记录 add 调用的 jobData
+//   - after：清理 tasks/task_batches + provisionCaller 归属容器
+//
+// 红线验证：
+//   1. 合法 Bearer + 完整 body → 200 + successResponse
+//   2. podcastQueue.add 被调用，jobData 字段对齐 PodcastJobData + 回调字段
+//   3. task_batches 落库 source=open_api、service_type=podcast、module=podcast
+//   4. content_type=text：jobData.content 为正文文本
+//   5. content_type=url：jobData.content 为 URL
+//   6. content_type=file + URL：透传 URL（sourceFileUrl 为 null，不触发脱敏）
+//   7. speakers 非 2 个 → 422
+//   8. content_type 非法枚举 → 422
+//   9. 无 Authorization → 401
+//  10. 重复 task_id → 200 + DUPLICATE_TASK
+//
+// PDF base64 脱敏：路由层调用 uploadToTos（依赖真实 TOS），此处不触发该路径
+// （脱敏核心逻辑由 podcast-content.test.ts 的 mock TOS 测试充分覆盖）。
+// 本测试用 file + URL 验证透传分流，避免引入真实 TOS 依赖。
+import { describe, test, before, after } from 'node:test'
+import assert from 'node:assert/strict'
+import Fastify from 'fastify'
+import autoload from '@fastify/autoload'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+import { closeDb, getDb } from '@aigc/db'
+
+import { __setQueuesForTest } from '../../lib/queue.js'
+import { requireApiKey } from '../../plugins/api-key-auth.js'
+import { sendOpenApiError } from './_shared.js'
+import { ErrorCode } from '../../lib/open-api-errors.js'
+import { provisionCaller } from '../../lib/provision-caller.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+interface CapturedJob {
+  name: string
+  data: Record<string, unknown>
+}
+const capturedJobs: CapturedJob[] = []
+const fakePodcastQueue = {
+  async add(name: string, data: Record<string, unknown>) {
+    capturedJobs.push({ name, data })
+    return { id: 'fake-job-id' }
+  },
+  async close() {
+    /* no-op */
+  },
+}
+
+const createdNames: string[] = []
+const createdBatchIds: string[] = []
+
+let app: Fastify.FastifyInstance
+
+async function buildTestApp() {
+  const instance = Fastify({ logger: false })
+  await instance.register(requireApiKey)
+  instance.setErrorHandler((err, _req, reply) => {
+    sendOpenApiError(reply, err)
+  })
+  await instance.register(autoload, {
+    dir: join(__dirname),
+    dirNameRoutePrefix: false,
+    forceESM: true,
+    autoHooks: false,
+    cascadeHooks: false,
+    ignorePattern: /(^_|\.test\.ts$)/,
+  })
+  await instance.ready()
+  return instance
+}
+
+async function cleanup() {
+  const db = getDb()
+
+  if (createdBatchIds.length > 0) {
+    await db.transaction().execute(async (trx) => {
+      await trx.deleteFrom('tasks').where('batch_id', 'in', createdBatchIds).execute()
+      await trx.deleteFrom('task_batches').where('id', 'in', createdBatchIds).execute()
+    })
+  }
+
+  if (createdNames.length === 0) return
+  const teamNames = createdNames.map((n) => `openapi:${n}`)
+  const teams = await db
+    .selectFrom('teams')
+    .select(['id', 'owner_id'])
+    .where('name', 'in', teamNames)
+    .execute()
+  const teamIds = teams.map((t) => t.id)
+  const userIds = teams.map((t) => t.owner_id)
+
+  const acctIds = teamIds.length
+    ? (
+        await db
+          .selectFrom('credit_accounts')
+          .select('id')
+          .where('team_id', 'in', teamIds)
+          .execute()
+      ).map((r) => r.id)
+    : []
+
+  await db.transaction().execute(async (trx) => {
+    if (teamIds.length > 0) {
+      await trx.deleteFrom('api_clients').where('team_id', 'in', teamIds).execute()
+      if (acctIds.length > 0) {
+        await trx.deleteFrom('credits_ledger').where('credit_account_id', 'in', acctIds).execute()
+      }
+      await trx.deleteFrom('credit_accounts').where('team_id', 'in', teamIds).execute()
+      await trx.deleteFrom('team_members').where('team_id', 'in', teamIds).execute()
+      await trx.deleteFrom('workspaces').where('team_id', 'in', teamIds).execute()
+      await trx.deleteFrom('teams').where('id', 'in', teamIds).execute()
+    }
+    if (userIds.length > 0) {
+      await trx.deleteFrom('users').where('id', 'in', userIds).execute()
+    }
+  })
+}
+
+function uniqueName(label: string): string {
+  const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  return `test:${label}:${tag}`
+}
+
+// 合法请求体模板（对齐源 PodcastGenerateRequest 必填字段）
+function validBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    task_id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    bussiness_id: `biz-${Date.now()}`,
+    content_type: 'text',
+    content: '一段关于人工智能的播客对话内容',
+    speakers: ['voice_male', 'voice_female'],
+    callback_url: 'https://example.com/cb',
+    ...overrides,
+  }
+}
+
+describe('POST /api/v3/podcasts/generations', () => {
+  before(async () => {
+    __setQueuesForTest({ podcastQueue: fakePodcastQueue })
+    app = await buildTestApp()
+  })
+
+  after(async () => {
+    await app.close()
+    __setQueuesForTest({ podcastQueue: null })
+    await cleanup()
+    await closeDb()
+  })
+
+  test('合法请求（content_type=text）→ 200 + successResponse，jobData 对齐 PodcastJobData', async () => {
+    const name = uniqueName('pod-text')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const taskId = `task-text-${Date.now()}`
+    const body = validBody({ task_id: taskId })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+
+    assert.equal(res.statusCode, 200, `期望 200，实际 ${res.statusCode}：${res.body}`)
+    const json = res.json() as { result: { task_id: string; code: string } }
+    assert.equal(json.result.task_id, taskId)
+    assert.equal(json.result.code, ErrorCode.SUCCESS)
+
+    // 验证 jobData 投递
+    assert.ok(capturedJobs.length >= 1, 'podcastQueue.add 应被调用')
+    const job = capturedJobs[capturedJobs.length - 1]
+    assert.equal(job.name, 'generate')
+    const data = job.data as Record<string, unknown>
+    assert.equal(typeof data.taskId, 'string')
+    assert.equal(typeof data.batchId, 'string')
+    assert.equal(typeof data.userId, 'string')
+    assert.equal(typeof data.creditAccountId, 'string')
+    assert.equal(data.estimatedCredits, 0)
+    // 业务字段
+    assert.equal(data.contentType, 'text')
+    assert.equal(data.content, '一段关于人工智能的播客对话内容')
+    assert.deepEqual(data.speakers, ['voice_male', 'voice_female'])
+    assert.equal(data.sourceFileUrl, null)
+    // 回调字段
+    assert.equal(data.callbackUrl, 'https://example.com/cb')
+    assert.equal(data.businessId, body.bussiness_id)
+    assert.equal(data.serviceType, 'podcast')
+    assert.equal(data.openApiTaskId, taskId)
+
+    createdBatchIds.push(data.batchId as string)
+
+    // 验证 task_batches 落库
+    const db = getDb()
+    const batch = await db
+      .selectFrom('task_batches')
+      .selectAll()
+      .where('id', '=', data.batchId as string)
+      .executeTakeFirstOrThrow()
+    assert.equal(batch.source, 'open_api')
+    assert.equal(batch.task_id, taskId)
+    assert.equal(batch.module, 'podcast')
+    assert.equal(batch.service_type, 'podcast')
+    assert.equal(batch.provider, 'sami')
+
+    // params 含业务字段（content 为正文文本，未脱敏）
+    const params = typeof batch.params === 'string' ? JSON.parse(batch.params) : batch.params
+    assert.equal(params.content_type, 'text')
+    assert.equal(params.content, '一段关于人工智能的播客对话内容')
+    assert.deepEqual(params.speakers, ['voice_male', 'voice_female'])
+    assert.equal(params.source_file_url, null)
+  })
+
+  test('content_type=url → jobData.content 为 URL', async () => {
+    const name = uniqueName('pod-url')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const taskId = `task-url-${Date.now()}`
+    const body = validBody({
+      task_id: taskId,
+      content_type: 'url',
+      content: 'https://example.com/article/123',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+
+    assert.equal(res.statusCode, 200)
+    const job = capturedJobs[capturedJobs.length - 1]
+    const data = job.data as Record<string, unknown>
+    assert.equal(data.contentType, 'url')
+    assert.equal(data.content, 'https://example.com/article/123')
+    createdBatchIds.push(data.batchId as string)
+  })
+
+  test('content_type=file + URL → 透传 URL，sourceFileUrl=null（不触发脱敏）', async () => {
+    const name = uniqueName('pod-file-url')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const taskId = `task-file-url-${Date.now()}`
+    const body = validBody({
+      task_id: taskId,
+      content_type: 'file',
+      content: 'https://tos.example.com/already-uploaded.pdf',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+
+    assert.equal(res.statusCode, 200)
+    const job = capturedJobs[capturedJobs.length - 1]
+    const data = job.data as Record<string, unknown>
+    assert.equal(data.contentType, 'file')
+    assert.equal(data.content, 'https://tos.example.com/already-uploaded.pdf')
+    assert.equal(data.sourceFileUrl, null, '已是 URL 不触发脱敏，sourceFileUrl 为 null')
+    createdBatchIds.push(data.batchId as string)
+  })
+
+  test('speakers 非 2 个（1 个）→ 422', async () => {
+    const name = uniqueName('pod-speakers')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const body = validBody({ speakers: ['only-one'] })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+
+    assert.equal(res.statusCode, 422)
+    const json = res.json() as { result: { code: string } }
+    assert.equal(json.result.code, ErrorCode.PARAM_ERROR)
+  })
+
+  test('speakers 3 个 → 422（maxItems=2）', async () => {
+    const name = uniqueName('pod-speakers3')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const body = validBody({ speakers: ['a', 'b', 'c'] })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+
+    assert.equal(res.statusCode, 422)
+  })
+
+  test('content_type 非法枚举 → 422', async () => {
+    const name = uniqueName('pod-ctype')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const body = validBody({ content_type: 'image' })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+
+    assert.equal(res.statusCode, 422)
+  })
+
+  test('缺必填字段（无 callback_url）→ 422', async () => {
+    const name = uniqueName('pod-missing')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const body = validBody()
+    delete body.callback_url
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+
+    assert.equal(res.statusCode, 422)
+  })
+
+  test('无 Authorization → 401 + AUTH_FAILED', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      payload: validBody(),
+    })
+
+    assert.equal(res.statusCode, 401)
+    const json = res.json() as { result: { code: string } }
+    assert.equal(json.result.code, ErrorCode.AUTH_FAILED)
+  })
+
+  test('重复 task_id → 200 + DUPLICATE_TASK', async () => {
+    const name = uniqueName('pod-dup')
+    createdNames.push(name)
+    const { apiKey } = await provisionCaller(name)
+    const taskId = `task-dup-${Date.now()}`
+    const body = validBody({ task_id: taskId })
+
+    // 第一次：成功
+    const res1 = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+    assert.equal(res1.statusCode, 200)
+    const job1 = capturedJobs[capturedJobs.length - 1]
+    createdBatchIds.push((job1.data as { batchId: string }).batchId)
+
+    // 第二次：重复 task_id
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/podcasts/generations',
+      headers: { authorization: `Bearer ${apiKey}` },
+      payload: body,
+    })
+    assert.equal(res2.statusCode, 200)
+    const json2 = res2.json() as { result: { code: string } }
+    assert.equal(json2.result.code, ErrorCode.DUPLICATE_TASK)
+  })
+})

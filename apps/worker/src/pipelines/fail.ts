@@ -1,7 +1,9 @@
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
+import { ErrorCode } from '@aigc/types'
 import type { GenerationJobData } from '@aigc/types'
 import { getPubRedis } from '../lib/redis.js'
+import { dispatchBatchResult } from '../lib/dispatch-result.js'
 import { buildLogger } from '../logger.js'
 
 const logger = buildLogger()
@@ -110,15 +112,36 @@ export async function failPipeline(
     }
   })
 
-  // 3. Publish SSE event
-  const channel = `sse:batch:${batchId}`
-  const publishPayload = JSON.stringify({ event: 'batch_update' })
-  logger.info({ batchId, channel }, '准备发布 SSE 事件')
-  try {
-    const result = await getPubRedis().publish(channel, publishPayload)
-    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
-  } catch (err) {
-    logger.error({ batchId, err }, 'SSE 事件发布失败')
-    throw err
+  // 3. 分发终态通知（事务外）
+  // 非开放接口任务 → 保持原 SSE 通道；开放接口任务 → 走回调队列（失败语义）
+  const oa = await db.selectFrom('task_batches')
+    .select(['callback_url', 'business_id', 'service_type', 'task_id', 'source'])
+    .where('id', '=', batchId)
+    .executeTakeFirst()
+
+  if (oa?.source === 'open_api') {
+    // 开放接口失败：统一对外文案「不符合创作规范」，不泄漏 errorMessage 内部文本
+    await dispatchBatchResult({
+      batchId,
+      status: 'failed',
+      serviceType: oa.service_type ?? 'image',
+      media: {},
+      businessId: oa.business_id ?? '',
+      taskId: oa.task_id ?? '',
+      callbackUrl: oa.callback_url,
+      failureCode: ErrorCode.SYSTEM_FAILED,
+    })
+  } else {
+    // 非开放接口：保持现有 SSE（与改造前完全一致）
+    const channel = `sse:batch:${batchId}`
+    const publishPayload = JSON.stringify({ event: 'batch_update' })
+    logger.info({ batchId, channel }, '准备发布 SSE 事件')
+    try {
+      const result = await getPubRedis().publish(channel, publishPayload)
+      logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+    } catch (err) {
+      logger.error({ batchId, err }, 'SSE 事件发布失败')
+      throw err
+    }
   }
 }

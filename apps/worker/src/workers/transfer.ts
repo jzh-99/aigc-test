@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
+import { ErrorCode } from '@aigc/types'
 import type { TransferJobData } from '@aigc/types'
 import type { Agent } from 'node:http'
 import { get as httpGet } from 'node:http'
@@ -10,6 +11,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
 import { getTos, getBucket, getPublicUrl, getStorageRuntimeInfo } from '../lib/storage.js'
+import { dispatchBatchResult } from '../lib/dispatch-result.js'
 import { buildLogger } from '../logger.js'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -306,10 +308,36 @@ export const transferWorker = new Worker<TransferJobData>(
         .execute()
 
       if (batchId) {
-        try {
-          await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
-        } catch (error) {
-          logger.warn({ jobId: job.id, taskId, err: error instanceof Error ? error.message : String(error) }, 'Transfer 完成后发布 SSE 失败')
+        // 分流：开放接口任务走最终回调（media 用转存后的 TOS 永久 URL），
+        // 非开放接口任务保持原 SSE
+        const oa = await db.selectFrom('task_batches')
+          .select(['callback_url', 'business_id', 'service_type', 'task_id', 'source'])
+          .where('id', '=', batchId)
+          .executeTakeFirst()
+
+        if (oa?.source === 'open_api') {
+          // 开放接口最终回调：media 字段按 assetType 区分
+          // - video → video_url（对齐 buildAsyncCallbackPayload 的 video meta 契约）
+          // - image → image_url
+          // storageUrl 为已转存的 TOS 永久 URL
+          const media = assetType === 'video'
+            ? { video_url: storageUrl }
+            : { image_url: storageUrl }
+          await dispatchBatchResult({
+            batchId,
+            status: 'succeeded',
+            serviceType: oa.service_type ?? (assetType === 'video' ? 'video' : 'image'),
+            media,
+            businessId: oa.business_id ?? '',
+            taskId: oa.task_id ?? '',
+            callbackUrl: oa.callback_url,
+          })
+        } else {
+          try {
+            await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+          } catch (error) {
+            logger.warn({ jobId: job.id, taskId, err: error instanceof Error ? error.message : String(error) }, 'Transfer 完成后发布 SSE 失败')
+          }
         }
       }
 
@@ -360,10 +388,33 @@ export const transferWorker = new Worker<TransferJobData>(
           .where('id', '=', assetId)
           .execute()
         if (batchId) {
-          try {
-            await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
-          } catch (publishErr) {
-            logger.warn({ jobId: job.id, taskId, err: publishErr instanceof Error ? publishErr.message : String(publishErr) }, 'Transfer 失败后发布 SSE 失败')
+          // 分流：开放接口任务转存最终失败 → 走失败回调；非开放接口保持原 SSE
+          const oa = await db.selectFrom('task_batches')
+            .select(['callback_url', 'business_id', 'service_type', 'task_id', 'source'])
+            .where('id', '=', batchId)
+            .executeTakeFirst()
+
+          if (oa?.source === 'open_api') {
+            try {
+              await dispatchBatchResult({
+                batchId,
+                status: 'failed',
+                serviceType: oa.service_type ?? 'image',
+                media: {},
+                businessId: oa.business_id ?? '',
+                taskId: oa.task_id ?? '',
+                callbackUrl: oa.callback_url,
+                failureCode: ErrorCode.STORAGE_FAILED,
+              })
+            } catch (cbErr) {
+              logger.warn({ jobId: job.id, taskId, err: cbErr instanceof Error ? cbErr.message : String(cbErr) }, 'Transfer 失败后开放接口回调入队失败')
+            }
+          } else {
+            try {
+              await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+            } catch (publishErr) {
+              logger.warn({ jobId: job.id, taskId, err: publishErr instanceof Error ? publishErr.message : String(publishErr) }, 'Transfer 失败后发布 SSE 失败')
+            }
           }
         }
         logger.error({

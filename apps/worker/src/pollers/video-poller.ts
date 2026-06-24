@@ -1,10 +1,12 @@
 import { getDb } from '@aigc/db'
+import { ErrorCode } from '@aigc/types'
 import { sql } from 'kysely'
 import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
 import { Queue } from 'bullmq'
 import { buildLogger } from '../logger.js'
 import { recordProviderPollAudit } from '../lib/provider-poll-audit.js'
+import { dispatchBatchResult } from '../lib/dispatch-result.js'
 import {
   classifyVideoPollHttpError,
   MAX_CONSECUTIVE_VIDEO_POLL_ERRORS,
@@ -364,16 +366,37 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
       .where('id', '=', batchId).execute()
   })
 
-  // Publish SSE event
-  const channel = `sse:batch:${batchId}`
-  const publishPayload = JSON.stringify({ event: 'batch_update' })
-  logger.info({ batchId, channel }, '准备发布 SSE 事件')
-  try {
-    const result = await getPubRedis().publish(channel, publishPayload)
-    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
-  } catch (err) {
-    logger.error({ batchId, err }, 'SSE 事件发布失败')
-    throw err
+  // 分流：开放接口任务走失败回调（HMAC 签名 POST callback_url），
+  // 非开放接口任务保持原 SSE 事件（逐字保留，零影响）
+  const oa = await db.selectFrom('task_batches')
+    .select(['callback_url', 'business_id', 'service_type', 'task_id', 'source'])
+    .where('id', '=', batchId)
+    .executeTakeFirst()
+
+  if (oa?.source === 'open_api') {
+    // 开放接口视频失败回调：media 为空，failureCode 透传供应商失败语义
+    await dispatchBatchResult({
+      batchId,
+      status: 'failed',
+      serviceType: oa.service_type ?? 'video',
+      media: {},
+      businessId: oa.business_id ?? '',
+      taskId: oa.task_id ?? '',
+      callbackUrl: oa.callback_url,
+      failureCode: ErrorCode.EXTERNAL_SERVICE_FAILED,
+    })
+  } else {
+    // 非 open_api：原 SSE 逻辑逐字保留
+    const channel = `sse:batch:${batchId}`
+    const publishPayload = JSON.stringify({ event: 'batch_update' })
+    logger.info({ batchId, channel }, '准备发布 SSE 事件')
+    try {
+      const result = await getPubRedis().publish(channel, publishPayload)
+      logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+    } catch (err) {
+      logger.error({ batchId, err }, 'SSE 事件发布失败')
+      throw err
+    }
   }
   logger.warn({ taskId, batchId, errorMessage }, 'Video task failed')
 }

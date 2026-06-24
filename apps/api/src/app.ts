@@ -12,6 +12,8 @@ import autoload from '@fastify/autoload'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { closeQueues } from './lib/queue.js'
+import { requireApiKey } from './plugins/api-key-auth.js'
+import { sendOpenApiError } from './routes/open-api/_shared.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -199,6 +201,26 @@ export async function buildApp() {
       ignorePattern: /^_/,
     })
   }, { prefix: '/api/v1' })
+
+  // 开放接口 /api/v3：独立 API Key 认证（不走 JWT），scoped 错误处理（不影响 /api/v1）
+  // 注册顺序：requireApiKey（装饰 request.apiClient）→ setErrorHandler（scoped）→ autoload（路由）
+  await app.register(async (instance) => {
+    // 装饰 request.apiClient（Task 0.5 的 requireApiKey 插件）
+    await instance.register(requireApiKey)
+    // 开放接口统一错误处理（scoped 到本实例，不污染 /api/v1 的默认错误格式）
+    instance.setErrorHandler((err, _request, reply) => {
+      sendOpenApiError(reply, err)
+    })
+    // 路由 autoload：选项对齐 /api/v1，忽略 _ 前缀的辅助文件（_shared.ts）
+    await instance.register(autoload, {
+      dir: join(__dirname, 'routes', 'open-api'),
+      dirNameRoutePrefix: false,
+      forceESM: true,
+      autoHooks: true,
+      cascadeHooks: false,
+      ignorePattern: /^_/,
+    })
+  }, { prefix: '/api/v3' })
 
   // 进程启动时扫描并重置僵死的短剧文本生成任务（进程重启遗留的死状态）
   // 动态 import：避免在模块顶层静态拉入 _zombie-scan → _text-generation。

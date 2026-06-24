@@ -4,6 +4,7 @@ import { Queue } from 'bullmq'
 import type { GenerationJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
+import { dispatchBatchResult } from '../lib/dispatch-result.js'
 import { buildLogger } from '../logger.js'
 
 const logger = buildLogger()
@@ -145,16 +146,45 @@ export async function completePipeline(
     return assetResult.id
   })
 
-  // 6. Publish SSE event (outside transaction)
-  const channel = `sse:batch:${batchId}`
-  const publishPayload = JSON.stringify({ event: 'batch_update' })
-  logger.info({ batchId, channel }, '准备发布 SSE 事件')
-  try {
-    const result = await getPubRedis().publish(channel, publishPayload)
-    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
-  } catch (err) {
-    logger.error({ batchId, err }, 'SSE 事件发布失败')
-    throw err
+  // 6. 分发终态通知（事务外）
+  // 非开放接口任务 → 保持原 SSE 通道（sse:batch:<id>），零改动
+  // 开放接口任务 → 图片由 transfer.ts 转存 TOS 后发最终回调（此处留空），
+  //                其余 service_type 即终态，直接走开放接口回调队列
+  const oa = await db.selectFrom('task_batches')
+    .select(['callback_url', 'business_id', 'service_type', 'task_id', 'source'])
+    .where('id', '=', batchId)
+    .executeTakeFirst()
+
+  if (oa?.source === 'open_api') {
+    if (oa.service_type === 'image') {
+      // 图片：complete 阶段产物仍是临时 URL，需经 transfer 转 TOS 才是最终 URL，
+      // 最终回调由 transfer.ts 转存成功后触发（见 transfer.ts 接入点）
+      logger.info({ batchId, taskId }, '图片开放接口任务，回调交由 transfer 触发')
+    } else {
+      // 非图片开放接口任务：complete 即终态，直接发回调
+      // media 视业务补充（song/video/news 等的产物 URL 由各自 pipeline 填充）
+      await dispatchBatchResult({
+        batchId,
+        status: 'succeeded',
+        serviceType: oa.service_type ?? 'image',
+        media: {},
+        businessId: oa.business_id ?? '',
+        taskId: oa.task_id ?? '',
+        callbackUrl: oa.callback_url,
+      })
+    }
+  } else {
+    // 非开放接口：保持现有 SSE（与改造前完全一致）
+    const channel = `sse:batch:${batchId}`
+    const publishPayload = JSON.stringify({ event: 'batch_update' })
+    logger.info({ batchId, channel }, '准备发布 SSE 事件')
+    try {
+      const result = await getPubRedis().publish(channel, publishPayload)
+      logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+    } catch (err) {
+      logger.error({ batchId, err }, 'SSE 事件发布失败')
+      throw err
+    }
   }
 
   // 6b. Canvas output tracking: write canvas_node_outputs + increment dirty version
