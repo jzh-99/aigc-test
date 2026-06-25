@@ -7,6 +7,10 @@ import type { LoginRequest } from '@aigc/types'
 import { ensurePersonalAccountScope } from '../../services/account-scope.js'
 import { buildAuthResponse, buildUserProfile } from '../../services/user-profile.js'
 import { signAccessToken, signRefreshToken } from '../../lib/auth-tokens.js'
+import {
+  ensureLocalUserForBizMgmtPhone,
+  syncBizMgmtMembersForLocalUser,
+} from '../../services/biz-mgmt-member-sync.js'
 
 // 账户锁定相关常量
 const MAX_LOGIN_ATTEMPTS = 5
@@ -79,11 +83,31 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     const db = getDb()
-    const user = await db
+    // 登录主体匹配：account（历史邮箱账号，小写）或 phone（手机号登录）。
+    // 关键：本地不存在用户且 identifier 是手机号时，先查业管；只有业管返回至少一个
+    // status=1 的会员才允许创建本地用户（见 ensureLocalUserForBizMgmtPhone）。
+    let user = await db
       .selectFrom('users')
-      .select(['id', 'account', 'username', 'password_hash', 'role', 'status'])
-      .where('account', '=', identifier.toLowerCase())
+      .select(['id', 'account', 'username', 'password_hash', 'role', 'status', 'phone'])
+      .where((eb) =>
+        eb.or([
+          eb('account', '=', identifier.toLowerCase()),
+          eb('phone', '=', identifier),
+        ]),
+      )
       .executeTakeFirst()
+
+    // 首次用手机号登录、本地无用户：由业管会员查询决定是否创建本地用户
+    let oneTimePassword: string | null = null
+    if (!user && /^1\d{10}$/.test(identifier)) {
+      const created = await ensureLocalUserForBizMgmtPhone(identifier)
+      oneTimePassword = created.oneTimePassword
+      user = await db
+        .selectFrom('users')
+        .select(['id', 'account', 'username', 'password_hash', 'role', 'status', 'phone'])
+        .where('id', '=', created.userId)
+        .executeTakeFirst()
+    }
 
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       await recordFailedAttempt(redis, identifier)
@@ -109,6 +133,18 @@ const route: FastifyPluginAsync = async (app) => {
 
     // 登录成功，清除失败记录
     await clearFailedAttempts(redis, identifier)
+
+    // 关键不变量：每次手机号密码登录成功后都刷新业管会员，即使本地用户已存在，
+    // 也要发现用户在业管新增的管理账号或公司账号。本同步只处理身份与本地资源
+    // 映射，不读写 A 豆余额；业管查询失败不应阻断已通过密码校验的登录主流程。
+    if (user.phone) {
+      try {
+        await syncBizMgmtMembersForLocalUser(user.id, user.phone)
+      } catch {
+        // 业管同步失败不阻断登录：用户仍可登录并在账号选择页/后续刷新时重试。
+        // 同步状态可由 last_synced_at 追溯，不应让业管临时故障锁死本地登录。
+      }
+    }
 
     // 撤销旧 refresh token，强制单会话
     await db
@@ -142,7 +178,11 @@ const route: FastifyPluginAsync = async (app) => {
 
     await ensurePersonalAccountScope(db, user.id)
     const profile = await buildUserProfile(db, user.id)
-    return buildAuthResponse(accessToken, profile)
+    const authBody = buildAuthResponse(accessToken, profile)
+    // 首次初始化（本地无用户、从业管创建）返回一次性初始密码，提示用户登录后修改
+    return oneTimePassword
+      ? { ...authBody, one_time_password: oneTimePassword, oneTimePassword }
+      : authBody
   })
 }
 

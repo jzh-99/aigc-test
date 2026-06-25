@@ -87,6 +87,53 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
   }))
   const requireScopeSelection = accountScopes.length > 1
 
+  // ─── 业务管理平台会员身份选择 ───────────────────────────────────────────
+  // 只查 status=1（正常）的业管绑定用于账号选择；为空表示该用户无业管身份
+  // （例如内部账号），不影响本地登录主流程。
+  // 注意：本查询不读取 A 豆余额——业管余额是权威来源，必须实时调用单独余额接口。
+  const bizMgmtRows = await db
+    .selectFrom('biz_mgmt_member_bindings')
+    .select([
+      'biz_mgmt_user_id',
+      'team_id',
+      'workspace_id',
+      'user_name',
+      'user_type',
+      'comp_name',
+      'goods_id',
+      'goods_name',
+      'is_selected',
+    ])
+    .where('local_user_id', '=', userId)
+    .where('status', '=', 1)
+    .orderBy('user_type', 'asc')
+    .orderBy('created_at', 'asc')
+    .execute()
+
+  const selectedBinding = bizMgmtRows.find((row) => row.is_selected)
+  const bizMgmtMembers = bizMgmtRows.map((row) => ({
+    biz_mgmt_user_id: row.biz_mgmt_user_id,
+    bizMgmtUserId: row.biz_mgmt_user_id,
+    team_id: row.team_id,
+    teamId: row.team_id,
+    workspace_id: row.workspace_id,
+    workspaceId: row.workspace_id,
+    user_name: row.user_name,
+    userName: row.user_name,
+    user_type: row.user_type as '1' | '2',
+    userType: row.user_type as '1' | '2',
+    comp_name: row.comp_name,
+    compName: row.comp_name,
+    goods_id: row.goods_id,
+    goodsId: row.goods_id,
+    goods_name: row.goods_name,
+    goodsName: row.goods_name,
+    is_selected: row.is_selected,
+    isSelected: row.is_selected,
+  }))
+  // 可选身份多于 1 个且尚未选择当前身份时，要求前端跳账号选择页
+  const requireBizMgmtMemberSelection = bizMgmtMembers.length > 1 && !selectedBinding
+
   return {
     id: user.id,
     email: user.email,
@@ -100,6 +147,12 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
     accountScopes,
     require_scope_selection: requireScopeSelection,
     requireScopeSelection,
+    biz_mgmt_members: bizMgmtMembers,
+    bizMgmtMembers,
+    require_biz_mgmt_member_selection: requireBizMgmtMemberSelection,
+    requireBizMgmtMemberSelection,
+    current_biz_mgmt_user_id: selectedBinding?.biz_mgmt_user_id ?? null,
+    currentBizMgmtUserId: selectedBinding?.biz_mgmt_user_id ?? null,
   }
 }
 

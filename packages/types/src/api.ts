@@ -292,6 +292,42 @@ export interface UserProfile {
   accountScopes?: UserAccountScope[]
   require_scope_selection?: boolean
   requireScopeSelection?: boolean
+  // ─── 业务管理平台会员身份选择 ───────────────────────────────────────────
+  // 业管会员绑定列表（仅 status=1 可选身份），前端账号选择页据此渲染
+  biz_mgmt_members?: BizMgmtMemberAccount[]
+  bizMgmtMembers?: BizMgmtMemberAccount[]
+  // 可选身份 >1 且尚未选择当前身份时为 true，前端跳转账号选择页
+  require_biz_mgmt_member_selection?: boolean
+  requireBizMgmtMemberSelection?: boolean
+  // 当前选中的业管会员 ID，无选中身份时为 null
+  current_biz_mgmt_user_id?: string | null
+  currentBizMgmtUserId?: string | null
+}
+
+/**
+ * 业务管理平台会员身份（账号选择卡片数据）。
+ * 不含 A 豆余额/累计消费——这些字段必须实时从业管查询，不落本地。
+ */
+export interface BizMgmtMemberAccount {
+  biz_mgmt_user_id: string
+  bizMgmtUserId: string
+  team_id: string
+  teamId: string
+  workspace_id: string
+  workspaceId: string
+  user_name: string
+  userName: string
+  // 1=个人会员，2=公司会员
+  user_type: '1' | '2'
+  userType: '1' | '2'
+  comp_name: string
+  compName: string
+  goods_id: string | null
+  goodsId: string | null
+  goods_name: string | null
+  goodsName: string | null
+  is_selected: boolean
+  isSelected: boolean
 }
 
 export type UserTeamType = 'standard' | 'company_a' | 'avatar_enabled' | 'personal'
