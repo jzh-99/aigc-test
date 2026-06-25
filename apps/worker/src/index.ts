@@ -23,6 +23,7 @@ import { openApiCallbackWorker } from './workers/open-api-callback.js'
 import { storybookWorker } from './workers/storybook.js'
 import { podcastWorker } from './workers/podcast.js'
 import { newsWorker } from './workers/news.js'
+import { startBizMgmtNotifyWorker } from './workers/biz-mgmt-notify.js'
 import { getRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from './lib/queue-options.js'
 import { startVideoPoller } from './pollers/video-poller.js'
@@ -249,6 +250,12 @@ await recoverStalledJobs()
 await scheduleCronJobs()
 logger.info('Cron worker started — listening on cron-queue')
 
+// ─── 业务管理平台通知 Worker（outbox 派发）─────────────────────────────────
+// 消费 biz-mgmt-notify-queue，按 outbox 事件类型调业管接口（创作结果同步/会员副卡同步），
+// 失败按指数退避重试，成功与失败记录都保留在 biz_mgmt_outbox_events。
+const bizMgmtNotifyWorker = startBizMgmtNotifyWorker()
+logger.info('Business management notify worker started — listening on biz-mgmt-notify-queue')
+
 // ─── Video Poller ─────────────────────────────────────────────────────────────
 
 const videoPollerTimer = startVideoPoller()
@@ -287,6 +294,7 @@ const shutdown = async () => {
     storybookWorker.close(),
     podcastWorker.close(),
     newsWorker.close(),
+    bizMgmtNotifyWorker.close(),
   ])
   await closeRedis()
   process.exit(0)
