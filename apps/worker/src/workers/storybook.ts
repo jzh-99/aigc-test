@@ -64,7 +64,7 @@ async function markTaskProcessing(taskId: string, batchId: string, jobId: string
 // ─── 成功状态流转：task→completed、batch 终态、积分确认（estimatedCredits=0 零积分）─
 async function markTaskSucceeded(jobData: StorybookJobData): Promise<void> {
   const db = getDb()
-  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = jobData
+  const { taskId, batchId } = jobData
   const actualCredits = 0
 
   await db.transaction().execute(async (trx: any) => {
@@ -85,26 +85,7 @@ async function markTaskSucceeded(jobData: StorybookJobData): Promise<void> {
       return
     }
 
-    // 积分确认：estimatedCredits=0 零积分，仅解冻（保持账本一致）
-    await trx
-      .updateTable('credit_accounts')
-      .set({ frozen_credits: sql`frozen_credits - ${estimatedCredits}` })
-      .where('id', '=', creditAccountId)
-      .execute()
-
-    // 账本记录（对齐 complete.ts 的 confirm 类型）
-    await trx
-      .insertInto('credits_ledger')
-      .values({
-        credit_account_id: creditAccountId,
-        user_id: userId,
-        amount: -actualCredits,
-        type: 'confirm',
-        task_id: taskId,
-        batch_id: batchId,
-        description: '绘本生成成功',
-      })
-      .execute()
+    // 业管化后本地不再维护积分：移除 credit_accounts/credits_ledger 操作。
 
     // batch 计数 + 终态判定（quantity=1，完成即终态）
     await trx
@@ -132,7 +113,7 @@ async function markTaskSucceeded(jobData: StorybookJobData): Promise<void> {
 // ─── 失败状态流转：task→failed、batch 终态、退还冻结积分 ──────────────────────
 async function markTaskFailed(jobData: StorybookJobData, errorMessage: string): Promise<void> {
   const db = getDb()
-  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = jobData
+  const { taskId, batchId } = jobData
 
   await db.transaction().execute(async (trx: any) => {
     const taskLock = await sql<{ status: string }>`
@@ -154,32 +135,7 @@ async function markTaskFailed(jobData: StorybookJobData, errorMessage: string): 
       .where('id', '=', taskId)
       .execute()
 
-    // 退还冻结积分（零积分场景为 0，保持账本一致）
-    await trx
-      .updateTable('credit_accounts')
-      .set({ frozen_credits: sql`GREATEST(frozen_credits - ${estimatedCredits}, 0)` })
-      .where('id', '=', creditAccountId)
-      .execute()
-
-    await trx
-      .updateTable('team_members')
-      .set({ credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)` })
-      .where('team_id', '=', teamId)
-      .where('user_id', '=', userId)
-      .execute()
-
-    await trx
-      .insertInto('credits_ledger')
-      .values({
-        credit_account_id: creditAccountId,
-        user_id: userId,
-        amount: estimatedCredits,
-        type: 'refund',
-        task_id: taskId,
-        batch_id: batchId,
-        description: `绘本生成失败：${errorMessage.slice(0, 200)}`,
-      })
-      .execute()
+    // 业管化后本地不再退还积分：移除 credit_accounts/team_members/credits_ledger 操作。
 
     await trx
       .updateTable('task_batches')

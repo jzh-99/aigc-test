@@ -13,10 +13,11 @@ const route: FastifyPluginAsync = async (app) => {
       schema: {
         body: {
           type: 'object',
-          required: ['userId', 'requestNo', 'workNo', 'pointsNum'],
+          required: ['userId', 'requestNo', 'source', 'workNo', 'pointsNum'],
           properties: {
             userId: { type: 'string' },
             requestNo: { type: 'string' },
+            source: { type: 'integer' },
             workNo: { type: 'string' },
             pointsNum: { anyOf: [{ type: 'number' }, { type: 'string' }] },
             remark: { type: 'string' },

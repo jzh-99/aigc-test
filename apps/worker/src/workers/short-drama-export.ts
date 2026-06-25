@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { validateShortDramaExportSegments, buildConcatManifest } from './short-drama-export-utils.js'
 import { getBucket, getPublicUrl, getStorageRuntimeInfo, getTos } from '../lib/storage.js'
+import { buildCreationResultOutboxPayload, enqueueCreationResultOutbox } from '../lib/biz-mgmt-result-outbox.js'
 
 export { validateShortDramaExportSegments, buildConcatManifest } from './short-drama-export-utils.js'
 
@@ -62,7 +63,7 @@ async function uploadToStorage(filePath: string, storageKey: string): Promise<st
 export const shortDramaExportWorker = new Worker<ShortDramaExportEpisodeJobData>(
   'short-drama-export-queue',
   async (job) => {
-    const { projectId, episodeId, exportId, userId, teamId, creditAccountId, estimatedCredits } = job.data
+    const { projectId, episodeId, exportId, userId, teamId, estimatedCredits, bizMgmtUserId, bizMgmtDeductRequestNo, bizMgmtWorkNo } = job.data
     const episodeNumber = parseInt(episodeId, 10)
     let tmpDir: string | null = null
 
@@ -200,31 +201,34 @@ export const shortDramaExportWorker = new Worker<ShortDramaExportEpisodeJobData>
         freshBatch.updatedAt = new Date().toISOString()
       }
 
-      // 保存 state 并确认积分
+      // 保存 state（业管化后本地不再确认积分；A 豆已在生成前扣减）
       await db.transaction().execute(async (trx: any) => {
         await trx.updateTable('short_drama_projects')
           .set({ state: JSON.stringify(freshState), updated_at: new Date() })
           .where('id', '=', projectId)
           .execute()
-
-        // 确认扣费：解冻 + 从余额扣除
-        await trx.updateTable('credit_accounts')
-          .set({
-            frozen_credits: sql`frozen_credits - ${estimatedCredits}`,
-            total_spent: sql`total_spent + ${estimatedCredits}`,
-            balance: sql`balance - ${estimatedCredits}`,
-          })
-          .where('id', '=', creditAccountId)
-          .execute()
-
-        await trx.insertInto('credits_ledger').values({
-          credit_account_id: creditAccountId,
-          user_id: userId,
-          amount: -estimatedCredits,
-          type: 'confirm',
-          description: `Short drama episode ${episodeNumber} export`,
-        }).execute()
       })
+
+      // 业管身份任务：写创作结果 outbox(success)
+      if (bizMgmtUserId && bizMgmtDeductRequestNo) {
+        try {
+          await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+            localUserId: userId,
+            bizMgmtUserId,
+            teamId,
+            workspaceId: job.data.workspaceId ?? null,
+            batchId: exportId,
+            taskId: `${exportId}-${episodeId}`,
+            taskStatus: 'completed',
+            pointsNum: estimatedCredits,
+            requestNo: bizMgmtDeductRequestNo,
+            workNo: bizMgmtWorkNo ?? `${exportId}-${episodeId}`,
+            module: 'short_drama_export',
+          }))
+        } catch (outboxErr) {
+          logger.error({ err: outboxErr instanceof Error ? outboxErr.message : String(outboxErr) }, 'Failed to enqueue short-drama-export creation result outbox')
+        }
+      }
 
       logger.info({ projectId, episodeNumber, exportId, outputUrl }, 'Episode export completed')
     } catch (err) {
@@ -267,31 +271,26 @@ export const shortDramaExportWorker = new Worker<ShortDramaExportEpisodeJobData>
         logger.error({ stateErr }, 'Failed to update export failure state')
       }
 
-      // 退款（直接 DB 操作，与 failPipeline 模式一致）
-      try {
-        const db = getDb()
-        await db.transaction().execute(async (trx: any) => {
-          await trx.updateTable('credit_accounts')
-            .set({ frozen_credits: sql`GREATEST(frozen_credits - ${estimatedCredits}, 0)` })
-            .where('id', '=', creditAccountId)
-            .execute()
-
-          await trx.updateTable('team_members')
-            .set({ credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)` })
-            .where('team_id', '=', teamId)
-            .where('user_id', '=', userId)
-            .execute()
-
-          await trx.insertInto('credits_ledger').values({
-            credit_account_id: creditAccountId,
-            user_id: userId,
-            amount: estimatedCredits,
-            type: 'refund',
-            description: `Short drama export failed: ${errorMessage.slice(0, 200)}`,
-          }).execute()
-        })
-      } catch (refundErr) {
-        logger.error({ refundErr }, 'CRITICAL: Failed to refund export credits')
+      // 业管化后本地不退积分；写创作结果 outbox(success=false) 通知业管退款
+      if (bizMgmtUserId && bizMgmtDeductRequestNo) {
+        try {
+          await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+            localUserId: userId,
+            bizMgmtUserId,
+            teamId,
+            workspaceId: job.data.workspaceId ?? null,
+            batchId: exportId,
+            taskId: `${exportId}-${episodeId}`,
+            taskStatus: 'failed',
+            pointsNum: estimatedCredits,
+            requestNo: bizMgmtDeductRequestNo,
+            workNo: bizMgmtWorkNo ?? `${exportId}-${episodeId}`,
+            module: 'short_drama_export',
+            message: errorMessage,
+          }))
+        } catch (outboxErr) {
+          logger.error({ err: outboxErr instanceof Error ? outboxErr.message : String(outboxErr) }, 'Failed to enqueue short-drama-export creation result outbox (failure path)')
+        }
       }
     } finally {
       if (tmpDir) {

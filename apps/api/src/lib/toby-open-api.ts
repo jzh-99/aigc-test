@@ -13,6 +13,7 @@ export const TOBY_SERVICE_CODES = {
   memberSubCard: 'MEMBER-1002',
   specificationConfig: 'SPECIFICATION-CONFIG',
   memberRegister: 'MEMBER-1003',
+  memberPoints: 'MEMBER-1004',
 } as const
 
 export type TobyServiceCode = typeof TOBY_SERVICE_CODES[keyof typeof TOBY_SERVICE_CODES]
@@ -30,6 +31,16 @@ export interface TobyApiResponse<T = unknown> {
   decryptedData?: T
 }
 
+interface TobyCryptoConfig {
+  appId: string
+  appSecret: string
+  privateKey: string
+}
+
+interface TobyOutboundConfig extends TobyCryptoConfig {
+  baseUrl: string
+}
+
 export interface TobyMemberLoginInfoRequest {
   phone: string
 }
@@ -44,6 +55,7 @@ export interface TobyPointsChangeQueryRequest {
 export interface TobyPointsChangeRequest {
   userId: string
   requestNo: string
+  source: number
   workNo: string
   pointsNum: number | string
   remark?: string
@@ -85,6 +97,10 @@ export interface TobyMemberRegisterRequest {
   channel: string
 }
 
+export interface TobyMemberPointsRequest {
+  userId: string
+}
+
 export interface TobySpecificationConfigPayload {
   timestamp: string
   signature: string
@@ -115,26 +131,37 @@ function getRequiredEnv(name: string): string {
   return value
 }
 
-function getTobyConfig() {
+function getTobyOutboundConfig(): TobyOutboundConfig {
   return {
-    baseUrl: getRequiredEnv('TOBY_BASE_URL').replace(/\/$/, ''),
-    appId: getRequiredEnv('TOBY_APP_ID'),
-    appSecret: getRequiredEnv('TOBY_APP_SECRET'),
-    privateKey: getRequiredEnv('TOBY_PRIVATE_KEY'),
+    baseUrl: getRequiredEnv('TOBY_OUTBOUND_BASE_URL').replace(/\/$/, ''),
+    appId: getRequiredEnv('TOBY_OUTBOUND_APP_ID'),
+    appSecret: getRequiredEnv('TOBY_OUTBOUND_APP_SECRET'),
+    privateKey: getRequiredEnv('TOBY_OUTBOUND_PRIVATE_KEY'),
   }
 }
 
-function getDesKey(privateKey: string): Buffer {
+function getTobyInboundConfig(): TobyCryptoConfig {
+  return {
+    appId: getRequiredEnv('TOBY_INBOUND_APP_ID'),
+    appSecret: getRequiredEnv('TOBY_INBOUND_APP_SECRET'),
+    privateKey: getRequiredEnv('TOBY_INBOUND_PRIVATE_KEY'),
+  }
+}
+
+function getDesKey(privateKey: string, envName: string): Buffer {
   const key = Buffer.from(privateKey, 'utf8')
-  if (key.length < 8) throw new Error('TOBY_PRIVATE_KEY must be at least 8 bytes')
+  if (key.length < 8) throw new Error(`${envName} must be at least 8 bytes`)
   return key.subarray(0, 8)
 }
 
-export function createTobySignature(timestamp: string, serviceCode: string): string {
-  const { appId, appSecret } = getTobyConfig()
+function createTobySignatureWithConfig(
+  config: TobyCryptoConfig,
+  timestamp: string,
+  serviceCode: string,
+): string {
   const sortedForm = [
-    ['appID', appId],
-    ['appSecret', appSecret],
+    ['appID', config.appId],
+    ['appSecret', config.appSecret],
     ['serviceCode', serviceCode],
     ['timestamp', timestamp],
   ]
@@ -144,9 +171,12 @@ export function createTobySignature(timestamp: string, serviceCode: string): str
   return crypto.createHash('md5').update(sortedForm, 'utf8').digest('hex')
 }
 
-export function encryptTobyJson(payload: object): string {
-  const { privateKey } = getTobyConfig()
-  const key = CryptoJS.enc.Latin1.parse(getDesKey(privateKey).toString('latin1'))
+export function createTobySignature(timestamp: string, serviceCode: string): string {
+  return createTobySignatureWithConfig(getTobyOutboundConfig(), timestamp, serviceCode)
+}
+
+function encryptTobyJsonWithConfig(payload: object, config: TobyCryptoConfig, privateKeyEnvName: string): string {
+  const key = CryptoJS.enc.Latin1.parse(getDesKey(config.privateKey, privateKeyEnvName).toString('latin1'))
   const iv = CryptoJS.enc.Utf8.parse(DES_IV)
   return CryptoJS.DES.encrypt(JSON.stringify(payload), key, {
     iv,
@@ -155,11 +185,16 @@ export function encryptTobyJson(payload: object): string {
   }).toString()
 }
 
-export function decryptTobyJson<T extends object = Record<string, unknown>>(
+export function encryptTobyJson(payload: object): string {
+  return encryptTobyJsonWithConfig(payload, getTobyOutboundConfig(), 'TOBY_OUTBOUND_PRIVATE_KEY')
+}
+
+function decryptTobyJsonWithConfig<T extends object = Record<string, unknown>>(
   encryptedValue: string,
+  config: TobyCryptoConfig,
+  privateKeyEnvName: string,
 ): T {
-  const { privateKey } = getTobyConfig()
-  const key = CryptoJS.enc.Latin1.parse(getDesKey(privateKey).toString('latin1'))
+  const key = CryptoJS.enc.Latin1.parse(getDesKey(config.privateKey, privateKeyEnvName).toString('latin1'))
   const iv = CryptoJS.enc.Utf8.parse(DES_IV)
   const text = CryptoJS.DES.decrypt(encryptedValue, key, {
     iv,
@@ -170,34 +205,47 @@ export function decryptTobyJson<T extends object = Record<string, unknown>>(
   return JSON.parse(text) as T
 }
 
+export function decryptTobyJson<T extends object = Record<string, unknown>>(
+  encryptedValue: string,
+): T {
+  return decryptTobyJsonWithConfig<T>(
+    encryptedValue,
+    getTobyOutboundConfig(),
+    'TOBY_OUTBOUND_PRIVATE_KEY',
+  )
+}
+
 export function buildTobyRequest(
   serviceCode: TobyServiceCode,
   payload: object,
 ): TobyEnvelope {
-  const { appId } = getTobyConfig()
+  const config = getTobyOutboundConfig()
   const timestamp = String(Math.floor(Date.now() / 1000))
   const requestPayload = {
     ...payload,
-    appID: appId,
+    appID: config.appId,
     timestamp,
     serviceCode,
-    signature: createTobySignature(timestamp, serviceCode),
+    signature: createTobySignatureWithConfig(config, timestamp, serviceCode),
   }
 
   return {
-    appID: appId,
-    requestJson: encryptTobyJson(requestPayload),
+    appID: config.appId,
+    requestJson: encryptTobyJsonWithConfig(requestPayload, config, 'TOBY_OUTBOUND_PRIVATE_KEY'),
   }
 }
 
-function assertTobySignature(payload: Record<string, unknown>, serviceCode: TobyServiceCode): void {
-  const { appId } = getTobyConfig()
+function assertTobySignature(
+  payload: Record<string, unknown>,
+  serviceCode: TobyServiceCode,
+  config: TobyCryptoConfig,
+): void {
   const responseAppId = String(payload.appID ?? '')
   const timestamp = String(payload.timestamp ?? '')
   const signature = String(payload.signature ?? '')
   const actualServiceCode = String(payload.serviceCode ?? '')
 
-  if (responseAppId !== appId) throw new Error('Toby appID 不匹配')
+  if (responseAppId !== config.appId) throw new Error('Toby appID 不匹配')
   if (actualServiceCode !== serviceCode) throw new Error('Toby serviceCode 不匹配')
   if (!timestamp || !signature) throw new Error('Toby 签名字段缺失')
 
@@ -208,7 +256,7 @@ function assertTobySignature(payload: Record<string, unknown>, serviceCode: Toby
     throw new Error('Toby 签名已过期')
   }
 
-  const expected = createTobySignature(timestamp, serviceCode)
+  const expected = createTobySignatureWithConfig(config, timestamp, serviceCode)
   if (signature !== expected) throw new Error('Toby 签名校验失败')
 }
 
@@ -216,12 +264,16 @@ export function decryptAndVerifyTobyResponse<T extends object>(
   envelope: TobyEnvelope,
   serviceCode: TobyServiceCode,
 ): T {
-  const { appId } = getTobyConfig()
-  if (envelope.appID !== appId || !envelope.responseJson) {
+  const config = getTobyOutboundConfig()
+  if (envelope.appID !== config.appId || !envelope.responseJson) {
     throw new Error('Toby 响应外层报文异常')
   }
-  const payload = decryptTobyJson<T>(envelope.responseJson)
-  assertTobySignature(payload as Record<string, unknown>, serviceCode)
+  const payload = decryptTobyJsonWithConfig<T>(
+    envelope.responseJson,
+    config,
+    'TOBY_OUTBOUND_PRIVATE_KEY',
+  )
+  assertTobySignature(payload as Record<string, unknown>, serviceCode, config)
   return payload
 }
 
@@ -229,12 +281,16 @@ export function decryptAndVerifyTobyRequest<T extends object>(
   envelope: TobyEnvelope,
   serviceCode: TobyServiceCode,
 ): T {
-  const { appId } = getTobyConfig()
-  if (envelope.appID !== appId || !envelope.requestJson) {
+  const config = getTobyOutboundConfig()
+  if (envelope.appID !== config.appId || !envelope.requestJson) {
     throw new Error('Toby 请求外层报文异常')
   }
-  const payload = decryptTobyJson<T>(envelope.requestJson)
-  assertTobySignature(payload as Record<string, unknown>, serviceCode)
+  const payload = decryptTobyJsonWithConfig<T>(
+    envelope.requestJson,
+    config,
+    'TOBY_OUTBOUND_PRIVATE_KEY',
+  )
+  assertTobySignature(payload as Record<string, unknown>, serviceCode, config)
   return payload
 }
 
@@ -242,19 +298,56 @@ export function buildTobyResponse(
   serviceCode: TobyServiceCode,
   payload: object,
 ): TobyEnvelope {
-  const { appId } = getTobyConfig()
+  const config = getTobyOutboundConfig()
   const timestamp = String(Math.floor(Date.now() / 1000))
   const responsePayload = {
     ...payload,
-    appID: appId,
+    appID: config.appId,
     timestamp,
     serviceCode,
-    signature: createTobySignature(timestamp, serviceCode),
+    signature: createTobySignatureWithConfig(config, timestamp, serviceCode),
   }
 
   return {
-    appID: appId,
-    responseJson: encryptTobyJson(responsePayload),
+    appID: config.appId,
+    responseJson: encryptTobyJsonWithConfig(responsePayload, config, 'TOBY_OUTBOUND_PRIVATE_KEY'),
+  }
+}
+
+export function decryptAndVerifyTobyInboundRequest<T extends object>(
+  envelope: TobyEnvelope,
+  serviceCode: TobyServiceCode,
+): T {
+  const config = getTobyInboundConfig()
+  if (envelope.appID !== config.appId || !envelope.requestJson) {
+    throw new Error('Toby 请求外层报文异常')
+  }
+  const payload = decryptTobyJsonWithConfig<T>(
+    envelope.requestJson,
+    config,
+    'TOBY_INBOUND_PRIVATE_KEY',
+  )
+  assertTobySignature(payload as Record<string, unknown>, serviceCode, config)
+  return payload
+}
+
+export function buildTobyInboundResponse(
+  serviceCode: TobyServiceCode,
+  payload: object,
+): TobyEnvelope {
+  const config = getTobyInboundConfig()
+  const timestamp = String(Math.floor(Date.now() / 1000))
+  const responsePayload = {
+    ...payload,
+    appID: config.appId,
+    timestamp,
+    serviceCode,
+    signature: createTobySignatureWithConfig(config, timestamp, serviceCode),
+  }
+
+  return {
+    appID: config.appId,
+    responseJson: encryptTobyJsonWithConfig(responsePayload, config, 'TOBY_INBOUND_PRIVATE_KEY'),
   }
 }
 
@@ -273,7 +366,7 @@ async function callTobyApi<T extends object>(
   serviceCode: TobyServiceCode,
   payload: object,
 ): Promise<TobyApiResponse<T>> {
-  const { baseUrl } = getTobyConfig()
+  const { baseUrl } = getTobyOutboundConfig()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
 
@@ -324,4 +417,8 @@ export function syncTobyMemberSubCard(payload: TobyMemberSubCardRequest) {
 
 export function registerTobyMember(payload: TobyMemberRegisterRequest) {
   return callTobyApi('/api/toby/member/register', TOBY_SERVICE_CODES.memberRegister, payload)
+}
+
+export function queryTobyMemberPoints(payload: TobyMemberPointsRequest) {
+  return callTobyApi('/api/toby/member/query-points', TOBY_SERVICE_CODES.memberPoints, payload)
 }

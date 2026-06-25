@@ -18,6 +18,7 @@ const PUBLIC_ROUTES = [
   '/api/v1/videos/uploads/',
   '/api/v1/canvases/uploads/',
   '/api/v1/payment/notify',
+  '/api/v1/external/toby/specification-config',
 ]
 
 export interface AuthUser {

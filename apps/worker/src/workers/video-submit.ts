@@ -5,6 +5,7 @@ import type { VideoSubmitJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { buildLogger } from '../logger.js'
 import { buildCtyunEdgeTaskBody, buildVolcengineTaskBody } from './video-submit-payload.js'
+import { buildCreationResultOutboxPayload, enqueueCreationResultOutbox } from '../lib/biz-mgmt-result-outbox.js'
 
 const logger = buildLogger()
 
@@ -280,7 +281,7 @@ async function submitVeo(
 export const videoSubmitWorker = new Worker<VideoSubmitJobData>(
   'video-queue',
   async (job) => {
-    const { taskId, batchId, userId, teamId, creditAccountId, provider, model, prompt, params, estimatedCredits } = job.data
+    const { taskId, batchId, userId, teamId, provider, model, prompt, params, estimatedCredits, bizMgmtUserId, bizMgmtDeductRequestNo, bizMgmtWorkNo } = job.data
     const logCtx = { jobId: job.id, taskId, provider, model }
     logger.info(logCtx, '[video-submit] 开始提交视频任务')
 
@@ -316,41 +317,42 @@ export const videoSubmitWorker = new Worker<VideoSubmitJobData>(
       logger.info({ ...logCtx, externalTaskId }, '[video-submit] 提交成功，等待 poller 轮询')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      logger.error({ ...logCtx, err: msg }, '[video-submit] 提交失败，退还积分')
+      logger.error({ ...logCtx, err: msg }, '[video-submit] 提交失败')
 
-      // 提交失败：task/batch 标记失败，退还积分
+      // 提交失败：task/batch 标记失败。业管化后本地不退积分。
       await db.transaction().execute(async (trx: any) => {
         await trx.updateTable('tasks')
           .set({ status: 'failed', error_message: msg.slice(0, 1000), completed_at: new Date().toISOString() })
           .where('id', '=', taskId)
           .execute()
 
-        await trx.updateTable('credit_accounts')
-          .set({ frozen_credits: sql`GREATEST(frozen_credits - ${estimatedCredits}, 0)` })
-          .where('id', '=', creditAccountId)
-          .execute()
-
-        await trx.updateTable('team_members')
-          .set({ credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)` })
-          .where('team_id', '=', teamId)
-          .where('user_id', '=', userId)
-          .execute()
-
-        await trx.insertInto('credits_ledger').values({
-          credit_account_id: creditAccountId,
-          user_id: userId,
-          amount: estimatedCredits,
-          type: 'refund',
-          task_id: taskId,
-          batch_id: batchId,
-          description: `视频任务提交失败：${msg.slice(0, 200)}`,
-        }).execute()
-
         await trx.updateTable('task_batches')
           .set({ status: 'failed', failed_count: sql`failed_count + 1` })
           .where('id', '=', batchId)
           .execute()
       })
+
+      // 业管身份任务：写创作结果 outbox(success=false) 通知业管退款
+      if (bizMgmtUserId && bizMgmtDeductRequestNo) {
+        try {
+          await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+            localUserId: userId,
+            bizMgmtUserId,
+            teamId,
+            workspaceId: job.data.workspaceId ?? null,
+            batchId,
+            taskId,
+            taskStatus: 'failed',
+            pointsNum: estimatedCredits,
+            requestNo: bizMgmtDeductRequestNo,
+            workNo: bizMgmtWorkNo ?? taskId,
+            module: 'video',
+            message: msg,
+          }))
+        } catch (outboxErr) {
+          logger.error({ err: outboxErr instanceof Error ? outboxErr.message : String(outboxErr), taskId }, 'Failed to enqueue video-submit creation result outbox')
+        }
+      }
 
       await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
     }

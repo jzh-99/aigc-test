@@ -6,13 +6,20 @@ import { afterEach, beforeEach, describe, test } from 'node:test'
 import {
   TOBY_SERVICE_CODES,
   type TobyServiceCode,
+  buildTobyInboundResponse,
   buildTobyRequest,
   buildTobyResponse,
+  decryptAndVerifyTobyInboundRequest,
   decryptAndVerifyTobyRequest,
   decryptAndVerifyTobyResponse,
   decryptTobyJson,
+  deductTobyPoints,
+  notifyTobyCreationResult,
   queryTobyMemberLoginInfo,
+  queryTobyMemberPoints,
+  queryTobyPointsChangeList,
   registerTobyMember,
+  syncTobyMemberSubCard,
   syncTobySubscribe,
   type TobyEnvelope,
 } from '../lib/toby-open-api.js'
@@ -37,10 +44,42 @@ const TOBY_TEST_DATA = {
     payAmount: '9.90',
     status: 1,
   },
+  pointsChangeList: {
+    userId: 'member-1',
+    changeType: '1,2',
+    pageNum: 1,
+    pageSize: 20,
+  },
+  pointsChange: {
+    userId: 'member-1',
+    requestNo: 'points-change-1',
+    source: 2,
+    workNo: 'work-1',
+    pointsNum: '3.00',
+    remark: '测试扣减',
+  },
+  creationResultNotify: {
+    userId: 'member-1',
+    requestNo: 'creation-result-1',
+    workNo: 'work-1',
+    success: true,
+    remark: '测试创作成功',
+  },
+  memberSubCard: {
+    phone: '17714420973',
+    userName: '李四',
+    compName: '测试公司',
+    channel: '2',
+    belongId: 'member-admin-1',
+    initialPointsNum: '100.00',
+  },
   memberRegister: {
     phone: '17714420972',
     userName: '张三',
     channel: '2',
+  },
+  memberPoints: {
+    userId: 'member-1',
   },
   specificationConfig: {
     requestNo: 'spec-1',
@@ -65,6 +104,13 @@ const TOBY_TEST_DATA = {
   },
 }
 
+function readSentPayload(
+  record: FetchRecord,
+  serviceCode: TobyServiceCode,
+) {
+  return decryptAndVerifyTobyRequest<Record<string, unknown>>(record.body, serviceCode)
+}
+
 const originalFetch = globalThis.fetch
 
 function printDecrypted(label: string, value: unknown) {
@@ -73,10 +119,13 @@ function printDecrypted(label: string, value: unknown) {
 
 function getTobyTestEnv() {
   const envNames = [
-    'TOBY_BASE_URL',
-    'TOBY_APP_ID',
-    'TOBY_APP_SECRET',
-    'TOBY_PRIVATE_KEY',
+    'TOBY_OUTBOUND_BASE_URL',
+    'TOBY_OUTBOUND_APP_ID',
+    'TOBY_OUTBOUND_APP_SECRET',
+    'TOBY_OUTBOUND_PRIVATE_KEY',
+    'TOBY_INBOUND_APP_ID',
+    'TOBY_INBOUND_APP_SECRET',
+    'TOBY_INBOUND_PRIVATE_KEY',
   ] as const
   const env = Object.fromEntries(
     envNames.map((name) => [name, process.env[name]?.trim() ?? '']),
@@ -89,7 +138,7 @@ function getTobyTestEnv() {
 
   return {
     ...env,
-    TOBY_BASE_URL: env.TOBY_BASE_URL.replace(/\/$/, ''),
+    TOBY_OUTBOUND_BASE_URL: env.TOBY_OUTBOUND_BASE_URL.replace(/\/$/, ''),
   }
 }
 
@@ -140,7 +189,7 @@ describe('Toby 业务管理平台开放接口协议', () => {
       result = await queryTobyMemberLoginInfo({ phone })
     } catch (err) {
       printDecrypted('会员信息查询真实请求失败', {
-        url: `${env.TOBY_BASE_URL}/api/toby/member/query-by-phone`,
+        url: `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/member/query-by-phone`,
         phone,
         message: err instanceof Error ? err.message : String(err),
         cause: err instanceof Error && 'cause' in err ? err.cause : undefined,
@@ -160,7 +209,7 @@ describe('Toby 业务管理平台开放接口协议', () => {
     assert.equal(Object.hasOwn(requestPayload, 'userName'), false)
     assert.equal(result.code, '0000', `业管接口返回失败：${result.message}`)
     assert.ok(result.decryptedData, '业管成功响应应包含可解密的 responseJson')
-    assert.equal(result.decryptedData?.appID, env.TOBY_APP_ID)
+    assert.equal(result.decryptedData?.appID, env.TOBY_OUTBOUND_APP_ID)
     assert.equal(result.decryptedData?.serviceCode, TOBY_SERVICE_CODES.memberLoginInfo)
     assert.ok(Array.isArray((result.decryptedData as { members?: unknown }).members))
   })
@@ -176,15 +225,100 @@ describe('Toby 业务管理平台开放接口协议', () => {
 
     await syncTobySubscribe(TOBY_TEST_DATA.subscribe)
 
-    assert.equal(records[0].url, `${env.TOBY_BASE_URL}/api/toby/subscribe/external/dealExSubscribe`)
-    const payload = decryptAndVerifyTobyRequest<Record<string, unknown>>(
-      records[0].body,
-      TOBY_SERVICE_CODES.subscribe,
-    )
+    assert.equal(records[0].url, `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/subscribe/external/dealExSubscribe`)
+    const payload = readSentPayload(records[0], TOBY_SERVICE_CODES.subscribe)
     printDecrypted('订购同步 requestJson 解密后', payload)
 
     assert.equal(payload.source, 'BDQY')
     assert.equal(payload.serviceCode, TOBY_SERVICE_CODES.subscribe)
+  })
+
+  test('A豆流水查询按新版文档调用 change-list，并携带分页参数', async () => {
+    const records: FetchRecord[] = []
+    const env = getTobyTestEnv()
+    createSuccessFetch(TOBY_SERVICE_CODES.pointsChangeQuery, {
+      total: 0,
+      pageNum: 1,
+      pageSize: 20,
+      records: [],
+    }, records)
+
+    const result = await queryTobyPointsChangeList(TOBY_TEST_DATA.pointsChangeList)
+
+    assert.equal(records[0].url, `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/points/external/change-list`)
+    const payload = readSentPayload(records[0], TOBY_SERVICE_CODES.pointsChangeQuery)
+    printDecrypted('A豆流水查询 requestJson 解密后', payload)
+    printDecrypted('A豆流水查询 responseJson 解密后', result.decryptedData)
+
+    assert.equal(payload.serviceCode, 'AIHUB_POINTS_CHANGE_QUERY')
+    assert.equal(payload.userId, TOBY_TEST_DATA.pointsChangeList.userId)
+    assert.equal(payload.changeType, TOBY_TEST_DATA.pointsChangeList.changeType)
+    assert.equal(payload.pageNum, TOBY_TEST_DATA.pointsChangeList.pageNum)
+    assert.equal(payload.pageSize, TOBY_TEST_DATA.pointsChangeList.pageSize)
+  })
+
+  test('A豆扣减按新版文档调用 change，并携带 source 必填字段', async () => {
+    const records: FetchRecord[] = []
+    const env = getTobyTestEnv()
+    createSuccessFetch(TOBY_SERVICE_CODES.pointsChange, {
+      requestNo: TOBY_TEST_DATA.pointsChange.requestNo,
+      workNo: TOBY_TEST_DATA.pointsChange.workNo,
+      status: 'DEDUCTED',
+      balancePointsNum: '97.00',
+      idempotent: false,
+    }, records)
+
+    const result = await deductTobyPoints(TOBY_TEST_DATA.pointsChange)
+
+    assert.equal(records[0].url, `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/points/external/change`)
+    const payload = readSentPayload(records[0], TOBY_SERVICE_CODES.pointsChange)
+    printDecrypted('A豆扣减 requestJson 解密后', payload)
+    printDecrypted('A豆扣减 responseJson 解密后', result.decryptedData)
+
+    assert.equal(payload.serviceCode, 'AIHUB_POINTS_CHANGE')
+    assert.equal(payload.source, TOBY_TEST_DATA.pointsChange.source)
+    assert.equal(payload.workNo, TOBY_TEST_DATA.pointsChange.workNo)
+    assert.equal(payload.pointsNum, TOBY_TEST_DATA.pointsChange.pointsNum)
+  })
+
+  test('创作结果同步按新版文档调用 result-notify，并携带 success 结果', async () => {
+    const records: FetchRecord[] = []
+    const env = getTobyTestEnv()
+    createSuccessFetch(TOBY_SERVICE_CODES.creationResultNotify, {
+      requestNo: TOBY_TEST_DATA.creationResultNotify.requestNo,
+      workNo: TOBY_TEST_DATA.creationResultNotify.workNo,
+      status: 'SUCCESS',
+      balancePointsNum: '97.00',
+      idempotent: false,
+    }, records)
+
+    const result = await notifyTobyCreationResult(TOBY_TEST_DATA.creationResultNotify)
+
+    assert.equal(records[0].url, `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/points/external/result-notify`)
+    const payload = readSentPayload(records[0], TOBY_SERVICE_CODES.creationResultNotify)
+    printDecrypted('创作结果同步 requestJson 解密后', payload)
+    printDecrypted('创作结果同步 responseJson 解密后', result.decryptedData)
+
+    assert.equal(payload.serviceCode, 'AIHUB_CREATION_RESULT_NOTIFY')
+    assert.equal(payload.success, TOBY_TEST_DATA.creationResultNotify.success)
+    assert.equal(payload.workNo, TOBY_TEST_DATA.creationResultNotify.workNo)
+  })
+
+  test('会员副卡变动同步使用 MEMBER-1002 和 /api/toby/member/sub-card', async () => {
+    const records: FetchRecord[] = []
+    const env = getTobyTestEnv()
+    createSuccessFetch(TOBY_SERVICE_CODES.memberSubCard, { userId: 'member-sub-1' }, records)
+
+    const result = await syncTobyMemberSubCard(TOBY_TEST_DATA.memberSubCard)
+
+    assert.equal(records[0].url, `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/member/sub-card`)
+    const payload = readSentPayload(records[0], TOBY_SERVICE_CODES.memberSubCard)
+    printDecrypted('会员副卡变动 requestJson 解密后', payload)
+    printDecrypted('会员副卡变动 responseJson 解密后', result.decryptedData)
+
+    assert.equal(payload.serviceCode, 'MEMBER-1002')
+    assert.equal(payload.belongId, TOBY_TEST_DATA.memberSubCard.belongId)
+    assert.equal(payload.initialPointsNum, TOBY_TEST_DATA.memberSubCard.initialPointsNum)
   })
 
   test('个人会员注册使用 MEMBER-1003 和 /api/toby/member/register', async () => {
@@ -194,17 +328,35 @@ describe('Toby 业务管理平台开放接口协议', () => {
 
     const result = await registerTobyMember(TOBY_TEST_DATA.memberRegister)
 
-    assert.equal(records[0].url, `${env.TOBY_BASE_URL}/api/toby/member/register`)
-    const payload = decryptAndVerifyTobyRequest<Record<string, unknown>>(
-      records[0].body,
-      TOBY_SERVICE_CODES.memberRegister,
-    )
+    assert.equal(records[0].url, `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/member/register`)
+    const payload = readSentPayload(records[0], TOBY_SERVICE_CODES.memberRegister)
     printDecrypted('个人会员注册 requestJson 解密后', payload)
     printDecrypted('个人会员注册 responseJson 解密后', result.decryptedData)
 
     assert.equal(payload.serviceCode, 'MEMBER-1003')
     assert.equal(payload.userName, TOBY_TEST_DATA.memberRegister.userName)
     assert.equal((result.decryptedData as { userId: string }).userId, 'member-1')
+  })
+
+  test('会员A豆余额查询使用 MEMBER-1004 和 /api/toby/member/query-points', async () => {
+    const records: FetchRecord[] = []
+    const env = getTobyTestEnv()
+    createSuccessFetch(TOBY_SERVICE_CODES.memberPoints, {
+      pointsNum: '97.00',
+      sumPointsNum: '100.00',
+      status: 1,
+    }, records)
+
+    const result = await queryTobyMemberPoints(TOBY_TEST_DATA.memberPoints)
+
+    assert.equal(records[0].url, `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/member/query-points`)
+    const payload = readSentPayload(records[0], TOBY_SERVICE_CODES.memberPoints)
+    printDecrypted('会员A豆余额查询 requestJson 解密后', payload)
+    printDecrypted('会员A豆余额查询 responseJson 解密后', result.decryptedData)
+
+    assert.equal(payload.serviceCode, 'MEMBER-1004')
+    assert.equal(payload.userId, TOBY_TEST_DATA.memberPoints.userId)
+    assert.equal((result.decryptedData as { status: number }).status, 1)
   })
 
   test('模型规格同步使用 SPECIFICATION-CONFIG，并支持 modelParams.params 数组结构', () => {
@@ -226,6 +378,31 @@ describe('Toby 业务管理平台开放接口协议', () => {
     )
   })
 
+  test('模型规格入站回调用独立入站凭证解密验签并生成响应', () => {
+    const envelope = buildTobyInboundResponse(
+      TOBY_SERVICE_CODES.specificationConfig,
+      TOBY_TEST_DATA.specificationConfig,
+    )
+    const inboundRequestEnvelope = {
+      appID: envelope.appID,
+      requestJson: envelope.responseJson,
+    }
+
+    const payload = decryptAndVerifyTobyInboundRequest<{
+      serviceCode: string
+      modelParams: { modelCode: string }
+    }>(inboundRequestEnvelope, TOBY_SERVICE_CODES.specificationConfig)
+    const response = buildTobyInboundResponse(TOBY_SERVICE_CODES.specificationConfig, {
+      requestNo: 'spec-1',
+      status: '0',
+    })
+    const env = getTobyTestEnv()
+
+    assert.equal(payload.serviceCode, 'SPECIFICATION-CONFIG')
+    assert.equal(payload.modelParams.modelCode, TOBY_TEST_DATA.specificationConfig.modelParams.modelCode)
+    assert.equal(response.appID, env.TOBY_INBOUND_APP_ID)
+  })
+
   test('响应验签失败时会拒绝错误 serviceCode，避免把其他接口响应混用', () => {
     const envelope = buildTobyResponse(TOBY_SERVICE_CODES.memberLoginInfo, { members: [] })
 
@@ -242,8 +419,8 @@ describe('Toby 业务管理平台开放接口协议', () => {
     const env = getTobyTestEnv()
     printDecrypted('requestJson 解密后', innerPayload)
 
-    assert.equal(envelope.appID, env.TOBY_APP_ID)
-    assert.equal(innerPayload.appID, env.TOBY_APP_ID)
+    assert.equal(envelope.appID, env.TOBY_OUTBOUND_APP_ID)
+    assert.equal(innerPayload.appID, env.TOBY_OUTBOUND_APP_ID)
     assert.equal(innerPayload.serviceCode, TOBY_SERVICE_CODES.memberRegister)
   })
 })

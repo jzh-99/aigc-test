@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import {
   TOBY_SERVICE_CODES,
-  buildTobyResponse,
-  decryptAndVerifyTobyRequest,
+  buildTobyInboundResponse,
+  decryptAndVerifyTobyInboundRequest,
   type TobyEnvelope,
   type TobySpecificationConfigPayload,
 } from '../../../lib/toby-open-api.js'
@@ -29,7 +29,7 @@ const route: FastifyPluginAsync = async (app) => {
       let payload: TobySpecificationConfigPayload
 
       try {
-        payload = decryptAndVerifyTobyRequest<TobySpecificationConfigPayload>(
+        payload = decryptAndVerifyTobyInboundRequest<TobySpecificationConfigPayload>(
           request.body,
           TOBY_SERVICE_CODES.specificationConfig,
         )
@@ -47,7 +47,7 @@ const route: FastifyPluginAsync = async (app) => {
       return {
         code: '0000',
         message: 'success',
-        data: buildTobyResponse(TOBY_SERVICE_CODES.specificationConfig, {
+        data: buildTobyInboundResponse(TOBY_SERVICE_CODES.specificationConfig, {
           requestNo: String(payload.requestNo ?? ''),
           status: '0',
         }),

@@ -191,7 +191,7 @@ async function auditAvatarPoll(task: AvatarTaskRow, result: Awaited<ReturnType<t
 
 async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promise<void> {
   const db = getDb()
-  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = task
+  const { taskId, batchId, userId, estimatedCredits } = task
 
   await db.transaction().execute(async (trx: any) => {
     const taskUpdate = await trx
@@ -209,18 +209,7 @@ async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promi
       type: 'video', original_url: videoUrl, transfer_status: 'pending',
     }).execute()
 
-    await trx.updateTable('credit_accounts').set({
-      frozen_credits: sql`frozen_credits - ${estimatedCredits}`,
-      total_spent: sql`total_spent + ${estimatedCredits}`,
-      balance: sql`balance - ${estimatedCredits}`,
-    }).where('id', '=', creditAccountId).execute()
-
-    await trx.insertInto('credits_ledger').values({
-      credit_account_id: creditAccountId, user_id: userId,
-      amount: -estimatedCredits, type: 'confirm',
-      task_id: taskId, batch_id: batchId,
-      description: '数字人生成成功',
-    }).execute()
+    // 业管化后本地不再维护积分：移除 credit_accounts/credits_ledger 操作。
 
     await trx.updateTable('task_batches').set({
       status: 'completed',
@@ -244,7 +233,7 @@ async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promi
 
 async function handleAvatarFailure(task: AvatarTaskRow, errorMessage: string): Promise<void> {
   const db = getDb()
-  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = task
+  const { taskId, batchId } = task
 
   await db.transaction().execute(async (trx: any) => {
     const taskUpdate = await trx
@@ -257,14 +246,7 @@ async function handleAvatarFailure(task: AvatarTaskRow, errorMessage: string): P
 
     if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 0) === 0) return
 
-    await trx.updateTable('credit_accounts').set({ frozen_credits: sql`frozen_credits - ${estimatedCredits}` }).where('id', '=', creditAccountId).execute()
-    await trx.updateTable('team_members').set({ credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)` }).where('team_id', '=', teamId).where('user_id', '=', userId).execute()
-    await trx.insertInto('credits_ledger').values({
-      credit_account_id: creditAccountId, user_id: userId,
-      amount: estimatedCredits, type: 'refund',
-      task_id: taskId, batch_id: batchId,
-      description: `数字人生成失败：${errorMessage.slice(0, 200)}`,
-    }).execute()
+    // 业管化后本地不再退还积分：移除 credit_accounts/team_members/credits_ledger 操作。
     await trx.updateTable('task_batches').set({ status: 'failed', failed_count: sql`failed_count + 1` }).where('id', '=', batchId).execute()
   })
 

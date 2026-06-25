@@ -43,6 +43,7 @@ export interface VideoSubmitJobData {
   batchId: string
   userId: string
   teamId: string
+  workspaceId?: string | null
   creditAccountId?: string | null
   provider: string
   model: string

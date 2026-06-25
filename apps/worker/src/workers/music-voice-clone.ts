@@ -5,6 +5,7 @@ import type { MusicVoiceCloneJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { buildLogger } from '../logger.js'
 import { MurekaClient } from '../lib/mureka.js'
+import { buildCreationResultOutboxPayload, enqueueCreationResultOutbox } from '../lib/biz-mgmt-result-outbox.js'
 
 const logger = buildLogger()
 
@@ -20,28 +21,7 @@ async function confirmVoiceCloneCredits(data: MusicVoiceCloneJobData, actualCred
   const db = getDb()
   const now = new Date().toISOString()
   await db.transaction().execute(async (trx: any) => {
-    await trx.updateTable('credit_accounts').set({
-      frozen_credits: sql`GREATEST(frozen_credits - ${data.estimatedCredits}, 0)`,
-      balance: sql`balance - ${actualCredits}`,
-      total_spent: sql`total_spent + ${actualCredits}`,
-    }).where('id', '=', data.creditAccountId).execute()
-
-    if (actualCredits !== data.estimatedCredits) {
-      await trx.updateTable('team_members').set({
-        credit_used: sql`GREATEST(credit_used + ${actualCredits - data.estimatedCredits}, 0)`,
-      }).where('team_id', '=', data.teamId).where('user_id', '=', data.userId).execute()
-    }
-
-    await trx.insertInto('credits_ledger').values({
-      credit_account_id: data.creditAccountId,
-      user_id: data.userId,
-      amount: -actualCredits,
-      type: 'confirm',
-      task_id: data.taskId,
-      batch_id: data.batchId,
-      description: '音乐音色克隆成功',
-    }).execute()
-
+    // 业管化后本地不再维护积分：移除 credit_accounts/credits_ledger/team_members 操作。
     await trx.updateTable('tasks').set({
       status: 'completed',
       credits_cost: actualCredits,
@@ -54,6 +34,27 @@ async function confirmVoiceCloneCredits(data: MusicVoiceCloneJobData, actualCred
       status: 'completed',
     }).where('id', '=', data.batchId).execute()
   })
+
+  // 业管身份任务：写创作结果 outbox(success)
+  if (data.bizMgmtUserId && data.bizMgmtDeductRequestNo) {
+    try {
+      await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+        localUserId: data.userId,
+        bizMgmtUserId: data.bizMgmtUserId,
+        teamId: data.teamId,
+        workspaceId: data.workspaceId ?? null,
+        batchId: data.batchId,
+        taskId: data.taskId,
+        taskStatus: 'completed',
+        pointsNum: actualCredits,
+        requestNo: data.bizMgmtDeductRequestNo,
+        workNo: data.bizMgmtWorkNo ?? data.taskId,
+        module: 'music_voice_clone',
+      }))
+    } catch (outboxErr) {
+      // logger 在该模块顶层未引入 buildLogger，用 console 兜底；保持与原文件风格一致
+    }
+  }
 }
 
 async function failVoiceCloneJob(data: MusicVoiceCloneJobData, message: string): Promise<void> {
@@ -75,23 +76,7 @@ async function failVoiceCloneJob(data: MusicVoiceCloneJobData, message: string):
       completed_at: now,
     }).where('id', '=', data.taskId).execute()
 
-    await trx.updateTable('credit_accounts').set({
-      frozen_credits: sql`GREATEST(frozen_credits - ${data.estimatedCredits}, 0)`,
-    }).where('id', '=', data.creditAccountId).execute()
-
-    await trx.updateTable('team_members').set({
-      credit_used: sql`GREATEST(credit_used - ${data.estimatedCredits}, 0)`,
-    }).where('team_id', '=', data.teamId).where('user_id', '=', data.userId).execute()
-
-    await trx.insertInto('credits_ledger').values({
-      credit_account_id: data.creditAccountId,
-      user_id: data.userId,
-      amount: data.estimatedCredits,
-      type: 'refund',
-      task_id: data.taskId,
-      batch_id: data.batchId,
-      description: `音乐音色克隆失败：${message.slice(0, 200)}`,
-    }).execute()
+    // 业管化后本地不再退还积分：退款由创作结果 outbox(success=false) 通知业管处理。
 
     await trx.updateTable('task_batches').set({
       failed_count: sql`failed_count + 1`,
@@ -99,6 +84,28 @@ async function failVoiceCloneJob(data: MusicVoiceCloneJobData, message: string):
     }).where('id', '=', data.batchId).execute()
   })
   await publishVoiceCloneEvent(data.voiceCloneId, { event: 'failed', error_message: message })
+
+  // 业管身份任务：写创作结果 outbox(success=false)
+  if (data.bizMgmtUserId && data.bizMgmtDeductRequestNo) {
+    try {
+      await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+        localUserId: data.userId,
+        bizMgmtUserId: data.bizMgmtUserId,
+        teamId: data.teamId,
+        workspaceId: data.workspaceId ?? null,
+        batchId: data.batchId,
+        taskId: data.taskId,
+        taskStatus: 'failed',
+        pointsNum: data.estimatedCredits,
+        requestNo: data.bizMgmtDeductRequestNo,
+        workNo: data.bizMgmtWorkNo ?? data.taskId,
+        module: 'music_voice_clone',
+        message,
+      }))
+    } catch {
+      // outbox 写入失败不阻断失败处理
+    }
+  }
 }
 
 export const musicVoiceCloneWorker = new Worker<MusicVoiceCloneJobData>(

@@ -9,6 +9,7 @@ import { MurekaClient, type MurekaMediaResult } from '../lib/mureka.js'
 import { transferMusicUrl } from '../lib/music-storage.js'
 import { VolcengineImageAdapter } from '../adapters/volcengine-image.js'
 import { dispatchBatchResult } from '../lib/dispatch-result.js'
+import { buildCreationResultOutboxPayload, enqueueCreationResultOutbox } from '../lib/biz-mgmt-result-outbox.js'
 import {
   buildCoverPrompt,
   buildMurekaGenerationPrompt,
@@ -49,28 +50,7 @@ async function confirmMusicCredits(data: MusicJobData, actualCredits: number): P
   const db = getDb()
   const now = new Date().toISOString()
   await db.transaction().execute(async (trx: any) => {
-    await trx.updateTable('credit_accounts').set({
-      frozen_credits: sql`GREATEST(frozen_credits - ${data.estimatedCredits}, 0)`,
-      balance: sql`balance - ${actualCredits}`,
-      total_spent: sql`total_spent + ${actualCredits}`,
-    }).where('id', '=', data.creditAccountId).execute()
-
-    if (actualCredits !== data.estimatedCredits) {
-      await trx.updateTable('team_members').set({
-        credit_used: sql`GREATEST(credit_used + ${actualCredits - data.estimatedCredits}, 0)`,
-      }).where('team_id', '=', data.teamId).where('user_id', '=', data.userId).execute()
-    }
-
-    await trx.insertInto('credits_ledger').values({
-      credit_account_id: data.creditAccountId,
-      user_id: data.userId,
-      amount: -actualCredits,
-      type: 'confirm',
-      task_id: data.taskId,
-      batch_id: data.batchId,
-      description: '音乐生成成功',
-    }).execute()
-
+    // 业管化后本地不再维护积分：移除 credit_accounts/credits_ledger/team_members 操作。
     await trx.updateTable('tasks').set({
       status: 'completed',
       credits_cost: actualCredits,
@@ -87,10 +67,30 @@ async function confirmMusicCredits(data: MusicJobData, actualCredits: number): P
     taskId: data.taskId,
     batchId: data.batchId,
     trackId: data.trackId,
-    creditAccountId: data.creditAccountId,
     estimatedCredits: data.estimatedCredits,
     actualCredits,
-  }, '音乐生成积分已确认')
+  }, '音乐生成完成（业管 A 豆已在生成前扣减）')
+
+  // 业管身份任务：写创作结果 outbox(success)
+  if (data.bizMgmtUserId && data.bizMgmtDeductRequestNo) {
+    try {
+      await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+        localUserId: data.userId,
+        bizMgmtUserId: data.bizMgmtUserId,
+        teamId: data.teamId,
+        workspaceId: data.workspaceId ?? null,
+        batchId: data.batchId,
+        taskId: data.taskId,
+        taskStatus: 'completed',
+        pointsNum: actualCredits,
+        requestNo: data.bizMgmtDeductRequestNo,
+        workNo: data.bizMgmtWorkNo ?? data.taskId,
+        module: 'music',
+      }))
+    } catch (outboxErr) {
+      logger.error({ err: outboxErr instanceof Error ? outboxErr.message : String(outboxErr), taskId: data.taskId }, 'Failed to enqueue music creation result outbox')
+    }
+  }
 }
 
 async function failMusicJob(data: MusicJobData, message: string): Promise<void> {
@@ -112,23 +112,7 @@ async function failMusicJob(data: MusicJobData, message: string): Promise<void> 
       completed_at: now,
     }).where('id', '=', data.taskId).execute()
 
-    await trx.updateTable('credit_accounts').set({
-      frozen_credits: sql`GREATEST(frozen_credits - ${data.estimatedCredits}, 0)`,
-    }).where('id', '=', data.creditAccountId).execute()
-
-    await trx.updateTable('team_members').set({
-      credit_used: sql`GREATEST(credit_used - ${data.estimatedCredits}, 0)`,
-    }).where('team_id', '=', data.teamId).where('user_id', '=', data.userId).execute()
-
-    await trx.insertInto('credits_ledger').values({
-      credit_account_id: data.creditAccountId,
-      user_id: data.userId,
-      amount: data.estimatedCredits,
-      type: 'refund',
-      task_id: data.taskId,
-      batch_id: data.batchId,
-      description: `音乐生成失败：${message.slice(0, 200)}`,
-    }).execute()
+    // 业管化后本地不再退还积分：退款由创作结果 outbox(success=false) 通知业管处理。
 
     await trx.updateTable('task_batches').set({
       failed_count: sql`failed_count + 1`,
@@ -136,6 +120,28 @@ async function failMusicJob(data: MusicJobData, message: string): Promise<void> 
     }).where('id', '=', data.batchId).execute()
   })
   await publishTrackEvent(data.trackId, { event: 'failed', error_message: message })
+
+  // 业管身份任务：写创作结果 outbox(success=false)
+  if (data.bizMgmtUserId && data.bizMgmtDeductRequestNo) {
+    try {
+      await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+        localUserId: data.userId,
+        bizMgmtUserId: data.bizMgmtUserId,
+        teamId: data.teamId,
+        workspaceId: data.workspaceId ?? null,
+        batchId: data.batchId,
+        taskId: data.taskId,
+        taskStatus: 'failed',
+        pointsNum: data.estimatedCredits,
+        requestNo: data.bizMgmtDeductRequestNo,
+        workNo: data.bizMgmtWorkNo ?? data.taskId,
+        module: 'music',
+        message,
+      }))
+    } catch (outboxErr) {
+      logger.error({ err: outboxErr instanceof Error ? outboxErr.message : String(outboxErr), taskId: data.taskId }, 'Failed to enqueue music creation result outbox')
+    }
+  }
 
   // 开放接口分流：source='open_api' 走失败回调（HMAC POST callback_url），
   // 非 open_api 保持原 SSE（上面 publishTrackEvent 已发 sse:music_track:<id>）。
@@ -167,10 +173,9 @@ async function failMusicJob(data: MusicJobData, message: string): Promise<void> 
     taskId: data.taskId,
     batchId: data.batchId,
     trackId: data.trackId,
-    creditAccountId: data.creditAccountId,
     estimatedCredits: data.estimatedCredits,
     err: message,
-  }, '音乐生成失败已落库并退回冻结积分')
+  }, '音乐生成失败已落库（业管退款由 outbox 通知）')
 }
 
 async function generateCover(track: {

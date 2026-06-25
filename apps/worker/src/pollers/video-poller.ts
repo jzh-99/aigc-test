@@ -213,7 +213,7 @@ async function auditVideoPoll(task: VideoTaskRow, result: VideoPollResult): Prom
 
 async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise<void> {
   const db = getDb()
-  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = task
+  const { taskId, batchId, userId, estimatedCredits } = task
 
   await db.transaction().execute(async (trx: any) => {
     // Idempotency guard
@@ -233,24 +233,7 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
       .values({ task_id: taskId, batch_id: batchId, user_id: userId, type: 'video', original_url: videoUrl, transfer_status: 'pending' })
       .execute()
 
-    // Confirm credits
-    await trx.updateTable('credit_accounts')
-      .set({
-        frozen_credits: sql`frozen_credits - ${estimatedCredits}`,
-        total_spent: sql`total_spent + ${estimatedCredits}`,
-        balance: sql`balance - ${estimatedCredits}`,
-      })
-      .where('id', '=', creditAccountId).execute()
-
-    await trx.insertInto('credits_ledger').values({
-      credit_account_id: creditAccountId,
-      user_id: userId,
-      amount: -estimatedCredits,
-      type: 'confirm',
-      task_id: taskId,
-      batch_id: batchId,
-      description: '视频生成成功',
-    }).execute()
+    // 业管化后本地不再维护积分：移除 credit_accounts/credits_ledger 操作。业管 A 豆已在生成前扣减。
 
     // Update batch to completed
     await trx.updateTable('task_batches')
@@ -329,7 +312,7 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
 
 async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Promise<void> {
   const db = getDb()
-  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = task
+  const { taskId, batchId } = task
 
   await db.transaction().execute(async (trx: any) => {
     const taskUpdate = await trx
@@ -342,24 +325,9 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
 
     if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 0) === 0) return
 
-    // Refund credits
-    await trx.updateTable('credit_accounts')
-      .set({ frozen_credits: sql`frozen_credits - ${estimatedCredits}` })
-      .where('id', '=', creditAccountId).execute()
-
-    await trx.updateTable('team_members')
-      .set({ credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)` })
-      .where('team_id', '=', teamId).where('user_id', '=', userId).execute()
-
-    await trx.insertInto('credits_ledger').values({
-      credit_account_id: creditAccountId,
-      user_id: userId,
-      amount: estimatedCredits,
-      type: 'refund',
-      task_id: taskId,
-      batch_id: batchId,
-      description: `视频生成失败：${errorMessage.slice(0, 200)}`,
-    }).execute()
+    // 业管化后本地不再退还积分：移除 credit_accounts/team_members/credits_ledger 操作。
+    // 业管 A 豆退款由创作结果 outbox(success=false) 通知业管处理（poller 无法重建 outbox 上下文，
+    // 该 gap 由 biz_mgmt_a_bean_transactions 审计 + 人工对账兜底）。
 
     await trx.updateTable('task_batches')
       .set({ status: 'failed', failed_count: sql`failed_count + 1` })
