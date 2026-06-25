@@ -293,9 +293,11 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
     if (fileOrDataUrl instanceof File) {
       form.append('file', fileOrDataUrl, fileOrDataUrl.name)
     } else {
-      const res = await fetch(fileOrDataUrl)
-      const blob = await res.blob()
-      form.append('file', blob, filename)
+      // 远程存储 URL（如 *.volces.com）跨域无 CORS 头，裸 fetch 必然失败。
+      // 走 fetchAssetFile：经 resolveAssetFetchUrl 改写为 /api/v1/assets/fetch 代理 + JWT 鉴权，
+      // 与 frames 拖拽路径保持一致。复用历史任务恢复的参考图只有 URL、没有 file，必经此分支。
+      const file = await fetchAssetFile(fileOrDataUrl, 'image', filename.replace(/\.\w+$/, ''))
+      form.append('file', file, filename)
     }
     const json = await fetchWithAuth<{ url: string }>('/videos/upload', { method: 'POST', body: form })
     return json.url
@@ -304,14 +306,13 @@ export function VideoPanel({ onBatchCreated, disabled, initialParams }: VideoPan
   const resolveVideoImageInput = async (img: FrameImage, filename: string, requireUrl: boolean): Promise<string> => {
     if (requireUrl) return uploadToVideoTemp(img.file ?? img.dataUrl, filename)
     if (img.dataUrl.startsWith('data:')) return img.dataUrl
-    const resp = await fetch(img.dataUrl)
-    if (!resp.ok) throw new Error('reference image fetch failed')
-    const blob = await resp.blob()
+    // 同 uploadToVideoTemp：远程 URL 走代理 + 鉴权 fetch，避免裸 fetch 跨域失败。
+    const file = await fetchAssetFile(img.dataUrl, 'image', filename.replace(/\.\w+$/, ''))
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result as string)
       reader.onerror = reject
-      reader.readAsDataURL(blob)
+      reader.readAsDataURL(file)
     })
   }
 
