@@ -4,16 +4,12 @@ import { randomUUID } from 'node:crypto'
 import type { CategoryReferences, GenerateImageRequest, ParamsPricingRule } from '@aigc/types'
 import { parseCategoryReferences, resolveImageGenerationCategory, validateImageReferenceLimits } from '@aigc/types'
 import { checkPrompt } from '../../services/prompt-filter.js'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getImageQueue } from '../../lib/queue.js'
 import { decryptProxyUrl, uploadToTos } from '../../lib/storage.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { resolveBatchSource } from '../../lib/batch-source.js'
 import rateLimit from '@fastify/rate-limit'
-import {
-  deductBizMgmtPointsForGeneration,
-  getCurrentBizMgmtIdentity,
-} from '../../services/biz-mgmt-a-bean.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 
 // 每个用户最多同时处于 pending/processing 状态的批次数
 const MAX_PENDING_BATCHES = 20
@@ -543,58 +539,24 @@ const route: FastifyPluginAsync = async (app) => {
     const actualModel = resolvedModel ?? model
     const totalCost = unitPrice * quantity
 
-    // 冻结积分 / 业管 A 豆扣减
-    // 分支：有当前业管会员身份 → 走业管 A 豆实时扣减（不读本地余额，不创建本地冻结）；
-    //      无业管身份（旧账号/内部账号）→ 走原本地 freezeCredits。
-    let creditAccountId: string
-    // 业管扣减上下文，仅业管身份任务携带，供 worker 终态写创作结果 outbox
-    let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string } | null = null
-    let bizMgmtIdentity: Awaited<ReturnType<typeof getCurrentBizMgmtIdentity>> | null = null
+    // 业管 A 豆扣减（所有用户统一走业管：实时余额校验 → 扣减 → 成功后才创建任务）
+    // 本地不再维护积分，不调用 freezeCredits。无业管身份时由 deductBizMgmtPointsForGeneration
+    // 内部 getCurrentBizMgmtIdentity 抛错，返回 402 引导用户先选身份。
+    // 业管计费上下文透传到 jobData，供 worker 终态写创作结果 outbox。
+    let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
     try {
-      // 探测当前用户是否已选择业管会员身份（无身份会抛错，落入本地积分分支）
-      bizMgmtIdentity = await getCurrentBizMgmtIdentity(userId)
-    } catch {
-      // 非业管账号：bizMgmtIdentity 保持 null，走本地积分流程
-      bizMgmtIdentity = null
-    }
-
-    try {
-      if (bizMgmtIdentity) {
-        // 业管身份：实时查余额 + 扣减（AIHUB_POINTS_CHANGE），扣减失败不创建任务
-        // 注意 batch_id 尚未生成，先用临时占位 id 让审计先行；扣减成功后用真实 batch_id。
-        // 这里采用「先创建批次→再扣减」的反向，见下方事务内统一处理。
-        // 为保持幂等号稳定且可追溯，使用 idempotency_key 作为批次级扣减幂等号。
-        const tempBatchId = idempotency_key
-        const deduction = await deductBizMgmtPointsForGeneration({
-          localUserId: userId,
-          teamId,
-          workspaceId,
-          batchId: tempBatchId,
-          pointsNum: totalCost,
-          source: 1, // 来源值以业管文档为准；集中在此处，避免散落魔法数字
-          remark: `图片生成：${model}`,
-        })
-        bizMgmtBilling = {
-          requestNo: deduction.requestNo,
-          bizMgmtUserId: deduction.bizMgmtUserId,
-          workNo: deduction.workNo,
-        }
-        // 业管扣减账号不需要本地 credit_account，但 task_batches.credit_account_id 非空，
-        // 复用团队级账户作为归属占位（业管计费权威在 biz_mgmt_a_bean_transactions）。
-        const teamAccount = await db
-          .selectFrom('credit_accounts')
-          .select('id')
-          .where('owner_type', '=', 'team')
-          .where('team_id', '=', teamId)
-          .executeTakeFirstOrThrow()
-        creditAccountId = teamAccount.id
-      } else {
-        // 旧账号/内部账号：本地积分冻结
-        const result = await freezeCredits(teamId, userId, totalCost, '图片生成冻结')
-        creditAccountId = result.creditAccountId
-      }
+      const deduction = await deductBizMgmtPointsForGeneration({
+        localUserId: userId,
+        teamId,
+        workspaceId,
+        batchId: idempotency_key, // 扣减幂等号用 idempotency_key，批次级稳定
+        pointsNum: totalCost,
+        source: 1, // 来源值以业管文档为准，集中在此常量
+        remark: `图片生成：${model}`,
+      })
+      bizMgmtBilling = deduction
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Credit error'
+      const msg = err instanceof Error ? err.message : '业管 A 豆扣减失败'
       logGenerateSubmissionError(app, {
         userId,
         errorCode: 'INSUFFICIENT_CREDITS',
@@ -610,7 +572,8 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     // 在事务中创建批次 + 任务，然后入队
-    // 若任一步骤在冻结后失败，退还积分防止孤立冻结
+    // 业管扣减已在上方完成；此处 batch 创建失败不再退本地积分（业管扣减失败时不会走到这里，
+    // 扣减成功后若 batch 创建失败，由 biz_mgmt_a_bean_transactions 审计 + 人工对账处理）
     let batch: { batch: any; tasks: any[] }
     try {
       batch = await db.transaction().execute(async (trx: any) => {
@@ -620,7 +583,7 @@ const route: FastifyPluginAsync = async (app) => {
             user_id: userId,
             team_id: teamId,
             workspace_id: workspaceId,
-            credit_account_id: creditAccountId,
+            credit_account_id: null,
             idempotency_key,
             source: resolveBatchSource({
               module: 'image',
@@ -659,7 +622,7 @@ const route: FastifyPluginAsync = async (app) => {
         return { batch: batchResult, tasks }
       })
 
-      // 先构建所有 job payload，再批量入队，避免部分入队导致积分状态不一致
+      // 先构建所有 job payload，再批量入队，避免部分入队导致状态不一致
       const jobPayloads = batch.tasks.map((task: any) => ({
         name: 'generate',
         data: {
@@ -668,29 +631,24 @@ const route: FastifyPluginAsync = async (app) => {
           userId,
           teamId,
           workspaceId,
-          creditAccountId,
           provider: providerModel.providerCode,
           model: actualModel,
           prompt,
           params: paramsForJob,
           estimatedCredits: unitPrice,
-          // 业管身份任务携带计费上下文，供 worker 终态写创作结果 outbox
-          ...(bizMgmtBilling
-            ? {
-                bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
-                bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
-                bizMgmtWorkNo: bizMgmtBilling.workNo,
-              }
-            : {}),
+          // 业管计费上下文，供 worker 终态写创作结果 outbox
+          bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+          bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+          bizMgmtWorkNo: bizMgmtBilling.workNo,
           ...(canvas_id ? { canvasId: canvas_id, canvasNodeId: canvas_node_id ?? undefined } : {}),
         },
         opts: { priority: jobPriority },
       }))
       await getImageQueue().addBulk(jobPayloads)
     } catch (err) {
-      // DB 创建或批量入队失败 — 退还全部冻结积分
-      // 注意：业管扣减失败已在上方 try 块拦截，不会走到这里；走到这里仅本地积分账号需退款。
-      app.log.error({ err }, 'Failed to create batch/tasks after freeze, refunding credits')
+      // DB 创建或批量入队失败。业管扣减已完成（A 豆已扣），本地不再退积分；
+      // 由 biz_mgmt_a_bean_transactions 审计 + 人工对账处理已扣未投递的任务。
+      app.log.error({ err }, 'Failed to create batch/tasks after biz-mgmt deduction')
       logGenerateSubmissionError(app, {
         userId,
         errorCode: 'INTERNAL_ERROR',
@@ -699,16 +657,9 @@ const route: FastifyPluginAsync = async (app) => {
         model,
         canvasId: canvas_id,
       })
-      try {
-        if (!bizMgmtBilling) {
-          await refundCredits(teamId, creditAccountId, userId, totalCost, undefined, undefined, '图片生成退款')
-        }
-      } catch (refundErr) {
-        app.log.error({ refundErr }, 'CRITICAL: Failed to refund credits after batch creation failure')
-      }
       return reply.status(500).send({
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回，请重试' },
+        error: { code: 'INTERNAL_ERROR', message: '任务创建失败，请稍后重试或联系管理员核对 A 豆扣减' },
       })
     }
 
