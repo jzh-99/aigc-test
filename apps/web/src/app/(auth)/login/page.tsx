@@ -68,6 +68,21 @@ export default function LoginPage() {
       const res = await apiPost<AuthResponse>('/auth/login', { identifier, password } satisfies LoginRequest)
       resetGeneration()
       setAuth(res.user, res.access_token)
+
+      // 首次从业管创建本地用户时，后端返回一次性初始密码，提示用户登录后修改
+      const oneTimePassword = res.one_time_password ?? res.oneTimePassword
+      if (oneTimePassword) {
+        toast.info(`首次登录初始密码：${oneTimePassword}，登录后请尽快修改密码，遗失请联系管理员重置`, {
+          duration: 12000,
+        })
+      }
+
+      // 需要选择业管会员身份（同手机号多账号且未选）：跳账号选择页，优先于改密/首页
+      if (res.user.requireBizMgmtMemberSelection || res.user.require_biz_mgmt_member_selection) {
+        router.replace('/select-account')
+        return
+      }
+
       if (res.user.password_change_required) {
         router.replace('/settings?tab=security&change_password=true')
       } else {

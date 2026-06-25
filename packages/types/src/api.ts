@@ -262,6 +262,17 @@ export interface AuthResponse {
   accountScopes?: UserAccountScope[]
   require_scope_selection?: boolean
   requireScopeSelection?: boolean
+  // 首次从业管创建本地用户时返回的一次性初始密码；已存在用户登录不返回
+  one_time_password?: string
+  oneTimePassword?: string
+}
+
+/**
+ * 选择业管会员身份接口的响应。
+ * 不含 access_token：身份选择不重签 token，前端用原 token 继续（见 post-select-biz-mgmt-member.ts）。
+ */
+export interface BizMgmtMemberSelectionResponse {
+  user: UserProfile
 }
 
 export type AccountScopeType = 'personal' | 'team'
