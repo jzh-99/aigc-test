@@ -776,6 +776,44 @@ export interface ApiClientsTable {
   updated_at: Generated<Date>
 }
 
+// ─── Business Management Platform Member Bindings ─────────────────────────────
+
+/**
+ * 业务管理平台会员身份绑定缓存表。
+ *
+ * 权威约束：本表不保存 A 豆余额、累计获得、累计消费；这些字段必须实时从业管查询。
+ * 业管平台是会员、权益、A 豆余额的权威来源，本表只做身份选择与本地资源归属映射。
+ */
+export interface BizMgmtMemberBindingsTable {
+  id: Generated<string>
+  // 本地登录用户 ID，关联 users.id
+  local_user_id: string
+  // 业管会员编号（MEMBER-1001 members[].userId），全局唯一，A 豆扣减/流水/结果同步主键
+  biz_mgmt_user_id: string
+  phone: string
+  user_name: string
+  // 1=个人会员（映射 personal 团队），2=公司会员（映射 company_a 团队）
+  user_type: '1' | '2'
+  // 1=正常可选，2=冻结，3=删除；仅 status=1 可被选为当前身份
+  status: 1 | 2 | 3
+  comp_name: string
+  // 最近已完成订购商品 ID，仅展示当前权益，不计费权威
+  goods_id: string | null
+  goods_name: string | null
+  // 业管会员注册时间 members[].createTime，入库为 timestamptz
+  biz_mgmt_created_at: Timestamp | null
+  // 该业管身份对应的本地团队 ID
+  team_id: string
+  // 该业管身份对应的默认本地工作空间 ID
+  workspace_id: string
+  // 当前本地用户最近选择的业管身份标记，同 local_user_id 最多一条为 true
+  is_selected: Generated<boolean>
+  // 最近一次从业管 MEMBER-1001 成功刷新该身份快照的时间
+  last_synced_at: Generated<Date>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── Database Interface ───────────────────────────────────────────────────────
 
 export interface Database {
@@ -825,4 +863,5 @@ export interface Database {
   ai_assistant_errors: AiAssistantErrorsTable
   submission_errors: SubmissionErrorsTable
   api_clients: ApiClientsTable
+  biz_mgmt_member_bindings: BizMgmtMemberBindingsTable
 }
