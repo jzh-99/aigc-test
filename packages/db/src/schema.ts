@@ -159,7 +159,7 @@ export interface TaskBatchesTable {
   user_id: string
   team_id: string | null
   workspace_id: string | null
-  credit_account_id: string
+  credit_account_id: string | null
   parent_batch_id: string | null
   idempotency_key: string
   // 开放接口迁移扩展：新增 'open_api'
