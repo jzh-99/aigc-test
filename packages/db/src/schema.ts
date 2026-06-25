@@ -814,6 +814,41 @@ export interface BizMgmtMemberBindingsTable {
   updated_at: Generated<Date>
 }
 
+// ─── Business Management Platform A Bean Transactions (Audit) ──────────────────
+
+/**
+ * 业务管理平台 A 豆扣减审计表。
+ *
+ * 权威约束：只记录扣减审计，不保存余额/累计获得/累计消费；
+ * 创作结果同步状态以 biz_mgmt_outbox_events 为准。
+ */
+export interface BizMgmtABeanTransactionsTable {
+  id: Generated<string>
+  local_user_id: string
+  team_id: string
+  workspace_id: string | null
+  // 业管会员编号（A 豆扣减/流水/结果同步主键）
+  biz_mgmt_user_id: string
+  // 幂等请求号，全局唯一，重复请求复用
+  request_no: string
+  // 业管作品编号
+  work_no: string
+  // 业管扣减来源，取值按业管文档，服务层集中映射
+  source: number
+  // 本次预估扣减 A 豆数，单位 A 豆；不表示余额
+  points_num: string
+  remark: string | null
+  task_id: string | null
+  batch_id: string | null
+  // pending=未扣减，succeeded=扣减成功，failed=扣减失败（不得创建付费生成任务）
+  deduct_status: Generated<'pending' | 'succeeded' | 'failed'>
+  // 业管扣减响应 JSON：{ code, message, decryptedData }
+  deduct_response: unknown | null
+  last_error: string | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── Database Interface ───────────────────────────────────────────────────────
 
 export interface Database {
@@ -864,4 +899,5 @@ export interface Database {
   submission_errors: SubmissionErrorsTable
   api_clients: ApiClientsTable
   biz_mgmt_member_bindings: BizMgmtMemberBindingsTable
+  biz_mgmt_a_bean_transactions: BizMgmtABeanTransactionsTable
 }
