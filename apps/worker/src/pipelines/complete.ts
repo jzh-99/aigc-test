@@ -5,6 +5,7 @@ import type { GenerationJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
 import { dispatchBatchResult } from '../lib/dispatch-result.js'
+import { buildCreationResultOutboxPayload, enqueueCreationResultOutbox } from '../lib/biz-mgmt-result-outbox.js'
 import { buildLogger } from '../logger.js'
 
 const logger = buildLogger()
@@ -27,7 +28,7 @@ export async function completePipeline(
   if (actualCredits > jobData.estimatedCredits * 3) actualCredits = jobData.estimatedCredits
 
   const db = getDb()
-  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = jobData
+  const { taskId, batchId, userId, teamId, estimatedCredits } = jobData
 
   const assetId = await db.transaction().execute<string>(async (trx: any) => {
     logger.info({ taskId, batchId }, '开始执行完成管线')
@@ -47,43 +48,8 @@ export async function completePipeline(
       .executeTakeFirstOrThrow()
     logger.info({ assetId: assetResult.id, taskId }, '资产记录已创建')
 
-    // 2. Confirm credits: frozen -= estimated, balance -= actual, total_spent += actual
-    await trx
-      .updateTable('credit_accounts')
-      .set({
-        frozen_credits: sql`frozen_credits - ${estimatedCredits}`,
-        total_spent: sql`total_spent + ${actualCredits}`,
-        balance: sql`balance - ${actualCredits}`,
-      })
-      .where('id', '=', creditAccountId)
-      .execute()
-
-    // Adjust member credit_used if actual differs from estimated
-    if (actualCredits !== estimatedCredits) {
-      const delta = actualCredits - estimatedCredits
-      await trx
-        .updateTable('team_members')
-        .set({
-          credit_used: sql`credit_used + ${delta}`,
-        })
-        .where('team_id', '=', teamId)
-        .where('user_id', '=', userId)
-        .execute()
-    }
-
-    // 3. Insert ledger entry for confirm
-    await trx
-      .insertInto('credits_ledger')
-      .values({
-        credit_account_id: creditAccountId,
-        user_id: userId,
-        amount: -actualCredits,
-        type: 'confirm',
-        task_id: taskId,
-        batch_id: batchId,
-        description: '图片生成成功',
-      })
-      .execute()
+    // 业管化后本地不再维护积分：移除 credit_accounts/credits_ledger/team_members 操作。
+    // 业管 A 豆已在生成前扣减（扣减即终态）；此处只更新 task/batch 状态。
 
     // 4. Update task status (idempotent — skip if already completed)
     const taskUpdate = await trx
@@ -145,6 +111,27 @@ export async function completePipeline(
 
     return assetResult.id
   })
+
+  // 业管身份任务：写创作结果 outbox(success)，由 biz-mgmt-notify-queue 异步通知业管
+  if (jobData.bizMgmtUserId && jobData.bizMgmtDeductRequestNo) {
+    try {
+      await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+        localUserId: userId,
+        bizMgmtUserId: jobData.bizMgmtUserId,
+        teamId,
+        workspaceId: jobData.workspaceId ?? null,
+        batchId,
+        taskId,
+        taskStatus: 'completed',
+        pointsNum: actualCredits,
+        requestNo: jobData.bizMgmtDeductRequestNo,
+        workNo: jobData.bizMgmtWorkNo ?? taskId,
+        module: 'image',
+      }))
+    } catch (outboxErr) {
+      logger.error({ err: outboxErr instanceof Error ? outboxErr.message : String(outboxErr), taskId, batchId }, 'Failed to enqueue creation result outbox (will not block completion)')
+    }
+  }
 
   // 6. 分发终态通知（事务外）
   // 非开放接口任务 → 保持原 SSE 通道（sse:batch:<id>），零改动

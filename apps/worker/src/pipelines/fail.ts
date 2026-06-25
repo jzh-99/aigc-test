@@ -4,6 +4,7 @@ import { ErrorCode } from '@aigc/types'
 import type { GenerationJobData } from '@aigc/types'
 import { getPubRedis } from '../lib/redis.js'
 import { dispatchBatchResult } from '../lib/dispatch-result.js'
+import { buildCreationResultOutboxPayload, enqueueCreationResultOutbox } from '../lib/biz-mgmt-result-outbox.js'
 import { buildLogger } from '../logger.js'
 
 const logger = buildLogger()
@@ -13,12 +14,11 @@ export async function failPipeline(
   errorMessage: string,
 ): Promise<void> {
   const db = getDb()
-  const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = jobData
+  const { taskId, batchId, userId, teamId, estimatedCredits } = jobData
   logger.info({ taskId, batchId, errorMessage }, '开始执行失败管线')
 
   await db.transaction().execute(async (trx: any) => {
-    // 先对 task 行加行锁，防止 timeout-guardian 与正常失败流程并发执行时
-    // 两者同时读到旧状态，导致 frozen_credits 被重复扣减
+    // 先对 task 行加行锁，防止 timeout-guardian 与正常失败流程并发执行
     const taskLock = await sql<{ status: string }>`
       SELECT status FROM tasks WHERE id = ${taskId} FOR UPDATE
     `.execute(trx)
@@ -39,42 +39,10 @@ export async function failPipeline(
       .where('id', '=', taskId)
       .execute()
 
-    // 1. 退还冻结积分：frozen -= estimatedCredits，balance 不变（从未从 balance 扣除）
-    // 用 GREATEST 兜底：防止积分从未被冻结（或冻结步骤失败）时 frozen 变为负数
-    // 若 frozen < estimatedCredits，只退实际有的部分，避免约束报错导致事务回滚死循环
-    await trx
-      .updateTable('credit_accounts')
-      .set({
-        frozen_credits: sql`GREATEST(frozen_credits - ${estimatedCredits}, 0)`,
-      })
-      .where('id', '=', creditAccountId)
-      .execute()
+    // 业管化后本地不再维护积分：移除 credit_accounts/credits_ledger/team_members 退还操作。
+    // 业管 A 豆退款由创作结果 outbox(success=false) 通知业管处理。
 
-    // Decrement member usage
-    await trx
-      .updateTable('team_members')
-      .set({
-        credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)`,
-      })
-      .where('team_id', '=', teamId)
-      .where('user_id', '=', userId)
-      .execute()
-
-    // Insert ledger entry for refund
-    await trx
-      .insertInto('credits_ledger')
-      .values({
-        credit_account_id: creditAccountId,
-        user_id: userId,
-        amount: estimatedCredits,
-        type: 'refund',
-        task_id: taskId,
-        batch_id: batchId,
-        description: `图片生成失败：${errorMessage.slice(0, 200)}`,
-      })
-      .execute()
-
-    // 2. Update batch counts + check terminal (with row lock)
+    // Update batch counts + check terminal (with row lock)
     await trx
       .updateTable('task_batches')
       .set({
@@ -111,6 +79,28 @@ export async function failPipeline(
         .execute()
     }
   })
+
+  // 业管身份任务：写创作结果 outbox(success=false)，由 biz-mgmt-notify-queue 通知业管退款
+  if (jobData.bizMgmtUserId && jobData.bizMgmtDeductRequestNo) {
+    try {
+      await enqueueCreationResultOutbox(buildCreationResultOutboxPayload({
+        localUserId: userId,
+        bizMgmtUserId: jobData.bizMgmtUserId,
+        teamId,
+        workspaceId: jobData.workspaceId ?? null,
+        batchId,
+        taskId,
+        taskStatus: 'failed',
+        pointsNum: estimatedCredits,
+        requestNo: jobData.bizMgmtDeductRequestNo,
+        workNo: jobData.bizMgmtWorkNo ?? taskId,
+        module: 'image',
+        message: errorMessage,
+      }))
+    } catch (outboxErr) {
+      logger.error({ err: outboxErr instanceof Error ? outboxErr.message : String(outboxErr), taskId, batchId }, 'Failed to enqueue creation result outbox (will not block failure handling)')
+    }
+  }
 
   // 3. 分发终态通知（事务外）
   // 非开放接口任务 → 保持原 SSE 通道；开放接口任务 → 走回调队列（失败语义）
