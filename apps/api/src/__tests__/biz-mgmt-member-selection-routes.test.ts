@@ -20,3 +20,12 @@ test('user profile selects business management bindings', () => {
   assert.match(source, /biz_mgmt_member_bindings/)
   assert.match(source, /require_biz_mgmt_member_selection/)
 })
+
+test('select business management member route updates one selected binding', () => {
+  const source = readFileSync(apiSrc('routes/auth/post-select-biz-mgmt-member.ts'), 'utf8')
+  assert.match(source, /\/auth\/select-biz-mgmt-member/)
+  assert.match(source, /is_selected: false/)
+  assert.match(source, /is_selected: true/)
+  // 身份选择只更新绑定状态并返回新 profile，不重签 access token（不破坏单会话语义）
+  assert.match(source, /buildUserProfile/)
+})
