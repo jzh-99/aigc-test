@@ -849,6 +849,47 @@ export interface BizMgmtABeanTransactionsTable {
   updated_at: Generated<Date>
 }
 
+// ─── Business Management Platform Outbox Events ───────────────────────────────
+
+/**
+ * 业务管理平台出站通知 outbox 表。
+ * 所有通知业管的事件先入此表，再由 biz-mgmt-notify-queue 异步投递；
+ * 成功和失败记录都保留。
+ */
+export interface BizMgmtOutboxEventsTable {
+  id: Generated<string>
+  // creation_result_notify | member_sub_card_sync
+  event_type: 'creation_result_notify' | 'member_sub_card_sync'
+  // 幂等键，全局唯一，重复入队复用
+  dedupe_key: string
+  // pending | processing | succeeded | failed
+  status: Generated<'pending' | 'processing' | 'succeeded' | 'failed'>
+  local_user_id: string | null
+  biz_mgmt_user_id: string | null
+  phone: string | null
+  team_id: string | null
+  workspace_id: string | null
+  task_id: string | null
+  batch_id: string | null
+  // 任务终态：completed | failed（仅创作结果同步）
+  task_status: string | null
+  // 事件相关 A 豆数，非余额
+  points_num: string | null
+  // 出站请求 JSON，结构见迁移 COMMENT（逐事件类型说明）
+  payload: unknown
+  // 最近一次业管响应 JSON：{ code, message, decryptedData }
+  last_response: unknown | null
+  last_error: string | null
+  attempt_count: Generated<number>
+  max_attempts: Generated<number>
+  next_attempt_at: Generated<Date>
+  locked_at: Date | null
+  locked_by: string | null
+  sent_at: Date | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── Database Interface ───────────────────────────────────────────────────────
 
 export interface Database {
@@ -900,4 +941,5 @@ export interface Database {
   api_clients: ApiClientsTable
   biz_mgmt_member_bindings: BizMgmtMemberBindingsTable
   biz_mgmt_a_bean_transactions: BizMgmtABeanTransactionsTable
+  biz_mgmt_outbox_events: BizMgmtOutboxEventsTable
 }
