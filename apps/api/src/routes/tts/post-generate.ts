@@ -1,10 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { confirmCredits, freezeCredits, refundCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { signAssetUrl, uploadToTos } from '../../lib/storage.js'
 import { generateMiniMaxTtsAudio, shouldUseMiniMaxStreaming } from '../../services/minimax-tts.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
+import { enqueueBizMgmtOutboxEvent } from '../../services/biz-mgmt-outbox.js'
 
 const MAX_TTS_TEXT_LENGTH = 10000
 const TTS_CONTENT_TYPE = 'audio/mpeg'
@@ -176,12 +177,23 @@ const route: FastifyPluginAsync = async (app) => {
     const actualModel = resolvedModel ?? model
     const estimatedCredits = Math.max(1, Math.ceil(characterCount / 1000)) * unitPrice
 
-    let creditAccountId: string
+    // 业管 A 豆扣减（同步生成：实时余额校验 → 扣减 → 生成）。扣减即终态，无需 confirm。
+    // 生成失败时写创作结果 outbox(success=false) 由 notify worker 通知业管退款。
+    const ttsIdempotencyKey = request.body.idempotency_key ?? `tts_${userId}_${Date.now()}`
+    let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
     try {
-      const result = await freezeCredits(teamId, userId, estimatedCredits, 'TTS 语音合成冻结')
-      creditAccountId = result.creditAccountId
+      const deduction = await deductBizMgmtPointsForGeneration({
+        localUserId: userId,
+        teamId,
+        workspaceId,
+        batchId: ttsIdempotencyKey,
+        pointsNum: estimatedCredits,
+        source: 1,
+        remark: `TTS 语音合成：${model}`,
+      })
+      bizMgmtBilling = deduction
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'A豆余额不足'
+      const message = err instanceof Error ? err.message : 'A 豆余额不足'
       return reply.status(402).send({ success: false, error: { code: 'INSUFFICIENT_CREDITS', message } })
     }
 
@@ -214,8 +226,8 @@ const route: FastifyPluginAsync = async (app) => {
             user_id: userId,
             team_id: teamId,
             workspace_id: workspaceId,
-            credit_account_id: creditAccountId,
-            idempotency_key: request.body.idempotency_key ?? `tts_${userId}_${Date.now()}`,
+            credit_account_id: null,
+            idempotency_key: ttsIdempotencyKey,
             source: 'generation',
             module: 'tts',
             provider: providerModel.providerCode,
@@ -283,7 +295,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       batchId = created.batch.id
       taskId = created.task.id
-      await confirmCredits(creditAccountId, userId, estimatedCredits, taskId, batchId, 'TTS 语音合成确认')
+      // 业管扣减已在生成前完成（扣减即终态），无需 confirmCredits
 
       return reply.status(201).send({
         id: created.batch.id,
@@ -315,9 +327,34 @@ const route: FastifyPluginAsync = async (app) => {
       })
     } catch (err) {
       app.log.error({ err }, 'TTS generation failed')
-      await refundCredits(teamId, creditAccountId, userId, estimatedCredits, taskId ?? undefined, batchId ?? undefined, 'TTS 语音合成退款').catch(() => {})
+      // 业管 A 豆已在生成前扣减；生成失败时写创作结果 outbox(success=false)，
+      // 由 biz-mgmt-notify-queue 通知业管退款（本地不退、不维护积分）。
+      // taskId/batchId 可能为空（生成阶段即失败、未创建 batch），此时用 idempotency 占位。
+      try {
+        await enqueueBizMgmtOutboxEvent({
+          eventType: 'creation_result_notify',
+          dedupeKey: `creation-result:${bizMgmtBilling.requestNo}`,
+          localUserId: userId,
+          bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+          teamId,
+          workspaceId,
+          batchId: batchId ?? ttsIdempotencyKey,
+          taskId: taskId ?? ttsIdempotencyKey,
+          taskStatus: 'failed',
+          pointsNum: estimatedCredits,
+          payload: {
+            userId: bizMgmtBilling.bizMgmtUserId,
+            requestNo: bizMgmtBilling.requestNo,
+            workNo: bizMgmtBilling.workNo,
+            success: false,
+            remark: `创作失败：tts`,
+          },
+        })
+      } catch (outboxErr) {
+        app.log.error({ err: outboxErr }, 'Failed to enqueue tts creation result outbox')
+      }
       const message = err instanceof Error ? err.message : '音频生成失败'
-      return reply.status(502).send({ success: false, error: { code: 'TTS_GENERATION_FAILED', message: `${message}（积分已退回）` } })
+      return reply.status(502).send({ success: false, error: { code: 'TTS_GENERATION_FAILED', message: `${message}（A 豆退款将由业管处理）` } })
     }
   })
 }

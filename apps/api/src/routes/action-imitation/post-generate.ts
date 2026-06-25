@@ -2,10 +2,11 @@ import type { FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { buildSignedRequest } from '../../lib/volcengine-visual-sign.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { ACTION_API_VERSION } from './_shared.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
+import { enqueueBizMgmtOutboxEvent } from '../../services/biz-mgmt-outbox.js'
 
 // POST /action-imitation/generate — 提交动作模仿视频生成任务
 const route: FastifyPluginAsync = async (app) => {
@@ -106,13 +107,23 @@ const route: FastifyPluginAsync = async (app) => {
     const estimatedSeconds = Math.ceil(video_duration)
     const estimatedCredits = estimatedSeconds * unitPrice
 
-    // 冻结积分
-    let creditAccountId: string
+    // 业管 A 豆扣减（同步生成：实时余额校验 → 扣减 → 提交）。扣减即终态。
+    // 提交失败时写创作结果 outbox(success=false) 由 notify worker 通知业管退款。
+    const actionIdempotencyKey = randomUUID()
+    let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
     try {
-      const result = await freezeCredits(teamId, userId, estimatedCredits, '动作模仿生成冻结')
-      creditAccountId = result.creditAccountId
+      const deduction = await deductBizMgmtPointsForGeneration({
+        localUserId: userId,
+        teamId,
+        workspaceId,
+        batchId: actionIdempotencyKey,
+        pointsNum: estimatedCredits,
+        source: 1,
+        remark: `动作模仿生成`,
+      })
+      bizMgmtBilling = deduction
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Credit error'
+      const msg = err instanceof Error ? err.message : '业管 A 豆扣减失败'
       return reply.status(402).send({ success: false, error: { code: 'INSUFFICIENT_CREDITS', message: msg } })
     }
 
@@ -124,11 +135,11 @@ const route: FastifyPluginAsync = async (app) => {
         const batchResult = await trx
           .insertInto('task_batches')
           .values({
-            idempotency_key: randomUUID(),
+            idempotency_key: actionIdempotencyKey,
             user_id: userId,
             team_id: teamId,
             workspace_id: workspaceId,
-            credit_account_id: creditAccountId,
+            credit_account_id: null,
             source: 'generation',
             module: 'action_imitation',
             provider: 'volcengine',
@@ -163,9 +174,18 @@ const route: FastifyPluginAsync = async (app) => {
       batchId = _bt.batchId
       taskId = _bt.taskId
     } catch (err) {
-      app.log.error({ err }, 'Failed to create action_imitation batch/task, refunding credits')
-      try { await refundCredits(teamId, creditAccountId, userId, estimatedCredits, undefined, undefined, '动作模仿生成退款') } catch { /* ignore */ }
-      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回' } })
+      app.log.error({ err }, 'Failed to create action_imitation batch/task')
+      // 业管扣减已完成，本地不退；写 outbox(success=false) 通知业管退款
+      try {
+        await enqueueBizMgmtOutboxEvent({
+          eventType: 'creation_result_notify',
+          dedupeKey: `creation-result:${bizMgmtBilling.requestNo}`,
+          localUserId: userId, bizMgmtUserId: bizMgmtBilling.bizMgmtUserId, teamId, workspaceId,
+          batchId: actionIdempotencyKey, taskId: actionIdempotencyKey, taskStatus: 'failed', pointsNum: estimatedCredits,
+          payload: { userId: bizMgmtBilling.bizMgmtUserId, requestNo: bizMgmtBilling.requestNo, workNo: bizMgmtBilling.workNo, success: false, remark: '创作失败：action_imitation（batch 创建失败）' },
+        })
+      } catch (outboxErr) { app.log.error({ err: outboxErr }, 'Failed to enqueue action_imitation creation result outbox') }
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: '任务创建失败，A 豆退款将由业管处理' } })
     }
 
     // 提交到火山引擎 Action Imitation 2.0 API
@@ -200,14 +220,20 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     if (!externalTaskId) {
-      // 提交失败：标记任务失败并退还积分
+      // 提交失败：标记任务失败，写创作结果 outbox(success=false) 通知业管退款（本地不碰积分）
       await db.transaction().execute(async (trx: any) => {
         await trx.updateTable('tasks').set({ status: 'failed', error_message: lastError.slice(0, 1000), completed_at: new Date().toISOString() }).where('id', '=', taskId).execute()
         await trx.updateTable('task_batches').set({ status: 'failed', failed_count: sql`failed_count + 1` }).where('id', '=', batchId).execute()
-        await trx.updateTable('credit_accounts').set({ frozen_credits: sql`frozen_credits - ${estimatedCredits}` }).where('id', '=', creditAccountId).execute()
-        await trx.updateTable('team_members').set({ credit_used: sql`GREATEST(credit_used - ${estimatedCredits}, 0)` }).where('team_id', '=', teamId).where('user_id', '=', userId).execute()
-        await trx.insertInto('credits_ledger').values({ credit_account_id: creditAccountId, user_id: userId, amount: estimatedCredits, type: 'refund', task_id: taskId, batch_id: batchId, description: `动作模仿任务提交失败：${lastError.slice(0, 200)}` }).execute()
       })
+      try {
+        await enqueueBizMgmtOutboxEvent({
+          eventType: 'creation_result_notify',
+          dedupeKey: `creation-result:${bizMgmtBilling.requestNo}`,
+          localUserId: userId, bizMgmtUserId: bizMgmtBilling.bizMgmtUserId, teamId, workspaceId,
+          batchId, taskId, taskStatus: 'failed', pointsNum: estimatedCredits,
+          payload: { userId: bizMgmtBilling.bizMgmtUserId, requestNo: bizMgmtBilling.requestNo, workNo: bizMgmtBilling.workNo, success: false, remark: `创作失败：action_imitation，${lastError.slice(0, 200)}` },
+        })
+      } catch (outboxErr) { app.log.error({ err: outboxErr }, 'Failed to enqueue action_imitation creation result outbox') }
       try { await (request.server as any).redis.publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' })) } catch { /* ignore */ }
       return reply.status(502).send({ success: false, error: { code: 'ACTION_IMITATION_API_ERROR', message: `动作模仿服务暂时不可用：${lastError.slice(0, 300)}` } })
     }
