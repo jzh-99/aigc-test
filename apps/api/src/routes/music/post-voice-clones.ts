@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import type { MusicVoiceCloneJobData } from '@aigc/types'
 import { deleteTosObject, extractStorageKey, uploadToTos } from '../../lib/storage.js'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getMusicVoiceCloneQueue } from '../../lib/queue.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 import {
   assertWorkspaceAccess,
   getExpectedCreditErrorMessage,
@@ -128,15 +128,26 @@ const route: FastifyPluginAsync = async (app) => {
       }
       const uploadedAudioUrl = sourceAudioUrl
 
-      let creditAccountId: string
+      // 业管 A 豆扣减（所有用户统一走业管：实时余额校验 → 扣减 → 成功后才创建任务）
+      // idempotency_key 提前生成，用作扣减幂等号 + batch 幂等键，保证稳定可追溯
+      const voiceCloneIdempotencyKey = randomUUID()
+      let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
       try {
-        const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits, '音色克隆冻结')
-        creditAccountId = frozen.creditAccountId
+        const deduction = await deductBizMgmtPointsForGeneration({
+          localUserId: userId,
+          teamId: access.teamId,
+          workspaceId,
+          batchId: voiceCloneIdempotencyKey,
+          pointsNum: credits.estimatedCredits,
+          source: 1,
+          remark: `音色克隆：${payload.name}`,
+        })
+        bizMgmtBilling = deduction
       } catch (error) {
         const message = getExpectedCreditErrorMessage(error)
         await cleanupUploadedAudio(sourceAudioUrl, app.log)
         if (!message) {
-          app.log.error({ err: error }, 'Failed to freeze credits for music voice clone')
+          app.log.error({ err: error }, 'Failed to deduct a beans for music voice clone')
           return reply.status(500).send({
             success: false,
             error: { code: 'INTERNAL_ERROR', message: '请求处理失败，请稍后重试' },
@@ -157,8 +168,8 @@ const route: FastifyPluginAsync = async (app) => {
               user_id: userId,
               team_id: access.teamId,
               workspace_id: workspaceId,
-              credit_account_id: creditAccountId,
-              idempotency_key: randomUUID(),
+              credit_account_id: null,
+              idempotency_key: voiceCloneIdempotencyKey,
               source: 'studio',
               module: 'music_voice_clone',
               provider: credits.providerCode,
@@ -221,8 +232,11 @@ const route: FastifyPluginAsync = async (app) => {
           userId,
           teamId: access.teamId,
           workspaceId,
-          creditAccountId,
           estimatedCredits: credits.estimatedCredits,
+          // 业管计费上下文，供 worker 终态写创作结果 outbox
+          bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+          bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+          bizMgmtWorkNo: bizMgmtBilling.workNo,
         }
         await getMusicVoiceCloneQueue().add('music-voice-clone', jobData)
       } catch (error) {
@@ -240,11 +254,7 @@ const route: FastifyPluginAsync = async (app) => {
           }
         }
         await cleanupUploadedAudio(sourceAudioUrl, app.log)
-        try {
-          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits, created?.task.id, created?.batch.id, '音色克隆退款')
-        } catch (refundError) {
-          app.log.error({ err: refundError }, 'Failed to refund music voice clone credits')
-        }
+        // 业管扣减已完成，本地不再退积分；由 biz_mgmt_a_bean_transactions 审计 + 人工对账
         return reply.status(500).send({
           success: false,
           error: { code: 'INTERNAL_ERROR', message: '任务创建失败，请稍后重试' },

@@ -7,10 +7,10 @@ import {
   type VideoCategory,
   type VideoReferenceCounts,
 } from '@aigc/types'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { getVideoQueue } from '../../lib/queue.js'
 import { resolveBatchSource } from '../../lib/batch-source.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 
 // 视频生成允许的 params 键白名单
 const ALLOWED_PARAM_KEYS = new Set([
@@ -216,13 +216,22 @@ const route: FastifyPluginAsync = async (app) => {
       unitPrice,
     })
 
-    // 冻结积分
-    let creditAccountId: string
+    // 业管 A 豆扣减（所有用户统一走业管：实时余额校验 → 扣减 → 成功后才创建任务）
+    const deductBatchId = `${userId}-${Date.now()}`
+    let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
     try {
-      const result = await freezeCredits(teamId, userId, estimatedCredits, '视频生成冻结')
-      creditAccountId = result.creditAccountId
+      const deduction = await deductBizMgmtPointsForGeneration({
+        localUserId: userId,
+        teamId,
+        workspaceId,
+        batchId: deductBatchId,
+        pointsNum: estimatedCredits,
+        source: 1,
+        remark: `视频生成：${model}`,
+      })
+      bizMgmtBilling = deduction
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Credit error'
+      const msg = err instanceof Error ? err.message : '业管 A 豆扣减失败'
       return reply.status(402).send({ success: false, error: { code: 'INSUFFICIENT_CREDITS', message: msg } })
     }
 
@@ -235,8 +244,8 @@ const route: FastifyPluginAsync = async (app) => {
             user_id: userId,
             team_id: teamId,
             workspace_id: workspaceId,
-            credit_account_id: creditAccountId,
-            idempotency_key: `${userId}-${Date.now()}`,
+            credit_account_id: null,
+            idempotency_key: deductBatchId,
             source: resolveBatchSource({
               module: 'video',
               canvasId,
@@ -278,12 +287,16 @@ const route: FastifyPluginAsync = async (app) => {
         batchId: batch.id,
         userId,
         teamId,
-        creditAccountId,
+        workspaceId,
         provider: providerModel.providerCode,
         model,
         prompt,
         params,
         estimatedCredits,
+        // 业管计费上下文，供 worker 终态写创作结果 outbox
+        bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+        bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+        bizMgmtWorkNo: bizMgmtBilling.workNo,
       })
 
       return reply.status(201).send({
@@ -313,9 +326,9 @@ const route: FastifyPluginAsync = async (app) => {
         }],
       })
     } catch (err) {
-      await refundCredits(teamId, creditAccountId, userId, estimatedCredits, undefined, undefined, '视频生成退款').catch(() => {})
+      // 业管扣减已完成，本地不再退积分；由 biz_mgmt_a_bean_transactions 审计 + 人工对账
       app.log.error({ err }, 'Failed to create video batch/task')
-      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回' } })
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: '任务创建失败，请稍后重试或联系管理员核对 A 豆扣减' } })
     }
   })
 }

@@ -2,8 +2,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import type { MusicJobData } from '@aigc/types'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
 import { getMusicQueue } from '../../lib/queue.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 import {
   assertVoiceCloneReadyForWorkspace,
   assertWorkspaceAccess,
@@ -140,15 +140,24 @@ const route: FastifyPluginAsync = async (app) => {
         resolvedVoiceId: voice?.voice_id ?? null,
       }, 'Music generate credits resolved')
 
-      let creditAccountId: string
+      // 业管 A 豆扣减（所有用户统一走业管：实时余额校验 → 扣减 → 成功后才创建任务）
+      let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
       try {
-        const frozen = await freezeCredits(access.teamId, userId, credits.estimatedCredits, '音乐生成冻结')
-        creditAccountId = frozen.creditAccountId
-        app.log.info({ ...logCtx, teamId: access.teamId, creditAccountId, estimatedCredits: credits.estimatedCredits }, 'Music generate credits frozen')
+        const deduction = await deductBizMgmtPointsForGeneration({
+          localUserId: userId,
+          teamId: access.teamId,
+          workspaceId: payload.workspace_id,
+          batchId: idempotencyKey,
+          pointsNum: credits.estimatedCredits,
+          source: 1,
+          remark: `音乐生成：${payload.model}`,
+        })
+        bizMgmtBilling = deduction
+        app.log.info({ ...logCtx, teamId: access.teamId, estimatedCredits: credits.estimatedCredits }, 'Music generate a beans deducted')
       } catch (error) {
         const message = getExpectedCreditErrorMessage(error)
         if (!message) {
-          app.log.error({ err: error }, 'Failed to freeze credits for music generation')
+          app.log.error({ err: error }, 'Failed to deduct a beans for music generation')
           return reply.status(500).send({
             success: false,
             error: { code: 'INTERNAL_ERROR', message: '请求处理失败，请稍后重试' },
@@ -182,7 +191,7 @@ const route: FastifyPluginAsync = async (app) => {
               user_id: userId,
               team_id: access.teamId,
               workspace_id: payload.workspace_id,
-              credit_account_id: creditAccountId,
+              credit_account_id: null,
               idempotency_key: idempotencyKey,
               source: 'studio',
               module: 'music',
@@ -241,8 +250,11 @@ const route: FastifyPluginAsync = async (app) => {
           userId,
           teamId: access.teamId,
           workspaceId: payload.workspace_id,
-          creditAccountId,
           estimatedCredits: credits.estimatedCredits,
+          // 业管计费上下文，供 worker 终态写创作结果 outbox
+          bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+          bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+          bizMgmtWorkNo: bizMgmtBilling.workNo,
         }
         await getMusicQueue().add('music-generate', jobData)
         app.log.info({
@@ -250,7 +262,6 @@ const route: FastifyPluginAsync = async (app) => {
           batchId: created.batch.id,
           taskId: created.task.id,
           trackId: created.track.id,
-          creditAccountId,
           estimatedCredits: credits.estimatedCredits,
         }, 'Music generate task queued')
       } catch (error) {
@@ -267,11 +278,7 @@ const route: FastifyPluginAsync = async (app) => {
             app.log.error({ err: markError }, 'Failed to mark music task as failed after queue delivery failure')
           }
         }
-        try {
-          await refundCredits(access.teamId, creditAccountId, userId, credits.estimatedCredits, created?.task.id, created?.batch.id, '音乐生成退款')
-        } catch (refundError) {
-          app.log.error({ err: refundError }, 'Failed to refund music credits after task creation failure')
-        }
+        // 业管扣减已完成，本地不再退积分；由 biz_mgmt_a_bean_transactions 审计 + 人工对账
         return reply.status(500).send({
           success: false,
           error: { code: 'INTERNAL_ERROR', message: '任务创建失败，请稍后重试' },
