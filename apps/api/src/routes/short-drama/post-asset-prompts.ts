@@ -13,7 +13,7 @@ import {
   markShortDramaProjectFailed,
   type ShortDramaAssetPromptInput,
 } from './_text-generation.js'
-import { freezeCredits } from '../../services/credit.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { createShortDramaSSESession } from './_sse.js'
 import {
@@ -176,13 +176,21 @@ const route: FastifyPluginAsync = async (app) => {
     let warningMessage: string | null = null
 
     try {
-      for (const batch of batches) {
-        let creditAccountId: string
+      for (const [batchIndex, batch] of batches.entries()) {
+        // 业管 A 豆扣减（每批独立幂等号）；本地不再冻结积分
+        const creditAccountId = ''
 
         try {
-          const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS, '短剧素材描述冻结')
-          creditAccountId = freezeResult.creditAccountId
-          // 第一批冻结后创建文本任务记录（creditAccountId 已可用，整个生成仅创建一次）
+          await deductBizMgmtPointsForGeneration({
+            localUserId: userId,
+            teamId,
+            workspaceId: project.workspace_id,
+            batchId: `shortdrama-assetprompts-${projectId}-${batch.from}-${batch.to}`,
+            pointsNum: ESTIMATED_CREDITS,
+            source: 1,
+            remark: `短剧素材描述生成（第${batchIndex + 1}批）`,
+          })
+          // 第一批扣减后创建文本任务记录（整个生成仅创建一次）
           if (!textTaskId) {
             try {
               textTaskId = await createShortDramaTextTaskBatch({

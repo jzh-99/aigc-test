@@ -16,7 +16,7 @@ import {
   calculateTextGenerationCredits,
   markShortDramaProjectFailed,
 } from './_text-generation.js'
-import { freezeCredits } from '../../services/credit.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 import { acquireRedisLock, releaseRedisLock, type RedisLockHandle } from '../../lib/distributed-lock.js'
 import { createShortDramaSSESession } from './_sse.js'
 import {
@@ -102,14 +102,21 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 预冻结积分
-    let creditAccountId: string
+    // 业管 A 豆扣减（生成前实时余额校验 → 扣减）。本地不再冻结积分。
+    const creditAccountId = ''
     try {
-      const freezeResult = await freezeCredits(teamId, userId, ESTIMATED_CREDITS, '短剧片段脚本冻结')
-      creditAccountId = freezeResult.creditAccountId
+      await deductBizMgmtPointsForGeneration({
+        localUserId: userId,
+        teamId,
+        workspaceId: project.workspace_id,
+        batchId: `shortdrama-segments-${projectId}-${episodeNumber}`,
+        pointsNum: ESTIMATED_CREDITS,
+        source: 1,
+        remark: `短剧片段脚本生成（第${episodeNumber}集）`,
+      })
     } catch (error) {
       await releaseRedisLock(app.redis, generationLock)
-      const message = error instanceof Error ? error.message : '积分冻结失败'
+      const message = error instanceof Error ? error.message : '业管 A 豆扣减失败'
       return reply.status(402).send({
         error: { code: 'INSUFFICIENT_CREDITS', message },
       })

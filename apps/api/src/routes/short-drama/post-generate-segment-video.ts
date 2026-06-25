@@ -8,7 +8,7 @@ import {
   parseCategoryReferences,
 } from '@aigc/types'
 import type { ShortDramaAsset, ShortDramaAspectRatio, ShortDramaSegment } from '@aigc/types'
-import { freezeCredits } from '../../services/credit.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { encryptProxyUrl } from '../../lib/storage.js'
 import { getVideoQueue } from '../../lib/queue.js'
@@ -361,13 +361,22 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
       const { unitPrice } = resolveUnitPrice(modelRecord.params_pricing, resolution)
       const totalCost = isSeedance ? durationSeconds * unitPrice : unitPrice
 
-      // 冻结积分
-      let creditAccountId: string
+      // 业管 A 豆扣减（生成前实时余额校验 → 扣减）
+      const segmentVideoBatchId = `shortdrama-segmentvideo-${project.id}-${episodeNumber}-${segmentId}`
+      let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
       try {
-        const result = await freezeCredits(teamId, userId, totalCost, '短剧片段视频生成冻结')
-        creditAccountId = result.creditAccountId
+        const deduction = await deductBizMgmtPointsForGeneration({
+          localUserId: userId,
+          teamId,
+          workspaceId: project.workspace_id,
+          batchId: segmentVideoBatchId,
+          pointsNum: totalCost,
+          source: 1,
+          remark: `短剧片段视频生成（第${episodeNumber}集 ${segmentId}）`,
+        })
+        bizMgmtBilling = deduction
       } catch (err) {
-        const msg = err instanceof Error ? err.message : '积分不足'
+        const msg = err instanceof Error ? err.message : '业管 A 豆扣减失败'
         return reply.status(402).send({
           success: false,
           error: { code: 'INSUFFICIENT_CREDITS', message: msg },
@@ -401,7 +410,7 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
               user_id: userId,
               team_id: teamId,
               workspace_id: project.workspace_id,
-              credit_account_id: creditAccountId,
+              credit_account_id: null,
               idempotency_key: randomUUID(),
               source: 'studio',
               module: 'video',
@@ -450,12 +459,16 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
           batchId,
           userId,
           teamId,
-          creditAccountId,
+          workspaceId: project.workspace_id,
           provider: modelRecord.providerCode,
           model: modelCode,
           prompt: finalVideoPrompt,
           params: videoParams,
           estimatedCredits: totalCost,
+          // 业管计费上下文，供 worker 终态写创作结果 outbox
+          bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+          bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+          bizMgmtWorkNo: bizMgmtBilling.workNo,
         })
 
         // 更新 segment 状态为 generating，并让该集旧导出失效。

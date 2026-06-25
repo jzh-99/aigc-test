@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import { SHORT_DRAMA_IMAGE_MODEL } from '@aigc/types'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 import { getImageQueue } from '../../lib/queue.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import {
@@ -151,13 +151,22 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
       const { unitPrice } = resolveUnitPrice(providerModel.params_pricing, null)
       const totalCost = unitPrice * targetAssets.length
 
-      // 冻结积分
-      let creditAccountId: string
+      // 业管 A 豆扣减（生成前实时余额校验 → 扣减）
+      const assetsBatchId = `shortdrama-assets-${project.id}`
+      let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
       try {
-        const result = await freezeCredits(teamId, userId, totalCost, '短剧素材图片生成冻结')
-        creditAccountId = result.creditAccountId
+        const deduction = await deductBizMgmtPointsForGeneration({
+          localUserId: userId,
+          teamId,
+          workspaceId: project.workspace_id,
+          batchId: assetsBatchId,
+          pointsNum: totalCost,
+          source: 1,
+          remark: `短剧素材图片生成`,
+        })
+        bizMgmtBilling = deduction
       } catch (err) {
-        const msg = err instanceof Error ? err.message : '积分不足'
+        const msg = err instanceof Error ? err.message : '业管 A 豆扣减失败'
         return reply.status(402).send({
           success: false,
           error: { code: 'INSUFFICIENT_CREDITS', message: msg },
@@ -179,7 +188,7 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
               user_id: userId,
               team_id: teamId,
               workspace_id: project.workspace_id,
-              credit_account_id: creditAccountId,
+              credit_account_id: null,
               idempotency_key: randomUUID(),
               source: 'studio',
               module: 'image',
@@ -259,12 +268,16 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
               batchId: batchResult.batch.id,
               userId,
               teamId,
-              creditAccountId,
+              workspaceId: project.workspace_id,
               provider: providerModel.providerCode,
               model: modelCode,
               prompt: targetPrompts[i],
               params: { aspect_ratio: aspectRatio },
               estimatedCredits: unitPrice,
+              // 业管计费上下文，供 worker 终态写创作结果 outbox
+              bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+              bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+              bizMgmtWorkNo: bizMgmtBilling.workNo,
             },
             opts: { priority: 10 },
           }
@@ -278,15 +291,11 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
           estimatedCredits: totalCost,
         })
       } catch (err) {
-        app.log.error({ err }, 'Failed to create asset generation batch, refunding')
-        try {
-          await refundCredits(teamId, creditAccountId, userId, totalCost, undefined, undefined, '短剧素材图片生成退款')
-        } catch (refundErr) {
-          app.log.error({ refundErr }, 'CRITICAL: Failed to refund credits after asset batch failure')
-        }
+        // 业管扣减已完成，本地不退；由 biz_mgmt_a_bean_transactions 审计 + 人工对账
+        app.log.error({ err }, 'Failed to create asset generation batch')
         return reply.status(500).send({
           success: false,
-          error: { code: 'INTERNAL_ERROR', message: '任务创建失败，积分已退回' },
+          error: { code: 'INTERNAL_ERROR', message: '任务创建失败，A 豆退款将由业管处理' },
         })
       }
     }

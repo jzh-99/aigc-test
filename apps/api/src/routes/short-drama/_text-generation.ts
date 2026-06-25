@@ -608,24 +608,14 @@ export function parseAndValidateJson(
 
 
 /**
- * 原子化保存项目状态并结算积分（状态保存 + 积分确认 + ledger 在同一事务中）
+ * 原子化保存项目状态（业管 A 豆已改为生成前扣减，本函数不再结算本地积分）。
  *
- * 对齐 worker complete pipeline 的积分结算逻辑：
- * - 安全处理：actualCredits < 0 时设为 0，> estimatedCredits * 3 时设为 estimatedCredits
- * - 在同一事务中：保存状态、解冻并扣除积分、调整成员额度、插入 ledger
+ * 迁移说明：原实现对齐 worker complete pipeline 的本地积分结算（解冻+扣余额+ledger）。
+ * 业管化后 A 豆在生成前由 deductBizMgmtPointsForGeneration 实时扣减（扣减即终态），
+ * 本函数只负责 short_drama_projects 状态/累计积分写入；creditAccountId/estimatedCredits
+ * 参数保留以兼容调用方签名，但不再读写 credit_accounts/credits_ledger/team_members。
  *
- * @param input - 结算参数
- * @param input.projectId - 项目 ID
- * @param input.state - 新的状态对象
- * @param input.actualCredits - 实际消耗的积分
- * @param input.estimatedCredits - 预估冻结的积分
- * @param input.creditAccountId - 积分账户 ID
- * @param input.userId - 用户 ID
- * @param input.teamId - 团队 ID
- * @param input.status - 可选：项目状态
- * @param input.title - 可选：项目标题
- * @returns 实际结算的积分数
- * @throws 如果事务执行失败
+ * @returns 实际结算的积分数（安全钳制后，仍用于项目 actual_credits 累计展示）
  */
 export async function saveShortDramaStateAndSettleCredits(input: {
   projectId: string
@@ -644,15 +634,15 @@ export async function saveShortDramaStateAndSettleCredits(input: {
     state,
     actualCredits: rawActualCredits,
     estimatedCredits,
-    creditAccountId,
-    userId,
-    teamId,
+    userId: _userId,
+    teamId: _teamId,
+    creditAccountId: _creditAccountId,
     status,
     title,
     episodeCount,
   } = input
 
-  // 安全处理：对齐 worker complete pipeline 逻辑
+  // 安全处理：对齐原 worker complete pipeline 逻辑（仅用于项目累计展示，不写本地积分）
   let safeActualCredits = rawActualCredits
   if (safeActualCredits < 0) {
     safeActualCredits = 0
@@ -664,7 +654,7 @@ export async function saveShortDramaStateAndSettleCredits(input: {
   const db = getDb()
 
   await db.transaction().execute(async (trx) => {
-    // 1. 更新项目状态和累计积分
+    // 仅更新项目状态和累计积分（actual_credits 仅作展示，业管扣减权威在 biz_mgmt_a_bean_transactions）
     const projectUpdate: Record<string, unknown> = {
       state: JSON.stringify(state),
       actual_credits: sql`actual_credits + ${safeActualCredits}`,
@@ -688,75 +678,20 @@ export async function saveShortDramaStateAndSettleCredits(input: {
       .set(projectUpdate)
       .where('id', '=', projectId)
       .execute()
-
-    // 2. 更新积分账户：解冻预估额度，扣除实际消耗
-    await trx
-      .updateTable('credit_accounts')
-      .set({
-        frozen_credits: sql`GREATEST(frozen_credits - ${estimatedCredits}, 0)`,
-        balance: sql`balance - ${safeActualCredits}`,
-        total_spent: sql`total_spent + ${safeActualCredits}`,
-      })
-      .where('id', '=', creditAccountId)
-      .execute()
-
-    // 3. 如果实际消耗与预估不同，调整成员已用额度
-    if (safeActualCredits !== estimatedCredits) {
-      const delta = safeActualCredits - estimatedCredits
-      await trx
-        .updateTable('team_members')
-        .set({
-          credit_used: sql`GREATEST(credit_used + ${delta}, 0)`,
-        })
-        .where('team_id', '=', teamId)
-        .where('user_id', '=', userId)
-        .execute()
-    }
-
-    // 4. 插入积分确认 ledger 记录
-    await trx
-      .insertInto('credits_ledger')
-      .values({
-        credit_account_id: creditAccountId,
-        user_id: userId,
-        amount: -safeActualCredits,
-        type: 'confirm',
-        description: 'AI 短剧文本生成实际扣费',
-      })
-      .execute()
-
-    // 5. 如果实际消耗小于预估，插入退还 ledger 记录（审计清晰）
-    if (safeActualCredits < estimatedCredits) {
-      const refundAmount = estimatedCredits - safeActualCredits
-      await trx
-        .insertInto('credits_ledger')
-        .values({
-          credit_account_id: creditAccountId,
-          user_id: userId,
-          amount: refundAmount,
-          type: 'refund',
-          description: 'AI 短剧文本生成预估差额退还',
-        })
-        .execute()
-    }
   })
 
   return { settledCredits: safeActualCredits }
 }
 
 /**
- * 安全退还积分（包装 refundCredits，捕获异常并记录日志）
+ * 短剧文本生成失败时的退款回退（业管化后改为 no-op + 日志）。
  *
- * @param app - Fastify 实例（用于日志记录）
- * @param teamId - 团队 ID
- * @param creditAccountId - 积分账户 ID
- * @param userId - 用户 ID
- * @param amount - 退还金额
- * @param projectId - 项目 ID（用于日志）
- * @param context - 上下文描述（用于日志）
+ * 迁移说明：业管 A 豆在生成前已扣减；本地不再退积分。失败退款应由调用方写
+ * 创作结果 outbox(success=false) 由 biz-mgmt-notify-queue 通知业管处理。
+ * 本函数保留签名兼容现有调用点，但不再触碰 credit_accounts。
  */
 export async function safeRefundCredits(
-  app: { log: { error: (obj: unknown, msg: string) => void } },
+  app: { log: { warn: (obj: unknown, msg: string) => void } },
   teamId: string,
   creditAccountId: string,
   userId: string,
@@ -764,13 +699,8 @@ export async function safeRefundCredits(
   projectId: string,
   context: string
 ): Promise<void> {
-  try {
-    const { refundCredits } = await import('../../services/credit.js')
-    await refundCredits(teamId, creditAccountId, userId, amount, undefined, undefined, `短剧退款（${context}）`)
-  } catch (refundError) {
-    app.log.error(
-      { refundError, projectId, creditAccountId, teamId, userId, amount, context },
-      `短剧文本生成积分退还失败（${context}），需要人工处理`
-    )
-  }
+  app.log.warn(
+    { projectId, creditAccountId, teamId, userId, amount, context },
+    `短剧文本生成失败（${context}）：业管 A 豆已预扣，退款由业管侧 outbox 流程处理，本地不退`,
+  )
 }

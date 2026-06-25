@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import type { ShortDramaExportEpisodeJobData, ShortDramaEpisodeExport } from '@aigc/types'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 import { getShortDramaExportQueue } from '../../lib/queue.js'
 import {
   assertShortDramaProjectAccess,
@@ -85,13 +85,21 @@ export default async function postExportBatch(app: FastifyInstance): Promise<voi
       const exportCreditsPerEpisode = await getExportCredits()
       const totalCost = exportCreditsPerEpisode * exportableEpisodes.length
 
-      // 冻结总积分
-      let creditAccountId: string
+      // 业管 A 豆扣减（批量级：实时余额校验 → 一次性扣总费用）
+      let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
       try {
-        const result = await freezeCredits(teamId, userId, totalCost, '短剧批量导出冻结')
-        creditAccountId = result.creditAccountId
+        const deduction = await deductBizMgmtPointsForGeneration({
+          localUserId: userId,
+          teamId,
+          workspaceId: project.workspace_id,
+          batchId: `shortdrama-exportbatch-${project.id}`,
+          pointsNum: totalCost,
+          source: 1,
+          remark: `短剧批量导出（${exportableEpisodes.length}集）`,
+        })
+        bizMgmtBilling = deduction
       } catch (err) {
-        const msg = err instanceof Error ? err.message : '积分不足'
+        const msg = err instanceof Error ? err.message : '业管 A 豆扣减失败'
         return reply.status(402).send({
           success: false,
           error: { code: 'INSUFFICIENT_CREDITS', message: msg },
@@ -135,7 +143,7 @@ export default async function postExportBatch(app: FastifyInstance): Promise<voi
           .where('id', '=', project.id)
           .execute()
 
-        // 为每集入队导出任务
+        // 为每集入队导出任务（业管计费上下文共享，outbox dedupe_key 基于 requestNo 幂等）
         const jobs = exportEpisodeNumbers.map(num => ({
           name: 'export-episode',
           data: {
@@ -145,8 +153,11 @@ export default async function postExportBatch(app: FastifyInstance): Promise<voi
             userId,
             teamId,
             workspaceId: project.workspace_id,
-            creditAccountId,
             estimatedCredits: exportCreditsPerEpisode,
+            // 业管计费上下文，供 worker 终态写创作结果 outbox
+            bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+            bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+            bizMgmtWorkNo: bizMgmtBilling.workNo,
           } satisfies ShortDramaExportEpisodeJobData,
         }))
 
@@ -161,15 +172,11 @@ export default async function postExportBatch(app: FastifyInstance): Promise<voi
           failedCount: 0,
         })
       } catch (err) {
-        app.log.error({ err }, 'Failed to create batch export jobs, refunding')
-        try {
-          await refundCredits(teamId, creditAccountId, userId, totalCost, undefined, undefined, '短剧批量导出退款')
-        } catch (refundErr) {
-          app.log.error({ refundErr }, 'CRITICAL: Failed to refund after batch export failure')
-        }
+        // 业管扣减已完成，本地不退；由 biz_mgmt_a_bean_transactions 审计 + 人工对账
+        app.log.error({ err }, 'Failed to create batch export jobs')
         return reply.status(500).send({
           success: false,
-          error: { code: 'INTERNAL_ERROR', message: '批量导出任务创建失败，积分已退回' },
+          error: { code: 'INTERNAL_ERROR', message: '批量导出任务创建失败，A 豆退款将由业管处理' },
         })
       }
     }

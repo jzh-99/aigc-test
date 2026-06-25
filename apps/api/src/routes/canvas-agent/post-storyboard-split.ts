@@ -53,18 +53,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       const teamId = member?.team_id ?? ''
 
-      // 查团队积分账户（不扣积分，但字段 NOT NULL）
-      const creditAccount = await db
-        .selectFrom('credit_accounts')
-        .select('id')
-        .where('team_id', '=', teamId)
-        .where('owner_type', '=', 'team')
-        .executeTakeFirst()
-
-      if (!creditAccount) {
-        return reply.status(402).send({ success: false, error: { code: 'NO_CREDIT_ACCOUNT', message: '未找到积分账户' } })
-      }
-
+      // 零扣费分镜：业管化后本地无积分账户，credit_account_id 直接传 null
       // 创建 task_batches + task 记录
       const batchId = crypto.randomUUID()
       const taskId = crypto.randomUUID()
@@ -77,7 +66,7 @@ const route: FastifyPluginAsync = async (app) => {
             user_id: userId,
             team_id: teamId,
             workspace_id: canvas.workspace_id,
-            credit_account_id: creditAccount.id,
+            credit_account_id: null,
             idempotency_key: crypto.randomUUID(),
             source: 'canvas',
             module: 'storyboard',
@@ -112,7 +101,6 @@ const route: FastifyPluginAsync = async (app) => {
         batchId,
         userId,
         teamId,
-        creditAccountId: creditAccount.id,
         estimatedCredits: 0,
         canvasId,
         canvasNodeId,

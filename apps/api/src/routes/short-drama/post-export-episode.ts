@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '@aigc/db'
 import type { ShortDramaExportEpisodeJobData } from '@aigc/types'
-import { freezeCredits, refundCredits } from '../../services/credit.js'
+import { deductBizMgmtPointsForGeneration } from '../../services/biz-mgmt-a-bean.js'
 import { getShortDramaExportQueue } from '../../lib/queue.js'
 import {
   assertShortDramaProjectAccess,
@@ -89,13 +89,21 @@ export default async function postExportEpisode(app: FastifyInstance): Promise<v
 
       const exportCredits = await getExportCredits()
 
-      // 冻结积分
-      let creditAccountId: string
+      // 业管 A 豆扣减（生成前实时余额校验 → 扣减）
+      let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string }
       try {
-        const result = await freezeCredits(teamId, userId, exportCredits, '短剧单集导出冻结')
-        creditAccountId = result.creditAccountId
+        const deduction = await deductBizMgmtPointsForGeneration({
+          localUserId: userId,
+          teamId,
+          workspaceId: project.workspace_id,
+          batchId: `shortdrama-export-${project.id}-${episodeNumber}`,
+          pointsNum: exportCredits,
+          source: 1,
+          remark: `短剧单集导出（第${episodeNumber}集）`,
+        })
+        bizMgmtBilling = deduction
       } catch (err) {
-        const msg = err instanceof Error ? err.message : '积分不足'
+        const msg = err instanceof Error ? err.message : '业管 A 豆扣减失败'
         return reply.status(402).send({
           success: false,
           error: { code: 'INSUFFICIENT_CREDITS', message: msg },
@@ -143,8 +151,11 @@ export default async function postExportEpisode(app: FastifyInstance): Promise<v
           userId,
           teamId,
           workspaceId: project.workspace_id,
-          creditAccountId,
           estimatedCredits: exportCredits,
+          // 业管计费上下文，供 worker 终态写创作结果 outbox
+          bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+          bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+          bizMgmtWorkNo: bizMgmtBilling.workNo,
         }
 
         await getShortDramaExportQueue().add('export-episode', jobData)
@@ -156,15 +167,11 @@ export default async function postExportEpisode(app: FastifyInstance): Promise<v
           estimatedCredits: exportCredits,
         })
       } catch (err) {
-        app.log.error({ err }, 'Failed to create export job, refunding')
-        try {
-          await refundCredits(teamId, creditAccountId, userId, exportCredits, undefined, undefined, '短剧单集导出退款')
-        } catch (refundErr) {
-          app.log.error({ refundErr }, 'CRITICAL: Failed to refund after export failure')
-        }
+        // 业管扣减已完成，本地不退；由 biz_mgmt_a_bean_transactions 审计 + 人工对账
+        app.log.error({ err }, 'Failed to create export job')
         return reply.status(500).send({
           success: false,
-          error: { code: 'INTERNAL_ERROR', message: '导出任务创建失败，积分已退回' },
+          error: { code: 'INTERNAL_ERROR', message: '导出任务创建失败，A 豆退款将由业管处理' },
         })
       }
     }

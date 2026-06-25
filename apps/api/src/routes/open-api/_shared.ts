@@ -106,9 +106,8 @@ export interface CreateBatchResult {
   batchId: string
   // tasks.id（内部任务标识，version_index=0 的单任务）
   internalTaskId: string
-  // 归属 team 的 credit_account.id（路由投递 jobData 时 completePipeline/failPipeline 必需，
-  // 此处一并返回避免调用方重复查 findTeamCreditAccountId）
-  creditAccountId: string
+  // 业管化后本地无积分账户，固定返回 null（保留字段兼容调用方 jobData）
+  creditAccountId: string | null
 }
 
 // 判定 PG unique_violation（SQLSTATE 23505）。
@@ -122,23 +121,8 @@ export function isPgUniqueViolation(err: unknown): boolean {
   return msg.includes('duplicate') || msg.includes('unique') || msg.includes('冲突')
 }
 
-// 查归属 team 的 credit_account（owner_type=team）。
-// provisionCaller 为每个调用方建了唯一一个 team 级 credit_account，故 takeFirstOrThrow。
-async function findTeamCreditAccountId(teamId: string): Promise<string> {
-  const db = getDb()
-  const acc = await db
-    .selectFrom('credit_accounts')
-    .select('id')
-    .where('team_id', '=', teamId)
-    .where('owner_type', '=', 'team')
-    .executeTakeFirstOrThrow(
-      () => new OpenApiError(ErrorCode.SYSTEM_FAILED, `调用方归属 team 缺少 credit_account: ${teamId}`),
-    )
-  return acc.id
-}
-
 // 7 种开放接口业务路由共用的提交骨架：事务内建 task_batches + tasks。
-// estimated_credits 固定 0（开放接口零积分副作用，balance 占位由 provisionCaller 兜底）。
+// estimated_credits 固定 0（开放接口零积分副作用）。业管化后 credit_account_id 传 null。
 // 重复同 apiClient + taskId → 命中 idempotency_key UNIQUE → DUPLICATE_TASK。
 export async function createOpenApiBatch(input: CreateBatchInput): Promise<CreateBatchResult> {
   const teamId = input.apiClient.teamId
@@ -148,7 +132,6 @@ export async function createOpenApiBatch(input: CreateBatchInput): Promise<Creat
     throw new OpenApiError(ErrorCode.AUTH_FAILED, '调用方归属主体不完整')
   }
 
-  const creditAccountId = await findTeamCreditAccountId(teamId)
   // 幂等键：同 apiClient + 同对外 taskId 视为重复提交（对齐源项目 DUPLICATE_TASK 语义）
   const idempotencyKey = `openapi:${input.apiClient.id}:${input.taskId}`
   const db = getDb()
@@ -161,7 +144,7 @@ export async function createOpenApiBatch(input: CreateBatchInput): Promise<Creat
           user_id: systemUserId,
           team_id: teamId,
           workspace_id: input.apiClient.workspaceId,
-          credit_account_id: creditAccountId,
+          credit_account_id: null,
           idempotency_key: idempotencyKey,
           source: 'open_api',
           module: input.module,
@@ -193,7 +176,7 @@ export async function createOpenApiBatch(input: CreateBatchInput): Promise<Creat
         .returning('id')
         .executeTakeFirstOrThrow()
 
-      return { batchId: batch.id, internalTaskId: task.id, creditAccountId }
+      return { batchId: batch.id, internalTaskId: task.id, creditAccountId: null }
     })
   } catch (err) {
     if (isPgUniqueViolation(err)) {
