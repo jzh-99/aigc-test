@@ -19,6 +19,23 @@ export interface GenerationJobData {
   serviceType?: string | null
   // 对外 task_id（源项目契约字段，内部拼写 task_id）
   openApiTaskId?: string | null
+  // ─── 业务管理平台 A 豆计费上下文 ─────────────────────────────────────────
+  // 仅当用户使用业管会员身份生成时携带，供 worker 终态写入创作结果 outbox。
+  // 无业管身份的旧账号/内部账号不带这些字段，走本地积分流程。
+  workspaceId?: string | null
+  bizMgmtDeductRequestNo?: string
+  bizMgmtUserId?: string
+  bizMgmtWorkNo?: string
+}
+
+/**
+ * 业务管理平台生成计费上下文（用于 worker 终态写创作结果 outbox）。
+ * 透传到各类生成 job data，使 worker 完成/失败时能构造 creation_result_notify 事件。
+ */
+export interface BizMgmtGenerationBillingContext {
+  bizMgmtDeductRequestNo?: string
+  bizMgmtUserId?: string
+  bizMgmtWorkNo?: string
 }
 
 export interface VideoSubmitJobData {

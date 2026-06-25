@@ -10,6 +10,10 @@ import { decryptProxyUrl, uploadToTos } from '../../lib/storage.js'
 import { resolveUnitPrice } from '../../lib/pricing.js'
 import { resolveBatchSource } from '../../lib/batch-source.js'
 import rateLimit from '@fastify/rate-limit'
+import {
+  deductBizMgmtPointsForGeneration,
+  getCurrentBizMgmtIdentity,
+} from '../../services/biz-mgmt-a-bean.js'
 
 // 每个用户最多同时处于 pending/processing 状态的批次数
 const MAX_PENDING_BATCHES = 20
@@ -539,11 +543,56 @@ const route: FastifyPluginAsync = async (app) => {
     const actualModel = resolvedModel ?? model
     const totalCost = unitPrice * quantity
 
-    // 冻结积分
+    // 冻结积分 / 业管 A 豆扣减
+    // 分支：有当前业管会员身份 → 走业管 A 豆实时扣减（不读本地余额，不创建本地冻结）；
+    //      无业管身份（旧账号/内部账号）→ 走原本地 freezeCredits。
     let creditAccountId: string
+    // 业管扣减上下文，仅业管身份任务携带，供 worker 终态写创作结果 outbox
+    let bizMgmtBilling: { requestNo: string; bizMgmtUserId: string; workNo: string } | null = null
+    let bizMgmtIdentity: Awaited<ReturnType<typeof getCurrentBizMgmtIdentity>> | null = null
     try {
-      const result = await freezeCredits(teamId, userId, totalCost, '图片生成冻结')
-      creditAccountId = result.creditAccountId
+      // 探测当前用户是否已选择业管会员身份（无身份会抛错，落入本地积分分支）
+      bizMgmtIdentity = await getCurrentBizMgmtIdentity(userId)
+    } catch {
+      // 非业管账号：bizMgmtIdentity 保持 null，走本地积分流程
+      bizMgmtIdentity = null
+    }
+
+    try {
+      if (bizMgmtIdentity) {
+        // 业管身份：实时查余额 + 扣减（AIHUB_POINTS_CHANGE），扣减失败不创建任务
+        // 注意 batch_id 尚未生成，先用临时占位 id 让审计先行；扣减成功后用真实 batch_id。
+        // 这里采用「先创建批次→再扣减」的反向，见下方事务内统一处理。
+        // 为保持幂等号稳定且可追溯，使用 idempotency_key 作为批次级扣减幂等号。
+        const tempBatchId = idempotency_key
+        const deduction = await deductBizMgmtPointsForGeneration({
+          localUserId: userId,
+          teamId,
+          workspaceId,
+          batchId: tempBatchId,
+          pointsNum: totalCost,
+          source: 1, // 来源值以业管文档为准；集中在此处，避免散落魔法数字
+          remark: `图片生成：${model}`,
+        })
+        bizMgmtBilling = {
+          requestNo: deduction.requestNo,
+          bizMgmtUserId: deduction.bizMgmtUserId,
+          workNo: deduction.workNo,
+        }
+        // 业管扣减账号不需要本地 credit_account，但 task_batches.credit_account_id 非空，
+        // 复用团队级账户作为归属占位（业管计费权威在 biz_mgmt_a_bean_transactions）。
+        const teamAccount = await db
+          .selectFrom('credit_accounts')
+          .select('id')
+          .where('owner_type', '=', 'team')
+          .where('team_id', '=', teamId)
+          .executeTakeFirstOrThrow()
+        creditAccountId = teamAccount.id
+      } else {
+        // 旧账号/内部账号：本地积分冻结
+        const result = await freezeCredits(teamId, userId, totalCost, '图片生成冻结')
+        creditAccountId = result.creditAccountId
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Credit error'
       logGenerateSubmissionError(app, {
@@ -618,12 +667,21 @@ const route: FastifyPluginAsync = async (app) => {
           batchId: batch.batch.id,
           userId,
           teamId,
+          workspaceId,
           creditAccountId,
           provider: providerModel.providerCode,
           model: actualModel,
           prompt,
           params: paramsForJob,
           estimatedCredits: unitPrice,
+          // 业管身份任务携带计费上下文，供 worker 终态写创作结果 outbox
+          ...(bizMgmtBilling
+            ? {
+                bizMgmtDeductRequestNo: bizMgmtBilling.requestNo,
+                bizMgmtUserId: bizMgmtBilling.bizMgmtUserId,
+                bizMgmtWorkNo: bizMgmtBilling.workNo,
+              }
+            : {}),
           ...(canvas_id ? { canvasId: canvas_id, canvasNodeId: canvas_node_id ?? undefined } : {}),
         },
         opts: { priority: jobPriority },
@@ -631,6 +689,7 @@ const route: FastifyPluginAsync = async (app) => {
       await getImageQueue().addBulk(jobPayloads)
     } catch (err) {
       // DB 创建或批量入队失败 — 退还全部冻结积分
+      // 注意：业管扣减失败已在上方 try 块拦截，不会走到这里；走到这里仅本地积分账号需退款。
       app.log.error({ err }, 'Failed to create batch/tasks after freeze, refunding credits')
       logGenerateSubmissionError(app, {
         userId,
@@ -641,7 +700,9 @@ const route: FastifyPluginAsync = async (app) => {
         canvasId: canvas_id,
       })
       try {
-        await refundCredits(teamId, creditAccountId, userId, totalCost, undefined, undefined, '图片生成退款')
+        if (!bizMgmtBilling) {
+          await refundCredits(teamId, creditAccountId, userId, totalCost, undefined, undefined, '图片生成退款')
+        }
       } catch (refundErr) {
         app.log.error({ refundErr }, 'CRITICAL: Failed to refund credits after batch creation failure')
       }
