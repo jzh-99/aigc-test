@@ -8,7 +8,9 @@ import {
   ALLOWED_AUDIO_TYPES, ALLOWED_AUDIO_EXTS,
   MAX_FILE_MB,
 } from './constants'
-export { fetchAssetFile } from './asset-file'
+import { fetchAssetFile } from './asset-file'
+
+export { fetchAssetFile }
 
 export function isValidImageFile(file: File): boolean {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
@@ -57,14 +59,12 @@ export function getDraggedAsset(dataTransfer: DataTransfer): { url: string; type
 export async function getActionImagePayload(image: FrameImage): Promise<{ base64: string; mime: 'image/jpeg' | 'image/png' }> {
   const dataUrl = image.dataUrl.startsWith('data:')
     ? image.dataUrl
-    : await fetch(image.dataUrl).then(async (r) => {
-      if (!r.ok) throw new Error('reference image fetch failed')
-      const blob = await r.blob()
+    : await fetchAssetFile(image.dataUrl, 'image', 'action_image').then((file) => {
       return new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result as string)
         reader.onerror = reject
-        reader.readAsDataURL(blob)
+        reader.readAsDataURL(file)
       })
     })
   const [header, base64] = dataUrl.split(',')
