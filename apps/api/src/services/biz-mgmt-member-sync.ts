@@ -145,3 +145,119 @@ export async function ensureLocalUserForBizMgmtPhone(
 
   return { userId: user.id, oneTimePassword, members }
 }
+
+/**
+ * 把业管会员列表同步到本地绑定表，并补齐 team / workspace。
+ *
+ * 关键不变量（见计划 Critical Login Invariant）：
+ * - 同一 biz_mgmt_user_id 复用既有 team_id / workspace_id，避免每次登录重复建团队。
+ * - 本次从业管未返回的绑定不硬删除，只把 status 标记为非 1（这里置 2=冻结），
+ *   防止业管临时异常导致本地权限被误删；恢复后下次登录会重新置回 status=1。
+ * - 整个同步在一个事务内完成，保证绑定、team、workspace 三者一致。
+ *
+ * 注意：本函数只处理身份与本地资源映射，不读写 A 豆余额。
+ */
+export async function syncBizMgmtMembersForLocalUser(
+  localUserId: string,
+  phone: string,
+): Promise<NormalizedBizMgmtMember[]> {
+  const db = getDb()
+  const members = await fetchBizMgmtMembersByPhone(phone)
+
+  await db.transaction().execute(async (trx) => {
+    for (const member of members) {
+      const existingBinding = await trx
+        .selectFrom('biz_mgmt_member_bindings')
+        .select(['id', 'team_id', 'workspace_id'])
+        .where('biz_mgmt_user_id', '=', member.bizMgmtUserId)
+        .executeTakeFirst()
+
+      let teamId = existingBinding?.team_id
+      let workspaceId = existingBinding?.workspace_id
+
+      if (!teamId) {
+        // 新业管身份首次落地：创建对应类型的本地团队
+        const team = await trx
+          .insertInto('teams')
+          .values({
+            name: member.teamName,
+            owner_id: localUserId,
+            plan_tier: 'free',
+            team_type: member.userType === '1' ? 'personal' : 'company_a',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+        teamId = team.id
+
+        await trx.insertInto('team_members').values({ team_id: teamId, user_id: localUserId, role: 'owner' }).execute()
+        await trx
+          .insertInto('credit_accounts')
+          .values({ owner_type: 'team', team_id: teamId, balance: 0, frozen_credits: 0, total_earned: 0, total_spent: 0 })
+          .execute()
+      }
+
+      if (!workspaceId) {
+        const workspace = await trx
+          .insertInto('workspaces')
+          .values({ team_id: teamId, name: '默认工作区', description: null, created_by: localUserId })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+        workspaceId = workspace.id
+
+        await trx
+          .insertInto('workspace_members')
+          .values({ workspace_id: workspaceId, user_id: localUserId, role: 'admin' })
+          .execute()
+      }
+
+      // upsert 绑定：biz_mgmt_user_id 唯一，已存在则刷新身份快照（不含 A 豆数据）
+      await trx
+        .insertInto('biz_mgmt_member_bindings')
+        .values({
+          local_user_id: localUserId,
+          biz_mgmt_user_id: member.bizMgmtUserId,
+          phone: member.phone,
+          user_name: member.userName,
+          user_type: member.userType,
+          status: member.status,
+          comp_name: member.compName,
+          goods_id: member.goodsId,
+          goods_name: member.goodsName,
+          biz_mgmt_created_at: member.bizMgmtCreatedAt ? sql`${member.bizMgmtCreatedAt}::timestamptz` : null,
+          team_id: teamId,
+          workspace_id: workspaceId,
+          last_synced_at: sql`now()`,
+          updated_at: sql`now()`,
+        })
+        .onConflict((oc) =>
+          oc.column('biz_mgmt_user_id').doUpdateSet({
+            local_user_id: localUserId,
+            phone: member.phone,
+            user_name: member.userName,
+            user_type: member.userType,
+            status: member.status,
+            comp_name: member.compName,
+            goods_id: member.goodsId,
+            goods_name: member.goodsName,
+            team_id: teamId!,
+            workspace_id: workspaceId!,
+            last_synced_at: sql`now()`,
+            updated_at: sql`now()`,
+          }),
+        )
+        .execute()
+    }
+
+    if (members.length > 0) {
+      // 本次未从业管返回的旧绑定不删除，只冻结，避免业管临时异常误删本地权限
+      await trx
+        .updateTable('biz_mgmt_member_bindings')
+        .set({ status: 2, updated_at: sql`now()` })
+        .where('local_user_id', '=', localUserId)
+        .where('biz_mgmt_user_id', 'not in', members.map((member) => member.bizMgmtUserId))
+        .execute()
+    }
+  })
+
+  return members
+}

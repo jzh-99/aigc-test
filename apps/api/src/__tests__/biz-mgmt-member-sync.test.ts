@@ -30,3 +30,8 @@ test('normalizeBizMgmtMember keeps identity and entitlement fields only', () => 
 test('company member team name prefers compName', () => {
   assert.equal(pickDefaultBizMgmtMemberName({ userName: '吃瓜', compName: '牛奶', userType: '2' }), '牛奶')
 })
+
+test('syncBizMgmtMembersForLocalUser is exported for login orchestration', async () => {
+  const mod = await import('../services/biz-mgmt-member-sync.js')
+  assert.equal(typeof mod.syncBizMgmtMembersForLocalUser, 'function')
+})
