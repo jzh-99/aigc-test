@@ -48,7 +48,7 @@ const IMAGE_BODY = {
 
 const route: FastifyPluginAsync = async (app) => {
   app.post('/images/generations', {
-    schema: { body: IMAGE_BODY },
+    schema: { tags: ['OpenApi'], body: IMAGE_BODY },
     preHandler: [openApiPreHandler],
   }, async (request, reply) => {
     const b = request.body as {

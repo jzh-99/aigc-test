@@ -144,6 +144,12 @@ export async function buildApp() {
         components: {
           securitySchemes: {
             bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+            openApiBearerAuth: {
+              type: 'http',
+              scheme: 'bearer',
+              bearerFormat: 'Open API Key',
+              description: '开放接口 API Key，在 Swagger UI 中填写 aigc_xxx，调用时会生成 Authorization: Bearer aigc_xxx',
+            },
           },
         },
         security: [{ bearerAuth: [] }],
@@ -154,7 +160,27 @@ export async function buildApp() {
         if (!schema) return { schema, url }
         const s = schema as Record<string, unknown>
 
-        // 非 /api/v1 路由（如 /docs 内部路由）不处理
+        if (url.startsWith('/api/v3/')) {
+          const method = (route.method as string | string[])
+          const verb = METHOD_VERB[(Array.isArray(method) ? method[0] : method).toUpperCase()] ?? method
+          const lastSeg = url.split('/').filter(Boolean).pop() ?? ''
+          const autoSummary = `${verb} ${lastSeg}`
+          const summary = typeof s.summary === 'string' && s.summary.length > 0
+            ? s.summary
+            : autoSummary
+
+          return {
+            schema: {
+              ...s,
+              tags: Array.isArray(s.tags) && s.tags.length > 0 ? s.tags : ['OpenApi'],
+              summary,
+              security: [{ openApiBearerAuth: [] }],
+            },
+            url,
+          }
+        }
+
+        // 非 /api/v1 和 /api/v3 路由（如 /docs 内部路由）不处理
         if (!url.startsWith('/api/v1/')) return { schema, url }
 
         // 从 /api/v1/<module>/... 提取模块名
@@ -198,7 +224,7 @@ export async function buildApp() {
       forceESM: true,
       autoHooks: true,
       cascadeHooks: false,
-      ignorePattern: /^_/,
+      ignorePattern: /^(?:_|open-api$)/,
     })
   }, { prefix: '/api/v1' })
 

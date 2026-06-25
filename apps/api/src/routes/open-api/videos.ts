@@ -55,7 +55,7 @@ const VIDEO_BODY = {
 
 const route: FastifyPluginAsync = async (app) => {
   app.post('/videos/generations', {
-    schema: { body: VIDEO_BODY },
+    schema: { tags: ['OpenApi'], body: VIDEO_BODY },
     preHandler: [openApiPreHandler],
   }, async (request, reply) => {
     const b = request.body as {

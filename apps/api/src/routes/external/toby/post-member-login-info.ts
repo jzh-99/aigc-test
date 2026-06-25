@@ -13,13 +13,9 @@ const route: FastifyPluginAsync = async (app) => {
       schema: {
         body: {
           type: 'object',
-          required: ['phone', 'userName', 'channel', 'userType'],
+          required: ['phone'],
           properties: {
             phone: { type: 'string' },
-            userName: { type: 'string' },
-            compName: { type: 'string' },
-            channel: { type: 'string' },
-            userType: { type: 'string' },
           },
         },
       },

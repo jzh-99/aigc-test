@@ -45,6 +45,12 @@ pnpm --filter @aigc/worker dev    # Worker
 pnpm queue:clean -- --dry-run
 pnpm queue:clean
 pnpm queue:clean -- --queue image-queue --state failed
+
+# C端联调
+pnpm openapi:key -- c端联调
+
+# 业管测试
+pnpm --filter @aigc/api exec node --import tsx --test --test-name-pattern "会员信息查询" src/__tests__/toby-open-api.test.ts
 ```
 
 ### 数据库

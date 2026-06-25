@@ -21,7 +21,8 @@ import { closeDb } from '@aigc/db'
 async function main(): Promise<void> {
   const name = process.argv[2]
   if (!name) {
-    console.error('用法: create-open-api-key <name>')
+    console.error('用法: pnpm openapi:key -- <name>')
+    console.error('示例: pnpm openapi:key -- c端联调')
     process.exit(1)
   }
 
@@ -31,6 +32,15 @@ async function main(): Promise<void> {
   console.log(`API Key（仅显示一次，请妥善保存）: ${apiKey}`)
   console.log(`Client ID: ${clientId}`)
   console.log(`归属容器: openapi:${name}`)
+  console.log('')
+  console.log('Swagger Authorize 的 Value 填：')
+  console.log(apiKey)
+  console.log('')
+  console.log('HTTP Header 写法：')
+  console.log(`Authorization: Bearer ${apiKey}`)
+  console.log('')
+  console.log('本地 ping 验证：')
+  console.log(`curl -X GET "http://localhost:7001/api/v3/ping" -H "Authorization: Bearer ${apiKey}"`)
 }
 
 main()

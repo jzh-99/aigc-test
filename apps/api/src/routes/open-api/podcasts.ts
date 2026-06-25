@@ -77,7 +77,7 @@ const route: FastifyPluginAsync = async (app) => {
   app.post(
     '/podcasts/generations',
     {
-      schema: { body: PODCAST_BODY },
+      schema: { tags: ['OpenApi'], body: PODCAST_BODY },
       preHandler: [openApiPreHandler],
     },
     async (request, reply) => {

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "cross-env FASTIFY_AUTOLOAD_TYPESCRIPT=1 tsx watch src/index.ts",
     "build": "tsc",
-    "start": "cross-env FASTIFY_AUTOLOAD_TYPESCRIPT=1 node dist/index.js"
+    "start": "cross-env FASTIFY_AUTOLOAD_TYPESCRIPT=1 node dist/index.js",
+    "openapi:key": "tsx src/cli/create-open-api-key.ts"
   },
   "dependencies": {
     "@aigc/db": "workspace:*",

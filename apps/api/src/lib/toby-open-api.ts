@@ -11,7 +11,8 @@ export const TOBY_SERVICE_CODES = {
   creationResultNotify: 'AIHUB_CREATION_RESULT_NOTIFY',
   subscribe: 'SUBSCRIBE_SERVICE_CODE_1001',
   memberSubCard: 'MEMBER-1002',
-  specificationConfig: 'SPECIFICATION-COFIG',
+  specificationConfig: 'SPECIFICATION-CONFIG',
+  memberRegister: 'MEMBER-1003',
 } as const
 
 export type TobyServiceCode = typeof TOBY_SERVICE_CODES[keyof typeof TOBY_SERVICE_CODES]
@@ -31,10 +32,6 @@ export interface TobyApiResponse<T = unknown> {
 
 export interface TobyMemberLoginInfoRequest {
   phone: string
-  userName: string
-  compName?: string
-  channel: string
-  userType: string
 }
 
 export interface TobyPointsChangeQueryRequest {
@@ -82,21 +79,34 @@ export interface TobyMemberSubCardRequest {
   initialPointsNum: number | string
 }
 
+export interface TobyMemberRegisterRequest {
+  phone: string
+  userName: string
+  channel: string
+}
+
 export interface TobySpecificationConfigPayload {
   timestamp: string
   signature: string
   serviceCode: string
   appID: string
   requestNo?: string
-  modeCode: string
-  modeType: string
-  modeName: string
-  modelDesc: string
-  modelProvider: string
-  resolutionRatio: string
-  singleConsumeCount: number
-  inputConsumeCount: number
-  ouputConsumeCount: number
+  modelParams: {
+    modelCode: string
+    modelType: string
+    modelName: string
+    modelDesc: string
+    modelProvider: string
+    useChannel: string
+    singleUnit: string
+    materialRatio: string
+    params: Array<{
+      resolutionRatio: string
+      singleConsumeCount: number
+      inputConsumeCount?: number
+      ouputConsumeCount?: number
+    }>
+  }
 }
 
 function getRequiredEnv(name: string): string {
@@ -289,7 +299,7 @@ async function callTobyApi<T extends object>(
 }
 
 export function queryTobyMemberLoginInfo(payload: TobyMemberLoginInfoRequest) {
-  return callTobyApi('/api/toby/member/login-info', TOBY_SERVICE_CODES.memberLoginInfo, payload)
+  return callTobyApi('/api/toby/member/query-by-phone', TOBY_SERVICE_CODES.memberLoginInfo, payload)
 }
 
 export function queryTobyPointsChangeList(payload: TobyPointsChangeQueryRequest) {
@@ -305,9 +315,13 @@ export function notifyTobyCreationResult(payload: TobyCreationResultNotifyReques
 }
 
 export function syncTobySubscribe(payload: TobySubscribeRequest) {
-  return callTobyApi('/api/aihub/subscribe/external/dealExSubscribe', TOBY_SERVICE_CODES.subscribe, payload)
+  return callTobyApi('/api/toby/subscribe/external/dealExSubscribe', TOBY_SERVICE_CODES.subscribe, payload)
 }
 
 export function syncTobyMemberSubCard(payload: TobyMemberSubCardRequest) {
   return callTobyApi('/api/toby/member/sub-card', TOBY_SERVICE_CODES.memberSubCard, payload)
+}
+
+export function registerTobyMember(payload: TobyMemberRegisterRequest) {
+  return callTobyApi('/api/toby/member/register', TOBY_SERVICE_CODES.memberRegister, payload)
 }

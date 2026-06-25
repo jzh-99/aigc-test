@@ -8,7 +8,10 @@ import { openApiPreHandler } from './_shared.js'
 
 const route: FastifyPluginAsync = async (app) => {
   // GET /api/v3/ping：preHandler 认证 API Key，成功返回 task_id=ping 的成功信封
-  app.get('/ping', { preHandler: [openApiPreHandler] }, async (request, reply) => {
+  app.get('/ping', {
+    schema: { tags: ['OpenApi'] },
+    preHandler: [openApiPreHandler],
+  }, async (request, reply) => {
     // request.apiClient 由 requireApiKey 装饰 + openApiPreHandler 挂载（非空断言：preHandler 已确保）
     const clientId = request.apiClient?.id ?? 'unknown'
     return reply.status(200).send(successResponse(`ping:${clientId}`))

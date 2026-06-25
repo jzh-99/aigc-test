@@ -41,7 +41,7 @@ const route: FastifyPluginAsync = async (app) => {
   app.post(
     '/news/generations',
     {
-      schema: { body: NEWS_BODY },
+      schema: { tags: ['OpenApi'], body: NEWS_BODY },
       preHandler: [openApiPreHandler],
     },
     async (request, reply) => {

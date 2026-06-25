@@ -104,7 +104,7 @@ export function adaptSongParams(input: {
 
 const route: FastifyPluginAsync = async (app) => {
   app.post('/lyrics/generate', {
-    schema: { body: LYRICS_BODY },
+    schema: { tags: ['OpenApi'], body: LYRICS_BODY },
     preHandler: [openApiPreHandler],
   }, async (request, reply) => {
     const b = request.body as {

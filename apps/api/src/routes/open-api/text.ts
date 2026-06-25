@@ -114,7 +114,7 @@ const route: FastifyPluginAsync = async (app) => {
   app.post(
     '/chat/completions',
     {
-      schema: { body: TEXT_BODY },
+      schema: { tags: ['OpenApi'], body: TEXT_BODY },
       preHandler: [openApiPreHandler],
     },
     async (request, reply) => {

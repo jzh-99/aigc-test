@@ -47,7 +47,7 @@ const DEFAULT_STORYBOOK_IMAGE_MODEL = 'seedream-4.5'
 
 const route: FastifyPluginAsync = async (app) => {
   app.post('/storybooks/generations', {
-    schema: { body: STORYBOOK_BODY },
+    schema: { tags: ['OpenApi'], body: STORYBOOK_BODY },
     preHandler: [openApiPreHandler],
   }, async (request, reply) => {
     const b = request.body as {
