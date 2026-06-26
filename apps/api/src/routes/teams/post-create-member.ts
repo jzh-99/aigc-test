@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import bcrypt from 'bcryptjs'
 import { teamRoleGuard } from '../../plugins/guards.js'
+import { enqueueBizMgmtOutboxEvent } from '../../services/biz-mgmt-outbox.js'
 
 const route: FastifyPluginAsync = async (app) => {
   // POST /teams/:id/members/create — 创建单个成员（设置默认密码）
@@ -165,6 +166,42 @@ const route: FastifyPluginAsync = async (app) => {
         role: 'admin',
       })
       .execute()
+
+    // 通知业管为新成员创建会员副卡（MEMBER-1002），使其在业管侧获得 A 豆账户。
+    // belongId 取团长（当前操作 owner）当前选中的业管会员 ID；若团长尚未绑定业管身份，
+    // 则不写入 outbox（成员后续登录时由 member-sync 兜底绑定）。
+    const [teamInfo, ownerBinding] = await Promise.all([
+      db.selectFrom('teams').select('name').where('id', '=', teamId).executeTakeFirst(),
+      db
+        .selectFrom('biz_mgmt_member_bindings')
+        .select('biz_mgmt_user_id')
+        .where('local_user_id', '=', request.user.id)
+        .where('is_selected', '=', true)
+        .where('status', '=', 1)
+        .executeTakeFirst(),
+    ])
+
+    if (teamInfo && ownerBinding) {
+      // 幂等键：同一团队+成员+手机号重复创建复用同一 outbox 事件
+      const dedupeKey = `member-sub-card:${teamId}:${userId}:${identifier}`
+      await enqueueBizMgmtOutboxEvent({
+        eventType: 'member_sub_card_sync',
+        dedupeKey,
+        localUserId: userId,
+        bizMgmtUserId: ownerBinding.biz_mgmt_user_id,
+        phone: identifier,
+        teamId,
+        pointsNum: 0,
+        payload: {
+          phone: identifier,
+          userName: username,
+          compName: teamInfo.name,
+          channel: 'aihub',
+          belongId: ownerBinding.biz_mgmt_user_id,
+          initialPointsNum: 0,
+        },
+      })
+    }
 
     return reply.status(201).send({
       user_id: userId,
