@@ -124,8 +124,11 @@ const route: FastifyPluginAsync = async (app) => {
       let bizMgmtMembers: Awaited<ReturnType<typeof fetchBizMgmtMembersByPhone>>
       try {
         bizMgmtMembers = await fetchBizMgmtMembersByPhone(identifier)
-      } catch {
-        // 业管接口故障：按用户要求"一律拒绝+清理"，等同查无
+      } catch (err) {
+        // 业管接口故障：按用户要求"一律拒绝+清理"，等同查无。
+        // 用 request.log.error 记录，生产环境进 api-err.log（PM2）或 docker logs（容器），
+        // 结构化 JSON 带 identifier 便于排查。
+        request.log.error({ err, identifier }, '业管会员查询失败（post-login），按查无处理')
         bizMgmtMembers = []
       }
 
