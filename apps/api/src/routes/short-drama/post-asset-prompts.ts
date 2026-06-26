@@ -205,6 +205,9 @@ const route: FastifyPluginAsync = async (app) => {
             }
           }
         } catch (error) {
+          // 批次扣减/生成失败：多为 A 豆余额不足。打印错误日志便于排查业管扣减接口异常，
+          // 同时通过 SSE warning 引导用户充值后续生成
+          app.log.warn({ err: error, projectId, batchFrom: batch.from, batchTo: batch.to }, '短剧素材描述生成批次失败')
           stoppedByBalance = true
           warningMessage = 'A豆余额不足，已停止生成后续素材描述。已保存已完成的角色、场景和道具描述，请充值后点击「继续生成描述」生成剩余素材。'
           sendEvent('warning', {

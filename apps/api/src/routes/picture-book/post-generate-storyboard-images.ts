@@ -103,6 +103,8 @@ const route: FastifyPluginAsync = async (app) => {
           await linkStoryboardBatch(request.body.project_id, access.workspaceId, access.teamId, request.user.id, target, body)
           batches.push({ ref_id: target.refId, batch_id: body.id, status: body.status })
         } catch (error) {
+          // 单条分镜图片生成失败：记录错误日志，并入队 failures 让前端展示部分失败结果，不中断整批
+          request.log.error({ err: error, refId: target.refId }, '绘本分镜图片生成失败')
           failures.push({ ref_id: target.refId, message: error instanceof Error ? error.message : String(error) })
         }
       }

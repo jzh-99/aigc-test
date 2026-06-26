@@ -1,4 +1,8 @@
 import type { ImageGenerationAdapter, AdapterGenerateResult } from './base.js'
+import { buildLogger } from '../logger.js'
+
+// 适配器模块：复用 worker 单例 logger，确保错误日志写入 logs/worker/error.log
+const logger = buildLogger()
 
 const VOLCENGINE_API_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
@@ -214,7 +218,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
         console.log(`[volcengine-image] 参考图片准备完毕`)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`[volcengine-image] 参考图片准备失败: ${msg}`)
+        logger.error({ err, model, imageCount: capped.length }, '[volcengine-image] 参考图片准备失败')
         return { success: false, errorMessage: msg }
       }
     }
@@ -247,7 +251,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
       return result
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[volcengine-image] 请求异常: ${msg}`)
+      logger.error({ err, model }, '[volcengine-image] 请求异常')
       return { success: false, errorMessage: msg, requestPayload: logPayload }
     } finally {
       clearTimeout(timeout)
@@ -258,7 +262,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     const text = await res.text()
 
     if (!res.ok) {
-      console.error(`[volcengine-image] API 错误 ${res.status}: ${text.slice(0, 500)}`)
+      logger.error({ model, status: res.status, body: text.slice(0, 500) }, '[volcengine-image] API 错误')
       return { success: false, errorMessage: `Volcengine API ${res.status}: ${text.slice(0, 500)}` }
     }
 
@@ -268,13 +272,14 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     }
     try {
       json = JSON.parse(text)
-    } catch {
+    } catch (err) {
+      logger.error({ err, model, body: text.slice(0, 200) }, '[volcengine-image] 响应 JSON 解析失败')
       return { success: false, errorMessage: `Invalid JSON response from Volcengine: ${text.slice(0, 200)}` }
     }
 
     // Top-level error
     if (json.error) {
-      console.error(`[volcengine-image] 顶层错误 ${json.error.code}: ${json.error.message}`)
+      logger.error({ model, code: json.error.code, message: json.error.message }, '[volcengine-image] 顶层错误')
       return { success: false, errorMessage: `Volcengine error ${json.error.code}: ${json.error.message}` }
     }
 
@@ -282,7 +287,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     // Response has `data` array with items, each item can have `url` or `error`
     const items = json.data ?? []
     if (items.length === 0) {
-      console.error(`[volcengine-image] 响应 data 数组为空`)
+      logger.error({ model }, '[volcengine-image] 响应 data 数组为空')
       return { success: false, errorMessage: 'No images in Volcengine response' }
     }
 
@@ -294,7 +299,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
       const errMsg = firstErr?.error
         ? `${firstErr.error.code}: ${firstErr.error.message}`
         : 'No image URL in Volcengine response'
-      console.error(`[volcengine-image] 图片生成失败: ${errMsg}`)
+      logger.error({ model, errMsg, itemCount: items.length }, '[volcengine-image] 图片生成失败')
       return { success: false, errorMessage: errMsg }
     }
 

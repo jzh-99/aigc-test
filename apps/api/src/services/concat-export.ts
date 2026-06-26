@@ -5,6 +5,10 @@ import { createRequire } from 'node:module'
 import { pipeline } from 'node:stream/promises'
 import ffmpeg from 'fluent-ffmpeg'
 import { uploadToTos } from '../lib/storage.js'
+import { buildLogger } from '../logger.js'
+
+// 后台导出 service 无 Fastify 上下文：用独立 pino logger，复用项目 roll transport 写入 logs/api/error.log
+const logger = buildLogger()
 
 // Use system ffmpeg if available, otherwise fall back to the installer package
 try {
@@ -108,6 +112,8 @@ export async function runConcatExport(
 
     await updateJob({ status: 'done', resultUrl })
   } catch (err) {
+    // 视频拼接导出失败：记录完整错误便于排查 ffmpeg/下载/TOS 上传环节，并回写 job 状态
+    logger.error({ err, jobId, projectName }, '视频拼接导出失败')
     await updateJob({ status: 'failed', error: err instanceof Error ? err.message : String(err) })
   } finally {
     // cleanup tmp files

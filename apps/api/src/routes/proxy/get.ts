@@ -101,9 +101,12 @@ const route: FastifyPluginAsync = async (app) => {
         try {
           upstream = await fetchWithTimeout(url, PROXY_TIMEOUT_MS)
         } catch (err: unknown) {
+          // 资源代理拉取失败：超时记 warn，其它错误记 error，便于排查外部存储/CDN 故障
           if ((err as { name?: string })?.name === 'AbortError') {
+            request.log.warn({ url }, '资源代理拉取超时')
             return reply.code(504).send({ error: 'Gateway timeout' })
           }
+          request.log.error({ url, err }, '资源代理拉取失败')
           return reply.code(502).send({ error: 'Failed to fetch asset' })
         }
         if (!upstream.ok) {
@@ -154,9 +157,12 @@ const route: FastifyPluginAsync = async (app) => {
       try {
         upstream = await fetchWithTimeout(url, PROXY_VIDEO_TIMEOUT_MS, upstreamHeaders)
       } catch (err: unknown) {
+        // 视频透传代理拉取失败：超时记 warn，其它错误记 error，便于排查外部存储/CDN 故障
         if ((err as { name?: string })?.name === 'AbortError') {
+          request.log.warn({ url }, '视频透传代理拉取超时')
           return reply.code(504).send({ error: 'Gateway timeout' })
         }
+        request.log.error({ url, err }, '视频透传代理拉取失败')
         return reply.code(502).send({ error: 'Failed to fetch asset' })
       }
 

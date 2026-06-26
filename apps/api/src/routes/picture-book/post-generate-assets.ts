@@ -210,6 +210,8 @@ const route: FastifyPluginAsync = async (app) => {
           })
           batches.push({ ref_id: target.refId, kind: target.kind, batch_id: batch.id, status: batch.status })
         } catch (error) {
+          // 单个素材生成失败：记录错误日志，并入队 failures 让前端展示部分失败结果，不中断整批
+          request.log.error({ err: error, refId: target.refId, kind: target.kind }, '绘本素材生成失败')
           failures.push({ ref_id: target.refId, message: error instanceof Error ? error.message : String(error) })
         }
       }

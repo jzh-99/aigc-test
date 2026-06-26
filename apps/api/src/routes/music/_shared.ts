@@ -535,8 +535,8 @@ function normalizeMusicTitleForRequest(value: string): string {
   try {
     return normalizeMusicTitle(value)
   } catch (error) {
-    if (error instanceof Error) validationError(error.message)
-    validationError('标题不合法')
+    // 工具函数无 logger 上下文：统一转换为业务校验异常抛出，由路由外层 catch + sendMusicRouteError 记录日志
+    validationError(error instanceof Error ? error.message : '标题不合法')
   }
 }
 
@@ -544,8 +544,8 @@ function normalizeVoiceCloneDescriptionForRequest(value: string | null): string 
   try {
     return normalizeVoiceCloneDescription(value)
   } catch (error) {
-    if (error instanceof Error) validationError(error.message)
-    validationError('描述不合法')
+    // 工具函数无 logger 上下文：统一转换为业务校验异常抛出，由路由外层 catch + sendMusicRouteError 记录日志
+    validationError(error instanceof Error ? error.message : '描述不合法')
   }
 }
 

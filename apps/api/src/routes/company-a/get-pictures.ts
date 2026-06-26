@@ -47,9 +47,12 @@ const route: FastifyPluginAsync = async (app) => {
           clearTimeout(timer)
         }
       } catch (err: any) {
+        // 外部图库请求失败：超时或网络异常，打印错误后按状态码返回，便于后续排查外部平台故障
         if (err?.name === 'AbortError') {
+          app.log.warn({ url, err }, 'company-a API 请求超时')
           return reply.code(504).send({ error: 'Gateway timeout' })
         }
+        app.log.error({ url, err }, 'company-a API 请求失败')
         return reply.code(502).send({ error: 'Failed to reach company-a API' })
       }
 

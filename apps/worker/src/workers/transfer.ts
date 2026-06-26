@@ -121,6 +121,8 @@ function requestToBuffer(url: string, redirectCount = 0): Promise<Buffer> {
             validateExternalUrl(redirectUrl)
             requestToBuffer(redirectUrl, redirectCount + 1).then(resolve, reject)
           } catch (error) {
+            // 重定向 URL 解析或校验失败：记录目标地址与错误，外层调用方会在重试日志中再次捕获
+            logger.warn({ url: location, fromUrl: url, err: error }, '下载重定向解析失败')
             reject(error)
           }
           return

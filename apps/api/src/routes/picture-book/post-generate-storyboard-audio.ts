@@ -102,6 +102,8 @@ const route: FastifyPluginAsync = async (app) => {
           })
           outputs.push({ ref_id: target.refId, language: target.language, batch_id: body.id, output_url: outputUrl })
         } catch (error) {
+          // 单条分镜音频生成失败：记录错误日志，并入队 failures 让前端展示部分失败结果，不中断整批
+          request.log.error({ err: error, refId: target.refId, language: target.language }, '绘本分镜音频生成失败')
           failures.push({ ref_id: target.refId, language: target.language, message: error instanceof Error ? error.message : String(error) })
         }
       }

@@ -52,7 +52,8 @@ async function confirmVoiceCloneCredits(data: MusicVoiceCloneJobData, actualCred
         module: 'music_voice_clone',
       }))
     } catch (outboxErr) {
-      // logger 在该模块顶层未引入 buildLogger，用 console 兜底；保持与原文件风格一致
+      // 业管创作结果 outbox 入队失败：记录错误日志，便于后续从 biz_mgmt_a_bean_transactions 审计 + 人工对账
+      logger.error({ err: outboxErr, batchId: data.batchId, taskId: data.taskId, bizMgmtUserId: data.bizMgmtUserId }, '音色克隆创作结果 outbox 入队失败')
     }
   }
 }

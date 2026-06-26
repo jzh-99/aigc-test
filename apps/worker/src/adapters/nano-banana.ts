@@ -1,5 +1,9 @@
 import sharp from 'sharp'
 import type { ImageGenerationAdapter, AdapterGenerateResult } from './base.js'
+import { buildLogger } from '../logger.js'
+
+// 适配器模块：复用 worker 单例 logger，确保错误日志写入 logs/worker/error.log
+const logger = buildLogger()
 
 // Compress reference images before sending to the API to avoid 502 / timeout
 // caused by oversized payloads.
@@ -172,7 +176,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
       result.requestPayload = logPayload
       return result
     } catch (err) {
-      console.error(`[nano-banana] callGenerations 请求异常: ${err instanceof Error ? err.message : String(err)}`)
+      logger.error({ err, model, prompt }, '[nano-banana] callGenerations 请求异常')
       return { success: false, errorMessage: err instanceof Error ? err.message : String(err), requestPayload: logPayload }
     } finally {
       clearTimeout(timeout)
@@ -228,6 +232,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
         }),
       )
     } catch (err) {
+      logger.error({ err, model, imageCount: imageUrls?.length ?? 0 }, '[nano-banana] callEdits 参考图片准备失败')
       return { success: false, errorMessage: err instanceof Error ? err.message : String(err) }
     }
 
@@ -265,7 +270,7 @@ export class NanoBananaAdapter implements ImageGenerationAdapter {
       result.requestPayload = logPayload
       return result
     } catch (err) {
-      console.error(`[nano-banana] callEdits 请求异常: ${err instanceof Error ? err.message : String(err)}`)
+      logger.error({ err, model, prompt }, '[nano-banana] callEdits 请求异常')
       return { success: false, errorMessage: err instanceof Error ? err.message : String(err), requestPayload: logPayload }
     } finally {
       clearTimeout(timeout)
