@@ -103,7 +103,7 @@ const route: FastifyPluginAsync = async (app) => {
       let assetRecord: { assetId: string; batchId: string; taskId: string } | null = null
 
       if (canvasContext && canvasId) {
-        // 零扣费上传：业管化后本地无积分账户，credit_account_id 直接传 null
+        // 零扣费上传：业管化后本地无积分账户
         assetRecord = await db.transaction().execute(async (trx) => {
           const batch = await trx
             .insertInto('task_batches')
@@ -111,7 +111,6 @@ const route: FastifyPluginAsync = async (app) => {
               user_id: userId,
               team_id: canvasContext.teamId,
               workspace_id: canvasContext.workspaceId,
-              credit_account_id: null,
               idempotency_key: `canvas_upload_${userId}_${Date.now()}_${randomUUID()}`,
               source: 'canvas',
               module: 'upload',

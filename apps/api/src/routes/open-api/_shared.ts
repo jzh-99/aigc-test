@@ -106,8 +106,6 @@ export interface CreateBatchResult {
   batchId: string
   // tasks.id（内部任务标识，version_index=0 的单任务）
   internalTaskId: string
-  // 业管化后本地无积分账户，固定返回 null（保留字段兼容调用方 jobData）
-  creditAccountId: string | null
 }
 
 // 判定 PG unique_violation（SQLSTATE 23505）。
@@ -122,7 +120,7 @@ export function isPgUniqueViolation(err: unknown): boolean {
 }
 
 // 7 种开放接口业务路由共用的提交骨架：事务内建 task_batches + tasks。
-// estimated_credits 固定 0（开放接口零积分副作用）。业管化后 credit_account_id 传 null。
+// estimated_credits 固定 0（开放接口零积分副作用）。本地积分系统已退役，无 credit_account_id。
 // 重复同 apiClient + taskId → 命中 idempotency_key UNIQUE → DUPLICATE_TASK。
 export async function createOpenApiBatch(input: CreateBatchInput): Promise<CreateBatchResult> {
   const teamId = input.apiClient.teamId
@@ -144,7 +142,6 @@ export async function createOpenApiBatch(input: CreateBatchInput): Promise<Creat
           user_id: systemUserId,
           team_id: teamId,
           workspace_id: input.apiClient.workspaceId,
-          credit_account_id: null,
           idempotency_key: idempotencyKey,
           source: 'open_api',
           module: input.module,
@@ -176,7 +173,7 @@ export async function createOpenApiBatch(input: CreateBatchInput): Promise<Creat
         .returning('id')
         .executeTakeFirstOrThrow()
 
-      return { batchId: batch.id, internalTaskId: task.id, creditAccountId: null }
+      return { batchId: batch.id, internalTaskId: task.id }
     })
   } catch (err) {
     if (isPgUniqueViolation(err)) {

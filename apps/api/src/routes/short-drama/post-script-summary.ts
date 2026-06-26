@@ -73,8 +73,6 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     // 业管 A 豆扣减（生成前实时余额校验 → 扣减）。本地不再冻结积分。
-    // creditAccountId 置空字符串兼容下游 no-op 调用（saveShortDramaStateAndSettleCredits/safeRefundCredits 已不碰本地积分）。
-    const creditAccountId = ''
     try {
       await deductBizMgmtPointsForGeneration({
         localUserId: userId,
@@ -99,7 +97,7 @@ const route: FastifyPluginAsync = async (app) => {
       state.script.summaryErrorMessage = null
       await saveShortDramaProjectState(projectId, state, 0)
     } catch (error) {
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成状态保存失败')
+      await safeRefundCredits(app, teamId, userId, ESTIMATED_CREDITS, projectId, '摘要生成状态保存失败')
       await releaseRedisLock(app.redis, generationLock)
       app.log.error({ error, projectId }, '短剧摘要生成状态保存失败')
       return reply.status(500).send({
@@ -116,7 +114,6 @@ const route: FastifyPluginAsync = async (app) => {
         userId,
         teamId,
         workspaceId: project.workspace_id,
-        creditAccountId,
         estimatedCredits: ESTIMATED_CREDITS,
       })
     } catch (error) {
@@ -190,7 +187,6 @@ const route: FastifyPluginAsync = async (app) => {
         state,
         actualCredits,
         estimatedCredits: ESTIMATED_CREDITS,
-        creditAccountId,
         userId,
         teamId,
         status: 'summary_ready',
@@ -218,7 +214,7 @@ const route: FastifyPluginAsync = async (app) => {
         // 不退积分、不覆盖状态，仅记日志；用户刷新即可看到已生成结果。
         app.log.warn({ error, projectId }, '短剧摘要已生成成功，但向客户端推送结果失败')
       } else {
-        await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '摘要生成失败')
+        await safeRefundCredits(app, teamId, userId, ESTIMATED_CREDITS, projectId, '摘要生成失败')
         state.script.status = 'failed'
         // 持久化失败原因，前端重进页面仍可见并可重试
         state.script.summaryErrorMessage = error instanceof Error ? error.message : '剧本摘要生成失败'

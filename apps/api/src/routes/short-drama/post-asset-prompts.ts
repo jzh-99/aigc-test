@@ -159,8 +159,8 @@ const route: FastifyPluginAsync = async (app) => {
     const session = createShortDramaSSESession(reply)
     const { sendEvent, sendPing, clientSignal } = session
 
-    // 文本任务记录（僵死自愈的状态来源）：该路由积分按批冻结，循环外无 creditAccountId，
-    // 故任务记录在第一批 freezeCredits 后创建（见循环内）。心跳定时器先启动，textTaskId 赋值后自动写心跳。
+    // 文本任务记录（僵死自愈的状态来源）：故任务记录在第一批扣减后创建（见循环内）。
+    // 心跳定时器先启动，textTaskId 赋值后自动写心跳。
     let textTaskId: string | null = null
     const heartbeatTimer = setInterval(() => {
       if (textTaskId) void heartbeatShortDramaTextTask(textTaskId).catch(() => {})
@@ -178,7 +178,6 @@ const route: FastifyPluginAsync = async (app) => {
     try {
       for (const [batchIndex, batch] of batches.entries()) {
         // 业管 A 豆扣减（每批独立幂等号）；本地不再冻结积分
-        const creditAccountId = ''
 
         try {
           await deductBizMgmtPointsForGeneration({
@@ -199,7 +198,6 @@ const route: FastifyPluginAsync = async (app) => {
                 userId,
                 teamId,
                 workspaceId: project.workspace_id,
-                creditAccountId,
                 estimatedCredits: ESTIMATED_CREDITS,
               })
             } catch (err) {
@@ -369,7 +367,6 @@ const route: FastifyPluginAsync = async (app) => {
               state,
               actualCredits,
               estimatedCredits: ESTIMATED_CREDITS,
-              creditAccountId,
               userId,
               teamId,
               status: isAssetsCompleted ? 'assets_ready' : undefined,
@@ -390,7 +387,7 @@ const route: FastifyPluginAsync = async (app) => {
             totalCount: totalOutlines,
           })
         } catch (error) {
-          await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, `第 ${batch.from}-${batch.to} 集素材描述生成失败`)
+          await safeRefundCredits(app, teamId, userId, ESTIMATED_CREDITS, projectId, `第 ${batch.from}-${batch.to} 集素材描述生成失败`)
           app.log.error({ error, projectId, batch }, '短剧素材描述批次生成失败')
           state.assets.status = 'failed'
           await markShortDramaProjectFailed(projectId, state).catch((saveError) => {

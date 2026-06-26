@@ -65,11 +65,11 @@ const route: FastifyPluginAsync = async (app) => {
 
     const model = DEFAULT_STORYBOOK_IMAGE_MODEL
 
-    // ① 建 task_batches + tasks（事务内，幂等防重复），返回 creditAccountId 供 jobData
+    // ① 建 task_batches + tasks（事务内，幂等防重复）
     //    module='storybook'（对齐迁移 071 的 chk_tb_module 枚举）
     //    serviceType='storybook'（对齐 callbacks.py 的 _storybook_meta）
     //    params 快照写入 worker 两步流程所需的业务字段（age/category/style/pages）
-    const { batchId, internalTaskId, creditAccountId } = await createOpenApiBatch({
+    const { batchId, internalTaskId } = await createOpenApiBatch({
       apiClient,
       serviceType: 'storybook',
       taskId: b.task_id,
@@ -89,7 +89,7 @@ const route: FastifyPluginAsync = async (app) => {
 
     // ② 投递绘本生成队列
     //    jobData 字段对齐 StorybookJobData（packages/types）：
-    //      - taskId/batchId/userId/teamId/workspaceId/creditAccountId/estimatedCredits 必填
+    //      - taskId/batchId/userId/teamId/workspaceId/estimatedCredits 必填
     //      - prompt/age/category/style/pages 业务字段（worker 两步流程消费）
     //    回调字段（callbackUrl/businessId/serviceType/openApiTaskId）由 worker 读取
     await getStorybookQueue().add('generate', {
@@ -98,7 +98,6 @@ const route: FastifyPluginAsync = async (app) => {
       userId: apiClient.systemUserId!,
       teamId: apiClient.teamId!,
       workspaceId: apiClient.workspaceId!,
-      creditAccountId,
       estimatedCredits: 0,
       prompt: b.prompt,
       age: b.age,

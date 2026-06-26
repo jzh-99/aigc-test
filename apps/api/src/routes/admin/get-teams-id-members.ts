@@ -17,7 +17,7 @@ const route: FastifyPluginAsync = async (app) => {
       .innerJoin('users', 'users.id', 'team_members.user_id')
       .select([
         'users.id', 'users.username', 'users.account', 'users.avatar_url',
-        'team_members.role', 'team_members.credit_quota', 'team_members.credit_used',
+        'team_members.role',
         'team_members.joined_at',
       ])
       .where('team_members.team_id', '=', teamId)

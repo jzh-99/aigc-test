@@ -69,8 +69,8 @@ const route: FastifyPluginAsync = async (app) => {
     //    故此处把 URL 数组写入 params.image，而非自定义 referenceUrls 字段，确保 worker 透明兼容。
     const referenceUrls = await persistReferenceImages(b.image)
 
-    // ② 建 task_batches + tasks（事务内，幂等防重复），返回 creditAccountId 供 jobData
-    const { batchId, internalTaskId, creditAccountId } = await createOpenApiBatch({
+    // ② 建 task_batches + tasks（事务内，幂等防重复）
+    const { batchId, internalTaskId } = await createOpenApiBatch({
       apiClient,
       serviceType: 'image',
       taskId: b.task_id,
@@ -90,15 +90,13 @@ const route: FastifyPluginAsync = async (app) => {
 
     // ③ 投递图片生成队列
     //    jobData 字段对齐 GenerationJobData（packages/types）：
-    //      - taskId/batchId/userId/teamId/creditAccountId/estimatedCredits/provider/model/prompt/params 必填
-    //      - completePipeline/failPipeline 解构 creditAccountId 做积分确认/退还
+    //      - taskId/batchId/userId/teamId/estimatedCredits/provider/model/prompt/params 必填
     //      - callbackUrl/businessId/serviceType/openApiTaskId 为开放接口回调用可选字段
     await getImageQueue().add('generate', {
       taskId: internalTaskId,
       batchId,
       userId: apiClient.systemUserId!,
       teamId: apiClient.teamId!,
-      creditAccountId,
       provider: 'volcengine',
       model: b.model,
       prompt: b.promt,

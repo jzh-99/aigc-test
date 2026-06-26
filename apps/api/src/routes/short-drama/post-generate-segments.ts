@@ -103,7 +103,6 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     // 业管 A 豆扣减（生成前实时余额校验 → 扣减）。本地不再冻结积分。
-    const creditAccountId = ''
     try {
       await deductBizMgmtPointsForGeneration({
         localUserId: userId,
@@ -128,7 +127,7 @@ const route: FastifyPluginAsync = async (app) => {
     try {
       await saveShortDramaProjectState(projectId, state, 0)
     } catch (error) {
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, '片段脚本生成状态保存失败')
+      await safeRefundCredits(app, teamId, userId, ESTIMATED_CREDITS, projectId, '片段脚本生成状态保存失败')
       await releaseRedisLock(app.redis, generationLock)
       app.log.error({ error, projectId, episodeNumber }, '短剧片段脚本生成状态保存失败')
       return reply.status(500).send({
@@ -146,7 +145,6 @@ const route: FastifyPluginAsync = async (app) => {
         userId,
         teamId,
         workspaceId: project.workspace_id,
-        creditAccountId,
         estimatedCredits: ESTIMATED_CREDITS,
       })
     } catch (error) {
@@ -282,7 +280,7 @@ const route: FastifyPluginAsync = async (app) => {
       error: unknown,
       refundContext: string,
     ): Promise<void> => {
-      await safeRefundCredits(app, teamId, creditAccountId, userId, ESTIMATED_CREDITS, projectId, refundContext)
+      await safeRefundCredits(app, teamId, userId, ESTIMATED_CREDITS, projectId, refundContext)
       const now = new Date().toISOString()
       const failedEpisode = episode as typeof episode & { errorMessage?: string | null }
       episode.segmentsStatus = 'failed'
@@ -546,7 +544,6 @@ const route: FastifyPluginAsync = async (app) => {
         state,
         actualCredits,
         estimatedCredits: ESTIMATED_CREDITS,
-        creditAccountId,
         userId,
         teamId,
       })).settledCredits

@@ -226,7 +226,6 @@ const route: FastifyPluginAsync = async (app) => {
     const estimatedCredits = estimateEpisodeOutlineCredits(systemPrompt, userPrompt, batch)
 
     // 业管 A 豆扣减（生成前实时余额校验 → 扣减）。本地不再冻结积分。
-    const creditAccountId = ''
     try {
       await deductBizMgmtPointsForGeneration({
         localUserId: userId,
@@ -252,7 +251,7 @@ const route: FastifyPluginAsync = async (app) => {
       state.script.outlinesErrorMessage = null
       await saveShortDramaProjectState(projectId, state, 0)
     } catch (error) {
-      await safeRefundCredits(app, teamId, creditAccountId, userId, estimatedCredits, projectId, '剧本生成状态保存失败')
+      await safeRefundCredits(app, teamId, userId, estimatedCredits, projectId, '剧本生成状态保存失败')
       await releaseRedisLock(app.redis, generationLock)
       app.log.error({ error, projectId }, '短剧分集大纲生成状态保存失败')
       return reply.status(500).send({
@@ -269,7 +268,6 @@ const route: FastifyPluginAsync = async (app) => {
         userId,
         teamId,
         workspaceId: project.workspace_id,
-        creditAccountId,
         estimatedCredits,
       })
     } catch (error) {
@@ -331,7 +329,6 @@ const route: FastifyPluginAsync = async (app) => {
           state,
           actualCredits,
           estimatedCredits,
-          creditAccountId,
           userId,
           teamId,
           status: state.script.outlines.length >= episodeCount ? 'outline_ready' : undefined,
@@ -364,7 +361,7 @@ const route: FastifyPluginAsync = async (app) => {
       if (persisted) {
         app.log.warn({ error, projectId }, '短剧分集剧本已生成成功，但向客户端推送结果失败')
       } else {
-        await safeRefundCredits(app, teamId, creditAccountId, userId, estimatedCredits, projectId, `第 ${batch.from}-${batch.to} 集剧本生成失败`)
+        await safeRefundCredits(app, teamId, userId, estimatedCredits, projectId, `第 ${batch.from}-${batch.to} 集剧本生成失败`)
         state.script.status = 'failed'
         // 持久化分集剧本失败状态与原因，前端重进页面仍可见并可重试
         state.script.outlinesStatus = 'failed'

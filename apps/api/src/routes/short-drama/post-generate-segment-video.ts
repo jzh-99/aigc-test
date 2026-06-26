@@ -410,7 +410,6 @@ export default async function postGenerateSegmentVideo(app: FastifyInstance): Pr
               user_id: userId,
               team_id: teamId,
               workspace_id: project.workspace_id,
-              credit_account_id: null,
               idempotency_key: randomUUID(),
               source: 'studio',
               module: 'video',

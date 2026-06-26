@@ -4,14 +4,16 @@ import { sql } from 'kysely'
 import { teamRoleGuard } from '../../plugins/guards.js'
 
 const route: FastifyPluginAsync = async (app) => {
-  // PATCH /teams/:id/members/:uid — 更新成员角色、配额或周期
+  // PATCH /teams/:id/members/:uid — 更新成员角色或优先特权
+  // （成员配额已退役，credit_quota/quota_period 字段保留在 body 兼容旧前端但忽略）
   app.patch<{ Params: { id: string; uid: string }; Body: { role?: string; credit_quota?: number | null; quota_period?: string | null; priority_boost?: boolean } }>('/teams/:id/members/:uid', {
     preHandler: teamRoleGuard('owner'),
     config: { rateLimit: false },
   }, async (request, reply) => {
-    const { role, credit_quota, quota_period, priority_boost } = request.body ?? {}
-    if (role === undefined && credit_quota === undefined && quota_period === undefined && priority_boost === undefined) {
-      return reply.badRequest('At least one field (role, credit_quota, quota_period, priority_boost) is required')
+    const { role, priority_boost } = request.body ?? {}
+    // credit_quota / quota_period 已退役，忽略；仅 role / priority_boost 生效
+    if (role === undefined && priority_boost === undefined) {
+      return reply.badRequest('At least one field (role, priority_boost) is required')
     }
 
     // 只有全局管理员可以设置 priority_boost
@@ -19,28 +21,10 @@ const route: FastifyPluginAsync = async (app) => {
       return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '只有管理员可以设置优先特权' } })
     }
 
-    if (quota_period !== undefined && quota_period !== null && quota_period !== 'weekly' && quota_period !== 'monthly') {
-      return reply.badRequest('quota_period must be "weekly", "monthly", or null')
-    }
-
     const db = getDb()
     const updates: Record<string, unknown> = {}
     if (role !== undefined) updates.role = role
-    if (credit_quota !== undefined) updates.credit_quota = credit_quota
     if (priority_boost !== undefined) updates.priority_boost = priority_boost
-    if (quota_period !== undefined) {
-      updates.quota_period = quota_period
-      if (quota_period) {
-        const now = new Date()
-        if (quota_period === 'weekly') {
-          updates.quota_reset_at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
-        } else {
-          updates.quota_reset_at = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
-        }
-      } else {
-        updates.quota_reset_at = null
-      }
-    }
 
     await db
       .updateTable('team_members')
@@ -52,42 +36,18 @@ const route: FastifyPluginAsync = async (app) => {
     return { success: true }
   })
 
-  // POST /teams/:id/members/:uid/reset-credits — 手动重置成员已用积分为 0
+  // POST /teams/:id/members/:uid/reset-credits — 【已退役】成员配额已移除，A 豆由业管统一管理
   app.post<{ Params: { id: string; uid: string } }>('/teams/:id/members/:uid/reset-credits', {
     preHandler: teamRoleGuard('owner'),
     config: { rateLimit: false },
-  }, async (request, reply) => {
-    const db = getDb()
-
-    const member = await db
-      .selectFrom('team_members')
-      .select(['credit_used', 'quota_period'])
-      .where('team_id', '=', request.params.id)
-      .where('user_id', '=', request.params.uid)
-      .executeTakeFirst()
-
-    if (!member) return reply.notFound('成员不存在')
-
-    const updates: Record<string, unknown> = { credit_used: 0 }
-
-    // 如果设置了周期配额，从当前时间重新计算下次重置时间
-    if (member.quota_period) {
-      const now = new Date()
-      if (member.quota_period === 'weekly') {
-        updates.quota_reset_at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
-      } else {
-        updates.quota_reset_at = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
-      }
-    }
-
-    await db
-      .updateTable('team_members')
-      .set(updates)
-      .where('team_id', '=', request.params.id)
-      .where('user_id', '=', request.params.uid)
-      .execute()
-
-    return { success: true, credit_used: 0 }
+  }, async (_request, reply) => {
+    return reply.code(410).send({
+      success: false,
+      error: {
+        code: 'LOCAL_CREDITS_RETIRED',
+        message: '成员配额已移除，A 豆余额与消耗由业管平台统一管理，本地重置配额已退役。',
+      },
+    })
   })
 
   // DELETE /teams/:id/members/:uid — 移除成员

@@ -77,8 +77,8 @@ const route: FastifyPluginAsync = async (app) => {
     //    worker buildTaskBody 读 params.images 作为首尾帧 URL 数组，故字段名用 images
     const referenceUrls = await persistReferenceImages(b.images)
 
-    // ② 建 task_batches + tasks（事务内，幂等防重复），返回 creditAccountId 供 jobData
-    const { batchId, internalTaskId, creditAccountId } = await createOpenApiBatch({
+    // ② 建 task_batches + tasks（事务内，幂等防重复）
+    const { batchId, internalTaskId } = await createOpenApiBatch({
       apiClient,
       serviceType: 'video',
       taskId: b.task_id,
@@ -101,7 +101,7 @@ const route: FastifyPluginAsync = async (app) => {
 
     // ③ 投递视频生成队列
     //    jobData 字段对齐 VideoSubmitJobData（packages/types）：
-    //      - taskId/batchId/userId/teamId/creditAccountId/provider/model/prompt/params/estimatedCredits 必填
+    //      - taskId/batchId/userId/teamId/provider/model/prompt/params/estimatedCredits 必填
     //      - video-submit worker 消费 params（aspect_ratio/images/duration/resolution）提交火山
     //    回调字段（callbackUrl/businessId/serviceType/openApiTaskId）非 VideoSubmitJobData
     //    契约字段，但与 GenerationJobData 对齐保留，video-poller/transfer 通过查 task_batches
@@ -111,7 +111,6 @@ const route: FastifyPluginAsync = async (app) => {
       batchId,
       userId: apiClient.systemUserId!,
       teamId: apiClient.teamId!,
-      creditAccountId,
       provider: 'volcengine',
       model: b.model,
       prompt: b.prompt,

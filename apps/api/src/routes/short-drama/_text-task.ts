@@ -35,8 +35,6 @@ export interface ShortDramaTextTaskContext {
   userId: string
   teamId: string
   workspaceId: string
-  /** 业管化后本地无积分账户，允许为空 */
-  creditAccountId?: string | null
   estimatedCredits?: number
 }
 
@@ -48,7 +46,6 @@ export async function createShortDramaTextTaskBatch(ctx: ShortDramaTextTaskConte
       user_id: ctx.userId,
       team_id: ctx.teamId,
       workspace_id: ctx.workspaceId,
-      credit_account_id: ctx.creditAccountId ?? null,
       idempotency_key: randomUUID(),
       source: 'studio',
       module: 'text',

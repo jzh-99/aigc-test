@@ -130,7 +130,6 @@ const route: FastifyPluginAsync = async (app) => {
         team_id: teamId,
         user_id: userId,
         role,
-        credit_quota,
       })
       .execute()
 

@@ -93,7 +93,6 @@ const route: FastifyPluginAsync = async (app) => {
         life_order_id: String(lifeOrder.orderid),
         user_id: userId,
         team_id: team_id ?? null,
-        credit_account_id: null,
         amount_fen: pkg.amount_fen,
         credits_to_grant: pkg.credits,
         status: 'pending',

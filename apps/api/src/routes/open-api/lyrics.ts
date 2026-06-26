@@ -131,10 +131,10 @@ const route: FastifyPluginAsync = async (app) => {
     // bussiness_id 源可空，适配为空串（DB business_id 为 nullable，但回调契约传空串）
     const bussinessId = b.bussiness_id ?? ''
 
-    // ② 建 task_batches + tasks（事务内，幂等防重复），返回 batchId/internalTaskId/creditAccountId
+    // ② 建 task_batches + tasks（事务内，幂等防重复），返回 batchId/internalTaskId
     //    module='music'、serviceType='song'（对齐源 callbacks.py 的 _song_meta）
     //    params 快照写入 worker 读取的 MusicBatchParams 字段（mode/track_type/styles/voice_gender 等）
-    const { batchId, internalTaskId, creditAccountId } = await createOpenApiBatch({
+    const { batchId, internalTaskId } = await createOpenApiBatch({
       apiClient,
       serviceType: 'song',
       taskId: b.task_id,
@@ -190,7 +190,7 @@ const route: FastifyPluginAsync = async (app) => {
 
     // ④ 投递音乐生成队列
     //    jobData 字段对齐 MusicJobData（packages/types）：
-    //      - taskId/batchId/trackId/userId/teamId/workspaceId/creditAccountId/estimatedCredits 必填
+    //      - taskId/batchId/trackId/userId/teamId/workspaceId/estimatedCredits 必填
     //    回调字段（callbackUrl/businessId/serviceType/openApiTaskId）非 MusicJobData 契约字段，
     //    但与 GenerationJobData 对齐保留；music worker 完成后通过查 task_batches 表
     //    获取 source/callback_url/business_id/task_id 做分流（不依赖 jobData 透传）
@@ -201,7 +201,6 @@ const route: FastifyPluginAsync = async (app) => {
       userId: apiClient.systemUserId!,
       teamId: apiClient.teamId!,
       workspaceId: apiClient.workspaceId!,
-      creditAccountId,
       estimatedCredits: 0,
       callbackUrl: b.callback_url,
       businessId: bussinessId,

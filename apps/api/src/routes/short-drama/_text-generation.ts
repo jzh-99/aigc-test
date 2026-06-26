@@ -612,8 +612,8 @@ export function parseAndValidateJson(
  *
  * 迁移说明：原实现对齐 worker complete pipeline 的本地积分结算（解冻+扣余额+ledger）。
  * 业管化后 A 豆在生成前由 deductBizMgmtPointsForGeneration 实时扣减（扣减即终态），
- * 本函数只负责 short_drama_projects 状态/累计积分写入；creditAccountId/estimatedCredits
- * 参数保留以兼容调用方签名，但不再读写 credit_accounts/credits_ledger/team_members。
+ * 本函数只负责 short_drama_projects 状态/累计积分写入；estimatedCredits 参数仅用于
+ * 项目累计展示的安全钳制，不再读写本地积分表。
  *
  * @returns 实际结算的积分数（安全钳制后，仍用于项目 actual_credits 累计展示）
  */
@@ -622,7 +622,6 @@ export async function saveShortDramaStateAndSettleCredits(input: {
   state: ShortDramaState
   actualCredits: number
   estimatedCredits: number
-  creditAccountId: string
   userId: string
   teamId: string
   status?: string
@@ -636,7 +635,6 @@ export async function saveShortDramaStateAndSettleCredits(input: {
     estimatedCredits,
     userId: _userId,
     teamId: _teamId,
-    creditAccountId: _creditAccountId,
     status,
     title,
     episodeCount,
@@ -688,19 +686,18 @@ export async function saveShortDramaStateAndSettleCredits(input: {
  *
  * 迁移说明：业管 A 豆在生成前已扣减；本地不再退积分。失败退款应由调用方写
  * 创作结果 outbox(success=false) 由 biz-mgmt-notify-queue 通知业管处理。
- * 本函数保留签名兼容现有调用点，但不再触碰 credit_accounts。
+ * 本函数保留签名兼容现有调用点，但不再触碰本地积分。
  */
 export async function safeRefundCredits(
   app: { log: { warn: (obj: unknown, msg: string) => void } },
   teamId: string,
-  creditAccountId: string,
   userId: string,
   amount: number,
   projectId: string,
   context: string
 ): Promise<void> {
   app.log.warn(
-    { projectId, creditAccountId, teamId, userId, amount, context },
+    { projectId, teamId, userId, amount, context },
     `短剧文本生成失败（${context}）：业管 A 豆已预扣，退款由业管侧 outbox 流程处理，本地不退`,
   )
 }

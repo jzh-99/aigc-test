@@ -53,7 +53,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       const teamId = member?.team_id ?? ''
 
-      // 零扣费分镜：业管化后本地无积分账户，credit_account_id 直接传 null
+      // 零扣费分镜：业管化后本地无积分账户
       // 创建 task_batches + task 记录
       const batchId = crypto.randomUUID()
       const taskId = crypto.randomUUID()
@@ -66,7 +66,6 @@ const route: FastifyPluginAsync = async (app) => {
             user_id: userId,
             team_id: teamId,
             workspace_id: canvas.workspace_id,
-            credit_account_id: null,
             idempotency_key: crypto.randomUUID(),
             source: 'canvas',
             module: 'storyboard',

@@ -3,7 +3,6 @@ export interface GenerationJobData {
   batchId: string
   userId: string
   teamId: string
-  creditAccountId?: string | null
   provider: string
   model: string
   prompt: string
@@ -44,7 +43,6 @@ export interface VideoSubmitJobData {
   userId: string
   teamId: string
   workspaceId?: string | null
-  creditAccountId?: string | null
   provider: string
   model: string
   prompt: string
@@ -81,7 +79,6 @@ export interface StoryboardJobData {
   batchId: string
   userId: string
   teamId: string
-  creditAccountId?: string | null
   estimatedCredits: number
   canvasId: string
   canvasNodeId: string
@@ -96,7 +93,6 @@ export interface MusicJobData {
   userId: string
   teamId: string
   workspaceId: string
-  creditAccountId?: string | null
   estimatedCredits: number
   // 开放接口（Open API）回调用字段，全部可选，对非开放接口任务零影响：
   // music worker 完成后通过查 task_batches 表获取 source/callback_url 做分流，
@@ -120,7 +116,6 @@ export interface MusicVoiceCloneJobData {
   userId: string
   teamId: string
   workspaceId: string
-  creditAccountId?: string | null
   estimatedCredits: number
   // 业管计费上下文（见 BizMgmtGenerationBillingContext），worker 终态写创作结果 outbox 用
   bizMgmtDeductRequestNo?: string
@@ -149,7 +144,6 @@ export interface StorybookJobData {
   userId: string
   teamId: string
   workspaceId: string
-  creditAccountId?: string | null
   estimatedCredits: number
   // 源 StorybookGenerateRequest 业务字段
   prompt: string
@@ -173,7 +167,6 @@ export interface ShortDramaExportEpisodeJobData {
   userId: string
   teamId: string
   workspaceId: string
-  creditAccountId?: string | null
   estimatedCredits: number
   // 业管计费上下文（见 BizMgmtGenerationBillingContext），worker 终态写创作结果 outbox 用
   bizMgmtDeductRequestNo?: string
@@ -201,7 +194,6 @@ export interface PodcastJobData {
   userId: string
   teamId: string
   workspaceId: string
-  creditAccountId?: string | null
   estimatedCredits: number
   // 源 PodcastGenerateRequest 业务字段
   contentType: 'text' | 'file' | 'url'
@@ -258,7 +250,6 @@ export interface NewsJobData {
   userId: string
   teamId: string
   workspaceId: string
-  creditAccountId?: string | null
   estimatedCredits: number
   // 源 NewsGenerateRequest 业务字段
   prompt: string

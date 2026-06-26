@@ -59,7 +59,7 @@ const route: FastifyPluginAsync = async (app) => {
       // module='news'（对齐迁移 071 的 chk_tb_module 枚举）
       // serviceType='news'（对齐 callbacks.py 的 news 分支）
       // provider='ark' / model=资讯模型 / params 快照 date（worker 消费用）
-      const { batchId, internalTaskId, creditAccountId } = await createOpenApiBatch({
+      const { batchId, internalTaskId } = await createOpenApiBatch({
         apiClient,
         serviceType: 'news',
         taskId: b.task_id,
@@ -74,7 +74,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       // 步骤②：投递资讯生成队列
       // jobData 字段对齐 NewsJobData（packages/types）：
-      //   - taskId/batchId/userId/teamId/workspaceId/creditAccountId/estimatedCredits 必填
+      //   - taskId/batchId/userId/teamId/workspaceId/estimatedCredits 必填
       //   - prompt/date 业务字段（worker 消费）
       //   - 回调字段（callbackUrl/businessId/serviceType/openApiTaskId）
       await getNewsQueue().add('generate', {
@@ -83,7 +83,6 @@ const route: FastifyPluginAsync = async (app) => {
         userId: apiClient.systemUserId!,
         teamId: apiClient.teamId!,
         workspaceId: apiClient.workspaceId!,
-        creditAccountId,
         estimatedCredits: 0,
         prompt: b.prompt,
         date: b.date,

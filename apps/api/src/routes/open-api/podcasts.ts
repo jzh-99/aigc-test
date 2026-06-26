@@ -106,7 +106,7 @@ const route: FastifyPluginAsync = async (app) => {
       // module='podcast'（对齐迁移 071 的 chk_tb_module 枚举）
       // serviceType='podcast'（对齐 callbacks.py 的 podcast 默认分支）
       // params 快照写入 worker 所需业务字段（content_type/speakers/content 脱敏后的值）
-      const { batchId, internalTaskId, creditAccountId } = await createOpenApiBatch({
+      const { batchId, internalTaskId } = await createOpenApiBatch({
         apiClient,
         serviceType: 'podcast',
         taskId: b.task_id,
@@ -126,7 +126,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       // 步骤③：投递播客生成队列
       // jobData 字段对齐 PodcastJobData（packages/types）：
-      //   - taskId/batchId/userId/teamId/workspaceId/creditAccountId/estimatedCredits 必填
+      //   - taskId/batchId/userId/teamId/workspaceId/estimatedCredits 必填
       //   - contentType/content/speakers 业务字段（worker 消费）
       //   - sourceFileUrl：路由层 PDF base64 转 TOS 后的 URL（worker 优先用此）
       await getPodcastQueue().add('generate', {
@@ -135,7 +135,6 @@ const route: FastifyPluginAsync = async (app) => {
         userId: apiClient.systemUserId!,
         teamId: apiClient.teamId!,
         workspaceId: apiClient.workspaceId!,
-        creditAccountId,
         estimatedCredits: 0,
         contentType: b.content_type,
         content: resolvedContent,
