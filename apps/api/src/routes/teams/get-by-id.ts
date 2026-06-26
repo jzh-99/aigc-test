@@ -2,8 +2,14 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import { teamRoleGuard } from '../../plugins/guards.js'
 
+/**
+ * GET /teams/:id — 团队信息 + 成员列表。
+ *
+ * 硬切换后本地积分系统已退役，A 豆余额由业管平台统一管理，本接口不再查询
+ * credit_accounts，响应移除 credits 字段。成员列表中的 credit_quota / credit_used 等
+ * 配额字段也已废弃（成员配额已移除），不再返回给前端。
+ */
 const route: FastifyPluginAsync = async (app) => {
-  // GET /teams/:id — 团队信息 + 成员列表 + 积分余额
   app.get<{ Params: { id: string } }>('/teams/:id', {
     preHandler: teamRoleGuard('editor'),
     config: { rateLimit: false },
@@ -20,21 +26,12 @@ const route: FastifyPluginAsync = async (app) => {
       .innerJoin('users', 'users.id', 'team_members.user_id')
       .select([
         'users.id as user_id', 'users.account', 'users.username', 'users.avatar_url',
-        'team_members.role', 'team_members.credit_quota', 'team_members.credit_used',
-        'team_members.quota_period', 'team_members.quota_reset_at', 'team_members.joined_at',
-        'team_members.priority_boost',
+        'team_members.role', 'team_members.joined_at', 'team_members.priority_boost',
       ])
       .where('team_members.team_id', '=', request.params.id)
       .execute()
 
-    const creditAccount = await db
-      .selectFrom('credit_accounts')
-      .select(['balance', 'frozen_credits', 'total_earned', 'total_spent'])
-      .where('owner_type', '=', 'team')
-      .where('team_id', '=', request.params.id)
-      .executeTakeFirst()
-
-    return { ...team, members, credits: creditAccount ?? { balance: 0, frozen_credits: 0, total_earned: 0, total_spent: 0 } }
+    return { ...team, members }
   })
 }
 

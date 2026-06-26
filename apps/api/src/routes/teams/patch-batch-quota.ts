@@ -1,9 +1,14 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { getDb } from '@aigc/db'
 import { teamRoleGuard } from '../../plugins/guards.js'
 
+/**
+ * PATCH /teams/:id/members/batch-quota — 批量更新多个成员的配额和周期。
+ *
+ * 【已退役】本地积分系统硬切换后成员配额已移除，A 豆余额与消耗由业管平台统一管理，
+ * 本地不再维护 team_members 的配额字段。保留路由与请求 schema 以兼容旧前端调用，
+ * 统一返回 410 提示该能力已退役，不再读写任何本地配额字段。
+ */
 const route: FastifyPluginAsync = async (app) => {
-  // PATCH /teams/:id/members/batch-quota — 批量更新多个成员的配额和周期
   app.patch<{
     Params: { id: string }
     Body: { user_ids: string[]; credit_quota?: number | null; quota_period?: string | null }
@@ -22,36 +27,14 @@ const route: FastifyPluginAsync = async (app) => {
         additionalProperties: false,
       },
     },
-  }, async (request, reply) => {
-    const { user_ids, credit_quota, quota_period } = request.body
-    if (credit_quota === undefined && quota_period === undefined) {
-      return reply.badRequest('At least one of credit_quota or quota_period is required')
-    }
-
-    const db = getDb()
-    const updates: Record<string, unknown> = {}
-    if (credit_quota !== undefined) updates.credit_quota = credit_quota
-    if (quota_period !== undefined) {
-      updates.quota_period = quota_period
-      if (quota_period) {
-        const now = new Date()
-        updates.quota_reset_at = quota_period === 'weekly'
-          ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
-          : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
-      } else {
-        updates.quota_reset_at = null
-      }
-    }
-
-    await db
-      .updateTable('team_members')
-      .set(updates)
-      .where('team_id', '=', request.params.id)
-      .where('user_id', 'in', user_ids)
-      .where('role', '!=', 'owner')
-      .execute()
-
-    return { success: true, updated: user_ids.length }
+  }, async (_request, reply) => {
+    return reply.code(410).send({
+      success: false,
+      error: {
+        code: 'LOCAL_CREDITS_RETIRED',
+        message: '成员配额已移除，A 豆余额与消耗由业管平台统一管理，本地批量配额管理已退役。',
+      },
+    })
   })
 }
 

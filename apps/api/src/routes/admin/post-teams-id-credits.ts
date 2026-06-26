@@ -1,10 +1,16 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { getDb } from '@aigc/db'
-import { sql } from 'kysely'
-import { stripHtml } from '../../lib/sanitize.js'
 import type { TopUpCreditsRequest } from '@aigc/types'
 
-// POST /admin/teams/:id/credits — 调整A豆（正数充值，负数扣减）
+/**
+ * POST /admin/teams/:id/credits — 调整 A 豆（正数充值，负数扣减）。
+ *
+ * 【已退役】本地积分系统硬切换后，团队 A 豆余额由业管平台统一管理，本地不再维护
+ * credit_accounts / credits_ledger。管理员如需调整某会员的 A 豆，请在业管后台操作，
+ * 或通过业管订购同步接口（subscribe_sync outbox）走充值流程。
+ *
+ * 保留路由与请求 schema 以兼容旧前端调用，但统一返回 410 提示该能力已迁移至业管，
+ * 不再读写任何本地积分表。
+ */
 const route: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string }; Body: TopUpCreditsRequest }>('/admin/teams/:id/credits', {
     schema: {
@@ -19,60 +25,13 @@ const route: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (request, reply) => {
-    const { amount, description: rawDesc } = request.body
-    if (amount === 0) return reply.badRequest('amount must be a non-zero number')
-    const description = rawDesc ? stripHtml(rawDesc).slice(0, 200) : undefined
-
-    const db = getDb()
-    const creditAccount = await db
-      .selectFrom('credit_accounts')
-      .select(['id', 'balance', 'frozen_credits'])
-      .where('team_id', '=', request.params.id)
-      .where('owner_type', '=', 'team')
-      .executeTakeFirst()
-    if (!creditAccount) return reply.notFound('Team credit account not found')
-
-    if (amount > 0) {
-      await db.updateTable('credit_accounts').set({
-        balance: sql`balance + ${amount}`,
-        total_earned: sql`total_earned + ${amount}`,
-      }).where('id', '=', creditAccount.id).execute()
-
-      await db.insertInto('credits_ledger').values({
-        credit_account_id: creditAccount.id,
-        user_id: request.user.id,
-        amount,
-        type: 'topup',
-        description: description ?? '管理员充值A豆',
-      }).execute()
-    } else {
-      const deduction = Math.abs(amount)
-      const available = Number(creditAccount.balance) - Number(creditAccount.frozen_credits)
-      if (available < deduction) {
-        return reply.badRequest('可扣减余额不足，请检查当前余额和冻结金额')
-      }
-
-      await db.updateTable('credit_accounts').set({
-        balance: sql`balance - ${deduction}`,
-        total_spent: sql`total_spent + ${deduction}`,
-      }).where('id', '=', creditAccount.id).execute()
-
-      await db.insertInto('credits_ledger').values({
-        credit_account_id: creditAccount.id,
-        user_id: request.user.id,
-        amount,
-        type: 'refund',
-        description: description ?? '管理员扣减A豆',
-      }).execute()
-    }
-
-    const updated = await db
-      .selectFrom('credit_accounts')
-      .select(['balance', 'frozen_credits', 'total_earned', 'total_spent'])
-      .where('id', '=', creditAccount.id)
-      .executeTakeFirstOrThrow()
-
-    return updated
+    return reply.code(410).send({
+      success: false,
+      error: {
+        code: 'LOCAL_CREDITS_RETIRED',
+        message: '团队 A 豆余额由业管平台统一管理，本地管理员充值/扣减已退役，请在业管后台操作。',
+      },
+    })
   })
 }
 
