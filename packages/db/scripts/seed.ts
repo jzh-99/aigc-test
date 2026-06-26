@@ -147,20 +147,16 @@ async function main() {
     .onConflict((oc: any) => oc.columns(['team_id', 'user_id']).doUpdateSet({ role: 'owner' }))
     .execute()
 
-  // Editor with quota
+  // Editor
   await db
     .insertInto('team_members')
     .values({
       team_id: team.id,
       user_id: editorUser.id,
       role: 'editor',
-      credit_quota: 1000,
-      credit_used: 0,
     })
     .onConflict((oc: any) => oc.columns(['team_id', 'user_id']).doUpdateSet({
       role: 'editor',
-      credit_quota: 1000,
-      credit_used: 0,
     }))
     .execute()
   console.log('  team_members seeded')
@@ -209,28 +205,8 @@ async function main() {
     .execute()
   console.log('  workspace_members seeded')
 
-  // 8. Team credit account with 10000 credits — skip if exists
-  const existingTeamCredit = await db
-    .selectFrom('credit_accounts')
-    .selectAll()
-    .where('team_id', '=', team.id)
-    .where('owner_type', '=', 'team')
-    .executeTakeFirst()
-
-  if (!existingTeamCredit) {
-    await db
-      .insertInto('credit_accounts')
-      .values({
-        owner_type: 'team',
-        team_id: team.id,
-        balance: 10000,
-        frozen_credits: 0,
-        total_earned: 10000,
-        total_spent: 0,
-      })
-      .execute()
-  }
-  console.log('  team credit_accounts seeded (10000 credits)')
+  // 本地积分系统已退役（迁移 078 删除 credit_accounts），seed 不再种植本地积分账户。
+  // A 豆余额由业管平台统一管理。
 
   // 8b. Admin team + workspace + credits — admin gets their own space
   let adminTeam = await db
@@ -298,27 +274,7 @@ async function main() {
     .onConflict((oc: any) => oc.columns(['workspace_id', 'user_id']).doUpdateSet({ role: 'admin' }))
     .execute()
 
-  const existingAdminCredit = await db
-    .selectFrom('credit_accounts')
-    .selectAll()
-    .where('team_id', '=', adminTeam.id)
-    .where('owner_type', '=', 'team')
-    .executeTakeFirst()
-
-  if (!existingAdminCredit) {
-    await db
-      .insertInto('credit_accounts')
-      .values({
-        owner_type: 'team',
-        team_id: adminTeam.id,
-        balance: 99999,
-        frozen_credits: 0,
-        total_earned: 99999,
-        total_spent: 0,
-      })
-      .execute()
-  }
-  console.log('  admin team + workspace + credits seeded (管理员)')
+  console.log('  admin team + workspace seeded (管理员)')
 
   // 9. Provider: Qwen — 画布文本节点、分镜拆分等文本类能力使用
   const qwenResult = await db

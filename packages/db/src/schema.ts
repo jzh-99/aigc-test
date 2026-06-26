@@ -90,10 +90,6 @@ export interface TeamMembersTable {
   user_id: string
   role: 'owner' | 'admin' | 'editor' | 'viewer'
   joined_at: Generated<Date>
-  credit_quota: number | null
-  credit_used: Generated<number>
-  quota_period: 'weekly' | 'monthly' | null
-  quota_reset_at: Timestamp | null
   priority_boost: Generated<boolean>
 }
 
@@ -126,32 +122,6 @@ export interface WorkspaceMembersTable {
   created_at: Generated<Date>
 }
 
-// ─── Credits ──────────────────────────────────────────────────────────────────
-
-export interface CreditAccountsTable {
-  id: Generated<string>
-  owner_type: 'user' | 'team'
-  user_id: string | null
-  team_id: string | null
-  balance: Generated<number>
-  frozen_credits: Generated<number>
-  total_earned: Generated<number>
-  total_spent: Generated<number>
-  updated_at: Generated<Date>
-}
-
-export interface CreditsLedgerTable {
-  id: Generated<string>
-  credit_account_id: string
-  user_id: string
-  amount: number
-  type: 'topup' | 'subscription' | 'freeze' | 'confirm' | 'refund' | 'bonus' | 'expire'
-  task_id: string | null
-  batch_id: string | null
-  description: string | null
-  created_at: Generated<Date>
-}
-
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export interface TaskBatchesTable {
@@ -159,7 +129,6 @@ export interface TaskBatchesTable {
   user_id: string
   team_id: string | null
   workspace_id: string | null
-  credit_account_id: string | null
   parent_batch_id: string | null
   idempotency_key: string
   // 开放接口迁移扩展：新增 'open_api'
@@ -283,7 +252,6 @@ export interface PaymentOrdersTable {
   life_order_id: string
   user_id: string
   team_id: string | null
-  credit_account_id: string | null
   amount_fen: number
   credits_to_grant: number
   status: Generated<'pending' | 'paid' | 'failed' | 'refunded'>
@@ -903,8 +871,6 @@ export interface Database {
   team_subscriptions: TeamSubscriptionsTable
   workspaces: WorkspacesTable
   workspace_members: WorkspaceMembersTable
-  credit_accounts: CreditAccountsTable
-  credits_ledger: CreditsLedgerTable
   task_batches: TaskBatchesTable
   tasks: TasksTable
   assets: AssetsTable

@@ -18,11 +18,6 @@ CREATE TRIGGER trg_teams_updated_at
   BEFORE UPDATE ON teams
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-DROP TRIGGER IF EXISTS trg_credit_accounts_updated_at ON credit_accounts;
-CREATE TRIGGER trg_credit_accounts_updated_at
-  BEFORE UPDATE ON credit_accounts
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
 DROP TRIGGER IF EXISTS trg_task_batches_updated_at ON task_batches;
 CREATE TRIGGER trg_task_batches_updated_at
   BEFORE UPDATE ON task_batches
