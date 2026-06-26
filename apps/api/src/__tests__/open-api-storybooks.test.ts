@@ -94,21 +94,9 @@ async function cleanup() {
   const teamIds = teams.map((t) => t.id)
   const userIds = teams.map((t) => t.owner_id)
 
-  const acctIds = teamIds.length
-    ? (await db
-        .selectFrom('credit_accounts')
-        .select('id')
-        .where('team_id', 'in', teamIds)
-        .execute()).map((r) => r.id)
-    : []
-
   await db.transaction().execute(async (trx) => {
     if (teamIds.length > 0) {
       await trx.deleteFrom('api_clients').where('team_id', 'in', teamIds).execute()
-      if (acctIds.length > 0) {
-        await trx.deleteFrom('credits_ledger').where('credit_account_id', 'in', acctIds).execute()
-      }
-      await trx.deleteFrom('credit_accounts').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('team_members').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('workspaces').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('teams').where('id', 'in', teamIds).execute()
@@ -181,7 +169,6 @@ describe('POST /api/v3/storybooks/generations', () => {
     assert.equal(typeof data.userId, 'string')
     assert.equal(typeof data.teamId, 'string')
     assert.equal(typeof data.workspaceId, 'string')
-    assert.equal(typeof data.creditAccountId, 'string')
     assert.equal(data.estimatedCredits, 0)
     // 业务字段
     assert.equal(data.prompt, '一只小兔子的森林冒险')

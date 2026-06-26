@@ -32,7 +32,6 @@ interface AvatarTaskRow {
   userId: string
   teamId: string
   workspaceId: string | null
-  creditAccountId: string
   estimatedCredits: number
   externalTaskId: string
   processingStartedAt: string | null
@@ -269,7 +268,6 @@ async function pollAvatarTasks(): Promise<void> {
       'task_batches.team_id as teamId',
       'task_batches.user_id as userId',
       'task_batches.workspace_id as workspaceId',
-      'task_batches.credit_account_id as creditAccountId',
     ])
     .where('tasks.status', '=', 'processing')
     .where('task_batches.module', '=', 'avatar' as any)

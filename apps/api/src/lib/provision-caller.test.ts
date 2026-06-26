@@ -51,7 +51,6 @@ async function cleanup(): Promise<void> {
   await db.transaction().execute(async (trx) => {
     if (teamIds.length > 0) {
       await trx.deleteFrom('api_clients').where('team_id', 'in', teamIds).execute()
-      await trx.deleteFrom('credit_accounts').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('team_members').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('workspaces').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('teams').where('id', 'in', teamIds).execute()

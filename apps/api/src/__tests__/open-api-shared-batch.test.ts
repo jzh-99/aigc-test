@@ -76,7 +76,6 @@ async function cleanup(): Promise<void> {
   await db.transaction().execute(async (trx) => {
     if (teamIds.length > 0) {
       await trx.deleteFrom('api_clients').where('team_id', 'in', teamIds).execute()
-      await trx.deleteFrom('credit_accounts').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('team_members').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('workspaces').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('teams').where('id', 'in', teamIds).execute()
@@ -117,7 +116,6 @@ describe('createOpenApiBatch', () => {
 
     assert.ok(res.batchId, '应返回 batchId')
     assert.ok(res.internalTaskId, '应返回 internalTaskId')
-    assert.ok(res.creditAccountId, '应返回 creditAccountId 供路由投递 jobData')
     assert.notEqual(res.batchId, res.internalTaskId)
 
     const db = getDb()
@@ -150,16 +148,6 @@ describe('createOpenApiBatch', () => {
     )
     // params jsonb 序列化后回读应与原对象等价
     assert.deepEqual(batch.params, input.params, 'params jsonb 往返一致')
-
-    // credit_account_id 应指向归属 team 的 team 级账户
-    const acc = await db
-      .selectFrom('credit_accounts')
-      .select(['id', 'owner_type'])
-      .where('id', '=', batch.credit_account_id)
-      .executeTakeFirstOrThrow()
-    assert.equal(acc.owner_type, 'team')
-    // createOpenApiBatch 返回的 creditAccountId 应与 task_batches.credit_account_id 一致
-    assert.equal(res.creditAccountId, batch.credit_account_id)
 
     // tasks 行：version_index=0、status=pending、归属 batch + system_user
     const task = await db

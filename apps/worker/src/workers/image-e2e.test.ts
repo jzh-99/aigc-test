@@ -48,7 +48,6 @@ import { getBullMQConnection, closeRedis } from '../lib/redis.js'
 const CALLBACK_SECRET = 'e2e-test-callback-secret'
 const VOLCENGINE_TEMP_IMAGE_PATH = '/__e2e_temp_image__.png'
 const MOCK_TOS_PUBLIC_URL = 'https://tos-e2e-mock.example.com'
-const OPENAPI_BALANCE = 1_000_000_000
 // 测试专用 Redis db：与可能正在运行的 dev worker（db0）隔离，避免队列抢占
 // dev worker 连 db0 消费 image-queue；测试 worker 连 db15 消费同名队列，互不干扰
 const TEST_REDIS_DB = 15
@@ -161,7 +160,7 @@ function stopMockServer(): Promise<void> {
 // ─── 内联 provisionCaller（对齐 apps/api/src/lib/provision-caller.ts）──────────
 // 字段逻辑与源文件保持一致；仅为避免跨包 import fastify 依赖而内联。
 
-async function provisionCallerInline(name: string): Promise<{ clientId: string; teamId: string; systemUserId: string; workspaceId: string; creditAccountId: string }> {
+async function provisionCallerInline(name: string): Promise<{ clientId: string; teamId: string; systemUserId: string; workspaceId: string }> {
   const db = getDb()
   const apiKey = 'aigc_' + crypto.randomUUID().replace(/-/g, '')
   const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex')
@@ -205,17 +204,6 @@ async function provisionCallerInline(name: string): Promise<{ clientId: string; 
       .returning('id')
       .executeTakeFirstOrThrow()
 
-    const acct = await trx
-      .insertInto('credit_accounts')
-      .values({
-        owner_type: 'team',
-        team_id: team.id,
-        balance: OPENAPI_BALANCE,
-        frozen_credits: 0,
-      })
-      .returning('id')
-      .executeTakeFirstOrThrow()
-
     await trx
       .insertInto('team_members')
       .values({
@@ -242,7 +230,6 @@ async function provisionCallerInline(name: string): Promise<{ clientId: string; 
       clientId: client.id,
       teamId: team.id,
       systemUserId: sysUser.id,
-      creditAccountId: acct.id,
       workspaceId: workspace.id,
     }
   })
@@ -258,7 +245,6 @@ async function createBatchInline(input: {
   teamId: string
   systemUserId: string
   workspaceId: string
-  creditAccountId: string
   taskId: string
   bussinessId: string
   callbackUrl: string
@@ -276,7 +262,6 @@ async function createBatchInline(input: {
         user_id: input.systemUserId,
         team_id: input.teamId,
         workspace_id: input.workspaceId,
-        credit_account_id: input.creditAccountId,
         idempotency_key: idempotencyKey,
         source: 'open_api',
         module: 'image',
@@ -321,9 +306,8 @@ async function cleanup(): Promise<void> {
   }
 
   if (createdBatchIds.length > 0) {
-    // 先删引用 batch 的关联表（credits_ledger / provider_api_logs 有 FK 指向 batch/task/account）
+    // 先删引用 batch 的关联表（provider_api_logs 有 FK 指向 batch/task）
     await db.deleteFrom('provider_api_logs').where('batch_id', 'in', createdBatchIds).execute()
-    await db.deleteFrom('credits_ledger').where('batch_id', 'in', createdBatchIds).execute()
     await db.transaction().execute(async (trx) => {
       await trx.deleteFrom('tasks').where('batch_id', 'in', createdBatchIds).execute()
       await trx.deleteFrom('canvas_node_outputs').where('batch_id', 'in', createdBatchIds).execute()
@@ -341,23 +325,9 @@ async function cleanup(): Promise<void> {
   const teamIds = teams.map((t) => t.id)
   const userIds = teams.map((t) => t.owner_id)
 
-  // 先查归属 team 的 credit_account_ids，删引用它们的 credits_ledger，再删 account
-  const acctIds = teamIds.length
-    ? (await db
-        .selectFrom('credit_accounts')
-        .select('id')
-        .where('team_id', 'in', teamIds)
-        .execute()).map((r) => r.id)
-    : []
-
   await db.transaction().execute(async (trx) => {
     if (teamIds.length > 0) {
       await trx.deleteFrom('api_clients').where('team_id', 'in', teamIds).execute()
-      // credits_ledger 引用 credit_account_id，必须先删
-      if (acctIds.length > 0) {
-        await trx.deleteFrom('credits_ledger').where('credit_account_id', 'in', acctIds).execute()
-      }
-      await trx.deleteFrom('credit_accounts').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('team_members').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('workspaces').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('teams').where('id', 'in', teamIds).execute()
@@ -476,7 +446,6 @@ describe('图片开放接口端到端（Task 1.4）', () => {
       teamId: caller.teamId,
       systemUserId: caller.systemUserId,
       workspaceId: caller.workspaceId!,
-      creditAccountId: caller.creditAccountId,
       taskId: externalTaskId,
       bussinessId,
       callbackUrl,
@@ -493,7 +462,6 @@ describe('图片开放接口端到端（Task 1.4）', () => {
       batchId,
       userId: caller.systemUserId,
       teamId: caller.teamId,
-      creditAccountId: caller.creditAccountId,
       provider: 'volcengine',
       model: 'seedream-4.0',
       prompt: '一只猫',

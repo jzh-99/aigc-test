@@ -109,23 +109,9 @@ async function cleanup() {
   const teamIds = teams.map((t) => t.id)
   const userIds = teams.map((t) => t.owner_id)
 
-  const acctIds = teamIds.length
-    ? (
-        await db
-          .selectFrom('credit_accounts')
-          .select('id')
-          .where('team_id', 'in', teamIds)
-          .execute()
-      ).map((r) => r.id)
-    : []
-
   await db.transaction().execute(async (trx) => {
     if (teamIds.length > 0) {
       await trx.deleteFrom('api_clients').where('team_id', 'in', teamIds).execute()
-      if (acctIds.length > 0) {
-        await trx.deleteFrom('credits_ledger').where('credit_account_id', 'in', acctIds).execute()
-      }
-      await trx.deleteFrom('credit_accounts').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('team_members').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('workspaces').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('teams').where('id', 'in', teamIds).execute()

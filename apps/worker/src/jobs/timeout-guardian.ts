@@ -43,7 +43,6 @@ export async function runTimeoutGuardian(): Promise<void> {
       'task_batches.prompt',
       'task_batches.params',
       'task_batches.team_id as teamId',
-      'task_batches.credit_account_id as creditAccountId',
     ])
     .where((eb: any) =>
       eb.or([
@@ -77,11 +76,11 @@ export async function runTimeoutGuardian(): Promise<void> {
       continue
     }
 
-    if (!task.teamId || !task.creditAccountId) {
-      logger.warn({ taskId: task.taskId }, 'Stuck task missing teamId or creditAccountId, marking failed')
+    if (!task.teamId) {
+      logger.warn({ taskId: task.taskId }, 'Stuck task missing teamId, marking failed')
       await db
         .updateTable('tasks')
-        .set({ status: 'failed', error_message: 'Missing team/credit context', completed_at: new Date().toISOString() })
+        .set({ status: 'failed', error_message: 'Missing team context', completed_at: new Date().toISOString() })
         .where('id', '=', task.taskId)
         .execute()
       continue
@@ -92,7 +91,6 @@ export async function runTimeoutGuardian(): Promise<void> {
       batchId: task.batchId,
       userId: task.userId,
       teamId: task.teamId,
-      creditAccountId: task.creditAccountId,
       provider: task.provider,
       model: task.model,
       prompt: task.prompt,

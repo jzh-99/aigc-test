@@ -104,7 +104,6 @@ async function cleanup() {
   await db.transaction().execute(async (trx) => {
     if (teamIds.length > 0) {
       await trx.deleteFrom('api_clients').where('team_id', 'in', teamIds).execute()
-      await trx.deleteFrom('credit_accounts').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('team_members').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('workspaces').where('team_id', 'in', teamIds).execute()
       await trx.deleteFrom('teams').where('id', 'in', teamIds).execute()
@@ -179,7 +178,6 @@ describe('POST /api/v3/lyrics/generate', () => {
     assert.equal(typeof data.userId, 'string')
     assert.equal(typeof data.teamId, 'string')
     assert.equal(typeof data.workspaceId, 'string')
-    assert.equal(typeof data.creditAccountId, 'string')
     assert.equal(data.estimatedCredits, 0)
     // 开放接口回调字段
     assert.equal(data.callbackUrl, 'https://example.com/cb')
