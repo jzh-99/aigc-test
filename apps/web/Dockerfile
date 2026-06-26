@@ -8,6 +8,8 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@10.31.0 --activate
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+RUN pnpm config set registry "$NPM_REGISTRY"
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/web/package.json ./apps/web/
