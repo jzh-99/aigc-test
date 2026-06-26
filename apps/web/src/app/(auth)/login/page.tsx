@@ -68,14 +68,29 @@ export default function LoginPage() {
     setIdentifier(val.replace(/\D/g, '').slice(0, 11))
   }
 
-  // 第一步"下一步"：仅本地校验手机号格式，通过则切到密码步（不调后端，避免暴露账号存在性）
-  function handleNextStep(e: React.FormEvent) {
+  // 第一步"下一步"：本地校验手机号格式后，调 /auth/check-biz-mgmt 查业管。
+  // 业管是账号唯一判官：查无会员（或故障）立即报"用户不存在"并停在第一步；
+  // 业管有会员才进入密码输入步。这一步会触发后端清理本地孤儿 user（若存在）。
+  async function handleNextStep(e: React.FormEvent) {
     e.preventDefault()
     if (!/^\d{11}$/.test(identifier)) {
       toast.error('请输入 11 位手机号', { duration: 4000 })
       return
     }
-    setStep('password')
+    setLoading(true)
+    try {
+      await apiPost<{ exists: boolean }>('/auth/check-biz-mgmt', { phone: identifier })
+      // 业管有会员，进入密码步
+      setStep('password')
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'BIZ_MGMT_NOT_FOUND') {
+        toast.error('用户不存在', { duration: 6000 })
+      } else {
+        toast.error('查询失败，请稍后重试', { duration: 6000 })
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   // 返回第一步（保留已输手机号，清空密码）

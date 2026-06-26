@@ -7,6 +7,7 @@ const PUBLIC_ROUTES = [
   '/docs',
   '/api/v1/healthz',
   '/api/v1/auth/login',
+  '/api/v1/auth/check-biz-mgmt',
   '/api/v1/auth/refresh',
   '/api/v1/auth/sso',
   '/api/v1/auth/accept-invite',
