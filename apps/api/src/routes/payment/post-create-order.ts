@@ -1,37 +1,17 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { sql } from 'kysely'
 import { getDb } from '@aigc/db'
 import { createLifeOrder, createLifeSubscriptionOrder, buildPaySign } from '../../lib/life-service.js'
 import { TOPUP_PACKAGE_MAP } from '../../lib/topup-packages.js'
 import type { CreateOrderRequest } from '@aigc/types'
 
-// 确保积分账户存在，不存在则创建
-async function ensureCreditAccount(
-  db: ReturnType<typeof getDb>,
-  userId: string,
-  teamId?: string
-): Promise<string> {
-  if (teamId) {
-    const existing = await db.selectFrom('credit_accounts').select('id')
-      .where('owner_type', '=', 'team').where('team_id', '=', teamId).executeTakeFirst()
-    if (existing) return existing.id
-    const created = await db.insertInto('credit_accounts')
-      .values({ owner_type: 'team', team_id: teamId, balance: 0, frozen_credits: 0, total_earned: 0, total_spent: 0 })
-      .returning('id').executeTakeFirstOrThrow()
-    return created.id
-  }
-
-  const existing = await db.selectFrom('credit_accounts').select('id')
-    .where('owner_type', '=', 'user').where('user_id', '=', userId).executeTakeFirst()
-  if (existing) return existing.id
-  const created = await db.insertInto('credit_accounts')
-    .values({ owner_type: 'user', user_id: userId, balance: 0, frozen_credits: 0, total_earned: 0, total_spent: 0 })
-    .returning('id').executeTakeFirstOrThrow()
-  return created.id
-}
-
+/**
+ * POST /payment/orders — 创建充值订单，返回 H5 支付 URL。
+ *
+ * 硬切换后本地积分系统已退役：本路由只负责创建本地订单（payment_orders）用于生命周期
+ * 追踪和支付回调匹配，不再创建/关联 credit_accounts。支付成功后的 A 豆入账由
+ * post-notify.ts 写 subscribe_sync outbox 事件，经业管订购同步接口完成。
+ */
 const route: FastifyPluginAsync = async (app) => {
-  // POST /payment/orders — 创建充值订单，返回 H5 支付 URL
   app.post<{ Body: CreateOrderRequest }>('/payment/orders', {
     schema: {
       body: {
@@ -68,9 +48,6 @@ const route: FastifyPluginAsync = async (app) => {
         return reply.forbidden('团队未开放充值权限')
       }
     }
-
-    // 确保积分账户存在
-    const creditAccountId = await ensureCreditAccount(db, userId, team_id)
 
     const amountYuan = (pkg.amount_fen / 100).toFixed(2)
     const platformCode = process.env.LIFE_SERVICE_PLATFORM_CODE!
@@ -116,11 +93,11 @@ const route: FastifyPluginAsync = async (app) => {
         life_order_id: String(lifeOrder.orderid),
         user_id: userId,
         team_id: team_id ?? null,
-        credit_account_id: creditAccountId,
+        credit_account_id: null,
         amount_fen: pkg.amount_fen,
         credits_to_grant: pkg.credits,
         status: 'pending',
-        order_type: 'topup',
+        order_type: pkg.type === 'monthly' ? 'subscription' : 'topup',
         platform_code: platformCode,
       })
       .returning('id')

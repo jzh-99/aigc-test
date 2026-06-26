@@ -51,7 +51,29 @@ export interface MemberSubCardOutboxInput {
   }
 }
 
-export type BizMgmtOutboxInput = CreationResultOutboxInput | MemberSubCardOutboxInput
+export interface SubscribeOutboxInput {
+  eventType: 'subscribe_sync'
+  dedupeKey: string
+  localUserId: string
+  bizMgmtUserId?: string | null
+  phone: string
+  teamId?: string | null
+  pointsNum: number
+  payload: {
+    requestNo: string
+    exOrderNo: string
+    phone: string
+    channel: number
+    source: string
+    goodsId: string
+    orderType: number
+    payAmount: number | string
+    status: number
+    orderTime?: string
+  }
+}
+
+export type BizMgmtOutboxInput = CreationResultOutboxInput | MemberSubCardOutboxInput | SubscribeOutboxInput
 
 // 幂等写入 outbox：dedupe_key 冲突 doNothing，重复入队不重复创建事件
 export async function enqueueBizMgmtOutboxEvent(input: BizMgmtOutboxInput): Promise<void> {
@@ -62,11 +84,13 @@ export async function enqueueBizMgmtOutboxEvent(input: BizMgmtOutboxInput): Prom
       event_type: input.eventType,
       dedupe_key: input.dedupeKey,
       local_user_id: input.localUserId,
-      biz_mgmt_user_id: input.bizMgmtUserId,
-      ...(input.eventType === 'member_sub_card_sync' ? { phone: input.phone } : {}),
-      team_id: input.teamId,
+      ...(input.eventType === 'subscribe_sync'
+        ? { biz_mgmt_user_id: input.bizMgmtUserId ?? null, phone: input.phone, team_id: input.teamId ?? null }
+        : { biz_mgmt_user_id: input.bizMgmtUserId }),
+      ...(input.eventType === 'member_sub_card_sync' ? { phone: input.phone, team_id: input.teamId } : {}),
       ...(input.eventType === 'creation_result_notify'
         ? {
+            team_id: input.teamId,
             workspace_id: input.workspaceId ?? null,
             task_id: input.taskId,
             batch_id: input.batchId,

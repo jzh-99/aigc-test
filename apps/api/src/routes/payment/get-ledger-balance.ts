@@ -1,114 +1,59 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { getDb } from '@aigc/db'
+import {
+  queryCurrentBizMgmtBalance,
+  queryCurrentBizMgmtLedger,
+} from '../../services/biz-mgmt-a-bean.js'
 
-function sanitizeLedgerDescription(description: string | null): string | null {
-  if (!description) return description
-
-  const normalized = description.trim()
-  const failurePrefix = normalized.match(/^(.+?(?:生成|合成|克隆|导出|拆分|摘要|描述|大纲|脚本|视频|图片|音频).*?失败)[：:]/)
-  if (failurePrefix?.[1]) return failurePrefix[1]
-
-  return normalized
-}
-
+/**
+ * GET /payment/ledger 与 /payment/balance — 兼容旧前端的余额/流水入口。
+ *
+ * 硬切换后本地积分系统已退役，credit_accounts / credits_ledger 不再是权威数据。
+ * 本路由转发到业管 A 豆查询服务（MEMBER-1004 / AIHUB_POINTS_CHANGE_QUERY），
+ * 余额与流水都以业管为准，本地不维护、不缓存。未选择业管身份时返回 400 引导选身份。
+ *
+ * 注意：team_id / account 参数仅用于保持旧契约兼容，业管以当前选中会员身份查询，
+ * 不区分团队/个人账户（业管侧只有会员账户）。
+ */
 const route: FastifyPluginAsync = async (app) => {
-  // GET /payment/ledger?account=personal|team&team_id=xxx&page=1&limit=20
-  app.get<{ Querystring: { account?: string; team_id?: string; page?: string; limit?: string } }>(
+  // GET /payment/ledger?page=1&limit=20&changeType=... — 查询业管 A 豆流水
+  app.get<{ Querystring: { account?: string; team_id?: string; page?: string; limit?: string; changeType?: string } }>(
     '/payment/ledger',
     async (request, reply) => {
-      const db = getDb()
-      const userId = request.user.id
-      const { account = 'personal', team_id, page = '1', limit: limitStr = '20' } = request.query
-      const limit = Math.min(Number(limitStr) || 20, 100)
-      const offset = (Math.max(Number(page) || 1, 1) - 1) * limit
-
-      let creditAccountId: string | undefined
-      let ownTeamLedgerOnly = false
-
-      if (account === 'team' && team_id) {
-        const membership = await db.selectFrom('team_members').select('role')
-          .where('team_id', '=', team_id).where('user_id', '=', userId).executeTakeFirst()
-        if (!membership) {
-          return reply.forbidden('无权查看该团队流水')
-        }
-        ownTeamLedgerOnly = !['owner', 'admin'].includes(membership.role)
-        const acc = await db.selectFrom('credit_accounts').select('id')
-          .where('owner_type', '=', 'team').where('team_id', '=', team_id).executeTakeFirst()
-        creditAccountId = acc?.id
-      } else {
-        const acc = await db.selectFrom('credit_accounts').select('id')
-          .where('owner_type', '=', 'user').where('user_id', '=', userId).executeTakeFirst()
-        creditAccountId = acc?.id
+      const { page = '1', limit: limitStr = '20', changeType } = request.query
+      try {
+        const data = await queryCurrentBizMgmtLedger({
+          localUserId: request.user.id,
+          changeType,
+          pageNum: Number(page),
+          pageSize: Number(limitStr),
+        })
+        return data
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '业管 A 豆流水查询失败'
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'BIZ_MGMT_IDENTITY_REQUIRED', message },
+        })
       }
-
-      if (!creditAccountId) return { data: [], total: 0 }
-
-      const rowsQuery = db.selectFrom('credits_ledger')
-        .leftJoin('task_batches', 'task_batches.id', 'credits_ledger.batch_id')
-        .leftJoin('users', 'users.id', 'credits_ledger.user_id')
-        .select([
-          'credits_ledger.id',
-          'credits_ledger.amount',
-          'credits_ledger.type',
-          'credits_ledger.description',
-          'credits_ledger.created_at',
-          'credits_ledger.task_id',
-          'credits_ledger.batch_id',
-          'credits_ledger.user_id',
-          'task_batches.module',
-          'task_batches.model',
-          'task_batches.provider',
-          'task_batches.prompt',
-          'task_batches.canvas_id',
-          'users.username',
-        ])
-        .where('credits_ledger.credit_account_id', '=', creditAccountId)
-        .where('credits_ledger.type', '!=', 'freeze')
-        .$if(ownTeamLedgerOnly, (qb) => qb.where('credits_ledger.user_id', '=', userId))
-        .orderBy('credits_ledger.created_at', 'desc')
-        .limit(limit).offset(offset)
-
-      const countQuery = db.selectFrom('credits_ledger')
-        .select(db.fn.countAll<number>().as('count'))
-        .where('credit_account_id', '=', creditAccountId)
-        .where('type', '!=', 'freeze')
-        .$if(ownTeamLedgerOnly, (qb) => qb.where('user_id', '=', userId))
-
-      const [rows, countRow] = await Promise.all([
-        rowsQuery.execute(),
-        countQuery.executeTakeFirst(),
-      ])
-
-      return {
-        data: rows.map((row) => ({
-          ...row,
-          description: sanitizeLedgerDescription(row.description),
-        })),
-        total: Number(countRow?.count ?? 0),
-      }
-    }
+    },
   )
 
-  // GET /payment/balance?team_id=xxx — 查询积分余额
-  app.get<{ Querystring: { team_id?: string } }>('/payment/balance', async (request) => {
-    const db = getDb()
-    const { team_id } = request.query
-    const userId = request.user.id
-
-    const [teamAccount, personalAccount] = await Promise.all([
-      team_id
-        ? db.selectFrom('credit_accounts').select('balance')
-            .innerJoin('team_members', 'team_members.team_id', 'credit_accounts.team_id')
-            .where('owner_type', '=', 'team').where('credit_accounts.team_id', '=', team_id)
-            .where('team_members.user_id', '=', userId).executeTakeFirst()
-        : Promise.resolve(null),
-      db.selectFrom('credit_accounts').select('balance')
-        .where('owner_type', '=', 'user').where('user_id', '=', userId).executeTakeFirst(),
-    ])
-
-    return {
-      team_balance: teamAccount?.balance ?? 0,
-      personal_balance: personalAccount?.balance ?? 0,
+  // GET /payment/balance?team_id=xxx — 查询业管 A 豆余额
+  app.get<{ Querystring: { team_id?: string } }>('/payment/balance', async (request, reply) => {
+    try {
+      const balance = await queryCurrentBizMgmtBalance(request.user.id)
+      // 旧契约返回 team_balance / personal_balance；业管只有一个会员余额，
+      // 两字段返回同值以保持兼容，前端应迁移到 /credits/biz-mgmt/balance。
+      return {
+        team_balance: balance,
+        personal_balance: balance,
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '业管 A 豆余额查询失败'
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'BIZ_MGMT_IDENTITY_REQUIRED', message },
+      })
     }
   })
 }

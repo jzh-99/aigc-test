@@ -858,8 +858,8 @@ export interface BizMgmtABeanTransactionsTable {
  */
 export interface BizMgmtOutboxEventsTable {
   id: Generated<string>
-  // creation_result_notify | member_sub_card_sync
-  event_type: 'creation_result_notify' | 'member_sub_card_sync'
+  // creation_result_notify | member_sub_card_sync | subscribe_sync
+  event_type: 'creation_result_notify' | 'member_sub_card_sync' | 'subscribe_sync'
   // 幂等键，全局唯一，重复入队复用
   dedupe_key: string
   // pending | processing | succeeded | failed

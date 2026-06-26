@@ -1,6 +1,6 @@
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { notifyBizMgmtCreationResult, syncBizMgmtMemberSubCard } from './biz-mgmt-toby-client.js'
+import { notifyBizMgmtCreationResult, syncBizMgmtMemberSubCard, syncBizMgmtSubscribe } from './biz-mgmt-toby-client.js'
 
 /**
  * 业管通知 outbox 派发。
@@ -43,7 +43,9 @@ export async function dispatchBizMgmtOutboxEvent(eventId: string): Promise<void>
     // 按 event_type 分派到对应业管接口
     const response = event.event_type === 'creation_result_notify'
       ? await notifyBizMgmtCreationResult(payload)
-      : await syncBizMgmtMemberSubCard(payload)
+      : event.event_type === 'subscribe_sync'
+        ? await syncBizMgmtSubscribe(payload)
+        : await syncBizMgmtMemberSubCard(payload)
 
     if (response.code !== '0000') throw new Error(response.message || '业管通知失败')
 

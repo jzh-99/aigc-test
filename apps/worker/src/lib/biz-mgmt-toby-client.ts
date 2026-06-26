@@ -116,6 +116,19 @@ export interface BizMgmtMemberSubCardRequest {
   initialPointsNum: number | string
 }
 
+export interface BizMgmtSubscribeRequest {
+  requestNo: string
+  exOrderNo: string
+  phone: string
+  channel: number
+  source: string
+  goodsId: string
+  orderType: number
+  payAmount: number | string
+  status: number
+  orderTime?: string
+}
+
 // 创作结果同步 → AIHUB_CREATION_RESULT_NOTIFY
 export function notifyBizMgmtCreationResult(payload: BizMgmtCreationResultRequest) {
   return callTobyApi('/api/toby/points/external/result-notify', 'AIHUB_CREATION_RESULT_NOTIFY', payload)
@@ -124,4 +137,11 @@ export function notifyBizMgmtCreationResult(payload: BizMgmtCreationResultReques
 // 会员副卡同步 → MEMBER-1002
 export function syncBizMgmtMemberSubCard(payload: BizMgmtMemberSubCardRequest) {
   return callTobyApi('/api/toby/member/sub-card', 'MEMBER-1002', payload)
+}
+
+// 订购同步 → SUBSCRIBE_SERVICE_CODE_1001
+// 充值/包月订单支付成功后通知业管，由业管负责给对应会员增加 A 豆，
+// 本地不再维护余额（硬切换：本地积分系统已退役）。
+export function syncBizMgmtSubscribe(payload: BizMgmtSubscribeRequest) {
+  return callTobyApi('/api/toby/subscribe/external/dealExSubscribe', 'SUBSCRIBE_SERVICE_CODE_1001', payload)
 }
