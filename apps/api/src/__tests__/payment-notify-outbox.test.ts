@@ -50,8 +50,8 @@ describe('payment post-create-order drops local credit account creation', () => 
     // 禁止出现 ensureCreditAccount 及 credit_accounts 插入
     assert.doesNotMatch(source, /ensureCreditAccount/)
     assert.doesNotMatch(source, /insertInto\('credit_accounts'\)/)
-    // 订单 credit_account_id 置空，本地不再关联积分账户
-    assert.match(source, /credit_account_id: null/)
+    // credit_account_id 列已删除，订单 insert 不得再写该字段
+    assert.doesNotMatch(source, /credit_account_id/)
   })
 })
 
