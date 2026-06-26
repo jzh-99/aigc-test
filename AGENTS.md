@@ -204,6 +204,13 @@ packages/
 - **解决办法**：`.env` 中 `NEXT_PUBLIC_STORAGE_HOST` 必须填写**浏览器可访问的火山 TOS 公网域名**（如 `xxx.tos-cn-shanghai.volces.com`），不能用内网地址。**改后必须重新构建 web 镜像**（因为已打进 bundle）。
 - **验证方式**：改 `.env` 后 `docker compose up -d --force-recreate` 重建 web 容器，浏览器开发者工具看图片请求 URL 指向公网域名且返回 200。
 
+### 5. CLAUDE.md 被 .gitignore 忽略、不能作为团队约定入口
+
+- **问题现象**：在根目录 `CLAUDE.md` 写了项目约定/规则并 `git add`，提示 `The following paths are ignored by one of your .gitignore files`，提交失败；同事 clone 仓库后看不到该文件，约定无法共享。
+- **根本原因**：`.gitignore` 第 85-86 行明确忽略 `CLAUDE.md` 与 `**/CLAUDE.md`，且根目录 `CLAUDE.md` 从未进入版本库（`git ls-files --error-unmatch CLAUDE.md` 报未跟踪）。它是**本地私有文件**，各人本地内容可不同，不能作为团队入口。
+- **解决办法**：项目约定、规则、常见问题**只写在 `AGENTS.md`**（唯一权威源 + 唯一团队入口，所有 Agent 工具通用）。`CLAUDE.md` 若需保留，仅作本机 Claude Code 的本地引导（指向 AGENTS.md），不 commit。需要把本地修改强制入库时再单独评估，不要默认它能被团队读到。
+- **验证方式**：`git check-ignore -v CLAUDE.md` 若有输出则确认被忽略；`git ls-files CLAUDE.md` 无输出则确认未跟踪；团队约定一律以 `git ls-files AGENTS.md` 能列出的 AGENTS.md 为准。
+
 ---
 
 ## Docker 部署
