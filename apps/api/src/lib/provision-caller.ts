@@ -7,16 +7,12 @@ import { hashApiKey } from './api-client.js'
 // 开放接口调用方「归属容器」联动创建（方案 B'）。
 //
 // 背景：开放接口流量需归属真实租户，而非平台级幽灵账号。每个 api_client 1:1 对应一个
-// 归属容器（system_user + team + 默认 workspace + 占位 credit_account + team_members）。
-// 调用方极少，可接受 1:1 冗余。
+// 归属容器（system_user + team + 默认 workspace + team_members）。
+// 本地积分系统已退役，不再创建占位 credit_account；开放接口任务零积分，生成路由已传
+// creditAccountId=null，余额校验由业管或零积分旁路处理。
 //
 // 在单个事务内联动建表，任一步失败则整体回滚，杜绝半成品行。明文 api_key 仅在此处返回一次，
 // 库内只存 sha256 摘要（对齐 api-client.ts 的 hashApiKey，与源项目 passlib 方案不互通）。
-
-// 开放接口调用方默认积分余额（大值兜底）。
-// 开放接口任务 estimated_credits=0（零积分副作用），但 balance 需为正以通过余额校验，
-// 故给一个足够大的占位值，避免调用方因余额不足被误拦。
-const OPENAPI_BALANCE = Number(process.env.OPENAPI_CREDIT_BALANCE ?? 1_000_000_000)
 
 export interface ProvisionResult {
   // 明文 api_key（仅此一次返回，调用方需妥善保存）
@@ -78,19 +74,9 @@ export async function provisionCaller(name: string): Promise<ProvisionResult> {
       .returning('id')
       .executeTakeFirstOrThrow()
 
-    // ④ 占位 credit_account：owner_type=team，大值 balance
-    //    注意 chk_ca_owner_exclusive 约束：owner_type=team 时 user_id 必须为 null（故不传 user_id）
-    await trx
-      .insertInto('credit_accounts')
-      .values({
-        owner_type: 'team',
-        team_id: team.id,
-        balance: OPENAPI_BALANCE,
-        frozen_credits: 0,
-      })
-      .execute()
-
-    // ⑤ team_members：system_user 以 owner 身份加入 team
+    // ④ team_members：system_user 以 owner 身份加入 team
+    //    （本地积分系统已退役，不再创建占位 credit_account；开放接口任务零积分，
+    //     生成路由已传 creditAccountId=null，余额校验由业管或零积分旁路处理）
     await trx
       .insertInto('team_members')
       .values({

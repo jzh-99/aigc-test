@@ -190,10 +190,7 @@ export async function syncBizMgmtMembersForLocalUser(
         teamId = team.id
 
         await trx.insertInto('team_members').values({ team_id: teamId, user_id: localUserId, role: 'owner' }).execute()
-        await trx
-          .insertInto('credit_accounts')
-          .values({ owner_type: 'team', team_id: teamId, balance: 0, frozen_credits: 0, total_earned: 0, total_spent: 0 })
-          .execute()
+        // 本地积分系统已退役：不再创建 credit_accounts，团队 A 豆余额由业管平台管理
       }
 
       if (!workspaceId) {

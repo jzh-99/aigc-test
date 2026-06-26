@@ -46,23 +46,6 @@ async function ensureTeamMemberOwner(db: DbLike, teamId: string, userId: string)
   }
 }
 
-async function ensureTeamCreditAccount(db: DbLike, teamId: string) {
-  const creditAccount = await db
-    .selectFrom('credit_accounts')
-    .select('id')
-    .where('team_id', '=', teamId)
-    .where('owner_type', '=', 'team')
-    .executeTakeFirst()
-
-  if (creditAccount) return
-
-  await db
-    .insertInto('credit_accounts')
-    .values({ owner_type: 'team', team_id: teamId, balance: 0 })
-    .onConflict((oc) => oc.column('team_id').doNothing())
-    .execute()
-}
-
 async function ensureDefaultWorkspace(db: DbLike, teamId: string, userId: string) {
   const existingWorkspace = await db
     .selectFrom('workspaces')
@@ -133,7 +116,6 @@ export async function ensurePersonalAccountScope(db: Kysely<Database>, userId: s
     }
 
     await ensureTeamMemberOwner(trx, team.id, userId)
-    await ensureTeamCreditAccount(trx, team.id)
     const workspace = await ensureDefaultWorkspace(trx, team.id, userId)
     await ensureWorkspaceMemberAdmin(trx, workspace.id, userId)
 

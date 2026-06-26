@@ -68,7 +68,7 @@ describe('provisionCaller', () => {
     await closeDb()
   })
 
-  test('单事务联动创建 system_user + team + workspace + credit_account + team_members + api_client', async () => {
+  test('单事务联动创建 system_user + team + workspace + team_members + api_client', async () => {
     const name = uniqueName('full')
     createdNames.push(name)
 
@@ -108,15 +108,8 @@ describe('provisionCaller', () => {
     assert.equal(ws.name, '默认工作区')
     assert.equal(ws.created_by, client.system_user_id)
 
-    // credit_account 归属该 team，balance 为大值兜底（> 1_000_000）
-    const acct = await db
-      .selectFrom('credit_accounts')
-      .selectAll()
-      .where('team_id', '=', team.id)
-      .executeTakeFirstOrThrow()
-    assert.equal(acct.owner_type, 'team')
-    assert.ok(acct.balance > 1_000_000, `balance 应为大值兜底，实际 ${acct.balance}`)
-    assert.equal(acct.frozen_credits, 0)
+    // credit_account 归属该 team —— 本地积分系统已退役，provisionCaller 不再创建占位
+    // credit_account，故此处不再断言余额账户（团队 A 豆余额由业管平台管理）。
 
     // team_members 有 owner 行（system_user 加入 team）
     const member = await db

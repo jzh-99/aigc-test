@@ -24,7 +24,7 @@ const route: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (request, reply) => {
-    const { name, owner_username, owner_password, initial_credits, team_type } = request.body
+    const { name, owner_username, owner_password, team_type } = request.body
     const owner_email = request.body.owner_email?.trim()
     const owner_phone = request.body.owner_phone?.trim()
 
@@ -122,12 +122,6 @@ const route: FastifyPluginAsync = async (app) => {
 
     await db.insertInto('team_members').values({ team_id: team.id, user_id: owner.id, role: 'owner' }).execute()
 
-    await db.insertInto('credit_accounts').values({
-      owner_type: 'team',
-      team_id: team.id,
-      balance: initial_credits ?? 0,
-    }).execute()
-
     const workspace = await db
       .insertInto('workspaces')
       .values({ team_id: team.id, name: '默认工作区', created_by: owner.id })
@@ -140,22 +134,8 @@ const route: FastifyPluginAsync = async (app) => {
       role: 'admin',
     }).execute()
 
-    if (initial_credits && initial_credits > 0) {
-      const creditAccount = await db
-        .selectFrom('credit_accounts')
-        .select('id')
-        .where('team_id', '=', team.id)
-        .where('owner_type', '=', 'team')
-        .executeTakeFirstOrThrow()
-
-      await db.insertInto('credits_ledger').values({
-        credit_account_id: creditAccount.id,
-        user_id: request.user.id,
-        amount: initial_credits,
-        type: 'topup',
-        description: '团队初始A豆',
-      }).execute()
-    }
+    // 本地积分系统已退役：不再创建 credit_accounts、不再写 credits_ledger。
+    // 请求体里的 initial_credits 字段保留以兼容旧前端，但被忽略——团队 A 豆余额由业管平台管理。
 
     return reply.status(201).send({
       team,
