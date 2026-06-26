@@ -10,12 +10,17 @@ import { signAccessToken, signRefreshToken } from '../../lib/auth-tokens.js'
 import {
   ensureLocalUserForBizMgmtPhone,
   syncBizMgmtMembersForLocalUser,
+  fetchBizMgmtMembersByPhone,
+  purgeLocalUserCascade,
 } from '../../services/biz-mgmt-member-sync.js'
 
 // 账户锁定相关常量
 const MAX_LOGIN_ATTEMPTS = 5
 const LOCKOUT_WINDOW = 10 * 60 // 10 分钟（秒）
 const LOCKOUT_DURATION = 15 * 60 // 15 分钟（秒）
+
+// 手机号识别正则：11 位、首位为 1。业管先行登录只对手机号生效，邮箱走旧逻辑。
+const PHONE_RE = /^1\d{10}$/
 
 // 检查账户是否被锁定
 async function checkAccountLocked(redis: import('ioredis').default, identifier: string): Promise<boolean> {
@@ -83,29 +88,95 @@ const route: FastifyPluginAsync = async (app) => {
     }
 
     const db = getDb()
-    // 登录主体匹配：account（历史邮箱账号，小写）或 phone（手机号登录）。
-    // 关键：本地不存在用户且 identifier 是手机号时，先查业管；只有业管返回至少一个
-    // status=1 的会员才允许创建本地用户（见 ensureLocalUserForBizMgmtPhone）。
-    let user = await db
-      .selectFrom('users')
-      .select(['id', 'account', 'username', 'password_hash', 'role', 'status', 'phone'])
-      .where((eb) =>
-        eb.or([
-          eb('account', '=', identifier.toLowerCase()),
-          eb('phone', '=', identifier),
-        ]),
-      )
-      .executeTakeFirst()
 
-    // 首次用手机号登录、本地无用户：由业管会员查询决定是否创建本地用户
+    // ────────────────────────────────────────────────────────────────────────
+    // 业管先行登录流程（见计划 Critical Login Invariant + 2026-06-26 澄清）：
+    //
+    // 业管是账号唯一判官。手机号登录必须【无条件先查业管】判存亡：
+    //  1. 业管查无会员（空数组）或接口故障（throw）→ 一律视为"用户不存在"。
+    //     若本地存在该手机号 user，先 purgeLocalUserCascade 物理删除其全部业务数据，
+    //     再返回 401 BIZ_MGMT_NOT_FOUND。
+    //  2. 业管有会员（≥1 个 status=1）→ 查本地 users.phone：
+    //       本地无 → ensureLocalUserForBizMgmtPhone 创建 user/team/workspace + 一次性初始密码
+    //       本地有 → bcrypt 校验密码
+    //  3. 登录成功后异步刷新业管绑定（setImmediate，不 await，不阻塞登录性能）。
+    //
+    // 邮箱登录（identifier 非手机号）走旧的本地先行逻辑，不触发业管查询，
+    // 保证 SSO / 邀请等链路不受影响。
+    // ────────────────────────────────────────────────────────────────────────
+
+    let user: {
+      id: string
+      account: string
+      username: string
+      password_hash: string
+      role: string
+      status: string
+      phone: string | null
+    } | undefined
+
     let oneTimePassword: string | null = null
-    if (!user && /^1\d{10}$/.test(identifier)) {
-      const created = await ensureLocalUserForBizMgmtPhone(identifier)
-      oneTimePassword = created.oneTimePassword
+
+    if (PHONE_RE.test(identifier)) {
+      // ── 手机号登录：业管先行 ──────────────────────────────────────────────
+
+      // 【无条件先查业管】try/catch 包裹：故障等同查无，统一走拒绝分支
+      let bizMgmtMembers: Awaited<ReturnType<typeof fetchBizMgmtMembersByPhone>>
+      try {
+        bizMgmtMembers = await fetchBizMgmtMembersByPhone(identifier)
+      } catch {
+        // 业管接口故障：按用户要求"一律拒绝+清理"，等同查无
+        bizMgmtMembers = []
+      }
+
+      if (bizMgmtMembers.length === 0) {
+        // 分支①②：业管查无（或故障）。
+        // 若本地存在该手机号 user，物理清理其全部业务数据，避免本地残留孤儿账号。
+        const existingUser = await db
+          .selectFrom('users')
+          .select(['id'])
+          .where('phone', '=', identifier)
+          .executeTakeFirst()
+        if (existingUser) {
+          // 分支②：本地有孤儿 user，清理后拒绝
+          await purgeLocalUserCascade(existingUser.id)
+        }
+        // 分支①②统一返回 BIZ_MGMT_NOT_FOUND，前端切回手机号步提示"用户不存在"
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'BIZ_MGMT_NOT_FOUND', message: '用户不存在' },
+        })
+      }
+
+      // 分支③④：业管有会员，查本地 users.phone 决定创建或校验
       user = await db
         .selectFrom('users')
         .select(['id', 'account', 'username', 'password_hash', 'role', 'status', 'phone'])
-        .where('id', '=', created.userId)
+        .where('phone', '=', identifier)
+        .executeTakeFirst()
+
+      if (!user) {
+        // 分支③：本地无 user，业管有会员 → 创建本地 user/team/workspace + 一次性初始密码
+        const created = await ensureLocalUserForBizMgmtPhone(identifier)
+        oneTimePassword = created.oneTimePassword
+        user = await db
+          .selectFrom('users')
+          .select(['id', 'account', 'username', 'password_hash', 'role', 'status', 'phone'])
+          .where('id', '=', created.userId)
+          .executeTakeFirst()
+      }
+      // 分支④：本地有 user，继续走下方密码校验
+    } else {
+      // ── 邮箱登录：本地先行（旧逻辑，保持兼容）──────────────────────────────
+      user = await db
+        .selectFrom('users')
+        .select(['id', 'account', 'username', 'password_hash', 'role', 'status', 'phone'])
+        .where((eb) =>
+          eb.or([
+            eb('account', '=', identifier.toLowerCase()),
+            eb('phone', '=', identifier),
+          ]),
+        )
         .executeTakeFirst()
     }
 
@@ -134,16 +205,16 @@ const route: FastifyPluginAsync = async (app) => {
     // 登录成功，清除失败记录
     await clearFailedAttempts(redis, identifier)
 
-    // 关键不变量：每次手机号密码登录成功后都刷新业管会员，即使本地用户已存在，
-    // 也要发现用户在业管新增的管理账号或公司账号。本同步只处理身份与本地资源
-    // 映射，不读写 A 豆余额；业管查询失败不应阻断已通过密码校验的登录主流程。
+    // 业管会员同步：改为异步触发，不阻塞登录响应。
+    // 关键不变量：每次手机号登录成功后都要刷新业管绑定，发现用户新增的管理/公司账号；
+    // 但业管查询耗时不应拖慢登录，故用 setImmediate 移出请求关键路径，失败只记日志。
     if (user.phone) {
-      try {
-        await syncBizMgmtMembersForLocalUser(user.id, user.phone)
-      } catch {
-        // 业管同步失败不阻断登录：用户仍可登录并在账号选择页/后续刷新时重试。
-        // 同步状态可由 last_synced_at 追溯，不应让业管临时故障锁死本地登录。
-      }
+      setImmediate(() => {
+        syncBizMgmtMembersForLocalUser(user!.id, user!.phone!).catch((err) => {
+          // 异步同步失败不影响已完成的登录，只记日志便于排查
+          request.log.error({ err, userId: user!.id }, '业管会员异步同步失败（不影响登录）')
+        })
+      })
     }
 
     // 撤销旧 refresh token，强制单会话

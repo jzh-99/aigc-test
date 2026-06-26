@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { apiPost, ApiError } from '@/lib/api-client'
 import type { AuthResponse, LoginRequest } from '@aigc/types'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ArrowRight, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 
 function KickedMessage() {
@@ -54,10 +54,35 @@ export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
   const resetGeneration = useGenerationStore((s) => s.reset)
+  // 两步式登录：第一步输手机号，第二步输密码。
+  // 后端单接口 /auth/login 一次完成业管先行流程（查业管→判存亡→查本地→建用户/校验），
+  // 前端两步只是纯视图切换，"下一步"不调后端，提交时才发 {identifier, password}。
+  const [step, setStep] = useState<'phone' | 'password'>('phone')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [suspended, setSuspended] = useState(false)
+
+  // 第一步手机号输入：复用 invite-dialog 的实时过滤（只留数字，截断 11 位）
+  function handlePhoneChange(val: string) {
+    setIdentifier(val.replace(/\D/g, '').slice(0, 11))
+  }
+
+  // 第一步"下一步"：仅本地校验手机号格式，通过则切到密码步（不调后端，避免暴露账号存在性）
+  function handleNextStep(e: React.FormEvent) {
+    e.preventDefault()
+    if (!/^\d{11}$/.test(identifier)) {
+      toast.error('请输入 11 位手机号', { duration: 4000 })
+      return
+    }
+    setStep('password')
+  }
+
+  // 返回第一步（保留已输手机号，清空密码）
+  function handleBack() {
+    setStep('phone')
+    setPassword('')
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -90,7 +115,12 @@ export default function LoginPage() {
       }
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.code === 'ACCOUNT_SUSPENDED') {
+        if (err.code === 'BIZ_MGMT_NOT_FOUND') {
+          // 业管查无会员（或故障）：提示"用户不存在"，切回手机号步并清空密码
+          toast.error('用户不存在', { duration: 6000 })
+          setStep('phone')
+          setPassword('')
+        } else if (err.code === 'ACCOUNT_SUSPENDED') {
           setSuspended(true)
         } else {
           toast.error(err.message, { duration: 8000 })
@@ -143,10 +173,12 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* 表单头部 */}
+          {/* 表单头部（随步骤切换标题）*/}
           <div className="login-form-header">
-            <h2 className="login-form-title">欢迎回来</h2>
-            <p className="login-form-subtitle">登录您的账户，开启 AI 创作之旅</p>
+            <h2 className="login-form-title">{step === 'phone' ? '欢迎回来' : '输入密码'}</h2>
+            <p className="login-form-subtitle">
+              {step === 'phone' ? '登录您的账户，开启 AI 创作之旅' : `正在登录 ${identifier}`}
+            </p>
           </div>
 
           <Suspense fallback={null}>
@@ -163,49 +195,97 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="login-form">
-            <div className="login-field">
-              <label htmlFor="identifier" className="login-label">手机号</label>
-              <Input
-                id="identifier"
-                type="text"
-                placeholder="请输入手机号"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                required
-                autoFocus
-                className="login-input"
-              />
-            </div>
+          {step === 'phone' ? (
+            // ── 第一步：手机号输入 ──
+            <form onSubmit={handleNextStep} className="login-form">
+              <div className="login-field">
+                <label htmlFor="identifier" className="login-label">手机号</label>
+                <Input
+                  id="identifier"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="请输入手机号"
+                  value={identifier}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
+                  required
+                  autoFocus
+                  className="login-input"
+                />
+              </div>
 
-            <div className="login-field">
-              <label htmlFor="password" className="login-label">密码</label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="请输入密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="login-input"
-              />
-            </div>
+              <button
+                type="submit"
+                className="login-submit-btn"
+                disabled={loading || identifier.length !== 11}
+              >
+                {loading ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    查询中...
+                  </span>
+                ) : (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                    下一步
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
+                )}
+              </button>
+            </form>
+          ) : (
+            // ── 第二步：密码输入 ──
+            <form onSubmit={handleSubmit} className="login-form">
+              <div className="login-field">
+                <label htmlFor="password" className="login-label">密码</label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="请输入密码"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoFocus
+                  className="login-input"
+                />
+              </div>
 
-            <button
-              type="submit"
-              className="login-submit-btn"
-              disabled={loading}
-            >
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  登录中...
-                </span>
-              ) : (
-                '登 录'
-              )}
-            </button>
-          </form>
+              <button
+                type="submit"
+                className="login-submit-btn"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    登录中...
+                  </span>
+                ) : (
+                  '登 录'
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBack}
+                className="login-back-btn"
+                style={{
+                  marginTop: '0.75rem',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.6)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.25rem',
+                  width: '100%',
+                  fontSize: '0.875rem',
+                }}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                返回修改手机号
+              </button>
+            </form>
+          )}
 
           <div className="login-footer-links">
             <span>登录即代表同意</span>

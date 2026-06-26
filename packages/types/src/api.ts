@@ -268,6 +268,21 @@ export interface AuthResponse {
 }
 
 /**
+ * 业管先行登录流程的错误响应载荷。
+ *
+ * 业管是账号唯一判官（见计划 Critical Login Invariant）：
+ * - BIZ_MGMT_NOT_FOUND：业管 MEMBER-1001 返回空会员列表，或接口调用失败（故障等同查无）。
+ *   前端据此切回手机号输入步、提示"用户不存在"，并清空密码框。
+ *   后端在返回此码前，若本地存在该手机号 user，会先调用 purgeLocalUserCascade 物理删除其全部业务数据。
+ * - INVALID_CREDENTIALS：业管有会员、本地 user 存在，仅密码错误。前端停在密码步。
+ *
+ * 两者都是 401，但 error.code 不同，前端靠 code 分支。
+ */
+export interface LoginErrorResponse {
+  user_not_found?: boolean
+}
+
+/**
  * 选择业管会员身份接口的响应。
  * 不含 access_token：身份选择不重签 token，前端用原 token 继续（见 post-select-biz-mgmt-member.ts）。
  */

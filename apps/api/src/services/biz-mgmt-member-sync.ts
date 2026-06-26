@@ -258,3 +258,85 @@ export async function syncBizMgmtMembersForLocalUser(
 
   return members
 }
+
+/**
+ * 物理删除一个本地用户及其全部业务数据（业管先行登录的孤儿清理）。
+ *
+ * 触发场景（见计划 Critical Login Invariant）：
+ * 业管是账号唯一判官。当手机号登录时业管 MEMBER-1001 返回空会员列表，
+ * 或接口调用失败（故障等同查无），且本地存在该手机号 user 时，必须调用本函数
+ * 把这个"业管已不存在"的用户的全部本地业务数据物理删除，避免本地残留孤儿账号。
+ *
+ * 删除顺序（叶子→根，严格依赖外键约束）：
+ * 大量业务表对 users.id 是 NO ACTION（Postgres 默认 RESTRICT），直接删 users 会被 FK 阻止，
+ * 所以必须按依赖图逆拓扑顺序逐表删除，最后才能删 users。
+ *
+ * CASCADE 表（refresh_tokens/email_verifications/workspace_members/biz_mgmt_*）理论上会被自动级联，
+ * 但显式删除更可控、更易读，且不依赖外键策略的隐式行为。
+ *
+ * SET NULL 表（provider_api_logs/mini_user_auth_records）删 user 时会自动置 NULL，无需手动处理。
+ *
+ * 整个删除在单个事务内完成，任何一步失败则整体回滚，避免删一半导致数据不一致。
+ *
+ * @param localUserId 本地 users.id
+ */
+export async function purgeLocalUserCascade(localUserId: string): Promise<void> {
+  const db = getDb()
+
+  await db.transaction().execute(async (trx) => {
+    // ── 1. 最底层业务记录（仅引用 user，无反向 FK 依赖）─────────────────────
+    await trx.deleteFrom('prompt_filter_logs').where('user_id', '=', localUserId).execute()
+    await trx.deleteFrom('payment_orders').where('user_id', '=', localUserId).execute()
+    await trx.deleteFrom('voice_profiles').where('user_id', '=', localUserId).execute()
+    // provider_api_logs.user_id 是 SET NULL，会自动处理，这里显式删除避免留日志
+    await trx.deleteFrom('provider_api_logs').where('user_id', '=', localUserId).execute()
+
+    // ── 2. 创作类项目表（引用 user + workspace/team）────────────────────────
+    // picture_book_project_charges 引用 picture_book_projects，先删 charges
+    await trx.deleteFrom('picture_book_project_charges').where('user_id', '=', localUserId).execute()
+    await trx.deleteFrom('picture_book_projects').where('user_id', '=', localUserId).execute()
+    // short_drama_projects 删后，short_drama_segments 通过 project_id CASCADE 自动删
+    await trx.deleteFrom('short_drama_projects').where('user_id', '=', localUserId).execute()
+    await trx.deleteFrom('music_voice_clones').where('user_id', '=', localUserId).execute()
+    await trx.deleteFrom('music_tracks').where('user_id', '=', localUserId).execute()
+    await trx.deleteFrom('video_studio_projects').where('user_id', '=', localUserId).execute()
+    // canvases 删后，canvas_node_outputs / canvas_agent_sessions 通过 canvas_id CASCADE 自动删
+    await trx.deleteFrom('canvases').where('user_id', '=', localUserId).execute()
+
+    // ── 3. 任务链：assets → tasks → task_batches（依赖顺序）──────────────────
+    // assets.task_id 引用 tasks，先删 assets
+    await trx.deleteFrom('assets').where('user_id', '=', localUserId).execute()
+    // tasks.task_batch_id 引用 task_batches，先删 tasks
+    await trx.deleteFrom('tasks').where('user_id', '=', localUserId).execute()
+    await trx.deleteFrom('task_batches').where('user_id', '=', localUserId).execute()
+
+    // ── 4. 业管侧（CASCADE，但显式删更可控）+ 无 FK 表 ───────────────────────
+    // biz_mgmt_member_bindings / biz_mgmt_a_bean_transactions 是 CASCADE，但显式删
+    await trx.deleteFrom('biz_mgmt_a_bean_transactions').where('local_user_id', '=', localUserId).execute()
+    await trx.deleteFrom('biz_mgmt_member_bindings').where('local_user_id', '=', localUserId).execute()
+    // biz_mgmt_outbox_events.local_user_id 无 FK（纯 uuid），必须手动删
+    await trx.deleteFrom('biz_mgmt_outbox_events').where('local_user_id', '=', localUserId).execute()
+    // api_clients.system_user_id 无 FK（纯 uuid），手动删避免悬空
+    await trx.deleteFrom('api_clients').where('system_user_id', '=', localUserId).execute()
+
+    // ── 5. 工作区 / 团队归属 ────────────────────────────────────────────────
+    // workspace_members 是 CASCADE，显式删
+    await trx.deleteFrom('workspace_members').where('user_id', '=', localUserId).execute()
+    // team_members 是 NO ACTION，必须在 teams 前删
+    await trx.deleteFrom('team_members').where('user_id', '=', localUserId).execute()
+    // teams.owner_id 是 NO ACTION，team_members 清掉后可删该 user 拥有的团队
+    // 注意：只删该 user 作为 owner 的团队；其他 owner 的团队不该被删
+    await trx.deleteFrom('teams').where('owner_id', '=', localUserId).execute()
+    // workspaces.created_by 是 NO ACTION，删该 user 创建的工作区
+    await trx.deleteFrom('workspaces').where('created_by', '=', localUserId).execute()
+
+    // ── 6. 认证类（CASCADE，显式删）+ NO ACTION 表 ──────────────────────────
+    await trx.deleteFrom('refresh_tokens').where('user_id', '=', localUserId).execute()
+    await trx.deleteFrom('email_verifications').where('user_id', '=', localUserId).execute()
+    // user_subscriptions 是 NO ACTION，必须显式删
+    await trx.deleteFrom('user_subscriptions').where('user_id', '=', localUserId).execute()
+
+    // ── 7. 最后删 users（所有引用已清除）────────────────────────────────────
+    await trx.deleteFrom('users').where('id', '=', localUserId).execute()
+  })
+}

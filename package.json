@@ -9,7 +9,8 @@
     "openapi:key": "pnpm --filter @aigc/api openapi:key",
     "queue:clean": "pnpm --filter @aigc/worker queue:clean",
     "db:migrate": "pnpm --filter @aigc/db migrate",
-    "db:seed": "pnpm --filter @aigc/db seed"
+    "db:seed": "pnpm --filter @aigc/db seed",
+    "db:reset": "pnpm --filter @aigc/db reset"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
