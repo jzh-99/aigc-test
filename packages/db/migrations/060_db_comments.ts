@@ -548,7 +548,7 @@ COMMENT ON COLUMN short_drama_projects.title IS '短剧标题';
 COMMENT ON COLUMN short_drama_projects.prompt IS '创作提示词';
 COMMENT ON COLUMN short_drama_projects.style IS '视觉风格（如"写实"、"动漫"、"水墨"）';
 COMMENT ON COLUMN short_drama_projects.aspect_ratio IS '画面比例，常用值：9:16（竖屏短视频）、16:9（横屏视频）';
-COMMENT ON COLUMN short_drama_projects.episode_count IS '总集数（范围 1~50）';
+COMMENT ON COLUMN short_drama_projects.episode_count IS '总集数（范围 1~100）；创意生成模式业务上限 80，上传剧本模式由 AI 根据原剧本结构推断，业务上限 100';
 COMMENT ON COLUMN short_drama_projects.status IS '项目状态，可选值：draft（草稿）、summary_ready（摘要就绪）、outline_ready（大纲就绪）、assets_ready（素材就绪）、episodes_ready（剧集就绪）、completed（已完成）、failed（失败）';
 COMMENT ON COLUMN short_drama_projects.active_step IS '当前活跃步骤，可选值：script（脚本编写）、assets（素材生成）、episodes（剧集生成）';
 COMMENT ON COLUMN short_drama_projects.cover_url IS '封面图 URL';

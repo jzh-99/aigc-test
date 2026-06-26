@@ -34,7 +34,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 
   // 添加约束
   await sql`ALTER TABLE short_drama_projects ADD CONSTRAINT chk_short_drama_aspect_ratio CHECK (aspect_ratio IN ('9:16','16:9'))`.execute(db)
-  await sql`ALTER TABLE short_drama_projects ADD CONSTRAINT chk_short_drama_episode_count CHECK (episode_count >= 1 AND episode_count <= 50)`.execute(db)
+  await sql`ALTER TABLE short_drama_projects ADD CONSTRAINT chk_short_drama_episode_count CHECK (episode_count >= 1 AND episode_count <= 100)`.execute(db)
   await sql`ALTER TABLE short_drama_projects ADD CONSTRAINT chk_short_drama_status CHECK (status IN ('draft','summary_ready','outline_ready','assets_ready','episodes_ready','completed','failed'))`.execute(db)
   await sql`ALTER TABLE short_drama_projects ADD CONSTRAINT chk_short_drama_active_step CHECK (active_step IN ('script','assets','episodes'))`.execute(db)
 

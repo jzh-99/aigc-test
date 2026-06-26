@@ -14,6 +14,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/deploy/dist"
 TARGET="${1:-all}"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -26,6 +27,7 @@ build_and_save() {
   docker build \
     --file "$REPO_ROOT/$dockerfile" \
     --tag "$name:latest" \
+    --build-arg "NPM_REGISTRY=$NPM_REGISTRY" \
     "$REPO_ROOT"
 
   echo "====== 导出 $name → dist/$name.tar.gz ======"
@@ -98,6 +100,7 @@ build_web() {
   docker build \
     --file "$REPO_ROOT/apps/web/Dockerfile" \
     --tag "aigc-web:latest" \
+    --build-arg "NPM_REGISTRY=$NPM_REGISTRY" \
     --build-arg "INTERNAL_API_URL=http://${api_host_val}:${api_port_val}" \
     --build-arg "NEXT_PUBLIC_STORAGE_HOST=${storage_host_val}" \
     --build-arg "NEXT_PUBLIC_STORAGE_PORT=${storage_port_val}" \
