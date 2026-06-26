@@ -22,17 +22,11 @@ import {
   creativeNavItems,
   isNavItemActive,
 } from './nav-config'
-import type { CreditBalance } from '@aigc/types'
 
-interface TeamMemberCredit {
-  user_id: string
-  credit_quota: number | null
-  credit_used: number
-}
-
-interface TeamCreditInfo {
-  credits: { balance: number; frozen_credits: number }
-  members: TeamMemberCredit[]
+// 业管 A 豆余额响应：{ balance: number }
+// 本地积分系统已退役，余额权威在业管，统一从 /credits/biz-mgmt/balance 现查。
+interface BizMgmtBalance {
+  balance: number
 }
 
 const navLabelMap: Record<string, string> = {
@@ -75,25 +69,14 @@ export function CreativeSideRail() {
   /* 仅首页吸顶时使用主题渐变；非首页侧边栏保持透明让父容器渐变透出 */
   const showRailTheme = isCreativeHome && isTabSticky
   const user = useAuthStore((s) => s.user)
-  const activeTeam = useAuthStore((s) => s.activeTeam())
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { setActiveTeam, setActiveWorkspace } = useAuthStore()
   const { showVideoStudioTab } = useTeamFeatures()
   const startNavigation = useNavigationStore((s) => s.startNavigation)
-  const { data: teamCreditData } = useSWR<TeamCreditInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
-  const { data: balanceData } = useSWR<CreditBalance>(
-    activeTeamId ? `/payment/balance?team_id=${activeTeamId}` : '/payment/balance'
-  )
-  const isCreditAdmin = activeTeam?.role === 'owner' || activeTeam?.role === 'admin' || user?.role === 'admin'
-  const currentMemberCredit = !isCreditAdmin
-    ? teamCreditData?.members?.find((member) => member.user_id === user?.id)
-    : null
-  const teamBalance = balanceData?.team_balance ?? 0
-  const frozenCredits = teamCreditData?.credits?.frozen_credits ?? 0
-  const remainingCredits = currentMemberCredit?.credit_quota != null
-    ? Math.max(0, currentMemberCredit.credit_quota - (currentMemberCredit.credit_used ?? 0))
-    : Math.max(0, teamBalance - frozenCredits)
+  // 余额统一指向业管 A 豆余额接口（不区分团队/个人，业管以当前选中会员身份查询）
+  const { data: balanceData } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
+  const remainingCredits = balanceData?.balance ?? 0
 
   return (
     <aside

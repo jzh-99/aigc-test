@@ -11,7 +11,7 @@ import { BatchDetail } from '@/components/history/batch-detail'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { AlertTriangle, FolderX } from 'lucide-react'
-import useSWR, { mutate } from 'swr'
+import useSWR from 'swr'
 import type { BatchResponse } from '@aigc/types'
 import { useBatches } from '@/hooks/use-batches'
 import { useBatchSSE } from '@/hooks/use-batch-sse'
@@ -19,15 +19,9 @@ import { Button } from '@/components/ui/button'
 import { AssetsLibraryTab } from '@/components/generation/assets-library-tab'
 import { cn } from '@/lib/utils'
 
-interface TeamMember {
-  user_id: string
-  credit_quota: number | null
-  credit_used: number
-}
-
-interface TeamInfo {
-  credits: { balance: number }
-  members: TeamMember[]
+// 业管 A 豆余额响应。本地积分系统已退役，余额来自业管平台统一查询。
+interface BizMgmtBalance {
+  balance: number
 }
 
 function isTerminalStatus(status: string): boolean {
@@ -97,12 +91,9 @@ function ImagePageContent() {
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam)
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
-  const activeTeamId = useAuthStore((s) => s.activeTeamId)
-  const isInitialized = useAuthStore((s) => s.isInitialized)
-  const activeTeamIdRef = useRef(activeTeamId)
   const hasInitiallyLoadedBatches = useRef(false)
-  useEffect(() => { activeTeamIdRef.current = activeTeamId }, [activeTeamId])
-  const { data: teamData } = useSWR<TeamInfo>(isInitialized && activeTeamId ? `/teams/${activeTeamId}` : null)
+  // 余额统一指向业管 A 豆余额接口（本地积分系统已退役）
+  const { data: balanceData, mutate: mutateBalance } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
 
   // 切换工作区时清空所有活跃订阅
   useEffect(() => {
@@ -148,34 +139,23 @@ function ImagePageContent() {
     batchListRef.current?.update(batch)
     batchListRef.current?.refresh()
     setTimeout(() => { batchListRef.current?.refresh() }, 800)
-    // 任务结束后刷新A豆余额（A豆已确认扣除或退还）
-    if (activeTeamIdRef.current) mutate(`/teams/${activeTeamIdRef.current}`)
+    // 任务结束后刷新业管 A 豆余额（A 豆已确认扣除或退还）
+    mutateBalance()
   }, [])
 
   const handleBatchCreated = useCallback((batch: BatchResponse) => {
     batchListRef.current?.prepend(batch)
     setActiveBatchIds((prev) => new Set(prev).add(batch.id))
-    // 提交后立即刷新A豆（A豆已冻结）
-    if (activeTeamId) mutate(`/teams/${activeTeamId}`)
-  }, [activeTeamId])
+    // 提交后立即刷新业管 A 豆余额（生成前已扣减）
+    mutateBalance()
+  }, [mutateBalance])
 
   const teamRole = activeTeam()?.role
   const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
   const noWorkspace = !activeWorkspaceId
 
-  let lowCredits = false
-  if (!isOwnerOrAdmin && teamData) {
-    const me = teamData.members?.find((m) => m.user_id === user?.id)
-    if (me && me.credit_quota !== null && me.credit_quota !== undefined) {
-      const remaining = me.credit_quota - (me.credit_used ?? 0)
-      if (remaining <= 0) lowCredits = true
-    } else if (teamData.credits.balance <= 0) {
-      lowCredits = true
-    }
-  }
-  if (isOwnerOrAdmin && teamData && teamData.credits.balance <= 0) {
-    lowCredits = true
-  }
+  // 余额不足提示：业管 A 豆余额 <= 0 时提示充值（不再区分团队/个人配额）
+  const lowCredits = (balanceData?.balance ?? 0) <= 0
 
   return (
     <div className="generation-dream-page -m-4 flex h-[calc(100%+2rem)] flex-col gap-6 p-5 md:-m-6 md:h-[calc(100%+3rem)] md:p-7 lg:flex-row">
@@ -209,7 +189,7 @@ function ImagePageContent() {
             <AlertDescription>
               {isOwnerOrAdmin
                 ? 'A豆余额不足，请充值后再继续生成。'
-                : '你的可用A豆已耗尽，请联系团队负责人增加你的A豆配额。'
+                : '你的可用A豆已耗尽，请前往业务管理平台充值。'
               }
             </AlertDescription>
           </Alert>

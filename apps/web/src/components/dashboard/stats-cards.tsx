@@ -3,69 +3,27 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Coins, ImageIcon, TrendingUp } from 'lucide-react'
-import { useAuthStore } from '@/stores/auth-store'
 import { useBatchStats } from '@/hooks/use-batch-stats'
 import useSWR from 'swr'
 
-interface TeamMember {
-  user_id: string
-  credit_quota: number | null
-  credit_used: number
-  role: string
-}
-
-interface TeamInfo {
-  credits: {
-    balance: number
-    frozen_credits: number
-  }
-  members: TeamMember[]
+// 业管 A 豆余额响应。本地积分系统已退役，余额来自业管平台统一查询。
+interface BizMgmtBalance {
+  balance: number
 }
 
 export function StatsCards() {
   const { total, totalCompleted, successRate, isLoading: isStatsLoading } = useBatchStats()
-  const user = useAuthStore((s) => s.user)
-  const activeTeamId = useAuthStore((s) => s.activeTeamId)
-  const activeTeam = useAuthStore((s) => s.activeTeam)
-  const { data: teamData, isLoading: isTeamLoading } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
+  // 余额统一指向业管 A 豆余额接口（不区分团队/个人）
+  const { data: balanceData, isLoading: isBalanceLoading } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
 
-  const teamRole = activeTeam()?.role
-  const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
-
-  let creditLabel: string
-  let creditValue: number
-
-  if (isOwnerOrAdmin) {
-    const balance = teamData?.credits?.balance ?? 0
-    const frozen = teamData?.credits?.frozen_credits ?? 0
-    creditLabel = '可用A豆'
-    creditValue = Math.max(0, balance - frozen)
-  } else {
-    // Editor: show personal remaining = credit_quota - credit_used, min 0
-    const me = teamData?.members?.find((m) => m.user_id === user?.id)
-    if (me && me.credit_quota !== null && me.credit_quota !== undefined) {
-      creditValue = Math.max(0, me.credit_quota - (me.credit_used ?? 0))
-    } else {
-      const balance = teamData?.credits?.balance ?? 0
-      const frozen = teamData?.credits?.frozen_credits ?? 0
-      creditValue = Math.max(0, balance - frozen)
-    }
-    creditLabel = '可用A豆'
-  }
-
-  // Editor quota details for subtitle
-  // 必须在 loading 时返回 null，否则首屏 CSR 若命中 SWR 缓存会与 SSR（无数据）不一致，触发 hydration mismatch
-  const me = !isOwnerOrAdmin ? teamData?.members?.find((m) => m.user_id === user?.id) : null
-  const hasQuota = !isTeamLoading && me && me.credit_quota !== null && me.credit_quota !== undefined
-  const creditSubtitle = hasQuota
-    ? `配额 ${me.credit_quota!.toLocaleString()} · 已用 ${(me.credit_used ?? 0).toLocaleString()}`
-    : null
+  const creditLabel = '可用A豆'
+  const creditValue = balanceData?.balance ?? 0
 
   const stats = [
     {
       label: creditLabel,
-      value: isTeamLoading ? null : creditValue.toLocaleString(),
-      subtitle: creditSubtitle,
+      value: isBalanceLoading ? null : creditValue.toLocaleString(),
+      subtitle: null,
       icon: Coins,
       color: 'text-accent-orange',
       bg: 'bg-accent-orange/10',

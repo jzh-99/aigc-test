@@ -1,104 +1,44 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import useSWR from 'swr'
-import { useAuthStore } from '@/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Coins, ArrowRight } from 'lucide-react'
+import { Coins } from 'lucide-react'
 import { TopupModal } from '@/components/credits/topup-modal'
-import { LedgerCard } from '@/components/credits/ledger-card'
 import { SettingsManagementNav } from '@/components/layout/settings-management-nav'
-import type { LedgerRow } from '@/components/credits/ledger-card'
-import type { CreditBalance } from '@aigc/types'
 import Link from 'next/link'
 
-interface LedgerResponse { data: LedgerRow[]; total: number }
-interface TeamMember {
-  user_id: string
-  credit_quota: number | null
-  credit_used: number
-  role: string
-}
-interface TeamInfo {
-  credits: { balance: number; frozen_credits: number }
-  members: TeamMember[]
+/**
+ * A 豆管理页。
+ *
+ * 硬切换后本地积分系统已退役，余额与流水均来自业管平台：
+ * - 余额：GET /credits/biz-mgmt/balance → { balance }（业管 MEMBER-1004 现查）
+ * - 流水：GET /credits/biz-mgmt/ledger（业管 AIHUB_POINTS_CHANGE_QUERY 现查）
+ * 不再区分团队/个人账户，业管以当前选中会员身份查询。
+ */
+interface BizMgmtBalance {
+  balance: number
 }
 
 export default function CreditsPage() {
-  const user = useAuthStore((s) => s.user)
-  const activeTeamId = useAuthStore((s) => s.activeTeamId)
-  const activeTeam = useAuthStore((s) => s.activeTeam())
-
-  const isOwner = activeTeam?.role === 'owner'
-  const isOwnerOrAdmin = isOwner || activeTeam?.role === 'admin' || user?.role === 'admin'
-  const allowMemberTopup = activeTeam?.allow_member_topup ?? false
-
-  const [page, setPage] = useState(1)
   const [topupOpen, setTopupOpen] = useState(false)
-  const [ledgerAccount, setLedgerAccount] = useState<'personal' | 'team'>(activeTeamId ? 'team' : 'personal')
 
-  useEffect(() => {
-    setLedgerAccount(activeTeamId ? 'team' : 'personal')
-    setPage(1)
-  }, [activeTeamId])
+  // 余额统一指向业管 A 豆余额接口
+  const { data: balanceData } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
 
-  const { data: balanceData } = useSWR<CreditBalance>(
-    activeTeamId ? `/payment/balance?team_id=${activeTeamId}` : '/payment/balance'
-  )
-  const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
-
-  const { data: ledgerData, isLoading: ledgerLoading } = useSWR<LedgerResponse>(
-    activeTeamId
-      ? `/payment/ledger?account=${ledgerAccount}&team_id=${activeTeamId}&page=${page}&limit=20`
-      : `/payment/ledger?account=personal&page=${page}&limit=20`
-  )
-
-  const totalPages = Math.ceil((ledgerData?.total ?? 0) / 20)
-
-  const canTopup = allowMemberTopup || isOwnerOrAdmin
-  const personalBalance = balanceData?.personal_balance ?? 0
-  const teamBalance = balanceData?.team_balance ?? 0
-  const teamFrozen = teamData?.credits?.frozen_credits ?? 0
-  const memberCredit = useMemo(() => {
-    if (isOwnerOrAdmin) return null
-    return teamData?.members?.find((m) => m.user_id === user?.id) ?? null
-  }, [isOwnerOrAdmin, teamData?.members, user?.id])
-  const hasMemberQuota = memberCredit?.credit_quota !== null && memberCredit?.credit_quota !== undefined
-  const availableCredits = activeTeamId
-    ? hasMemberQuota
-      ? Math.max(0, Number(memberCredit?.credit_quota ?? 0) - Number(memberCredit?.credit_used ?? 0))
-      : Math.max(0, teamBalance - teamFrozen)
-    : personalBalance
+  const balance = balanceData?.balance ?? 0
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-semibold">A豆管理</h1>
-        <p className="text-muted-foreground">查看当前工作区可用A豆和消费记录</p>
+        <p className="text-muted-foreground">查看当前可用A豆余额（数据来自业务管理平台）</p>
       </div>
 
       <SettingsManagementNav showBack />
 
-      {/* Team credits nav for owner */}
-      {isOwner && activeTeamId && (
-        <Link href="/team?tab=credits">
-          <Card className="border-accent-orange/30 hover:border-accent-orange/60 transition-colors cursor-pointer">
-            <CardContent className="flex items-center justify-between py-4 px-5">
-              <div className="flex items-center gap-3">
-                <Coins className="h-5 w-5 text-accent-orange" />
-                <div>
-                  <p className="text-sm font-medium">A豆管理</p>
-                  <p className="text-xs text-muted-foreground">充值、查看团队流水和成员权限</p>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground" />
-            </CardContent>
-          </Card>
-        </Link>
-      )}
-
-      {/* Current workspace balance */}
+      {/* 当前可用 A 豆（业管权威余额） */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">可用A豆</CardTitle>
@@ -106,45 +46,35 @@ export default function CreditsPage() {
         <CardContent className="flex items-end justify-between">
           <div className="flex items-center gap-2">
             <Coins className="h-5 w-5 text-accent-orange" />
-            <span className="text-2xl font-bold">{availableCredits.toLocaleString()}</span>
-            {hasMemberQuota && (
-              <span className="text-xs text-muted-foreground">
-                配额 {Number(memberCredit?.credit_quota ?? 0).toLocaleString()} · 已用 {Number(memberCredit?.credit_used ?? 0).toLocaleString()}
-              </span>
-            )}
+            <span className="text-2xl font-bold">{balance.toLocaleString()}</span>
           </div>
-          {canTopup && (
-            <Button size="sm" onClick={() => setTopupOpen(true)}>充值个人A豆</Button>
-          )}
+          <Button size="sm" onClick={() => setTopupOpen(true)}>充值A豆</Button>
         </CardContent>
       </Card>
 
-      {(allowMemberTopup || personalBalance > 0) && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">个人A豆</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <Coins className="h-5 w-5 text-blue-400" />
-            <span className="text-xl font-semibold">{personalBalance.toLocaleString()}</span>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">说明</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-1">
+          <p>A 豆余额与消费记录由业务管理平台统一管理。</p>
+          <p>充值成功后，A 豆将由业管平台实时入账；如需查看完整流水请前往业务管理平台。</p>
+        </CardContent>
+      </Card>
+
+      <Link href="/team" className="block">
+        <Card className="border-accent-orange/30 hover:border-accent-orange/60 transition-colors cursor-pointer">
+          <CardContent className="flex items-center justify-between py-4 px-5">
+            <div className="flex items-center gap-3">
+              <Coins className="h-5 w-5 text-accent-orange" />
+              <div>
+                <p className="text-sm font-medium">团队成员管理</p>
+                <p className="text-xs text-muted-foreground">查看团队成员与权限</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
-      )}
-
-      <LedgerCard
-        isOwnerOrAdmin={isOwnerOrAdmin}
-        activeTeamId={activeTeamId}
-        ledgerAccount={ledgerAccount}
-        setLedgerAccount={(account) => {
-          setLedgerAccount(account)
-          setPage(1)
-        }}
-        ledgerData={ledgerData}
-        ledgerLoading={ledgerLoading}
-        page={page}
-        totalPages={totalPages}
-        setPage={setPage}
-      />
+      </Link>
 
       <TopupModal
         open={topupOpen}
