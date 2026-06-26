@@ -17,7 +17,7 @@
 - Modify: `AGENTS.md`（唯一权威源）
   - 第 5-6 行工作流程章节：新增「问题沉淀规则」+ 改全局引用
   - 第 155 行后（「注意事项」与「Docker 部署」之间）：新增「常见问题与解决方案」章节
-- Modify: `CLAUDE.md`（根目录，降级为引导文件，全文重写）
+- Modify: `CLAUDE.md`（根目录，本地改写为引导文件，**不 commit** —— 实施期发现该文件被 `.gitignore` 第 85-86 行忽略且从未入库，是本地私有文件）
 - 不改: `.claude/CLAUDE.md`
 
 ---
@@ -114,13 +114,20 @@ git commit -m "docs(agents): 工作流程新增问题沉淀规则，修正失效
 - **根本原因**：`NEXT_PUBLIC_STORAGE_HOST`（火山 TOS 公网域名）会被**打包进客户端 bundle**。若填成内网地址（如 `INFRA_HOST` 内网 IP），浏览器（用户网络）无法访问内网，于是 404；而服务端能访问是因为服务器在内网。
 - **解决办法**：`.env` 中 `NEXT_PUBLIC_STORAGE_HOST` 必须填写**浏览器可访问的火山 TOS 公网域名**（如 `xxx.tos-cn-shanghai.volces.com`），不能用内网地址。**改后必须重新构建 web 镜像**（因为已打进 bundle）。
 - **验证方式**：改 `.env` 后 `docker compose up -d --force-recreate` 重建 web 容器，浏览器开发者工具看图片请求 URL 指向公网域名且返回 200。
+
+### 5. CLAUDE.md 被 .gitignore 忽略、不能作为团队约定入口
+
+- **问题现象**：在根目录 `CLAUDE.md` 写了项目约定/规则并 `git add`，提示 `The following paths are ignored by one of your .gitignore files`，提交失败；同事 clone 仓库后看不到该文件，约定无法共享。
+- **根本原因**：`.gitignore` 第 85-86 行明确忽略 `CLAUDE.md` 与 `**/CLAUDE.md`，且根目录 `CLAUDE.md` 从未进入版本库（`git ls-files --error-unmatch CLAUDE.md` 报未跟踪）。它是**本地私有文件**，各人本地内容可不同，不能作为团队入口。
+- **解决办法**：项目约定、规则、常见问题**只写在 `AGENTS.md`**（唯一权威源 + 唯一团队入口，所有 Agent 工具通用）。`CLAUDE.md` 若需保留，仅作本机 Claude Code 的本地引导（指向 AGENTS.md），不 commit。
+- **验证方式**：`git check-ignore -v CLAUDE.md` 若有输出则确认被忽略；`git ls-files CLAUDE.md` 无输出则确认未跟踪；团队约定一律以 `git ls-files AGENTS.md` 能列出的 AGENTS.md 为准。
 ```
 
 - [ ] **Step 2: 提交**
 
 ```bash
 git add AGENTS.md
-git commit -m "docs(agents): 新增「常见问题与解决方案」章节（4 个四段式条目）"
+git commit -m "docs(agents): 新增「常见问题与解决方案」章节（5 个四段式条目）"
 ```
 
 ---
@@ -152,16 +159,19 @@ git commit -m "docs(agents): 新增「常见问题与解决方案」章节（4 �
 - 若某类流程反复出现，不要再继续堆到 `CLAUDE.md`，优先升级为独立 skill、hook 或子代理。
 ```
 
-- [ ] **Step 2: 提交**
+- [ ] **Step 2: 提交（注意：CLAUDE.md 被 gitignore，不提交）**
+
+> **实施期发现**：`CLAUDE.md` 被 `.gitignore` 第 85-86 行忽略且从未入库，是本地私有文件，无法 `git add`。本步骤改为：仅保留本地 CLAUDE.md 修改（让本机 Claude Code 指向 AGENTS.md），**不 commit**。该坑已作为第 5 条常见问题沉淀进 AGENTS.md。
 
 ```bash
-git add CLAUDE.md
-git commit -m "docs(claude): CLAUDE.md 降级为引导文件，以 AGENTS.md 为唯一权威源"
+# 不执行 git add CLAUDE.md（被 ignore）
+# 仅确认本地文件已改写：
+head -3 CLAUDE.md   # 应显示指向 AGENTS.md 的引导声明
 ```
 
 ---
 
-## Task 4: 验证三文件一致性
+## Task 4: 验证一致性
 
 **Files:** 无改动，仅校验。
 
@@ -169,17 +179,17 @@ git commit -m "docs(claude): CLAUDE.md 降级为引导文件，以 AGENTS.md 为
 
 Run: 打开 `AGENTS.md`，确认：
 1. 第 5-6 行工作流程章节含「问题沉淀规则」小节，且第 6 行指向项目内 AGENTS.md（不再是 `~/.claude/CLAUDE.md`）。
-2. 「注意事项」与「Docker 部署」之间存在「常见问题与解决方案」章节，含 4 个 `### N.` 条目，每条都有 现象/原因/解法/验证 四段。
+2. 「注意事项」与「Docker 部署」之间存在「常见问题与解决方案」章节，含 **5 个** `### N.` 条目，每条都有 现象/原因/解法/验证 四段。
 3. Docker 部署章节的 PG OOM / Sharp / STORAGE_HOST 原散落注意事项**仍在**（未删）。
 
 Expected: 三点全部满足。
 
-- [ ] **Step 2: 校验 CLAUDE.md 不再有重复正文**
+- [ ] **Step 2: 校验本地 CLAUDE.md 已改写为引导文件（不入库）**
 
-Run: 打开 `CLAUDE.md`，确认：
+Run: 打开本地 `CLAUDE.md`（注意它被 gitignore，仅本地存在），确认：
 1. 不再包含「项目概述」「常用命令」「Monorepo 架构」「技术栈关键点」「环境变量」「Docker 部署」等与 AGENTS.md 重复的章节。
 2. 顶部明确声明以 AGENTS.md 为唯一权威源。
-3. 第 6 行不再写 `~/.claude/CLAUDE.md`。
+3. 不再写 `~/.claude/CLAUDE.md`。
 
 Expected: 三点全部满足。
 
@@ -191,8 +201,8 @@ Expected: 无输出（该文件未改动）。
 - [ ] **Step 4: 最终提交（如有遗漏修正）**
 
 ```bash
-git status   # 确认只剩本次文档改动
-git log --oneline -5   # 确认 3 条文档提交在列
+git status   # 确认只剩本次文档改动（CLAUDE.md 不应出现，因被 ignore）
+git log --oneline -6   # 确认 AGENTS.md/spec/plan 的提交在列
 ```
 
 ---
@@ -200,11 +210,12 @@ git log --oneline -5   # 确认 3 条文档提交在列
 ## Self Review
 
 - **Spec coverage**：
-  - spec 3.1（AGENTS.md 唯一源 + 其余引导）→ Task 1+2 写 AGENTS.md，Task 3 把 CLAUDE.md 降级为引导，Task 4 校验。覆盖。
+  - spec 3.1（AGENTS.md 唯一源 + 其余引导）→ Task 1+2 写 AGENTS.md，Task 3 本地改写 CLAUDE.md（不入库），Task 4 校验。覆盖。
   - spec 3.2（问题沉淀规则）→ Task 1 Step 2。覆盖。
-  - spec 3.3（失效全局引用）→ Task 1 Step 1（AGENTS.md）+ Task 3（CLAUDE.md 随重写一并修正）。覆盖。
+  - spec 3.3（失效全局引用）→ Task 1 Step 1（AGENTS.md）+ Task 3（CLAUDE.md 本地随重写一并修正）。覆盖。
   - spec 3.4（四段式章节）→ Task 2。覆盖。
-  - spec 3.5（4 个高频问题）→ Task 2 含 4 个完整四段式条目。覆盖。
+  - spec 3.5（5 个高频问题，含实施期发现的 CLAUDE.md gitignore 坑）→ Task 2（4 条）+ Task 3b（第 5 条）。覆盖。
+  - **gitignore 发现**：CLAUDE.md 无法入库的事实已记入 spec「实施期发现」节 + 第 5 条常见问题 + Task 3 决策注记。覆盖。
 - **Placeholder scan**：无 TBD/TODO；四段式条目均为完整正文，含具体配置值、命令、grep 验证语句。
-- **Type consistency**：章节锚点 `#常见问题与解决方案`、`#问题沉淀规则` 在 Task 1 与 Task 2 中一致；CLAUDE.md 引导措辞与 spec 3.1 一致。
+- **Type consistency**：章节锚点 `#常见问题与解决方案`、`#问题沉淀规则` 在 Task 1 与 Task 2 中一致。
 - **YAGNI**：不新建独立 troubleshooting 文件、不按模块拆分、不重写 Docker 章节正文、不改 `.claude/CLAUDE.md`。
