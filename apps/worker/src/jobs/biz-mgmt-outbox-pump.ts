@@ -91,6 +91,11 @@ export async function runBizMgmtOutboxPump(): Promise<void> {
     if (dueEvents.length === 0) return
 
     const queue = getBizMgmtNotifyQueue()
+    // 诊断：打印实际投递的 Redis 目标 + 投递后立即查队列长度，定位「投了但 Redis 没数据」
+    const redisInfo = await queue.client.then((c: any) => c.options)
+      .then((o: any) => `host=${o.host} port=${o.port} db=${o.db}`)
+      .catch(() => '无法读取 client options')
+    logger.info({ queueName: queue.name, redisTarget: redisInfo }, '[biz-mgmt-outbox-pump] 投递前 Redis 目标诊断')
     // 批量投递，每个事件一个 job，jobId=eventId 去重
     await queue.addBulk(
       dueEvents.map((event) => ({
@@ -98,6 +103,13 @@ export async function runBizMgmtOutboxPump(): Promise<void> {
         data: { eventId: event.id },
         opts: { jobId: event.id }, // 幂等：同 eventId 只有一个 job
       })),
+    )
+    // 投递后立即查 wait/delayed 长度，确认数据真的进了 Redis
+    const waitingCount = await queue.getWaitingCount().catch(() => -1)
+    const delayedCount = await queue.getDelayedCount().catch(() => -1)
+    logger.info(
+      { count: dueEvents.length, waitingCount, delayedCount },
+      '[biz-mgmt-outbox-pump] 投递后队列计数（waiting/delayed）',
     )
 
     logger.info(
