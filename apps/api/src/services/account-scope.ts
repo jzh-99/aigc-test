@@ -95,6 +95,22 @@ export async function ensurePersonalAccountScope(db: Kysely<Database>, userId: s
   return db.transaction().execute(async (trx) => {
     await sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`.execute(trx)
 
+    // 业管硬切换后：团队完全由业管身份同步生成（syncBizMgmtMembersForLocalUser），
+    // 每个业管会员（个人/公司）对应一个团队。此处不再为有业管身份的用户兜底建
+    // 「个人空间」团队——否则会多出一个无 biz_mgmt_member_bindings 的脏团队，
+    // 出现在工作区切换菜单里却查不到业管余额/身份。
+    // 仅当用户「没有任何业管绑定」时，才保留个人空间兜底（无业管身份的临时候补）。
+    const bizMgmtBinding = await trx
+      .selectFrom('biz_mgmt_member_bindings')
+      .select('id')
+      .where('local_user_id', '=', userId)
+      .where('status', '=', 1)
+      .executeTakeFirst()
+    if (bizMgmtBinding) {
+      // 有业管身份：团队由业管同步负责，此处不建个人空间，直接返回（无 team/workspace）
+      return { team: null, workspace: null }
+    }
+
     let team = await findPersonalTeam(trx, userId)
     if (!team) {
       const user = await trx
