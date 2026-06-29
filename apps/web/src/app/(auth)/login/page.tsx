@@ -62,6 +62,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [suspended, setSuspended] = useState(false)
+  // 新用户：check-biz-mgmt 预建 user 后返回的一次性初始密码，在密码步展示给用户
+  const [initialPassword, setInitialPassword] = useState<string | null>(null)
 
   // 第一步手机号输入：复用 invite-dialog 的实时过滤（只留数字，截断 11 位）
   function handlePhoneChange(val: string) {
@@ -79,7 +81,9 @@ export default function LoginPage() {
     }
     setLoading(true)
     try {
-      await apiPost<{ exists: boolean }>('/auth/check-biz-mgmt', { phone: identifier })
+      const res = await apiPost<{ exists: boolean; one_time_password?: string }>('/auth/check-biz-mgmt', { phone: identifier })
+      // 业管有会员：新用户 check 会预建 user 并返回一次性初始密码，保存以便密码步展示
+      setInitialPassword(res.one_time_password ?? null)
       // 业管有会员，进入密码步
       setStep('password')
     } catch (err) {
@@ -97,6 +101,7 @@ export default function LoginPage() {
   function handleBack() {
     setStep('phone')
     setPassword('')
+    setInitialPassword(null)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -108,14 +113,6 @@ export default function LoginPage() {
       const res = await apiPost<AuthResponse>('/auth/login', { identifier, password } satisfies LoginRequest)
       resetGeneration()
       setAuth(res.user, res.access_token)
-
-      // 首次从业管创建本地用户时，后端返回一次性初始密码，提示用户登录后修改
-      const oneTimePassword = res.one_time_password ?? res.oneTimePassword
-      if (oneTimePassword) {
-        toast.info(`首次登录初始密码：${oneTimePassword}，登录后请尽快修改密码，遗失请联系管理员重置`, {
-          duration: 12000,
-        })
-      }
 
       // 需要选择业管会员身份（同手机号多账号且未选）：跳账号选择页，优先于改密/首页
       if (res.user.requireBizMgmtMemberSelection || res.user.require_biz_mgmt_member_selection) {
@@ -206,6 +203,18 @@ export default function LoginPage() {
               <p className="font-semibold text-red-400 mb-1">账户已停用</p>
               <p className="text-white/40 leading-relaxed">
                 您已被移出所有团队，账户已自动停用。请联系团队管理员重新发送邀请链接以恢复使用。
+              </p>
+            </div>
+          )}
+
+          {step === 'password' && initialPassword && (
+            <div className="mb-5 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-sm">
+              <p className="font-semibold text-yellow-500 mb-1">首次登录初始密码</p>
+              <p className="text-white/40 leading-relaxed">
+                您的初始密码：<span className="font-mono text-yellow-400 select-all">{initialPassword}</span>
+              </p>
+              <p className="text-white/40 leading-relaxed mt-1">
+                请用此密码登录，登录后请尽快修改密码；遗失请联系管理员重置。
               </p>
             </div>
           )}
