@@ -90,4 +90,12 @@ describe('check-biz-mgmt 业管查询契约', () => {
       'check 中禁止用 setImmediate 异步建 team',
     )
   })
+
+  it('业管返回全部 status=3（删除）时必须拒绝登录（视为账户不存在）', () => {
+    assert.match(
+      SOURCE,
+      /status\s*===\s*1\s*\|\|\s*m\.status\s*===\s*2/,
+      'check 必须判断"无 status=1 或 2 的会员"才拒绝，全部 status=3 视为账户不存在',
+    )
+  })
 })
