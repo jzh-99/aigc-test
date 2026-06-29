@@ -134,21 +134,13 @@ describe('post-login 业管先行：分支③④ 业管有会员', () => {
   })
 })
 
-// ─── 不变量：业管同步异步化（不阻塞登录）──────────────────────────────────
-describe('post-login 业管先行：异步刷新不变量', () => {
-  it('syncBizMgmtMembersForLocalUser 必须异步调用（不 await，不阻塞登录响应）', () => {
-    // 关键：不能用 await syncBizMgmtMembersForLocalUser，否则业管慢会拖慢登录
-    // 应使用 setImmediate / queueMicrotask / .catch() 等异步触发
-    assert.match(
-      SOURCE,
-      /setImmediate\([^)]*syncBizMgmtMembersForLocalUser|queueMicrotask\([^)]*syncBizMgmtMembersForLocalUser|syncBizMgmtMembersForLocalUser[^;]*\.catch/,
-      'syncBizMgmtMembersForLocalUser 必须异步触发（setImmediate/queueMicrotask/.catch），不能用 await 阻塞登录',
-    )
-    // 反向断言：不允许出现 "await syncBizMgmtMembersForLocalUser"
+// ─── 不变量：建 team 责任移到 check，login 不再 sync ────────────────────────
+describe('post-login 业管先行：login 不再建 team', () => {
+  it('login 禁止调用 syncBizMgmtMembersForLocalUser（建 team 责任已移到 check-biz-mgmt）', () => {
     assert.doesNotMatch(
       SOURCE,
-      /await\s+syncBizMgmtMembersForLocalUser/,
-      '禁止 await syncBizMgmtMembersForLocalUser，会阻塞登录响应',
+      /syncBizMgmtMembersForLocalUser/,
+      '建 team 责任已移到 check-biz-mgmt，post-login 不应再调用 syncBizMgmtMembersForLocalUser',
     )
   })
 })

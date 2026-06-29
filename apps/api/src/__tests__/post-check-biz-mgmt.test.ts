@@ -73,4 +73,21 @@ describe('check-biz-mgmt 业管查询契约', () => {
     assert.match(SOURCE, /import[\s\S]*fetchBizMgmtMembersByPhone/, '必须导入 fetchBizMgmtMembersByPhone')
     assert.match(SOURCE, /import[\s\S]*purgeLocalUserCascade/, '必须导入 purgeLocalUserCascade')
   })
+
+  it('必须导入并调用 syncBizMgmtMembersForLocalUser（同步为每个业管账号建 team）', () => {
+    assert.match(SOURCE, /syncBizMgmtMembersForLocalUser/, 'check 必须调 syncBizMgmtMembersForLocalUser 同步建 team')
+  })
+
+  it('syncBizMgmtMembersForLocalUser 必须用 await 同步调用（不能用 setImmediate 异步）', () => {
+    assert.match(
+      SOURCE,
+      /await\s+syncBizMgmtMembersForLocalUser/,
+      '建 team 必须 await 同步完成，消除"已登录但 team 未建好"的窗口期',
+    )
+    assert.doesNotMatch(
+      SOURCE,
+      /setImmediate[\s\S]*syncBizMgmtMembersForLocalUser/,
+      'check 中禁止用 setImmediate 异步建 team',
+    )
+  })
 })
