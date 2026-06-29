@@ -29,11 +29,17 @@ export function MobileSidebar() {
   const startNavigation = useNavigationStore((s) => s.startNavigation)
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
+  const activeBizMgmtMember = useAuthStore((s) => s.activeBizMgmtMember())
   const { showVideoStudioTab } = useTeamFeatures()
+
+  // 当前业管选中身份是否为公司主卡（与后端 create-member 路由门控信号一致）。
+  const isCurrentBizMgmtMaster =
+    activeBizMgmtMember?.userType === '2' && (activeBizMgmtMember.isMaster ?? activeBizMgmtMember.is_master)
 
   const visibleManagementItems = managementNavItems.filter((item) => {
     if (item.requireUserRole && user?.role !== item.requireUserRole) return false
     if (item.requireTeamRole && activeTeam?.role !== item.requireTeamRole) return false
+    if (item.requireBizMgmtMaster && !isCurrentBizMgmtMaster) return false
     return true
   })
 

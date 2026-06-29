@@ -30,3 +30,20 @@ describe('073_biz_mgmt_member_bindings migration', () => {
     assert.match(source, /COMMENT ON COLUMN biz_mgmt_member_bindings\.is_selected/)
   })
 })
+
+describe('079_biz_mgmt_member_bindings_master migration', () => {
+  test('adds is_master boolean column with default false and comment', async () => {
+    const source = await readFile(
+      join(__dirname, '../migrations/079_biz_mgmt_member_bindings_master.ts'),
+      'utf8',
+    )
+
+    // 必须给 biz_mgmt_member_bindings 加 is_master 列
+    assert.match(source, /alterTable\('biz_mgmt_member_bindings'\)/)
+    assert.match(source, /addColumn\('is_master', 'boolean'/)
+    // 非空 + 默认 false（历史 binding 保守按副卡处理）
+    assert.match(source, /notNull\(\)\.defaultTo\(false\)/)
+    // 必须有列注释，写清主卡/副卡语义和权威来源
+    assert.match(source, /COMMENT ON COLUMN biz_mgmt_member_bindings\.is_master/)
+  })
+})

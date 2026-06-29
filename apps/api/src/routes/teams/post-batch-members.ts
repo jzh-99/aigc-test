@@ -2,23 +2,24 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import bcrypt from 'bcryptjs'
 import { teamRoleGuard } from '../../plugins/guards.js'
+import { generateOneTimePassword } from '../../services/biz-mgmt-member-sync.js'
 
 const route: FastifyPluginAsync = async (app) => {
-  // POST /teams/:id/members/batch — 批量创建成员（设置默认密码）
+  // POST /teams/:id/members/batch — 批量创建成员（系统生成初始密码）。
+  // 本地 A 豆上限已废弃：A 豆账户由业管平台管理，批量创建暂不触发 MEMBER-1002
+  // （按既有范围，批量副卡同步后续单独补齐）。
   app.post<{
     Params: { id: string }
     Body: {
       identifiers: string[]
       role?: 'editor' | 'viewer'
-      credit_quota?: number
-      default_password: string
     }
   }>('/teams/:id/members/batch', {
     preHandler: teamRoleGuard('owner'),
     schema: {
       body: {
         type: 'object',
-        required: ['identifiers', 'default_password'],
+        required: ['identifiers'],
         properties: {
           identifiers: {
             type: 'array',
@@ -27,19 +28,14 @@ const route: FastifyPluginAsync = async (app) => {
             maxItems: 50,
           },
           role: { type: 'string', enum: ['editor', 'viewer'] },
-          credit_quota: { type: 'number', minimum: 0, maximum: 1000000 },
-          default_password: { type: 'string', minLength: 6, maxLength: 50 },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { identifiers, role = 'editor', credit_quota = 1000, default_password } = request.body
+    const { identifiers, role = 'editor' } = request.body
     const teamId = request.params.id
     const db = getDb()
-
-    // 所有用户共用同一个密码哈希
-    const passwordHash = await bcrypt.hash(default_password, 10)
 
     interface BatchResult {
       identifier: string
@@ -49,6 +45,8 @@ const route: FastifyPluginAsync = async (app) => {
       workspace_name?: string
       username?: string
       error?: string
+      // 仅全新用户返回一次性密码，已存在用户为 null
+      one_time_password?: string | null
     }
 
     const results: BatchResult[] = []
@@ -116,8 +114,13 @@ const route: FastifyPluginAsync = async (app) => {
         const baseUsername = isEmail ? identifier.split('@')[0] : identifier.slice(-4)
         const username = await generateUsername(baseUsername)
 
+        // 全新用户由系统生成一次性初始密码（与业管首登 OTP 逻辑一致）；
+        // 已存在的本地用户保留原密码，不重置——批量创建只补团队关系，不改账号凭证。
         let userId: string
+        let oneTimePassword: string | null = null
         if (!existingUser) {
+          oneTimePassword = generateOneTimePassword()
+          const passwordHash = await bcrypt.hash(oneTimePassword, 10)
           const newUser = await db
             .insertInto('users')
             .values({
@@ -187,6 +190,7 @@ const route: FastifyPluginAsync = async (app) => {
           workspace_id: workspace.id,
           workspace_name: workspaceName,
           username,
+          one_time_password: existingUser ? null : oneTimePassword,
         })
         successCount++
       } catch (err) {

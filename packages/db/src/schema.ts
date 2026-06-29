@@ -764,6 +764,10 @@ export interface BizMgmtMemberBindingsTable {
   user_type: '1' | '2'
   // 1=正常可选，2=冻结，3=删除；仅 status=1 可被选为当前身份
   status: 1 | 2 | 3
+  // 是否为业管主卡（来源 MEMBER-1001 members[].master：1=主卡，0=副卡）。
+  // 主卡=该身份拥有团队管理权（team_members.role=owner），副卡=普通成员（editor）。
+  // 业管 master 是团队管理权的权威来源，本地 team_members.role 是其单向镜像。
+  is_master: Generated<boolean>
   comp_name: string
   // 最近已完成订购商品 ID，仅展示当前权益，不计费权威
   goods_id: string | null

@@ -36,6 +36,9 @@ interface CreateMemberResponse {
   workspace_id: string
   workspace_name: string
   account: string
+  // 后端生成的初始密码；仅全新用户返回，已存在用户为 null（保留原密码）
+  one_time_password: string | null
+  created_new_user: boolean
 }
 
 export function InviteDialog({
@@ -47,7 +50,6 @@ export function InviteDialog({
   const [identifier, setIdentifier] = useState('')
   const [username, setUsername] = useState('')
   const [role, setRole] = useState<'editor' | 'viewer'>('editor')
-  const [creditQuota, setCreditQuota] = useState('1000')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<CreateMemberResponse | null>(null)
   const [phoneError, setPhoneError] = useState('')
@@ -84,20 +86,14 @@ export function InviteDialog({
       return
     }
 
-    const quota = parseInt(creditQuota, 10)
-    if (isNaN(quota) || quota < 0) {
-      toast.error('A豆上限必须是非负整数')
-      return
-    }
-
     setLoading(true)
     try {
+      // A 豆账户由业管平台管理，本地不再配置 A 豆上限；
+      // 创建成员后通过业管会员副卡接口（MEMBER-1002）为其建立 A 豆账户。
       const res = await apiPost<CreateMemberResponse>(`/teams/${teamId}/members/create`, {
         identifier: trimmedId,
         username: trimmedUsername,
         role,
-        credit_quota: quota,
-        default_password: '123456',
       })
 
       setResult(res)
@@ -115,7 +111,6 @@ export function InviteDialog({
       setIdentifier('')
       setUsername('')
       setRole('editor')
-      setCreditQuota('1000')
       setResult(null)
       setPhoneError('')
       setUsernameError('')
@@ -129,7 +124,7 @@ export function InviteDialog({
         <DialogHeader>
           <DialogTitle>添加成员</DialogTitle>
           <DialogDescription>
-            直接创建可登录账号，默认密码为 123456（首次登录需修改）
+            通过业管会员副卡接口创建成员并建立其 A 豆账户，初始密码由系统自动生成
           </DialogDescription>
         </DialogHeader>
 
@@ -139,7 +134,9 @@ export function InviteDialog({
               <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
               <div className="text-sm">
                 <p className="font-medium text-green-900">成员创建成功</p>
-                <p className="text-green-800 mt-1">账号已激活，可直接登录使用</p>
+                <p className="text-green-800 mt-1">
+                  {result.created_new_user ? '账号已激活，可直接登录使用' : '该账号已存在，已加入当前团队'}
+                </p>
               </div>
             </div>
 
@@ -156,15 +153,19 @@ export function InviteDialog({
                 <span className="text-muted-foreground">工作区：</span>
                 <span className="font-medium">{result.workspace_name}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">默认密码：</span>
-                <span className="font-medium font-mono">123456</span>
-              </div>
+              {result.created_new_user && result.one_time_password ? (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">初始密码：</span>
+                  <span className="font-medium font-mono">{result.one_time_password}</span>
+                </div>
+              ) : null}
             </div>
 
-            <p className="text-xs text-muted-foreground text-center">
-              请将账号和密码告知新成员，首次登录需修改密码
-            </p>
+            {result.created_new_user && result.one_time_password ? (
+              <p className="text-xs text-muted-foreground text-center">
+                请将账号和初始密码告知新成员，首次登录需修改密码
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-4">
@@ -197,35 +198,24 @@ export function InviteDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>角色</Label>
-                <Select value={role} onValueChange={(v) => setRole(v as 'editor' | 'viewer')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="editor">编辑者 (Editor)</SelectItem>
-                    <SelectItem value="viewer">查看者 (Viewer)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>A豆上限</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={creditQuota}
-                  onChange={(e) => setCreditQuota(e.target.value)}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>角色</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as 'editor' | 'viewer')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="editor">编辑者 (Editor)</SelectItem>
+                  <SelectItem value="viewer">查看者 (Viewer)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
               <p className="font-medium text-blue-900 mb-1">创建说明：</p>
               <ul className="text-blue-800 space-y-1 text-xs">
-                <li>• 默认密码：123456（首次登录强制修改）</li>
+                <li>• 系统自动生成初始密码，创建成功后展示给组长转告</li>
+                <li>• 通过业管会员副卡接口建立成员 A 豆账户，A 豆额度由业管平台管理</li>
                 <li>• 自动创建独立工作区："{'{用户名}'}工作区"</li>
                 <li>• 手机号作为登录账号，用户名用于成员显示</li>
               </ul>

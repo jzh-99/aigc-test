@@ -69,3 +69,38 @@ test('normalizeBizMgmtMember 保留 status 1/2/3（不再强制过滤）', () =>
   })
   assert.equal(result.status, 3, 'status=3 的会员应能被 normalize 保留，不抛错')
 })
+
+// ─── master 主卡/副卡契约 ─────────────────────────────────────────────────
+test('normalizeBizMgmtMember 解析 master：1=主卡(true)，其余/缺省=副卡(false)', () => {
+  // master=1（数字）→ 主卡
+  assert.equal(
+    normalizeBizMgmtMember({ userId: 'M1', phone: '1', userName: 'u', compName: 'c', userType: '2', status: 1, master: 1 }).isMaster,
+    true,
+  )
+  // master='1'（字符串）→ 主卡（业管 String/Integer 双形态兼容）
+  assert.equal(
+    normalizeBizMgmtMember({ userId: 'M2', phone: '1', userName: 'u', compName: 'c', userType: '2', status: 1, master: '1' }).isMaster,
+    true,
+  )
+  // master=0（副卡）→ false
+  assert.equal(
+    normalizeBizMgmtMember({ userId: 'M3', phone: '1', userName: 'u', compName: 'c', userType: '2', status: 1, master: 0 }).isMaster,
+    false,
+  )
+  // 缺省 master → 保守按副卡
+  assert.equal(
+    normalizeBizMgmtMember({ userId: 'M4', phone: '1', userName: 'u', compName: 'c', userType: '1', status: 1 }).isMaster,
+    false,
+  )
+})
+
+test('sync 按 master 同步 team_members.role：主卡=owner，副卡=editor', () => {
+  // role 必须由 member.isMaster 驱动（主卡 owner / 副卡 editor），不能写死 owner
+  assert.match(SYNC_SOURCE, /const teamRole.*member\.isMaster \? 'owner' : 'editor'/, 'role 必须由 isMaster 驱动')
+  // 新建 team 时用 teamRole，不得写死 'owner'
+  assert.match(SYNC_SOURCE, /role: teamRole \}\)\.execute\(\)/, '新建 team_members 必须用 teamRole，不得写死 owner')
+  // 已入库身份刷新时也必须按 teamRole 对齐 role（升权/降权）
+  assert.match(SYNC_SOURCE, /updateTable\('team_members'\)[\s\S]*?set\(\{ role: teamRole \}\)/, '已入库身份刷新必须按 teamRole 对齐 role')
+  // upsertBinding 必须落 is_master 快照
+  assert.match(SYNC_SOURCE, /is_master: member\.isMaster/, 'upsertBinding 必须把 is_master 落库')
+})

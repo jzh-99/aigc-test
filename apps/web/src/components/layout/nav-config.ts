@@ -19,6 +19,9 @@ export interface NavItem {
   description?: string
   requireTeamRole?: string
   requireUserRole?: string
+  // 仅当前业管选中身份为公司主卡（userType=2 且 isMaster）时可见。
+  // 与后端 create-member 路由门控信号一致，避免 team_members.role 历史遗留导致误显。
+  requireBizMgmtMaster?: boolean
   children?: Array<{
     href: string
     label: string
@@ -45,8 +48,8 @@ export const creativeNavItems: NavItem[] = [
 ]
 
 export const managementNavItems: NavItem[] = [
-  { href: '/team', label: '团队管理', icon: Users, requireTeamRole: 'owner' },
-  { href: '/credits', label: 'A豆管理', icon: Coins },
+  { href: '/team', label: '团队管理', icon: Users, requireBizMgmtMaster: true },
+  { href: '/credits', label: 'A豆管理', icon: Coins, requireBizMgmtMaster: true },
   { href: '/admin', label: '管理后台', icon: Shield, requireUserRole: 'admin' },
   { href: '/settings', label: '设置', icon: Settings },
   { href: '/docs', label: '操作手册', icon: BookOpen },

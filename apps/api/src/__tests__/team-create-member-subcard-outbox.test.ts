@@ -39,4 +39,18 @@ describe('team create-member writes member_sub_card_sync outbox', () => {
     assert.match(source, /belongId:/)
     assert.match(source, /initialPointsNum:/)
   })
+
+  test('只有公司主卡（user_type=2 且 is_master）才能创建成员，否则 403 拒绝', async () => {
+    const source = await readFile(
+      join(__dirname, '../routes/teams/post-create-member.ts'),
+      'utf8',
+    )
+    // 取 owner binding 时必须带上 user_type 和 is_master 用于门控判断
+    assert.match(source, /select\(\['biz_mgmt_user_id', 'user_type', 'is_master'\]\)/, '必须 select user_type 与 is_master 用于主卡门控')
+    // 非公司主卡必须硬拒绝 403（不能静默跳过 outbox）
+    assert.match(source, /BIZ_MGMT_NOT_MASTER/, '非公司主卡必须返回 BIZ_MGMT_NOT_MASTER')
+    assert.match(source, /status\(403\)/, '非公司主卡必须 403 拒绝')
+    // 门控条件必须同时校验 user_type='2' 且 is_master
+    assert.match(source, /ownerBinding\.user_type !== '2' \|\| !ownerBinding\.is_master/, '必须同时校验公司会员 + 主卡')
+  })
 })

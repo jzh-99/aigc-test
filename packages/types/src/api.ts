@@ -346,6 +346,9 @@ export interface BizMgmtMemberAccount {
   // 1=个人会员，2=公司会员
   user_type: '1' | '2'
   userType: '1' | '2'
+  // 是否为业管主卡（来源 MEMBER-1001 master：1=主卡）。主卡拥有团队管理权。
+  is_master: boolean
+  isMaster: boolean
   comp_name: string
   compName: string
   goods_id: string | null

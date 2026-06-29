@@ -24,6 +24,8 @@ export interface RawBizMgmtMember {
   compName: string
   userType: '1' | '2' | string
   status: number
+  // 是否为主卡：1=主卡，0=副卡。主卡拥有团队管理权，可创建副卡成员。
+  master?: number | string | null
   // 以下三项是业管实时权益数据，仅供调试/解析，不得作为本地落库字段或生成前余额依据
   pointsNum?: number | null
   sumPointsNum?: number | null
@@ -42,6 +44,8 @@ export interface NormalizedBizMgmtMember {
   compName: string
   userType: '1' | '2'
   status: 1 | 2 | 3
+  // 主卡标记：master=1 → true（拥有团队管理权，本地 team_members.role 镜像为 owner）
+  isMaster: boolean
   goodsId: string | null
   goodsName: string | null
   bizMgmtCreatedAt: string | null
@@ -72,6 +76,8 @@ export function pickDefaultBizMgmtMemberName(input: {
 export function normalizeBizMgmtMember(member: RawBizMgmtMember): NormalizedBizMgmtMember {
   if (member.userType !== '1' && member.userType !== '2') throw new Error(`未知会员类型：${member.userType}`)
   if (member.status !== 1 && member.status !== 2 && member.status !== 3) throw new Error(`未知会员状态：${member.status}`)
+  // 业管 master 是 String/Integer 双形态，统一按 ==1 判定主卡，其余（含未返回）兜底为副卡。
+  const isMaster = member.master != null && Number(member.master) === 1
   return {
     bizMgmtUserId: member.userId,
     phone: member.phone,
@@ -79,6 +85,7 @@ export function normalizeBizMgmtMember(member: RawBizMgmtMember): NormalizedBizM
     compName: member.compName,
     userType: member.userType,
     status: member.status,
+    isMaster,
     goodsId: member.goodsId ?? null,
     goodsName: member.goodsName ?? null,
     bizMgmtCreatedAt: member.createTime ?? null,
@@ -189,6 +196,7 @@ async function upsertBinding(
       user_name: member.userName,
       user_type: member.userType,
       status: member.status,
+      is_master: member.isMaster,
       comp_name: member.compName,
       goods_id: member.goodsId,
       goods_name: member.goodsName,
@@ -205,6 +213,7 @@ async function upsertBinding(
         user_name: member.userName,
         user_type: member.userType,
         status: member.status,
+        is_master: member.isMaster,
         comp_name: member.compName,
         goods_id: member.goodsId,
         goods_name: member.goodsName,
@@ -297,6 +306,9 @@ export async function syncBizMgmtMembersForLocalUser(
       }
 
       // ── status=1（正常）：无 team 则建，有则刷新；曾软删的 team 恢复 ───────────
+      // 主卡（isMaster）拥有团队管理权 → team_members.role=owner；副卡=editor。
+      // 业管 master 是团队管理权的权威来源，本地 role 是其单向镜像。
+      const teamRole: 'owner' | 'editor' = member.isMaster ? 'owner' : 'editor'
       let teamId = existingBinding?.team_id
       let workspaceId = existingBinding?.workspace_id
 
@@ -319,6 +331,15 @@ export async function syncBizMgmtMembersForLocalUser(
           .where('team_id', '=', teamId)
           .where('is_deleted', '=', true)
           .execute()
+        // 已入库身份：按业管 master 对齐该成员在本团队的 role。
+        // 主卡→owner（升权），副卡→editor（降权，保留成员资格只收管理权）。
+        // 仅作用于当前 local_user_id+team_id 的成员行，不影响团队其他成员。
+        await trx
+          .updateTable('team_members')
+          .set({ role: teamRole })
+          .where('team_id', '=', teamId)
+          .where('user_id', '=', localUserId)
+          .execute()
       }
 
       if (!teamId) {
@@ -333,7 +354,8 @@ export async function syncBizMgmtMembersForLocalUser(
           .returning('id')
           .executeTakeFirstOrThrow()
         teamId = team.id
-        await trx.insertInto('team_members').values({ team_id: teamId, user_id: localUserId, role: 'owner' }).execute()
+        // 新建团队时按 master 决定该登录用户在团队内的角色：主卡=owner，副卡=editor
+        await trx.insertInto('team_members').values({ team_id: teamId, user_id: localUserId, role: teamRole }).execute()
         // 本地积分系统已退役：不再创建 credit_accounts，团队 A 豆余额由业管平台管理
       }
 

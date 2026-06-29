@@ -3,30 +3,29 @@ import { getDb } from '@aigc/db'
 import bcrypt from 'bcryptjs'
 import { teamRoleGuard } from '../../plugins/guards.js'
 import { enqueueBizMgmtOutboxEvent } from '../../services/biz-mgmt-outbox.js'
+import { generateOneTimePassword } from '../../services/biz-mgmt-member-sync.js'
 
 const route: FastifyPluginAsync = async (app) => {
-  // POST /teams/:id/members/create — 创建单个成员（设置默认密码）
+  // POST /teams/:id/members/create — 公司主卡创建成员（业管副卡同步）。
+  // 本地 A 豆上限已废弃：A 豆账户由业管平台管理，创建成员通过 MEMBER-1002 副卡同步建立。
+  // 初始密码由后端生成一次性密码（与业管首登 OTP 一致），返回给团长转告，不再写死 123456。
   app.post<{
     Params: { id: string }
     Body: {
       identifier: string
       username: string
       role?: 'editor' | 'viewer'
-      credit_quota?: number
-      default_password: string
     }
   }>('/teams/:id/members/create', {
     preHandler: teamRoleGuard('owner'),
     schema: {
       body: {
         type: 'object',
-        required: ['identifier', 'username', 'default_password'],
+        required: ['identifier', 'username'],
         properties: {
           identifier: { type: 'string', pattern: '^\\d{11}$', minLength: 11, maxLength: 11 },
           username: { type: 'string', minLength: 2, maxLength: 30 },
           role: { type: 'string', enum: ['editor', 'viewer'] },
-          credit_quota: { type: 'number', minimum: 0, maximum: 1000000 },
-          default_password: { type: 'string', minLength: 6, maxLength: 50 },
         },
         additionalProperties: false,
       },
@@ -36,8 +35,6 @@ const route: FastifyPluginAsync = async (app) => {
       identifier: rawIdentifier,
       username: rawUsername,
       role = 'editor',
-      credit_quota = 1000,
-      default_password,
     } = request.body
     const teamId = request.params.id
     const db = getDb()
@@ -54,6 +51,30 @@ const route: FastifyPluginAsync = async (app) => {
 
     if (!/^[\u4e00-\u9fa5A-Za-z0-9_-]{2,30}$/.test(requestedUsername)) {
       return reply.badRequest('用户名需为 2-30 位中文、字母、数字、下划线或横线')
+    }
+
+    // ── 公司主卡门控（先于任何数据写入，避免拒绝时留下孤儿成员/工作区）────────
+    // 业管文档约束「副卡按公司会员创建」，只有公司主卡（user_type=2 且 is_master=true）
+    // 才能创建成员并触发 MEMBER-1002。当前操作者当前选中的业管身份必须满足公司主卡。
+    // teamRoleGuard('owner') 已在 preHandler 拦截非 owner；此为业务侧权威二次校验。
+    const [teamInfo, ownerBinding] = await Promise.all([
+      db.selectFrom('teams').select('name').where('id', '=', teamId).executeTakeFirst(),
+      db
+        .selectFrom('biz_mgmt_member_bindings')
+        .select(['biz_mgmt_user_id', 'user_type', 'is_master'])
+        .where('local_user_id', '=', request.user.id)
+        .where('is_selected', '=', true)
+        .where('status', '=', 1)
+        .executeTakeFirst(),
+    ])
+    if (!ownerBinding || ownerBinding.user_type !== '2' || !ownerBinding.is_master) {
+      return reply.status(403).send({
+        success: false,
+        error: {
+          code: 'BIZ_MGMT_NOT_MASTER',
+          message: '当前身份非公司主卡，无法创建成员。请切换到公司主卡身份后重试。',
+        },
+      })
     }
 
     // 检查用户是否已存在
@@ -97,8 +118,10 @@ const route: FastifyPluginAsync = async (app) => {
       username = existingUser.username
     }
 
-    // 哈希密码
-    const passwordHash = await bcrypt.hash(default_password, 10)
+    // 生成一次性初始密码（仅对全新用户使用，与业管首登 OTP 生成逻辑一致）。
+    // 已存在的本地用户保留其原密码，不重置——创建成员只补团队关系，不改账号凭证。
+    const oneTimePassword = generateOneTimePassword()
+    const passwordHash = await bcrypt.hash(oneTimePassword, 10)
 
     // 如果用户不存在则创建
     let userId: string
@@ -167,40 +190,26 @@ const route: FastifyPluginAsync = async (app) => {
       .execute()
 
     // 通知业管为新成员创建会员副卡（MEMBER-1002），使其在业管侧获得 A 豆账户。
-    // belongId 取团长（当前操作 owner）当前选中的业管会员 ID；若团长尚未绑定业管身份，
-    // 则不写入 outbox（成员后续登录时由 member-sync 兜底绑定）。
-    const [teamInfo, ownerBinding] = await Promise.all([
-      db.selectFrom('teams').select('name').where('id', '=', teamId).executeTakeFirst(),
-      db
-        .selectFrom('biz_mgmt_member_bindings')
-        .select('biz_mgmt_user_id')
-        .where('local_user_id', '=', request.user.id)
-        .where('is_selected', '=', true)
-        .where('status', '=', 1)
-        .executeTakeFirst(),
-    ])
-
-    if (teamInfo && ownerBinding) {
-      // 幂等键：同一团队+成员+手机号重复创建复用同一 outbox 事件
-      const dedupeKey = `member-sub-card:${teamId}:${userId}:${identifier}`
-      await enqueueBizMgmtOutboxEvent({
-        eventType: 'member_sub_card_sync',
-        dedupeKey,
-        localUserId: userId,
-        bizMgmtUserId: ownerBinding.biz_mgmt_user_id,
+    // ownerBinding 已在函数顶部通过公司主卡门控校验（user_type=2 且 is_master=true）。
+    // 幂等键：同一团队+成员+手机号重复创建复用同一 outbox 事件
+    const dedupeKey = `member-sub-card:${teamId}:${userId}:${identifier}`
+    await enqueueBizMgmtOutboxEvent({
+      eventType: 'member_sub_card_sync',
+      dedupeKey,
+      localUserId: userId,
+      bizMgmtUserId: ownerBinding.biz_mgmt_user_id,
+      phone: identifier,
+      teamId,
+      pointsNum: 0,
+      payload: {
         phone: identifier,
-        teamId,
-        pointsNum: 0,
-        payload: {
-          phone: identifier,
-          userName: username,
-          compName: teamInfo.name,
-          channel: 'aihub',
-          belongId: ownerBinding.biz_mgmt_user_id,
-          initialPointsNum: 0,
-        },
-      })
-    }
+        userName: username,
+        compName: teamInfo?.name ?? '',
+        channel: 'aihub',
+        belongId: ownerBinding.biz_mgmt_user_id,
+        initialPointsNum: 0,
+      },
+    })
 
     return reply.status(201).send({
       user_id: userId,
@@ -208,6 +217,9 @@ const route: FastifyPluginAsync = async (app) => {
       workspace_id: workspace.id,
       workspace_name: workspaceName,
       account: identifier,
+      // 仅全新用户返回一次性密码让团长转告；已存在用户保留原密码，不回传。
+      one_time_password: existingUser ? null : oneTimePassword,
+      created_new_user: !existingUser,
     })
   })
 }

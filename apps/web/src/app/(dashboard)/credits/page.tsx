@@ -9,6 +9,7 @@ import { SettingsManagementNav } from '@/components/layout/settings-management-n
 import { useBizMgmtBalance } from '@/hooks/use-biz-mgmt-balance'
 import { useBizMgmtLedger } from '@/hooks/use-biz-mgmt-ledger'
 import { BizMgmtLedgerCard } from '@/components/credits/biz-mgmt-ledger-card'
+import { useAuthStore } from '@/stores/auth-store'
 import Link from 'next/link'
 
 /**
@@ -25,6 +26,12 @@ export default function CreditsPage() {
   const [topupOpen, setTopupOpen] = useState(false)
   const [changeType, setChangeType] = useState('')
   const [page, setPage] = useState(1)
+  const activeBizMgmtMember = useAuthStore((s) => s.activeBizMgmtMember())
+
+  // A豆管理权限 = 当前业管选中身份为公司主卡（与团队管理导航门控一致）。
+  const isOwner =
+    activeBizMgmtMember?.userType === '2' &&
+    (activeBizMgmtMember.isMaster ?? activeBizMgmtMember.is_master)
 
   // 余额统一指向业管 A 豆余额接口
   const { data: balanceData } = useBizMgmtBalance()
@@ -37,6 +44,27 @@ export default function CreditsPage() {
   const totalPages = ledgerData
     ? Math.max(1, Math.ceil(ledgerData.total / (ledgerData.pageSize || PAGE_SIZE)))
     : 1
+
+  // 防绕过：导航已对非主卡隐藏本页，直接输 URL 进入时显示无权限提示。
+  if (!isOwner) {
+    return (
+      <div className="space-y-6 max-w-3xl">
+        <div>
+          <h1 className="text-2xl font-semibold">A豆管理</h1>
+          <p className="text-muted-foreground">查看当前可用A豆余额（数据来自业务管理平台）</p>
+        </div>
+
+        <SettingsManagementNav showBack />
+
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <p className="text-lg font-medium">无权限访问</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            仅公司主卡可管理 A 豆，请切换到公司主卡身份后重试
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 max-w-3xl">

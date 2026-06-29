@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -56,7 +55,6 @@ export function BatchInviteDialog({
 }: BatchInviteDialogProps) {
   const [identifiersText, setIdentifiersText] = useState('')
   const [role, setRole] = useState<'editor' | 'viewer'>('editor')
-  const [creditQuota, setCreditQuota] = useState('1000')
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<BatchResponse | null>(null)
 
@@ -75,19 +73,12 @@ export function BatchInviteDialog({
       return
     }
 
-    const quota = parseInt(creditQuota, 10)
-    if (isNaN(quota) || quota < 0) {
-      toast.error('A豆上限必须是非负整数')
-      return
-    }
-
     setLoading(true)
     try {
+      // A 豆账户由业管平台管理，本地不再配置 A 豆上限。
       const res = await apiPost<BatchResponse>(`/teams/${teamId}/members/batch`, {
         identifiers,
         role,
-        credit_quota: quota,
-        default_password: '123456',
       })
 
       setResults(res)
@@ -125,7 +116,6 @@ export function BatchInviteDialog({
     if (!nextOpen) {
       setIdentifiersText('')
       setRole('editor')
-      setCreditQuota('1000')
       setResults(null)
     }
     onOpenChange(nextOpen)
@@ -137,7 +127,7 @@ export function BatchInviteDialog({
         <DialogHeader>
           <DialogTitle>批量添加成员</DialogTitle>
           <DialogDescription>
-            直接创建可登录账号，默认密码为 123456（首次登录需修改）
+            批量创建可登录账号，系统自动生成初始密码
           </DialogDescription>
         </DialogHeader>
 
@@ -228,35 +218,23 @@ export function BatchInviteDialog({
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>角色</Label>
-                <Select value={role} onValueChange={(v) => setRole(v as 'editor' | 'viewer')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="editor">编辑者 (Editor)</SelectItem>
-                    <SelectItem value="viewer">查看者 (Viewer)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>A豆上限</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={creditQuota}
-                  onChange={(e) => setCreditQuota(e.target.value)}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>角色</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as 'editor' | 'viewer')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="editor">编辑者 (Editor)</SelectItem>
+                  <SelectItem value="viewer">查看者 (Viewer)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
               <p className="font-medium text-blue-900 mb-1">批量创建说明：</p>
               <ul className="text-blue-800 space-y-1 text-xs">
-                <li>• 默认密码：123456（首次登录强制修改）</li>
+                <li>• 系统自动生成初始密码（批量创建暂不回传，成员可凭手机号走业管首登流程）</li>
                 <li>• 自动为每人创建独立工作区："{'{用户名}'}工作区"</li>
                 <li>• 用户名规则：邮箱取@前部分，手机号取后4位</li>
                 <li>• 单次最多创建 50 个账号</li>

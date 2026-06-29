@@ -17,7 +17,13 @@ export function SettingsManagementNav({ showBack = false }: SettingsManagementNa
   const router = useRouter()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
+  const activeBizMgmtMember = useAuthStore((s) => s.activeBizMgmtMember())
   const startNavigation = useNavigationStore((s) => s.startNavigation)
+
+  // 当前业管选中身份是否为公司主卡（与后端 create-member 路由门控信号一致）。
+  // 不依赖 team_members.role——历史遗留 role 可能滞后于业管 master 真实值。
+  const isCurrentBizMgmtMaster =
+    activeBizMgmtMember?.userType === '2' && (activeBizMgmtMember.isMaster ?? activeBizMgmtMember.is_master)
 
   const tabs = [
     { href: '/settings', label: '个人设置', icon: Settings },
@@ -25,6 +31,7 @@ export function SettingsManagementNav({ showBack = false }: SettingsManagementNa
       if (item.href === '/settings' || item.label === '操作手册') return false
       if (item.requireUserRole && user?.role !== item.requireUserRole) return false
       if (item.requireTeamRole && activeTeam?.role !== item.requireTeamRole) return false
+      if (item.requireBizMgmtMaster && !isCurrentBizMgmtMaster) return false
       return true
     }),
   ]
