@@ -88,8 +88,9 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
   const requireScopeSelection = accountScopes.length > 1
 
   // ─── 业务管理平台会员身份选择 ───────────────────────────────────────────
-  // 只查 status=1（正常）的业管绑定用于账号选择；为空表示该用户无业管身份
-  // （例如内部账号），不影响本地登录主流程。
+  // 返回 status=1（正常）和 status=2（冻结）的业管绑定：
+  // - 正常身份可选可用；冻结身份前端能看到（工作区列表置灰）但 select 接口只认 status=1 不可切换。
+  // - status=3（删除）不返回。
   // 注意：本查询不读取 A 豆余额——业管余额是权威来源，必须实时调用单独余额接口。
   const bizMgmtRows = await db
     .selectFrom('biz_mgmt_member_bindings')
@@ -99,13 +100,14 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
       'workspace_id',
       'user_name',
       'user_type',
+      'status',
       'comp_name',
       'goods_id',
       'goods_name',
       'is_selected',
     ])
     .where('local_user_id', '=', userId)
-    .where('status', '=', 1)
+    .where('status', 'in', [1, 2])
     .orderBy('user_type', 'asc')
     .orderBy('created_at', 'asc')
     .execute()
@@ -122,6 +124,7 @@ export async function buildUserProfile(db: ReturnType<typeof getDb>, userId: str
     userName: row.user_name,
     user_type: row.user_type as '1' | '2',
     userType: row.user_type as '1' | '2',
+    status: row.status as 1 | 2,
     comp_name: row.comp_name,
     compName: row.comp_name,
     goods_id: row.goods_id,
