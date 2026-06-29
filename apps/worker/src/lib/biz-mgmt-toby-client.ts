@@ -107,11 +107,10 @@ export interface BizMgmtCreationResultRequest {
   remark?: string
 }
 
+// 业管 MEMBER-1002 会员副卡同步请求（2026-06-29 契约更新：移除 compName / channel）。
 export interface BizMgmtMemberSubCardRequest {
   phone: string
   userName: string
-  compName: string
-  channel: string
   belongId: string
   initialPointsNum: number | string
 }

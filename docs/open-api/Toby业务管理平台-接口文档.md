@@ -316,6 +316,9 @@ responseJson 解密后：
 - **请求方式**：POST
 - **测试 URL**：`/api/toby/member/sub-card`
 
+> **2026-06-29 契约更新**：请求参数移除 `compName`（公司名称）与 `channel`（用户渠道）。
+> 副卡所属公司由 `belongId` 在业管侧解析，渠道固定为 B 端无需再传。
+
 ### 6.2 请求参数（requestJson 解密后）
 
 | 参数名称 | 类型 | 说明 | 是否必填 |
@@ -325,8 +328,6 @@ responseJson 解密后：
 | serviceCode | String | 固定为 `MEMBER-1002` | 是 |
 | phone | String | 手机号（成员） | 是 |
 | userName | String | 会员名称（成员） | 是 |
-| compName | String | 公司名称 | 是 |
-| channel | String | 用户渠道：1 B 端；2 C 端；3 H 端 | 是 |
 | belongId | String | 所属管理员的会员编号（必须为已存在可用会员） | 是 |
 | initialPointsNum | BigDecimal | 初始 A 豆；不能小于 0 | 是 |
 

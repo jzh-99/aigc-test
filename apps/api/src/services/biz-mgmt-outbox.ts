@@ -41,11 +41,10 @@ export interface MemberSubCardOutboxInput {
   phone: string
   teamId: string
   pointsNum: number
+  // 业管 MEMBER-1002 契约（2026-06-29 更新）：移除 compName / channel。
   payload: {
     phone: string
     userName: string
-    compName: string
-    channel: string
     belongId: string
     initialPointsNum: number
   }

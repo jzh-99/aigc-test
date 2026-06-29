@@ -82,11 +82,11 @@ export interface TobySubscribeRequest {
   orderTime?: string
 }
 
+// 业管 MEMBER-1002 会员副卡同步请求（2026-06-29 契约更新：移除 compName / channel）。
+// 仅保留 phone/userName/belongId/initialPointsNum 四个业务字段。
 export interface TobyMemberSubCardRequest {
   phone: string
   userName: string
-  compName: string
-  channel: string
   belongId: string
   initialPointsNum: number | string
 }

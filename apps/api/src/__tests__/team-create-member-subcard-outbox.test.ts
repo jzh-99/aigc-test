@@ -27,15 +27,14 @@ describe('team create-member writes member_sub_card_sync outbox', () => {
     assert.match(source, /dedupe_key|dedupeKey.*team/i)
   })
 
-  test('sub-card payload includes phone, userName, compName and belongId', async () => {
+  test('sub-card payload includes phone, userName and belongId (compName/channel 已移除)', async () => {
     const source = await readFile(
       join(__dirname, '../routes/teams/post-create-member.ts'),
       'utf8',
     )
-    // payload 必须包含业管 MEMBER-1002 必填字段
+    // payload 必须包含业管 MEMBER-1002 现行契约必填字段
     assert.match(source, /phone:/)
     assert.match(source, /userName:/)
-    assert.match(source, /compName:/)
     assert.match(source, /belongId:/)
     // initialPointsNum 透传给业管 MEMBER-1002（带变量解构默认值 1000，主卡可编辑）
     assert.match(source, /initialPointsNum/)
@@ -44,6 +43,9 @@ describe('team create-member writes member_sub_card_sync outbox', () => {
     assert.match(source, /rawInitialPointsNum \?\? 1000/)
     // outbox payload 的 initialPointsNum 与顶层 pointsNum 都用同一来源，不可硬编码
     assert.match(source, /pointsNum: initialPointsNum,\s*payload:\s*\{[\s\S]*?initialPointsNum,\s*\}/)
+    // 2026-06-29 契约更新：compName / channel 已从 MEMBER-1002 移除，源码不可再构造这两个字段
+    assert.doesNotMatch(source, /compName:/, 'compName 已从 MEMBER-1002 outbox payload 移除')
+    assert.doesNotMatch(source, /channel:\s*['"]?1['"]?/, 'channel 已从 MEMBER-1002 outbox payload 移除')
   })
 
   test('只有公司主卡（user_type=2 且 is_master）才能创建成员，否则 403 拒绝', async () => {

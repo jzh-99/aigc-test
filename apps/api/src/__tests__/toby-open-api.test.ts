@@ -65,10 +65,10 @@ const TOBY_TEST_DATA = {
     success: true,
     remark: '测试创作成功',
   },
+  // 业管 MEMBER-1002（2026-06-29 契约更新）：移除 compName / channel。
   memberSubCard: {
     phone: '13111111111',
     userName: '13111111111',
-    compName: '13111111111',
     belongId: 'cfa57951-1824-4aca-8f71-77f48055f661',
     initialPointsNum: '1000.00',
   },
@@ -316,8 +316,13 @@ describe('Toby 业务管理平台开放接口协议', () => {
     printDecrypted('会员副卡变动 responseJson 解密后', result.decryptedData)
 
     assert.equal(payload.serviceCode, 'MEMBER-1002')
+    assert.equal(payload.phone, TOBY_TEST_DATA.memberSubCard.phone)
+    assert.equal(payload.userName, TOBY_TEST_DATA.memberSubCard.userName)
     assert.equal(payload.belongId, TOBY_TEST_DATA.memberSubCard.belongId)
     assert.equal(payload.initialPointsNum, TOBY_TEST_DATA.memberSubCard.initialPointsNum)
+    // 2026-06-29 契约更新：compName / channel 已从请求中移除，绝不可出现在解密后的报文里
+    assert.equal(payload.compName, undefined, 'compName 已从 MEMBER-1002 契约移除')
+    assert.equal(payload.channel, undefined, 'channel 已从 MEMBER-1002 契约移除')
   })
 
   test('个人会员注册使用 MEMBER-1003 和 /api/toby/member/register', async () => {

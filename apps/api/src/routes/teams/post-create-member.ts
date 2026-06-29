@@ -64,16 +64,13 @@ const route: FastifyPluginAsync = async (app) => {
     // 业管文档约束「副卡按公司会员创建」，只有公司主卡（user_type=2 且 is_master=true）
     // 才能创建成员并触发 MEMBER-1002。当前操作者当前选中的业管身份必须满足公司主卡。
     // teamRoleGuard('owner') 已在 preHandler 拦截非 owner；此为业务侧权威二次校验。
-    const [teamInfo, ownerBinding] = await Promise.all([
-      db.selectFrom('teams').select('name').where('id', '=', teamId).executeTakeFirst(),
-      db
-        .selectFrom('biz_mgmt_member_bindings')
-        .select(['biz_mgmt_user_id', 'user_type', 'is_master'])
-        .where('local_user_id', '=', request.user.id)
-        .where('is_selected', '=', true)
-        .where('status', '=', 1)
-        .executeTakeFirst(),
-    ])
+    const ownerBinding = await db
+      .selectFrom('biz_mgmt_member_bindings')
+      .select(['biz_mgmt_user_id', 'user_type', 'is_master'])
+      .where('local_user_id', '=', request.user.id)
+      .where('is_selected', '=', true)
+      .where('status', '=', 1)
+      .executeTakeFirst()
     if (!ownerBinding || ownerBinding.user_type !== '2' || !ownerBinding.is_master) {
       return reply.status(403).send({
         success: false,
@@ -198,7 +195,9 @@ const route: FastifyPluginAsync = async (app) => {
 
     // 通知业管为新成员创建会员副卡（MEMBER-1002），使其在业管侧获得 A 豆账户。
     // ownerBinding 已在函数顶部通过公司主卡门控校验（user_type=2 且 is_master=true）。
-    // 幂等键：同一团队+成员+手机号重复创建复用同一 outbox 事件
+    // 幂等键：同一团队+成员+手机号重复创建复用同一 outbox 事件。
+    // 2026-06-29 契约更新：业管 MEMBER-1002 移除 compName / channel 字段，仅保留
+    // phone/userName/belongId/initialPointsNum。副卡所属公司由 belongId 在业管侧解析。
     const dedupeKey = `member-sub-card:${teamId}:${userId}:${identifier}`
     await enqueueBizMgmtOutboxEvent({
       eventType: 'member_sub_card_sync',
@@ -211,10 +210,6 @@ const route: FastifyPluginAsync = async (app) => {
       payload: {
         phone: identifier,
         userName: username,
-        compName: teamInfo?.name ?? '',
-        // 业管 MEMBER-1002 文档要求 channel 为枚举值：1 B端 / 2 C端 / 3 H端。
-        // 本项目是 B 端创作平台（Web），固定 '1'。之前误传 'aihub'（非合法枚举）会导致业管参数校验失败。
-        channel: '1',
         belongId: ownerBinding.biz_mgmt_user_id,
         initialPointsNum,
       },
