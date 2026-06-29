@@ -15,6 +15,69 @@ import {
  * - 余额是业管权威数据：付费生成前必须先调单独余额接口实时校验，不读本地缓存。
  */
 
+/**
+ * 业管 A 豆流水中性契约（统一映射后的形态，前端只面对此结构）。
+ * 来源：业管 AIHUB_POINTS_CHANGE_QUERY 解密后 record 经 mapTobyPointsChangeRecord 映射。
+ */
+export interface BizMgmtLedgerRow {
+  id: string
+  type: 'deduct' | 'refund' | 'gift' | 'expire' | 'recharge' | 'unknown'
+  typeName: string
+  amount: number
+  balanceAfter: number | null
+  bizNo: string | null
+  reason: string | null
+  source: number | null
+  operator: string | null
+  remark: string | null
+  createdAt: string
+}
+
+/** 流水查询结果：中性 record 列表 + 分页元数据（缺失项已 fallback）。 */
+export interface BizMgmtLedgerResult {
+  data: BizMgmtLedgerRow[]
+  total: number
+  pageNum: number
+  pageSize: number
+}
+
+/**
+ * 业管 changeType → 中性枚举 + amount 符号映射。
+ * 1扣减(负) / 2返还(正) / 3赠送(正) / 4过期(负) / 5充值(正)。
+ * 未知 changeType → unknown + 保守取正，避免误显示扣减，typeName 用业管原文兜底。
+ */
+const CHANGE_TYPE_MAP: Record<number, { type: BizMgmtLedgerRow['type']; sign: 1 | -1 }> = {
+  1: { type: 'deduct', sign: -1 },
+  2: { type: 'refund', sign: 1 },
+  3: { type: 'gift', sign: 1 },
+  4: { type: 'expire', sign: -1 },
+  5: { type: 'recharge', sign: 1 },
+}
+
+/** 中文 fallback：业管 changeTypeName 缺失时按枚举给出中文。 */
+const CHANGE_TYPE_NAME_FALLBACK: Record<number, string> = {
+  1: '扣减',
+  2: '返还',
+  3: '赠送',
+  4: '过期',
+  5: '充值',
+}
+
+/** 业管 record 原始形态（宽松类型，字段缺失容错）。 */
+interface TobyPointsChangeRecord {
+  changeNo?: string | null
+  changeType?: number | string | null
+  changeTypeName?: string | null
+  changePointsNum?: number | string | null
+  balancePointsNum?: number | string | null
+  bizNo?: string | null
+  changeReason?: string | null
+  source?: number | string | null
+  operateUser?: string | null
+  remark?: string | null
+  createTime?: string | null
+}
+
 export interface CurrentBizMgmtIdentity {
   localUserId: string
   teamId: string
@@ -198,4 +261,57 @@ export async function deductBizMgmtPointsForGeneration(input: {
 
   if (response.code !== '0000') throw new Error(response.message || '业管 A 豆扣减失败')
   return { requestNo, workNo, bizMgmtUserId: identity.bizMgmtUserId }
+}
+
+/**
+ * 把单条业管流水 record 映射成中性 BizMgmtLedgerRow。
+ * 纯函数，无副作用，便于单测。
+ * - amount：Math.abs(Number(changePointsNum)) * sign（扣减/过期为负）
+ * - changePointsNum 缺失/非法 → amount: 0（不崩，记录仍展示）
+ * - 字符串字段空串/null/undefined 统一归一化为 null
+ * - createTime 'yyyy-MM-dd HH:mm:ss'（无时区，业管本地时间）原样透传为 createdAt；
+ *   前端 new Date(createdAt) 会按本地时区解析，渲染正确，避免转 ISO 丢失本地时区语义；
+ *   createTime 缺失 → createdAt 空串
+ */
+export function mapTobyPointsChangeRecord(record: TobyPointsChangeRecord): BizMgmtLedgerRow {
+  const rawType = Number(record.changeType)
+  const mapped = CHANGE_TYPE_MAP[rawType]
+  const type: BizMgmtLedgerRow['type'] = mapped ? mapped.type : 'unknown'
+  const sign: 1 | -1 = mapped ? mapped.sign : 1
+
+  const rawPoints = Number(record.changePointsNum)
+  const amount = (Number.isFinite(rawPoints) ? Math.abs(rawPoints) : 0) * sign
+
+  const rawBalance = Number(record.balancePointsNum)
+  const balanceAfter = Number.isFinite(rawBalance) ? rawBalance : null
+
+  const rawSource = Number(record.source)
+  const source = Number.isFinite(rawSource) ? rawSource : null
+
+  const typeName = (record.changeTypeName && String(record.changeTypeName).trim()) ||
+    CHANGE_TYPE_NAME_FALLBACK[rawType] || '未知'
+
+  // createTime 无时区（业管本地时间），原样透传；缺失为空串
+  const createdAt = record.createTime != null ? String(record.createTime).trim() : ''
+
+  return {
+    id: String(record.changeNo ?? ''),
+    type,
+    typeName,
+    amount,
+    balanceAfter,
+    bizNo: normalizeNullableString(record.bizNo),
+    reason: normalizeNullableString(record.changeReason),
+    source,
+    operator: normalizeNullableString(record.operateUser),
+    remark: normalizeNullableString(record.remark),
+    createdAt,
+  }
+}
+
+/** 字符串归一化：空串/null/undefined → null；否则 trim 后返回。 */
+function normalizeNullableString(value: string | null | undefined): string | null {
+  if (value == null) return null
+  const trimmed = String(value).trim()
+  return trimmed === '' ? null : trimmed
 }
