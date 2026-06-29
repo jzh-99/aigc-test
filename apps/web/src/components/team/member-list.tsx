@@ -74,6 +74,11 @@ export function MemberList({ teamId }: { teamId: string }) {
     )
   }
 
+  // 【暂时取消】团队成员「移除成员」功能。通过此开关隐藏整个「操作」列（表头 + 单元格），
+  // 保留 handleRemoveMember 与按钮 JSX 代码以便后续恢复，恢复方式：把 ENABLE_REMOVE_MEMBER 改回 true。
+  // 说明：后端 DELETE /teams/:id/members/:uid 路由保留不动，仅前端入口下线。
+  const ENABLE_REMOVE_MEMBER = false
+
   async function handleRemoveMember(member: Member) {
     if (!await confirm({ title: '移除成员', description: `确定要移除 ${member.username} 吗？`, confirmText: '移除' })) return
     try {
@@ -110,7 +115,9 @@ export function MemberList({ teamId }: { teamId: string }) {
                   <th className="text-left py-2 px-2 font-medium">账户</th>
                   <th className="text-left py-2 px-2 font-medium">角色</th>
                   <th className="text-left py-2 px-2 font-medium">加入时间</th>
-                  <th className="text-right py-2 px-2 font-medium">操作</th>
+                  {ENABLE_REMOVE_MEMBER && (
+                    <th className="text-right py-2 px-2 font-medium">操作</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -128,21 +135,23 @@ export function MemberList({ teamId }: { teamId: string }) {
                       <td className="py-2 px-2 text-muted-foreground">
                         {joinedAt ? `${joinedAt.getFullYear()}-${String(joinedAt.getMonth() + 1).padStart(2, '0')}-${String(joinedAt.getDate()).padStart(2, '0')}` : '-'}
                       </td>
-                      <td className="py-2 px-2 text-right">
-                        {member.role !== 'owner' && (
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              title="移除成员"
-                              onClick={() => handleRemoveMember(member)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        )}
-                      </td>
+                      {ENABLE_REMOVE_MEMBER && (
+                        <td className="py-2 px-2 text-right">
+                          {member.role !== 'owner' && (
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                title="移除成员"
+                                onClick={() => handleRemoveMember(member)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
