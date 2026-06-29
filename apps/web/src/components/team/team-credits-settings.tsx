@@ -10,6 +10,7 @@ import { Coins } from 'lucide-react'
 import { apiPatch, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { TopupModal } from '@/components/credits/topup-modal'
+import { useBizMgmtBalance } from '@/hooks/use-biz-mgmt-balance'
 
 /**
  * 团队 A 豆设置面板。
@@ -22,13 +23,9 @@ interface TeamInfo {
   allow_member_topup: boolean
 }
 
-interface BizMgmtBalance {
-  balance: number
-}
-
 export function TeamCreditsSettings({ teamId }: { teamId: string }) {
   const { data, mutate } = useSWR<TeamInfo>(`/teams/${teamId}`)
-  const { data: balanceData } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
+  const { data: balanceData } = useBizMgmtBalance()
   const [loading, setLoading] = useState(false)
   const [topupOpen, setTopupOpen] = useState(false)
 

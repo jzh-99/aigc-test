@@ -4,17 +4,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Coins, ImageIcon, TrendingUp } from 'lucide-react'
 import { useBatchStats } from '@/hooks/use-batch-stats'
-import useSWR from 'swr'
-
-// 业管 A 豆余额响应。本地积分系统已退役，余额来自业管平台统一查询。
-interface BizMgmtBalance {
-  balance: number
-}
+import { useBizMgmtBalance } from '@/hooks/use-biz-mgmt-balance'
 
 export function StatsCards() {
   const { total, totalCompleted, successRate, isLoading: isStatsLoading } = useBatchStats()
   // 余额统一指向业管 A 豆余额接口（不区分团队/个人）
-  const { data: balanceData, isLoading: isBalanceLoading } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
+  const { data: balanceData, isLoading: isBalanceLoading } = useBizMgmtBalance()
 
   const creditLabel = '可用A豆'
   const creditValue = balanceData?.balance ?? 0

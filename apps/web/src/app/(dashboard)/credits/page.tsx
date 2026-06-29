@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import useSWR from 'swr'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Coins } from 'lucide-react'
 import { TopupModal } from '@/components/credits/topup-modal'
 import { SettingsManagementNav } from '@/components/layout/settings-management-nav'
+import { useBizMgmtBalance } from '@/hooks/use-biz-mgmt-balance'
 import Link from 'next/link'
 
 /**
@@ -17,15 +17,11 @@ import Link from 'next/link'
  * - 流水：GET /credits/biz-mgmt/ledger（业管 AIHUB_POINTS_CHANGE_QUERY 现查）
  * 不再区分团队/个人账户，业管以当前选中会员身份查询。
  */
-interface BizMgmtBalance {
-  balance: number
-}
-
 export default function CreditsPage() {
   const [topupOpen, setTopupOpen] = useState(false)
 
   // 余额统一指向业管 A 豆余额接口
-  const { data: balanceData } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
+  const { data: balanceData } = useBizMgmtBalance()
 
   const balance = balanceData?.balance ?? 0
 

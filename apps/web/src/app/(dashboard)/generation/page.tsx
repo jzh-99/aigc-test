@@ -11,18 +11,13 @@ import { BatchDetail } from '@/components/history/batch-detail'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { AlertTriangle, FolderX } from 'lucide-react'
-import useSWR from 'swr'
 import type { BatchResponse } from '@aigc/types'
 import { useBatches } from '@/hooks/use-batches'
 import { useBatchSSE } from '@/hooks/use-batch-sse'
 import { Button } from '@/components/ui/button'
 import { AssetsLibraryTab } from '@/components/generation/assets-library-tab'
 import { cn } from '@/lib/utils'
-
-// 业管 A 豆余额响应。本地积分系统已退役，余额来自业管平台统一查询。
-interface BizMgmtBalance {
-  balance: number
-}
+import { useBizMgmtBalance } from '@/hooks/use-biz-mgmt-balance'
 
 function isTerminalStatus(status: string): boolean {
   return status === 'completed' || status === 'failed' || status === 'partial_complete'
@@ -93,7 +88,7 @@ function ImagePageContent() {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const hasInitiallyLoadedBatches = useRef(false)
   // 余额统一指向业管 A 豆余额接口（本地积分系统已退役）
-  const { data: balanceData, mutate: mutateBalance } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
+  const { data: balanceData, mutate: mutateBalance } = useBizMgmtBalance()
 
   // 切换工作区时清空所有活跃订阅
   useEffect(() => {

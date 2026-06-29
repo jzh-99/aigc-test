@@ -2,7 +2,7 @@
 
 import { Coins } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import useSWR from 'swr'
+import { useBizMgmtBalance } from '@/hooks/use-biz-mgmt-balance'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
@@ -10,17 +10,11 @@ interface CreditsBadgeProps {
   collapsed: boolean
 }
 
-// 业管 A 豆余额响应：{ balance: number }
-// 本地积分系统已退役，余额权威在业管，统一从 /credits/biz-mgmt/balance 现查。
-interface BizMgmtBalance {
-  balance: number
-}
-
 export function CreditsBadge({ collapsed }: CreditsBadgeProps) {
   const router = useRouter()
 
   // 余额统一指向业管 A 豆余额接口（不区分团队/个人，业管以当前选中会员身份查询）
-  const { data: balanceData } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
+  const { data: balanceData } = useBizMgmtBalance()
 
   // 用 mounted gate 保证 SSR 与首屏 CSR 输出一致：
   // SWR 命中缓存时首屏 CSR 的 data 可能与 SSR（undefined）不同，会触发 hydration mismatch。

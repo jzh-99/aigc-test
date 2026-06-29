@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import useSWR from 'swr'
 import { useEffect, useState } from 'react'
 import { UserRound, Building2, ArrowLeftRight, Check, Coins } from 'lucide-react'
 import {
@@ -18,16 +17,11 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useHomeScrollStore } from '@/stores/home-scroll-store'
 import { useTeamFeatures } from '@/hooks/use-team-features'
 import { useNavigationStore } from '@/stores/navigation-store'
+import { useBizMgmtBalance } from '@/hooks/use-biz-mgmt-balance'
 import {
   creativeNavItems,
   isNavItemActive,
 } from './nav-config'
-
-// 业管 A 豆余额响应：{ balance: number }
-// 本地积分系统已退役，余额权威在业管，统一从 /credits/biz-mgmt/balance 现查。
-interface BizMgmtBalance {
-  balance: number
-}
 
 const navLabelMap: Record<string, string> = {
   'Toby Studio': 'Toby',
@@ -75,7 +69,7 @@ export function CreativeSideRail() {
   const { showVideoStudioTab } = useTeamFeatures()
   const startNavigation = useNavigationStore((s) => s.startNavigation)
   // 余额统一指向业管 A 豆余额接口（不区分团队/个人，业管以当前选中会员身份查询）
-  const { data: balanceData } = useSWR<BizMgmtBalance>('/credits/biz-mgmt/balance')
+  const { data: balanceData } = useBizMgmtBalance()
   const remainingCredits = balanceData?.balance ?? 0
 
   return (
