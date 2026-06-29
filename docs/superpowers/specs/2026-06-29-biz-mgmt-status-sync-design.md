@@ -44,9 +44,10 @@
   - upsert binding（记 status=2）
   - **不建 team**（若已存在 team，保留不动——用户能看到置灰工作区）
   - 不软删
+  - **select 接口不变**（仍只允许选 status=1）：冻结身份选不了，符合"前端无法切换到冻结 team 的工作空间"。
 - **status=3（删除）**：
   - **未入库**（无 binding）→ 不建 binding、不建 team（跳过）
-  - **已入库**（有 binding）→ 软删其 team（`teams.is_deleted=true, deleted_at=NOW()`）、软删 workspace；binding 保留并 upsert status=3（审计用）
+  - **已入库**（有 binding）→ 软删其 team（`teams.is_deleted=true, deleted_at=NOW()`）、软删 workspace；binding 保留并 upsert status=3（审计用）；若该 binding 是当前选中（is_selected=true），清空 is_selected 避免悬空选中。
 - **移除老的 `not in` 冻结逻辑**（:248-256）：不再用"未返回"推断，改用业管真实 status。
 
 ### 2.3 check-biz-mgmt 拒绝逻辑调整
@@ -59,7 +60,22 @@
 
 ### 2.4 付费能力限制（现状已实现，无需改）
 
-`getCurrentBizMgmtIdentity` 只认 status=1。status=2 的身份被选中后，生成接口调它 → 查不到 → 402 引导重选。符合"能登录但限制付费"。
+- `getCurrentBizMgmtIdentity:79` 只认 status=1 → status=2/3 身份查不到 → 生成/扣 A 豆抛 402。
+- `select-biz-mgmt-member:39` 只允许选 status=1 → 冻结身份选不了（前端无法切换到冻结 team 工作空间）。
+- 两处均无需改，付费限制与"冻结不可切换"天然生效。
+
+### 2.5 profile 返回冻结身份（让前端"能看到但不能切换"）
+
+**冻结语义（用户确认）**：冻结账户所有功能停用，但**工作区列表里仍要显示**冻结的工作区（用户看得到），只是**无法切换过去**；可解冻，解冻后恢复。
+
+**现状差距**：`user-profile.ts:108` `.where('status','=',1)` → 冻结(2)的 binding 不进 profile → 前端工作区列表**看不到**冻结的 → 与"要能看到"冲突。
+
+**改动**：
+- `user-profile.ts:108` 改为 `.where('status', 'in', [1, 2])`（正常+冻结都返回，删除(3)不返回）。
+- select 字段 + map 时**带上 `status`**，让前端区分正常/冻结（置灰、禁用切换）。
+- `requireBizMgmtMemberSelection`（:135）：可选身份多于 1 个且未选时要求选身份。改动后冻结身份也计入 count，但 select 只能选 status=1——若用户只有冻结身份（无正常），不强制跳选择页（因为选不了），profile 正常返回。
+
+> 前端置灰/禁用切换 UI 属后续工程（不在本次后端范围），但后端必须先把 status 透传给前端。
 
 ## 三、文件改动清单
 
@@ -81,7 +97,14 @@
 - 登录时本地无 user 的兜底拒绝逻辑不变（建 user 在 check 完成）。
 - 无需改 status 相关（login 不查业管建 user）。
 
-### 3.4 测试
+### 3.4 `apps/api/src/services/user-profile.ts`
+
+- `:108` `.where('status','=',1)` → `.where('status','in', sql([1,2]))` 或等价（正常+冻结返回，删除不返回）。
+- select 字段加 `status`；map（:114）时带上 status（snake + camel 双格式，与现有字段风格一致）。
+- 注释 `:91` 更新（不再"只查 status=1"）。
+- `requireBizMgmtMemberSelection`：保持"多于 1 个且未选则要求选"语义；但因 select 只能选 status=1，需确认只有冻结身份时不强制跳选择页（避免死循环）。
+
+### 3.5 测试
 
 - `biz-mgmt-member-sync.test.ts`：新增 status=2/3 分流测试（文本扫描 sync 源码，断言 status=3 软删 team、status=2 不软删）。
 - `post-check-biz-mgmt.test.ts`：新增"全部 status=3 → 拒绝"断言。
@@ -105,6 +128,8 @@
 - [ ] 业管返回有 status=1 或 2 → check 进密码步。
 - [ ] 会员 A 从 status=1 变 status=2 → 下次 sync 后 binding.status=2，team 保留，生成被限。
 - [ ] 会员 B 从 status=1 变 status=3 → 下次 sync 后 team 软删，binding.status=3。
+- [ ] 冻结(2)身份在 profile.bizMgmtMembers 中**返回**（带 status=2），前端能看到；select 该身份返回 404（不能切换）；该身份下生成返回 402（功能停用）。
+- [ ] 删除(3)身份不在 profile.bizMgmtMembers 中返回。
 
 ## 六、不做（YAGNI）
 
