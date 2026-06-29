@@ -222,6 +222,15 @@ packages/
   - 不要把建 user 逻辑放回 login；不要在 login 内重复查业管建 user（会与 check 结果不一致导致登录失败）。
 - **验证方式**：`grep -n "ensureLocalUserForBizMgmtPhone" apps/api/src/routes/auth/post-login.ts` 应无输出（login 不再建 user）；该函数只应出现在 `post-check-biz-mgmt.ts`；新用户走完「下一步」后 `users` 表即有该 phone 记录，不必等点「登录」。
 
+### 7. worker/api 改了 src 但运行时仍报旧错误（重启没用）
+
+- **问题现象**：改了 `apps/worker/src/`（或 `apps/api/src/`）的代码，重启进程后仍报旧的错误文案（如环境变量名从 `TOBY_BASE_URL` 改成 `TOBY_OUTBOUND_BASE_URL` 后，worker 日志/outbox 表 `last_error` 仍写 `TOBY_BASE_URL is required`）。
+- **根本原因**：`apps/worker` / `apps/api` 的 `package.json` 启动脚本是 `start: node dist/index.js`（生产模式跑 `dist/` 编译产物），不是 `dev: tsx src/index.ts`（开发模式实时编译 src）。只改 `src/` 不重新 `build`，`dist/` 仍是旧版本；`pnpm start` 或 PM2 加载的是 `dist/`，所以 src 的修改根本没生效。`tsc --noEmit` 和 `tsx --test` 都不碰 `dist/`，无法发现这个问题。
+- **解决办法**：改完 worker/api 的 src 后，**根据运行方式二选一**：
+  1. 开发调试：用 `pnpm --filter @aigc/worker dev`（tsx 直接跑 src，免 build）。
+  2. 生产 / PM2 / `pnpm start`：必须先 `pnpm --filter @aigc/worker build` 重编 `dist/`，再重启进程；服务器镜像部署同理（重新构建镜像 = 重建 dist）。
+- **验证方式**：`grep -n "<旧错误文案>" apps/worker/dist/lib/<对应文件>.js` 应无输出（确认 dist 已更新）；对比 `apps/worker/src` 与 `apps/worker/dist` 对应文件的修改时间，dist 应新于 src；重启后观察 `biz_mgmt_outbox_events.last_error` 或 worker 日志不再出现旧错误文案。
+
 ---
 
 ## Docker 部署
