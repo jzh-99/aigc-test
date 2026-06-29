@@ -8,7 +8,6 @@ import { ensurePersonalAccountScope } from '../../services/account-scope.js'
 import { buildAuthResponse, buildUserProfile } from '../../services/user-profile.js'
 import { signAccessToken, signRefreshToken } from '../../lib/auth-tokens.js'
 import {
-  syncBizMgmtMembersForLocalUser,
   fetchBizMgmtMembersByPhone,
   purgeLocalUserCascade,
 } from '../../services/biz-mgmt-member-sync.js'
@@ -98,7 +97,7 @@ const route: FastifyPluginAsync = async (app) => {
   //  2. 业管有会员（≥1 个 status=1）→ 查本地 users.phone：
   //       本地无 → 拒绝（建 user 责任在 check-biz-mgmt，跳过 check 视为异常）
   //       本地有 → bcrypt 校验密码
-    //  3. 登录成功后异步刷新业管绑定（setImmediate，不 await，不阻塞登录性能）。
+    //  3. 登录只校验密码 + 签发 token；业管绑定刷新与建 team 已在 check-biz-mgmt 完成。
     //
     // 邮箱登录（identifier 非手机号）走旧的本地先行逻辑，不触发业管查询，
     // 保证 SSO / 邀请等链路不受影响。
@@ -202,18 +201,6 @@ const route: FastifyPluginAsync = async (app) => {
 
     // 登录成功，清除失败记录
     await clearFailedAttempts(redis, identifier)
-
-    // 业管会员同步：改为异步触发，不阻塞登录响应。
-    // 关键不变量：每次手机号登录成功后都要刷新业管绑定，发现用户新增的管理/公司账号；
-    // 但业管查询耗时不应拖慢登录，故用 setImmediate 移出请求关键路径，失败只记日志。
-    if (user.phone) {
-      setImmediate(() => {
-        syncBizMgmtMembersForLocalUser(user!.id, user!.phone!).catch((err) => {
-          // 异步同步失败不影响已完成的登录，只记日志便于排查
-          request.log.error({ err, userId: user!.id }, '业管会员异步同步失败（不影响登录）')
-        })
-      })
-    }
 
     // 撤销旧 refresh token，强制单会话
     await db
