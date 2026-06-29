@@ -15,6 +15,9 @@ const route: FastifyPluginAsync = async (app) => {
       identifier: string
       username: string
       role?: 'editor' | 'viewer'
+      // 新成员的初始 A 豆额度，透传给业管 MEMBER-1002 initialPointsNum。
+      // 默认 1000，主卡创建时可在前端编辑（>=0）；A 豆账户实际由业管平台管理。
+      initial_points_num?: number
     }
   }>('/teams/:id/members/create', {
     preHandler: teamRoleGuard('owner'),
@@ -26,6 +29,7 @@ const route: FastifyPluginAsync = async (app) => {
           identifier: { type: 'string', pattern: '^\\d{11}$', minLength: 11, maxLength: 11 },
           username: { type: 'string', minLength: 2, maxLength: 30 },
           role: { type: 'string', enum: ['editor', 'viewer'] },
+          initial_points_num: { type: 'number', minimum: 0 },
         },
         additionalProperties: false,
       },
@@ -35,7 +39,10 @@ const route: FastifyPluginAsync = async (app) => {
       identifier: rawIdentifier,
       username: rawUsername,
       role = 'editor',
+      initial_points_num: rawInitialPointsNum,
     } = request.body
+    // 业管 MEMBER-1002 约束 initialPointsNum >= 0；未传默认 1000（历史默认值）
+    const initialPointsNum = Math.max(0, Math.trunc(rawInitialPointsNum ?? 1000))
     const teamId = request.params.id
     const db = getDb()
 
@@ -200,14 +207,14 @@ const route: FastifyPluginAsync = async (app) => {
       bizMgmtUserId: ownerBinding.biz_mgmt_user_id,
       phone: identifier,
       teamId,
-      pointsNum: 0,
+      pointsNum: initialPointsNum,
       payload: {
         phone: identifier,
         userName: username,
         compName: teamInfo?.name ?? '',
         channel: 'aihub',
         belongId: ownerBinding.biz_mgmt_user_id,
-        initialPointsNum: 0,
+        initialPointsNum,
       },
     })
 
@@ -220,6 +227,8 @@ const route: FastifyPluginAsync = async (app) => {
       // 仅全新用户返回一次性密码让团长转告；已存在用户保留原密码，不回传。
       one_time_password: existingUser ? null : oneTimePassword,
       created_new_user: !existingUser,
+      // 回传本次为该成员配置的初始 A 豆额度（已透传给业管 MEMBER-1002）
+      initial_points_num: initialPointsNum,
     })
   })
 }

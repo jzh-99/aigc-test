@@ -37,7 +37,13 @@ describe('team create-member writes member_sub_card_sync outbox', () => {
     assert.match(source, /userName:/)
     assert.match(source, /compName:/)
     assert.match(source, /belongId:/)
-    assert.match(source, /initialPointsNum:/)
+    // initialPointsNum 透传给业管 MEMBER-1002（带变量解构默认值 1000，主卡可编辑）
+    assert.match(source, /initialPointsNum/)
+    // 必须从请求 body 透传 initial_points_num，默认 1000（业管约束 >=0）
+    assert.match(source, /initial_points_num\?: number/)
+    assert.match(source, /rawInitialPointsNum \?\? 1000/)
+    // outbox payload 的 initialPointsNum 与顶层 pointsNum 都用同一来源，不可硬编码
+    assert.match(source, /pointsNum: initialPointsNum,\s*payload:\s*\{[\s\S]*?initialPointsNum,\s*\}/)
   })
 
   test('只有公司主卡（user_type=2 且 is_master）才能创建成员，否则 403 拒绝', async () => {
