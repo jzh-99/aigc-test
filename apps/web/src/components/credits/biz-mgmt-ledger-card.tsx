@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2, ChevronLeft, ChevronRight, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import type { BizMgmtLedgerRow } from '@/hooks/use-biz-mgmt-ledger'
 
 /**
  * 业管 A 豆流水展示组件（基于后端映射后的中性契约 BizMgmtLedgerRow）。
@@ -13,21 +14,6 @@ import { cn } from '@/lib/utils'
  * 不含已退役本地 credits_ledger 的 module/model/provider/prompt/canvas_id 等字段，
  * 也没有 personal/team 账户切换（业管按当前选中会员身份查询，无此概念）。
  */
-
-/** 业管 A 豆流水中性契约（与后端 BizMgmtLedgerRow 同构）。 */
-export interface BizMgmtLedgerRow {
-  id: string
-  type: 'deduct' | 'refund' | 'gift' | 'expire' | 'recharge' | 'unknown'
-  typeName: string
-  amount: number
-  balanceAfter: number | null
-  bizNo: string | null
-  reason: string | null
-  source: number | null
-  operator: string | null
-  remark: string | null
-  createdAt: string
-}
 
 interface Props {
   data: { data: BizMgmtLedgerRow[]; total: number; pageNum: number; pageSize: number } | undefined
