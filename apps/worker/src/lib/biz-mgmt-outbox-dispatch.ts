@@ -25,8 +25,9 @@ export async function dispatchBizMgmtOutboxEvent(eventId: string): Promise<void>
   // 已终态（成功/失败）的事件不再派发，保证幂等
   if (!event || event.status === 'succeeded' || event.status === 'failed') return
 
-  // 领取：attempt_count+1，置 processing 并加锁，记录领取时间与 worker 标识
-  await db.updateTable('biz_mgmt_outbox_events')
+  // 领取（CAS 乐观锁抢占）：只有第一个消费者能把 pending 改成 processing，
+  // 其余并发消费者（BullMQ 重投/多实例）返回 0 行直接跳过，确保事件只被消费一次。
+  const claimed = await db.updateTable('biz_mgmt_outbox_events')
     .set({
       status: 'processing',
       locked_at: new Date(),
@@ -35,7 +36,10 @@ export async function dispatchBizMgmtOutboxEvent(eventId: string): Promise<void>
       updated_at: new Date(),
     })
     .where('id', '=', eventId)
-    .execute()
+    .where('status', '=', 'pending') // CAS：仅 pending 可领取
+    .executeTakeFirst()
+  // 抢占失败（已被别的消费者领取或状态已变）→ 跳过，不重复调业管
+  if (!claimed || Number(claimed.numUpdatedRows) === 0) return
 
   const maxAttempts = Number(event.max_attempts ?? 8)
   try {
