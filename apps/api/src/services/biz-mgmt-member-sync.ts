@@ -95,7 +95,12 @@ export function generateOneTimePassword(): string {
 /**
  * 用手机号调用业管 MEMBER-1001 查询会员列表并标准化。
  *
- * 只返回 status=1（正常）的会员；status 非 1 的会员不可被选为当前身份。
+ * 返回 status=1/2/3 全部会员（真实 status 透传给 sync 分流处理）：
+ * - status=1 正常：建/更新 team，可选可用。
+ * - status=2 冻结：sync 记 binding.status=2，team 不动；profile 返回让前端能看到但不可切换；
+ *   付费限制由 getCurrentBizMgmtIdentity 只认 status=1 天然实现。
+ * - status=3 删除：已入库软删 team，未入库不入库。
+ * 是否拒绝登录（全部 status=3）由 check-biz-mgmt 判断，不在本函数过滤。
  */
 export async function fetchBizMgmtMembersByPhone(phone: string): Promise<NormalizedBizMgmtMember[]> {
   const response = await queryTobyMemberLoginInfo({ phone })
@@ -103,7 +108,7 @@ export async function fetchBizMgmtMembersByPhone(phone: string): Promise<Normali
   // MEMBER-1001 返回的 pointsNum/sumPointsNum/consumePointsNum 属于业管实时权益数据。
   // 本服务只同步身份和权益商品信息，不能把 A 豆余额或累计消费落入本地库；
   // 付费生成前必须调用单独的 A 豆余额接口重新获取余额。
-  return members.map(normalizeBizMgmtMember).filter((member) => member.status === 1)
+  return members.map(normalizeBizMgmtMember)
 }
 
 /**
