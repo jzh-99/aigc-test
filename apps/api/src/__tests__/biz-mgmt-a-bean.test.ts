@@ -67,3 +67,44 @@ test('ledger record maps 5 known changeTypes with correct amount sign', () => {
     mapTobyPointsChangeRecord({ ...base, changeType: 5, changePointsNum: 100 }).amount, 100,
   )
 })
+
+test('ledger record tolerates unknown changeType with positive sign and original typeName', () => {
+  const row = mapTobyPointsChangeRecord({
+    changeNo: 'c2', changeType: 99, changeTypeName: '新活动',
+    changePointsNum: '7', balancePointsNum: '88',
+  })
+  assert.equal(row.type, 'unknown')
+  assert.equal(row.amount, 7) // 保守取正
+  assert.equal(row.typeName, '新活动') // 业管原文兜底
+})
+
+test('ledger record uses Chinese fallback when changeTypeName missing', () => {
+  const row = mapTobyPointsChangeRecord({ changeNo: 'c3', changeType: 1, changePointsNum: 2 })
+  assert.equal(row.typeName, '扣减')
+})
+
+test('ledger record treats missing changePointsNum as amount 0', () => {
+  const row = mapTobyPointsChangeRecord({ changeNo: 'c4', changeType: 1, changePointsNum: null })
+  assert.equal(row.amount, 0)
+  assert.equal(row.balanceAfter, null) // balancePointsNum 也缺失
+})
+
+test('ledger record normalizes empty/nullable string fields to null', () => {
+  const row = mapTobyPointsChangeRecord({
+    changeNo: 'c5', changeType: 5, changePointsNum: 10,
+    bizNo: '', changeReason: '   ', operateUser: undefined, remark: '备注',
+  })
+  assert.equal(row.bizNo, null)
+  assert.equal(row.reason, null)
+  assert.equal(row.operator, null)
+  assert.equal(row.remark, '备注')
+})
+
+test('ledger record passes through createTime as-is (no timezone, no ISO conversion)', () => {
+  const ok = mapTobyPointsChangeRecord({ changeNo: 'c6', changeType: 1, changePointsNum: 1, createTime: '2026-06-21 10:00:00' })
+  assert.equal(ok.createdAt, '2026-06-21 10:00:00') // 业管本地时间原样透传，不转 ISO（避免时区偏移）
+  const bad = mapTobyPointsChangeRecord({ changeNo: 'c7', changeType: 1, changePointsNum: 1, createTime: 'not-a-date' })
+  assert.equal(bad.createdAt, 'not-a-date') // 非法值也原样透传，前端 new Date() 解析失败时自行兜底
+  const missing = mapTobyPointsChangeRecord({ changeNo: 'c8', changeType: 1, changePointsNum: 1 })
+  assert.equal(missing.createdAt, '') // 缺失为空串
+})

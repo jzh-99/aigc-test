@@ -280,7 +280,8 @@ export function mapTobyPointsChangeRecord(record: TobyPointsChangeRecord): BizMg
   const sign: 1 | -1 = mapped ? mapped.sign : 1
 
   const rawPoints = Number(record.changePointsNum)
-  const amount = (Number.isFinite(rawPoints) ? Math.abs(rawPoints) : 0) * sign
+  // abs * sign 在 changePointsNum 为 0 时会产生 -0，用 `|| 0` 归一化为 +0，避免 -0 !== 0 断言失败
+  const amount = ((Number.isFinite(rawPoints) ? Math.abs(rawPoints) : 0) * sign) || 0
 
   const rawBalance = Number(record.balancePointsNum)
   const balanceAfter = Number.isFinite(rawBalance) ? rawBalance : null
