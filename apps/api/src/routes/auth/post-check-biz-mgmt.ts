@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { fetchBizMgmtMembersByPhone, purgeLocalUserCascade } from '../../services/biz-mgmt-member-sync.js'
+import { ensureLocalUserForBizMgmtPhone, fetchBizMgmtMembersByPhone, purgeLocalUserCascade } from '../../services/biz-mgmt-member-sync.js'
 
 /**
  * POST /auth/check-biz-mgmt — 业管先行登录第一步：查业管账号是否存在。
@@ -11,12 +11,15 @@ import { fetchBizMgmtMembersByPhone, purgeLocalUserCascade } from '../../service
  * 前端是否进入密码输入步。
  *
  * 返回约定（前端据此切换视图）：
- * - 200 { exists: true }：业管有 ≥1 个 status=1 会员，前端进入密码步。
+ * - 200 { exists: true }：业管有 ≥1 个 status=1 会员，且本地已存在该手机号 user（老用户）。前端进入密码步。
+ * - 200 { exists: true, one_time_password: string }：业管有会员但本地无 user（新用户）。
+ *   本接口此时【预建本地 user + 生成一次性初始密码】并随响应返回，前端进密码步后展示该密码供用户登录。
  * - 401 { error.code: 'BIZ_MGMT_NOT_FOUND' }：业管查无会员或接口故障（故障等同查无）。
  *   若本地存在该手机号孤儿 user，先物理清理其全部业务数据，再返回此码。
  *
- * 安全说明：本接口只返回布尔 exists，不返回会员明细，避免向未认证请求泄露
+ * 安全说明：仅返回布尔 exists 和（新用户）一次性初始密码，不返回会员明细，避免向未认证请求泄露
  * 账号信息（会员明细在 /auth/login 成功后随 profile 返回）。
+ * 初始密码经 HTTPS 传输、用完即改（password_change_required=true），遗失联系管理员重置。
  * 频率限制复用全局 1200/min，登录接口另有 10/min 的更严限制。
  */
 const route: FastifyPluginAsync = async (app) => {
@@ -71,8 +74,22 @@ const route: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // 业管有会员：前端进入密码步
-    return { exists: true }
+    // 业管有会员：预建本地 user（本地无则建 + 生成一次性初始密码），再让前端进入密码步。
+    // 建 user 责任在 check 阶段完成，login 阶段只校验密码；老用户不重建、不返密码。
+    const db = getDb()
+    const existingUser = await db
+      .selectFrom('users')
+      .select(['id'])
+      .where('phone', '=', phone)
+      .executeTakeFirst()
+    if (existingUser) {
+      // 老用户：本地已有 user，直接进密码步，不返密码
+      return { exists: true }
+    }
+    // 新用户：业管有会员但本地无 user → 预建 user + 生成一次性初始密码
+    const created = await ensureLocalUserForBizMgmtPhone(phone)
+    // ensureLocalUserForBizMgmtPhone 内部已确认业管有 status=1 会员；oneTimePassword 仅新建时非空
+    return { exists: true, one_time_password: created.oneTimePassword }
   })
 }
 
