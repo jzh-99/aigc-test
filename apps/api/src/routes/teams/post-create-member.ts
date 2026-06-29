@@ -212,7 +212,9 @@ const route: FastifyPluginAsync = async (app) => {
         phone: identifier,
         userName: username,
         compName: teamInfo?.name ?? '',
-        channel: 'aihub',
+        // 业管 MEMBER-1002 文档要求 channel 为枚举值：1 B端 / 2 C端 / 3 H端。
+        // 本项目是 B 端创作平台（Web），固定 '1'。之前误传 'aihub'（非合法枚举）会导致业管参数校验失败。
+        channel: '1',
         belongId: ownerBinding.biz_mgmt_user_id,
         initialPointsNum,
       },
