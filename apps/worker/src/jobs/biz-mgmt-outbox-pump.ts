@@ -91,11 +91,23 @@ export async function runBizMgmtOutboxPump(): Promise<void> {
     if (dueEvents.length === 0) return
 
     const queue = getBizMgmtNotifyQueue()
-    // 诊断：打印实际投递的 Redis 目标 + 投递后立即查队列长度，定位「投了但 Redis 没数据」
-    const redisInfo = await queue.client.then((c: any) => c.options)
-      .then((o: any) => `host=${o.host} port=${o.port} db=${o.db}`)
-      .catch(() => '无法读取 client options')
-    logger.info({ queueName: queue.name, redisTarget: redisInfo }, '[biz-mgmt-outbox-pump] 投递前 Redis 目标诊断')
+
+    // 投递前清理这些 eventId 在 BullMQ 里的残留 job（completed/failed）。
+    // 原因：BullMQ 用 jobId 去重，jobId（=eventId）一旦落在 completed/failed 集合，
+    // 后续 addBulk 会被静默忽略，job 永远不进 waiting，worker 收不到。
+    // outbox 模式的重试由 outbox 表 next_attempt_at 控制，BullMQ job 只负责一次性触发；
+    // 因此每次重新投递前必须先删掉残留 job，让 jobId 重新可用。
+    for (const event of dueEvents) {
+      try {
+        const existingJob = await queue.getJob(event.id)
+        if (existingJob && (await existingJob.isFailed())) {
+          await existingJob.remove()
+        }
+      } catch {
+        // 删除残留 job 失败不阻断投递（job 可能已被 BullMQ 自动清理）
+      }
+    }
+
     // 批量投递，每个事件一个 job，jobId=eventId 去重
     await queue.addBulk(
       dueEvents.map((event) => ({
@@ -103,13 +115,6 @@ export async function runBizMgmtOutboxPump(): Promise<void> {
         data: { eventId: event.id },
         opts: { jobId: event.id }, // 幂等：同 eventId 只有一个 job
       })),
-    )
-    // 投递后立即查 wait/delayed 长度，确认数据真的进了 Redis
-    const waitingCount = await queue.getWaitingCount().catch(() => -1)
-    const delayedCount = await queue.getDelayedCount().catch(() => -1)
-    logger.info(
-      { count: dueEvents.length, waitingCount, delayedCount },
-      '[biz-mgmt-outbox-pump] 投递后队列计数（waiting/delayed）',
     )
 
     logger.info(
