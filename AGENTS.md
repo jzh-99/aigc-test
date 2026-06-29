@@ -211,6 +211,17 @@ packages/
 - **解决办法**：项目约定、规则、常见问题**只写在 `AGENTS.md`**（唯一权威源 + 唯一团队入口，所有 Agent 工具通用）。`CLAUDE.md` 若需保留，仅作本机 Claude Code 的本地引导（指向 AGENTS.md），不 commit。需要把本地修改强制入库时再单独评估，不要默认它能被团队读到。
 - **验证方式**：`git check-ignore -v CLAUDE.md` 若有输出则确认被忽略；`git ls-files CLAUDE.md` 无输出则确认未跟踪；团队约定一律以 `git ls-files AGENTS.md` 能列出的 AGENTS.md 为准。
 
+### 6. 两步式登录：建本地 user 的责任在 check-biz-mgmt，不在 login
+
+- **问题现象**：手机号登录时，业管明明返回了会员信息、前端也进了密码输入步，但 `users` 表一直是空的；新用户进密码步时也拿不到初始密码，无法完成首次登录。
+- **根本原因**：两步式登录职责错位。`/auth/check-biz-mgmt`（第一步「下一步」）只查业管判存亡，不建 user、不返密码；而建 user + 生成初始密码的逻辑放在了 `/auth/login`（第二步「登录」成功响应里）——初始密码出现在"登录成功之后"，新用户根本不知道密码，形成死循环。
+- **解决办法**：建本地 user 的责任**只在 `/auth/check-biz-mgmt`**。手机号登录正确时序：
+  1. `check-biz-mgmt`：业管有会员 → 查本地 `users.phone` → 无则 `ensureLocalUserForBizMgmtPhone` 建 user + 生成一次性初始密码 → 返回 `{exists:true, one_time_password}`；有则只返 `{exists:true}`。
+  2. 前端密码步：展示初始密码黄色提示框，用户用该密码登录。
+  3. `login`：**只做 bcrypt 密码校验**，不再建 user、不再返初始密码；本地无 user（说明跳过了 check）→ 返回 `BIZ_MGMT_NOT_FOUND` 拒绝。
+  - 不要把建 user 逻辑放回 login；不要在 login 内重复查业管建 user（会与 check 结果不一致导致登录失败）。
+- **验证方式**：`grep -n "ensureLocalUserForBizMgmtPhone" apps/api/src/routes/auth/post-login.ts` 应无输出（login 不再建 user）；该函数只应出现在 `post-check-biz-mgmt.ts`；新用户走完「下一步」后 `users` 表即有该 phone 记录，不必等点「登录」。
+
 ---
 
 ## Docker 部署
