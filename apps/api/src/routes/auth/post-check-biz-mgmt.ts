@@ -59,8 +59,10 @@ const route: FastifyPluginAsync = async (app) => {
       members = []
     }
 
-    if (members.length === 0) {
-      // 业管查无（或故障）：若本地存在该手机号孤儿 user，物理清理后拒绝
+    // 业管查无（空数组/故障）或全部会员 status=3（删除）→ 视为账户不存在
+    const hasUsableMember = members.some((m) => m.status === 1 || m.status === 2)
+    if (members.length === 0 || !hasUsableMember) {
+      // 若本地存在该手机号孤儿 user，物理清理后拒绝
       const db = getDb()
       const existingUser = await db
         .selectFrom('users')
