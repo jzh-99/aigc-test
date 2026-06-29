@@ -6,6 +6,7 @@ import {
   normalizeBizMgmtPointsLedgerQuery,
   mapTobyPointsChangeRecord,
   normalizeTobyRecords,
+  buildBizMgmtLedgerResult,
 } from '../services/biz-mgmt-a-bean.js'
 
 test('deduct request number is stable for batch and task', () => {
@@ -125,4 +126,44 @@ test('normalizeTobyRecords returns empty array for null/undefined/non-object', (
   assert.deepEqual(normalizeTobyRecords(undefined), [])
   assert.deepEqual(normalizeTobyRecords('string'), [])
   assert.deepEqual(normalizeTobyRecords(123), [])
+})
+
+test('buildBizMgmtLedgerResult maps records and falls back missing pagination meta', () => {
+  // 业管完整返回
+  const full = buildBizMgmtLedgerResult({
+    decryptedData: {
+      total: 30,
+      pageNum: 2,
+      pageSize: 20,
+      records: [{ changeNo: 'r1', changeType: 1, changePointsNum: '5', changeTypeName: '扣减', createTime: '2026-06-21 10:00:00' }],
+    },
+    requestPageNum: 2,
+    requestPageSize: 20,
+  })
+  assert.equal(full.total, 30)
+  assert.equal(full.pageNum, 2)
+  assert.equal(full.pageSize, 20)
+  assert.equal(full.data.length, 1)
+  assert.equal(full.data[0].id, 'r1')
+  assert.equal(full.data[0].amount, -5)
+
+  // 业管缺 total/pageNum/pageSize → fallback
+  const sparse = buildBizMgmtLedgerResult({
+    decryptedData: {
+      records: [{ changeNo: 'r2', changeType: 5, changePointsNum: 10 }],
+    },
+    requestPageNum: 1,
+    requestPageSize: 20,
+  })
+  assert.equal(sparse.total, 1) // fallback 用 data.length
+  assert.equal(sparse.pageNum, 1) // fallback 用请求入参
+  assert.equal(sparse.pageSize, 20)
+
+  // decryptedData 整体缺失 → 空结果
+  const empty = buildBizMgmtLedgerResult({
+    decryptedData: null,
+    requestPageNum: 1,
+    requestPageSize: 20,
+  })
+  assert.deepEqual(empty, { data: [], total: 0, pageNum: 1, pageSize: 20 })
 })

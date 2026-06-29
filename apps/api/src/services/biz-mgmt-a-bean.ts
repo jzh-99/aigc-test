@@ -164,25 +164,33 @@ export async function queryCurrentBizMgmtBalance(localUserId: string): Promise<n
 
 /**
  * 查询当前选中业管会员的 A 豆流水（AIHUB_POINTS_CHANGE_QUERY）。
- * 直接返回业管响应数据，不读取本地 credits_ledger。
+ * 业管原始 record 经 buildBizMgmtLedgerResult 映射成中性 BizMgmtLedgerResult，
+ * 不读取本地 credits_ledger。未选择身份时 getCurrentBizMgmtIdentity 抛错。
  */
 export async function queryCurrentBizMgmtLedger(input: {
   localUserId: string
   changeType?: string
   pageNum?: number
   pageSize?: number
-}) {
+}): Promise<BizMgmtLedgerResult> {
   const identity = await getCurrentBizMgmtIdentity(input.localUserId)
+  // 先算好请求入参，业管缺分页元数据时用其回填，避免分页控件状态错乱
+  const requestPageNum = Math.max(1, Math.trunc(input.pageNum ?? 1))
+  const requestPageSize = Math.min(100, Math.max(1, Math.trunc(input.pageSize ?? 20)))
   const response = await queryTobyPointsChangeList(
     normalizeBizMgmtPointsLedgerQuery({
       bizMgmtUserId: identity.bizMgmtUserId,
       changeType: input.changeType,
-      pageNum: input.pageNum,
-      pageSize: input.pageSize,
+      pageNum: requestPageNum,
+      pageSize: requestPageSize,
     }),
   )
   if (response.code !== '0000') throw new Error(response.message || '业管 A 豆流水查询失败')
-  return response.decryptedData ?? {}
+  return buildBizMgmtLedgerResult({
+    decryptedData: response.decryptedData,
+    requestPageNum,
+    requestPageSize,
+  })
 }
 
 /**
@@ -326,4 +334,26 @@ export function normalizeTobyRecords(raw: unknown): TobyPointsChangeRecord[] {
   if (Array.isArray(raw)) return raw as TobyPointsChangeRecord[]
   if (raw && typeof raw === 'object') return Object.values(raw) as TobyPointsChangeRecord[]
   return []
+}
+
+/**
+ * 把业管 AIHUB_POINTS_CHANGE_QUERY 的解密响应组装成 BizMgmtLedgerResult。
+ * - records 双形态归一化后逐条映射成中性 BizMgmtLedgerRow
+ * - 分页元数据缺失时 fallback：total 用 data.length，pageNum/pageSize 用请求入参
+ */
+export function buildBizMgmtLedgerResult(input: {
+  decryptedData: unknown
+  requestPageNum: number
+  requestPageSize: number
+}): BizMgmtLedgerResult {
+  const payload = (input.decryptedData && typeof input.decryptedData === 'object'
+    ? input.decryptedData
+    : {}) as { records?: unknown; total?: number; pageNum?: number; pageSize?: number }
+
+  const data = normalizeTobyRecords(payload.records).map(mapTobyPointsChangeRecord)
+  const total = typeof payload.total === 'number' ? payload.total : data.length
+  const pageNum = typeof payload.pageNum === 'number' ? payload.pageNum : input.requestPageNum
+  const pageSize = typeof payload.pageSize === 'number' ? payload.pageSize : input.requestPageSize
+
+  return { data, total, pageNum, pageSize }
 }

@@ -4,8 +4,8 @@ import { queryCurrentBizMgmtLedger } from '../../services/biz-mgmt-a-bean.js'
 /**
  * GET /credits/biz-mgmt/ledger — 查询当前选中业管会员的 A 豆流水。
  *
- * 权威约束：流水来自业管 AIHUB_POINTS_CHANGE_QUERY，直接返回业管数据，
- * 不读取本地 credits_ledger。未选择业管身份时返回 400。
+ * 权威约束：流水来自业管 AIHUB_POINTS_CHANGE_QUERY，经服务层映射成统一中性契约
+ * （BizMgmtLedgerRow + 分页元数据），不读取本地 credits_ledger。未选择业管身份时返回 400。
  */
 const route: FastifyPluginAsync = async (app) => {
   app.get<{
