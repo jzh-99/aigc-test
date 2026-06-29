@@ -31,11 +31,6 @@ function SettingsPageContent() {
   const [logoutLoading, setLogoutLoading] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
-  const [newPhone, setNewPhone] = useState('')
-  const [phoneCode, setPhoneCode] = useState('')
-  const [phoneCodeCountdown, setPhoneCodeCountdown] = useState(0)
-  const [phoneCodeLoading, setPhoneCodeLoading] = useState(false)
-  const [phoneBindLoading, setPhoneBindLoading] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -60,14 +55,6 @@ function SettingsPageContent() {
     setUsername(user?.username ?? '')
     setAvatarUrl(user?.avatar_url ?? '')
   }, [user?.avatar_url, user?.username])
-
-  useEffect(() => {
-    if (phoneCodeCountdown <= 0) return
-    const timer = window.setTimeout(() => {
-      setPhoneCodeCountdown((current) => Math.max(0, current - 1))
-    }, 1000)
-    return () => window.clearTimeout(timer)
-  }, [phoneCodeCountdown])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -112,57 +99,6 @@ function SettingsPageContent() {
     } finally {
       setAvatarUploading(false)
       e.target.value = ''
-    }
-  }
-
-  async function handleSendPhoneCode() {
-    const phone = newPhone.trim()
-    if (!/^1[3-9]\d{9}$/.test(phone)) {
-      toast.error('请输入有效的手机号')
-      return
-    }
-    if (phone === user?.phone) {
-      toast.error('新手机号与当前手机号一致')
-      return
-    }
-
-    setPhoneCodeLoading(true)
-    try {
-      const res = await apiPost<{ success: boolean; expires_in: number; dev_code?: string }>('/users/me/phone-code', { phone })
-      setPhoneCodeCountdown(60)
-      toast.success(res.dev_code ? `验证码已生成：${res.dev_code}` : '验证码已发送')
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : '验证码发送失败')
-    } finally {
-      setPhoneCodeLoading(false)
-    }
-  }
-
-  async function handleBindPhone(e: React.FormEvent) {
-    e.preventDefault()
-    const phone = newPhone.trim()
-    const code = phoneCode.trim()
-    if (!/^1[3-9]\d{9}$/.test(phone)) {
-      toast.error('请输入有效的手机号')
-      return
-    }
-    if (!code) {
-      toast.error('请输入验证码')
-      return
-    }
-
-    setPhoneBindLoading(true)
-    try {
-      const updated = await apiPost<UserProfile>('/users/me/phone', { phone, code })
-      updateUser(updated)
-      setNewPhone('')
-      setPhoneCode('')
-      setPhoneCodeCountdown(0)
-      toast.success('手机号已换绑')
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : '手机号换绑失败')
-    } finally {
-      setPhoneBindLoading(false)
     }
   }
 
@@ -429,60 +365,6 @@ function SettingsPageContent() {
               onCheckedChange={setWatermark}
             />
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>手机号换绑</CardTitle>
-          <CardDescription>通过短信验证码更新登录手机号</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleBindPhone} className="space-y-4">
-            <div className="space-y-2">
-              <Label>当前手机号</Label>
-              <Input value={user?.phone ?? '未绑定手机号'} disabled className="bg-muted" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-phone">新手机号</Label>
-              <Input
-                id="new-phone"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                placeholder="请输入新的手机号"
-                inputMode="tel"
-                maxLength={11}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone-code">验证码</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="phone-code"
-                  value={phoneCode}
-                  onChange={(e) => setPhoneCode(e.target.value)}
-                  placeholder="请输入验证码"
-                  inputMode="numeric"
-                  maxLength={10}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSendPhoneCode}
-                  disabled={phoneCodeLoading || phoneCodeCountdown > 0 || phoneBindLoading}
-                  className="shrink-0"
-                >
-                  {phoneCodeLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {phoneCodeCountdown > 0 ? `${phoneCodeCountdown}s` : '获取验证码'}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">换绑成功后，将使用新的手机号作为登录账户</p>
-            </div>
-            <Button type="submit" disabled={phoneBindLoading || phoneCodeLoading}>
-              {phoneBindLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              确认换绑
-            </Button>
-          </form>
         </CardContent>
       </Card>
 
