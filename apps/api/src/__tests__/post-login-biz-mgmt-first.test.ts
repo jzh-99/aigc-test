@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path'
 // 覆盖 4 种关键分支：
 //   ① 业管查无会员（或故障）+ 本地无 user → 直接 401 USER_NOT_FOUND
 //   ② 业管查无会员（或故障）+ 本地有 user → 清理孤儿(purgeLocalUserCascade) + 401
-//   ③ 业管有会员 + 本地无 user → 创建本地 user/team/workspace + 初始密码
+//   ③ 业管有会员 + 本地无 user → 拒绝（建 user 责任在 check-biz-mgmt，跳过 check 视为异常）
 //   ④ 业管有会员 + 本地有 user → bcrypt 校验密码
 //
 // 另外验证两个不变量：
@@ -46,11 +46,11 @@ describe('post-login 业管先行：手机号登录主流程契约', () => {
     )
   })
 
-  it('必须导入 ensureLocalUserForBizMgmtPhone（本地用户初始化）', () => {
-    assert.match(
+  it('login 阶段不再建 user：禁止导入/调用 ensureLocalUserForBizMgmtPhone（建 user 责任已移到 check-biz-mgmt）', () => {
+    assert.doesNotMatch(
       SOURCE,
       /ensureLocalUserForBizMgmtPhone/,
-      '业管有会员但本地无 user 时必须调用 ensureLocalUserForBizMgmtPhone 创建本地用户',
+      '建 user 责任已移到 check-biz-mgmt，post-login 不应再导入/调用 ensureLocalUserForBizMgmtPhone',
     )
   })
 
@@ -115,11 +115,17 @@ describe('post-login 业管先行：分支③④ 业管有会员', () => {
     )
   })
 
-  it('本地无 user 时必须调 ensureLocalUserForBizMgmtPhone 并接收 oneTimePassword', () => {
+  it('本地无 user 时必须拒绝（返回 BIZ_MGMT_NOT_FOUND），不再建 user', () => {
+    // 业管有会员分支查到本地无 user → 必须走拒绝路径，禁止建 user
     assert.match(
       SOURCE,
-      /ensureLocalUserForBizMgmtPhone[\s\S]*oneTimePassword|oneTimePassword[\s\S]*ensureLocalUserForBizMgmtPhone/,
-      '本地无 user 时必须调 ensureLocalUserForBizMgmtPhone 并取一次性初始密码',
+      /BIZ_MGMT_NOT_FOUND[\s\S]*用户不存在/,
+      '本地无 user（跳过 check）必须返回 BIZ_MGMT_NOT_FOUND 拒绝，建 user 责任在 check-biz-mgmt',
+    )
+    assert.doesNotMatch(
+      SOURCE,
+      /ensureLocalUserForBizMgmtPhone/,
+      'post-login 不应再调用 ensureLocalUserForBizMgmtPhone',
     )
   })
 
