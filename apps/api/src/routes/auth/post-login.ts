@@ -8,7 +8,6 @@ import { ensurePersonalAccountScope } from '../../services/account-scope.js'
 import { buildAuthResponse, buildUserProfile } from '../../services/user-profile.js'
 import { signAccessToken, signRefreshToken } from '../../lib/auth-tokens.js'
 import {
-  ensureLocalUserForBizMgmtPhone,
   syncBizMgmtMembersForLocalUser,
   fetchBizMgmtMembersByPhone,
   purgeLocalUserCascade,
@@ -96,9 +95,9 @@ const route: FastifyPluginAsync = async (app) => {
     //  1. 业管查无会员（空数组）或接口故障（throw）→ 一律视为"用户不存在"。
     //     若本地存在该手机号 user，先 purgeLocalUserCascade 物理删除其全部业务数据，
     //     再返回 401 BIZ_MGMT_NOT_FOUND。
-    //  2. 业管有会员（≥1 个 status=1）→ 查本地 users.phone：
-    //       本地无 → ensureLocalUserForBizMgmtPhone 创建 user/team/workspace + 一次性初始密码
-    //       本地有 → bcrypt 校验密码
+  //  2. 业管有会员（≥1 个 status=1）→ 查本地 users.phone：
+  //       本地无 → 拒绝（建 user 责任在 check-biz-mgmt，跳过 check 视为异常）
+  //       本地有 → bcrypt 校验密码
     //  3. 登录成功后异步刷新业管绑定（setImmediate，不 await，不阻塞登录性能）。
     //
     // 邮箱登录（identifier 非手机号）走旧的本地先行逻辑，不触发业管查询，
@@ -114,8 +113,6 @@ const route: FastifyPluginAsync = async (app) => {
       status: string
       phone: string | null
     } | undefined
-
-    let oneTimePassword: string | null = null
 
     if (PHONE_RE.test(identifier)) {
       // ── 手机号登录：业管先行 ──────────────────────────────────────────────
@@ -151,7 +148,8 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
 
-      // 分支③④：业管有会员，查本地 users.phone 决定创建或校验
+      // 业管有会员：查本地 users.phone。建 user 责任已在 check-biz-mgmt 完成，
+      // 此处本地无 user 说明用户跳过了 check（异常路径），拒绝登录防止绕过。
       user = await db
         .selectFrom('users')
         .select(['id', 'account', 'username', 'password_hash', 'role', 'status', 'phone'])
@@ -159,16 +157,13 @@ const route: FastifyPluginAsync = async (app) => {
         .executeTakeFirst()
 
       if (!user) {
-        // 分支③：本地无 user，业管有会员 → 创建本地 user/team/workspace + 一次性初始密码
-        const created = await ensureLocalUserForBizMgmtPhone(identifier)
-        oneTimePassword = created.oneTimePassword
-        user = await db
-          .selectFrom('users')
-          .select(['id', 'account', 'username', 'password_hash', 'role', 'status', 'phone'])
-          .where('id', '=', created.userId)
-          .executeTakeFirst()
+        // 跳过 check 直调 login（本地无 user）：拒绝
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'BIZ_MGMT_NOT_FOUND', message: '用户不存在' },
+        })
       }
-      // 分支④：本地有 user，继续走下方密码校验
+      // 本地有 user，继续走下方 bcrypt 密码校验
     } else {
       // ── 邮箱登录：本地先行（旧逻辑，保持兼容）──────────────────────────────
       user = await db
@@ -253,10 +248,7 @@ const route: FastifyPluginAsync = async (app) => {
     await ensurePersonalAccountScope(db, user.id)
     const profile = await buildUserProfile(db, user.id)
     const authBody = buildAuthResponse(accessToken, profile)
-    // 首次初始化（本地无用户、从业管创建）返回一次性初始密码，提示用户登录后修改
-    return oneTimePassword
-      ? { ...authBody, one_time_password: oneTimePassword, oneTimePassword }
-      : authBody
+    return authBody
   })
 }
 
