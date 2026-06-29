@@ -23,6 +23,11 @@ import Link from 'next/link'
 const DEFAULT_PAGE_SIZE = 10
 
 export default function CreditsPage() {
+  // 【暂时取消】A 豆「充值」功能。通过此开关隐藏充值入口（按钮不渲染），保留 TopupModal 与 topupOpen
+  // 状态以便后续恢复，恢复方式：把 ENABLE_TOPUP 改回 true。
+  // 说明：后端充值相关接口保留不动，仅前端入口下线。
+  const ENABLE_TOPUP = false
+
   const [topupOpen, setTopupOpen] = useState(false)
   const [changeType, setChangeType] = useState('')
   const [page, setPage] = useState(1)
@@ -86,7 +91,9 @@ export default function CreditsPage() {
             <Coins className="h-5 w-5 text-accent-orange" />
             <span className="text-2xl font-bold">{balance.toLocaleString()}</span>
           </div>
-          <Button size="sm" onClick={() => setTopupOpen(true)}>充值A豆</Button>
+          {ENABLE_TOPUP && (
+            <Button size="sm" onClick={() => setTopupOpen(true)}>充值A豆</Button>
+          )}
         </CardContent>
       </Card>
 

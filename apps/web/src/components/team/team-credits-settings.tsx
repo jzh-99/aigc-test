@@ -24,6 +24,11 @@ interface TeamInfo {
 }
 
 export function TeamCreditsSettings({ teamId }: { teamId: string }) {
+  // 【暂时取消】A 豆「充值」功能。通过此开关隐藏充值入口（按钮不渲染），保留 TopupModal 与 topupOpen
+  // 状态以便后续恢复，恢复方式：把 ENABLE_TOPUP 改回 true。
+  // 说明：后端充值相关接口保留不动，仅前端入口下线。
+  const ENABLE_TOPUP = false
+
   const { data, mutate } = useSWR<TeamInfo>(`/teams/${teamId}`)
   const { data: balanceData } = useBizMgmtBalance()
   const [loading, setLoading] = useState(false)
@@ -61,7 +66,9 @@ export function TeamCreditsSettings({ teamId }: { teamId: string }) {
                 <span className="text-2xl font-bold">{balance.toLocaleString()}</span>
               </div>
             </div>
-            <Button onClick={() => setTopupOpen(true)}>充值A豆</Button>
+            {ENABLE_TOPUP && (
+              <Button onClick={() => setTopupOpen(true)}>充值A豆</Button>
+            )}
           </div>
 
           <div className="h-px bg-border" />
