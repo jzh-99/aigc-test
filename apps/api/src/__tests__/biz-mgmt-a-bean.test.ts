@@ -5,6 +5,7 @@ import {
   normalizeBizMgmtPointsBalance,
   normalizeBizMgmtPointsLedgerQuery,
   mapTobyPointsChangeRecord,
+  normalizeTobyRecords,
 } from '../services/biz-mgmt-a-bean.js'
 
 test('deduct request number is stable for batch and task', () => {
@@ -107,4 +108,21 @@ test('ledger record passes through createTime as-is (no timezone, no ISO convers
   assert.equal(bad.createdAt, 'not-a-date') // 非法值也原样透传，前端 new Date() 解析失败时自行兜底
   const missing = mapTobyPointsChangeRecord({ changeNo: 'c8', changeType: 1, changePointsNum: 1 })
   assert.equal(missing.createdAt, '') // 缺失为空串
+})
+
+test('normalizeTobyRecords accepts array form', () => {
+  const arr = [{ changeNo: 'a' }, { changeNo: 'b' }]
+  assert.deepEqual(normalizeTobyRecords(arr), arr)
+})
+
+test('normalizeTobyRecords accepts object form (object values)', () => {
+  const obj = { x: { changeNo: 'a' }, y: { changeNo: 'b' } }
+  assert.deepEqual(normalizeTobyRecords(obj), [{ changeNo: 'a' }, { changeNo: 'b' }])
+})
+
+test('normalizeTobyRecords returns empty array for null/undefined/non-object', () => {
+  assert.deepEqual(normalizeTobyRecords(null), [])
+  assert.deepEqual(normalizeTobyRecords(undefined), [])
+  assert.deepEqual(normalizeTobyRecords('string'), [])
+  assert.deepEqual(normalizeTobyRecords(123), [])
 })

@@ -316,3 +316,14 @@ function normalizeNullableString(value: string | null | undefined): string | nul
   const trimmed = String(value).trim()
   return trimmed === '' ? null : trimmed
 }
+
+/**
+ * 归一化业管 records 字段为数组。
+ * 业管文档标 records 为 JSONObject，但配合 total/pageNum 实际形态不确定，
+ * 数组与对象两种都防御；null/undefined/非对象 → 空数组。
+ */
+export function normalizeTobyRecords(raw: unknown): TobyPointsChangeRecord[] {
+  if (Array.isArray(raw)) return raw as TobyPointsChangeRecord[]
+  if (raw && typeof raw === 'object') return Object.values(raw) as TobyPointsChangeRecord[]
+  return []
+}
