@@ -1,5 +1,7 @@
 import { getDb } from '@aigc/db'
+import type { Database } from '@aigc/db'
 import { sql } from 'kysely'
+import type { Transaction } from 'kysely'
 import bcrypt from 'bcryptjs'
 import crypto from 'node:crypto'
 import { queryTobyMemberLoginInfo } from '../lib/toby-open-api.js'
@@ -152,12 +154,78 @@ export async function ensureLocalUserForBizMgmtPhone(
 }
 
 /**
+ * upsert 业管会员绑定记录。
+ * - 已存在则刷新身份快照（不含 A 豆数据）；不存在则插入。
+ * - clearIfSelected=true 时，若该 binding 是当前选中（is_selected=true），清空 is_selected，
+ *   用于 status=3 软删后避免悬空选中。
+ * - bindingId 仅 clearIfSelected=true 时需要（定位要清空的记录）。
+ * - teamId/workspaceId 由调用方保证非空（biz_mgmt_member_bindings 两列非空约束）。
+ */
+async function upsertBinding(
+  trx: Transaction<Database>,
+  localUserId: string,
+  member: NormalizedBizMgmtMember,
+  teamId: string,
+  workspaceId: string,
+  bindingId: string | null,
+  clearIfSelected: boolean,
+): Promise<void> {
+  // 先处理"清空悬空选中"：仅对已存在且当前选中的 binding
+  if (clearIfSelected && bindingId) {
+    await trx
+      .updateTable('biz_mgmt_member_bindings')
+      .set({ is_selected: false, updated_at: sql`now()` })
+      .where('id', '=', bindingId)
+      .where('is_selected', '=', true)
+      .execute()
+  }
+
+  await trx
+    .insertInto('biz_mgmt_member_bindings')
+    .values({
+      local_user_id: localUserId,
+      biz_mgmt_user_id: member.bizMgmtUserId,
+      phone: member.phone,
+      user_name: member.userName,
+      user_type: member.userType,
+      status: member.status,
+      comp_name: member.compName,
+      goods_id: member.goodsId,
+      goods_name: member.goodsName,
+      biz_mgmt_created_at: member.bizMgmtCreatedAt ? sql`${member.bizMgmtCreatedAt}::timestamptz` : null,
+      team_id: teamId,
+      workspace_id: workspaceId,
+      last_synced_at: sql`now()`,
+      updated_at: sql`now()`,
+    })
+    .onConflict((oc) =>
+      oc.column('biz_mgmt_user_id').doUpdateSet({
+        local_user_id: localUserId,
+        phone: member.phone,
+        user_name: member.userName,
+        user_type: member.userType,
+        status: member.status,
+        comp_name: member.compName,
+        goods_id: member.goodsId,
+        goods_name: member.goodsName,
+        biz_mgmt_created_at: member.bizMgmtCreatedAt ? sql`${member.bizMgmtCreatedAt}::timestamptz` : null,
+        team_id: teamId,
+        workspace_id: workspaceId,
+        last_synced_at: sql`now()`,
+        updated_at: sql`now()`,
+      }),
+    )
+    .execute()
+}
+
+/**
  * 把业管会员列表同步到本地绑定表，并补齐 team / workspace。
  *
  * 关键不变量（见计划 Critical Login Invariant）：
  * - 同一 biz_mgmt_user_id 复用既有 team_id / workspace_id，避免每次登录重复建团队。
- * - 本次从业管未返回的绑定不硬删除，只把 status 标记为非 1（这里置 2=冻结），
- *   防止业管临时异常导致本地权限被误删；恢复后下次登录会重新置回 status=1。
+ * - 按业管真实 status 分流：status=1 建/更新 team（曾软删的恢复）；status=2 仅更新 binding 不动 team；
+ *   status=3 已入库软删 team、清空 is_selected，未入库不入库。
+ * - 不再用"未返回推断冻结"（旧 not in 逻辑已移除），改用业管权威 status。
  * - 整个同步在一个事务内完成，保证绑定、team、workspace 三者一致。
  *
  * 注意：本函数只处理身份与本地资源映射，不读写 A 豆余额。
@@ -177,11 +245,83 @@ export async function syncBizMgmtMembersForLocalUser(
         .where('biz_mgmt_user_id', '=', member.bizMgmtUserId)
         .executeTakeFirst()
 
+      // ── status=3（删除）：已入库软删 team/workspace；未入库跳过（不入库）──────────
+      if (member.status === 3) {
+        if (!existingBinding) {
+          // 未入库的删除会员：不建 binding、不建 team，直接跳过
+          continue
+        }
+        if (existingBinding.team_id) {
+          // 软删该身份的 workspaces
+          await trx
+            .updateTable('workspaces')
+            .set({ is_deleted: true, deleted_at: sql`now()` })
+            .where('team_id', '=', existingBinding.team_id)
+            .where('is_deleted', '=', false)
+            .execute()
+          // 软删 team
+          await trx
+            .updateTable('teams')
+            .set({ is_deleted: true, deleted_at: sql`now()`, updated_at: sql`now()` })
+            .where('id', '=', existingBinding.team_id)
+            .execute()
+        }
+        // upsert binding 记 status=3（审计保留）；若是当前选中身份，清空 is_selected 避免悬空选中。
+        // existingBinding 此处必存在（上面 !existingBinding 已 continue），team_id/workspace_id 列非空。
+        await upsertBinding(
+          trx,
+          localUserId,
+          member,
+          existingBinding!.team_id!,
+          existingBinding!.workspace_id!,
+          existingBinding!.id,
+          /* clearIfSelected */ true,
+        )
+        continue
+      }
+
+      // ── status=2（冻结）：仅 upsert binding 记 status=2，不建/不删 team ─────────
+      // team 若已存在则保留（前端能看到置灰工作区）；从未入库的冻结身份不入库（不需要 team）。
+      if (member.status === 2) {
+        if (!existingBinding) continue
+        await upsertBinding(
+          trx,
+          localUserId,
+          member,
+          existingBinding.team_id!,
+          existingBinding.workspace_id!,
+          existingBinding.id,
+          false,
+        )
+        continue
+      }
+
+      // ── status=1（正常）：无 team 则建，有则刷新；曾软删的 team 恢复 ───────────
       let teamId = existingBinding?.team_id
       let workspaceId = existingBinding?.workspace_id
 
+      // 若该 team 此前被软删过（曾 status=3），现在恢复 → 解除软删并刷新名称/类型
+      if (teamId) {
+        await trx
+          .updateTable('teams')
+          .set({
+            is_deleted: false,
+            deleted_at: null,
+            name: member.teamName,
+            team_type: member.userType === '1' ? 'personal' : 'company_a',
+            updated_at: sql`now()`,
+          })
+          .where('id', '=', teamId)
+          .execute()
+        await trx
+          .updateTable('workspaces')
+          .set({ is_deleted: false, deleted_at: null })
+          .where('team_id', '=', teamId)
+          .where('is_deleted', '=', true)
+          .execute()
+      }
+
       if (!teamId) {
-        // 新业管身份首次落地：创建对应类型的本地团队
         const team = await trx
           .insertInto('teams')
           .values({
@@ -193,7 +333,6 @@ export async function syncBizMgmtMembersForLocalUser(
           .returning('id')
           .executeTakeFirstOrThrow()
         teamId = team.id
-
         await trx.insertInto('team_members').values({ team_id: teamId, user_id: localUserId, role: 'owner' }).execute()
         // 本地积分系统已退役：不再创建 credit_accounts，团队 A 豆余额由业管平台管理
       }
@@ -212,52 +351,8 @@ export async function syncBizMgmtMembersForLocalUser(
           .execute()
       }
 
-      // upsert 绑定：biz_mgmt_user_id 唯一，已存在则刷新身份快照（不含 A 豆数据）
-      await trx
-        .insertInto('biz_mgmt_member_bindings')
-        .values({
-          local_user_id: localUserId,
-          biz_mgmt_user_id: member.bizMgmtUserId,
-          phone: member.phone,
-          user_name: member.userName,
-          user_type: member.userType,
-          status: member.status,
-          comp_name: member.compName,
-          goods_id: member.goodsId,
-          goods_name: member.goodsName,
-          biz_mgmt_created_at: member.bizMgmtCreatedAt ? sql`${member.bizMgmtCreatedAt}::timestamptz` : null,
-          team_id: teamId,
-          workspace_id: workspaceId,
-          last_synced_at: sql`now()`,
-          updated_at: sql`now()`,
-        })
-        .onConflict((oc) =>
-          oc.column('biz_mgmt_user_id').doUpdateSet({
-            local_user_id: localUserId,
-            phone: member.phone,
-            user_name: member.userName,
-            user_type: member.userType,
-            status: member.status,
-            comp_name: member.compName,
-            goods_id: member.goodsId,
-            goods_name: member.goodsName,
-            team_id: teamId!,
-            workspace_id: workspaceId!,
-            last_synced_at: sql`now()`,
-            updated_at: sql`now()`,
-          }),
-        )
-        .execute()
-    }
-
-    if (members.length > 0) {
-      // 本次未从业管返回的旧绑定不删除，只冻结，避免业管临时异常误删本地权限
-      await trx
-        .updateTable('biz_mgmt_member_bindings')
-        .set({ status: 2, updated_at: sql`now()` })
-        .where('local_user_id', '=', localUserId)
-        .where('biz_mgmt_user_id', 'not in', members.map((member) => member.bizMgmtUserId))
-        .execute()
+      // upsert binding（status=1，正常可用身份）。teamId/workspaceId 此处均已非空。
+      await upsertBinding(trx, localUserId, member, teamId!, workspaceId!, existingBinding?.id ?? null, false)
     }
   })
 
