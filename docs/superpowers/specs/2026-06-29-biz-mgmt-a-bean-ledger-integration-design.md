@@ -104,7 +104,7 @@ const CHANGE_TYPE_MAP = {
 | source | source | `Number()` 透传数字（前端只展示，不强映射中文渠道，避免硬编码）；缺失 → `null` |
 | operateUser | operator | 字符串归一化为 `null` |
 | remark | remark | 字符串归一化为 `null` |
-| createTime | createdAt | `yyyy-MM-dd HH:mm:ss` → 先 `new Date(createTime.replace(' ', 'T'))` 转 ISO；失败 → 原样透传字符串；缺失 → `''` |
+| createTime | createdAt | `yyyy-MM-dd HH:mm:ss`（无时区，业管本地时间）原样透传为字符串；缺失 → `''`。前端 `new Date(createdAt)` 按本地时区解析渲染，避免转 ISO 丢失本地时区语义导致偏移 |
 
 ### 4.3 records 归一化（双形态防御）
 
@@ -149,7 +149,7 @@ interface BizMgmtLedgerResult {
 
 - 新增类型 `BizMgmtLedgerRow` + `BizMgmtLedgerResult`。
 - 新增 `CHANGE_TYPE_MAP` 常量。
-- 新增纯函数 `mapTobyPointsChangeRecord(record): BizMgmtLedgerRow`：字段映射 + amount 正负号 + 类型枚举 + 字符串归一化 + createTime 转换。
+- 新增纯函数 `mapTobyPointsChangeRecord(record): BizMgmtLedgerRow`：字段映射 + amount 正负号 + 类型枚举 + 字符串归一化 + createTime 原样透传（无时区，不转 ISO）。
 - 改造 `queryCurrentBizMgmtLedger`：调用现有 `queryTobyPointsChangeList` → 拿 `decryptedData` → records 归一化成数组 → 逐条 `mapTobyPointsChangeRecord` → 组装 `{ data, total, pageNum, pageSize }`（分页元数据 fallback）。
 
 ### 5.2 `routes/credits/get-biz-mgmt-ledger.ts`
@@ -160,7 +160,7 @@ interface BizMgmtLedgerResult {
 ### 5.3 `__tests__/biz-mgmt-a-bean.test.ts`
 
 - 现有 3 个测试（`buildBizMgmtDeductRequestNo`/`normalizeBizMgmtPointsBalance`/`normalizeBizMgmtPointsLedgerQuery`）**保留不动**。
-- 新增 `mapTobyPointsChangeRecord` 纯函数单测：5 种已知 changeType 的 amount 正负号、1 个未知 changeType 兜底、typeName fallback、amount 缺失为 0、字符串字段空串归 null、createTime 正常转换 + 非法兜底。
+- 新增 `mapTobyPointsChangeRecord` 纯函数单测：5 种已知 changeType 的 amount 正负号、1 个未知 changeType 兜底、typeName fallback、amount 缺失为 0、字符串字段空串归 null、createTime 原样透传 + 非法值/缺失兜底。
 - 新增 records 归一化测试：array 形态、object 形态、null、缺失。
 - 新增分页元数据 fallback 测试：total 缺失、pageNum/pageSize 缺失。
 

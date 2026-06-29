@@ -69,7 +69,7 @@ test('ledger record maps 5 known changeTypes with correct amount sign', () => {
     mapTobyPointsChangeRecord({ ...base, changeType: 1, changePointsNum: '10.00', balancePointsNum: '90.00' }),
     {
       id: 'c1', type: 'deduct', typeName: '类型名', amount: -10, balanceAfter: 90,
-      bizNo: 'biz1', reason: '原因', source: 1, operator: 'op', remark: '备注', createdAt: '2026-06-21T10:00:00.000Z',
+      bizNo: 'biz1', reason: '原因', source: 1, operator: 'op', remark: '备注', createdAt: '2026-06-21 10:00:00',
     },
   )
   // changeType 2 返还 → 正
@@ -181,7 +181,9 @@ interface TobyPointsChangeRecord {
  * - amount：Math.abs(Number(changePointsNum)) * sign（扣减/过期为负）
  * - changePointsNum 缺失/非法 → amount: 0（不崩，记录仍展示）
  * - 字符串字段空串/null/undefined 统一归一化为 null
- * - createTime 'yyyy-MM-dd HH:mm:ss' → 转 ISO；失败/缺失原样或空串
+ * - createTime 'yyyy-MM-dd HH:mm:ss'（无时区，业管本地时间）原样透传为 createdAt；
+ *   前端 new Date(createdAt) 会按本地时区解析渲染正确，避免转 ISO 丢失本地时区语义；
+ *   createTime 缺失 → createdAt 空串
  */
 export function mapTobyPointsChangeRecord(record: TobyPointsChangeRecord): BizMgmtLedgerRow {
   const rawType = Number(record.changeType)
@@ -201,12 +203,8 @@ export function mapTobyPointsChangeRecord(record: TobyPointsChangeRecord): BizMg
   const typeName = (record.changeTypeName && String(record.changeTypeName).trim()) ||
     CHANGE_TYPE_NAME_FALLBACK[rawType] || '未知'
 
-  // createTime 'yyyy-MM-dd HH:mm:ss' → ISO（Date 解析需要 T 分隔）；解析失败原样透传
-  let createdAt = ''
-  if (record.createTime) {
-    const parsed = new Date(String(record.createTime).replace(' ', 'T'))
-    createdAt = isNaN(parsed.getTime()) ? String(record.createTime) : parsed.toISOString()
-  }
+  // createTime 无时区（业管本地时间），原样透传；缺失为空串
+  const createdAt = record.createTime != null ? String(record.createTime).trim() : ''
 
   return {
     id: String(record.changeNo ?? ''),
@@ -292,11 +290,11 @@ test('ledger record normalizes empty/nullable string fields to null', () => {
   assert.equal(row.remark, '备注')
 })
 
-test('ledger record converts createTime to ISO and falls back on invalid', () => {
+test('ledger record passes through createTime as-is (no timezone, no ISO conversion)', () => {
   const ok = mapTobyPointsChangeRecord({ changeNo: 'c6', changeType: 1, changePointsNum: 1, createTime: '2026-06-21 10:00:00' })
-  assert.equal(ok.createdAt, '2026-06-21T10:00:00.000Z')
+  assert.equal(ok.createdAt, '2026-06-21 10:00:00') // 业管本地时间原样透传，不转 ISO（避免时区偏移）
   const bad = mapTobyPointsChangeRecord({ changeNo: 'c7', changeType: 1, changePointsNum: 1, createTime: 'not-a-date' })
-  assert.equal(bad.createdAt, 'not-a-date') // 解析失败原样透传
+  assert.equal(bad.createdAt, 'not-a-date') // 非法值也原样透传，前端 new Date() 解析失败时自行兜底
   const missing = mapTobyPointsChangeRecord({ changeNo: 'c8', changeType: 1, changePointsNum: 1 })
   assert.equal(missing.createdAt, '') // 缺失为空串
 })
