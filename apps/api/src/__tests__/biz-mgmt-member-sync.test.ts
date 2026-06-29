@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { normalizeBizMgmtMember, pickDefaultBizMgmtMemberName } from '../services/biz-mgmt-member-sync.js'
+import { normalizeBizMgmtMember, pickDefaultBizMgmtMemberName, pickAutoSelectTarget } from '../services/biz-mgmt-member-sync.js'
 
 test('normalizeBizMgmtMember keeps identity and entitlement fields only', () => {
   const result = normalizeBizMgmtMember({
@@ -103,4 +103,36 @@ test('sync 按 master 同步 team_members.role：主卡=owner，副卡=editor', 
   assert.match(SYNC_SOURCE, /updateTable\('team_members'\)[\s\S]*?set\(\{ role: teamRole \}\)/, '已入库身份刷新必须按 teamRole 对齐 role')
   // upsertBinding 必须落 is_master 快照
   assert.match(SYNC_SOURCE, /is_master: member\.isMaster/, 'upsertBinding 必须把 is_master 落库')
+})
+
+// ─── 登录自动选中兜底契约 ───────────────────────────────────────────────────
+test('sync 事务结尾有自动选中兜底：仅当无已选中身份时置位一条', () => {
+  // 必须先用 alreadySelected 判定「无已选中」，避免覆盖用户主动选择
+  assert.match(SYNC_SOURCE, /alreadySelected[\s\S]*?is_selected.*true[\s\S]*?if \(!alreadySelected\)/, 'sync 必须先查已有 is_selected=true 再决定是否兜底')
+  // 自动选中必须用 pickAutoSelectTarget（主卡优先），不能写死取第一条
+  assert.match(SYNC_SOURCE, /pickAutoSelectTarget\(members\)/, 'sync 必须调用 pickAutoSelectTarget 选目标，不能写死')
+})
+
+test('pickAutoSelectTarget：主卡优先，无主卡取第一个 status=1，全不可用返回 null', () => {
+  const mk = (overrides: Partial<Parameters<typeof normalizeBizMgmtMember>[0]>) =>
+    normalizeBizMgmtMember({
+      userId: 'u', phone: '1', userName: 'n', compName: 'c', userType: '2', status: 1,
+      ...overrides,
+    })
+  // 主卡优先于副卡
+  const list = [
+    mk({ userId: 'sub1', master: 0 }),
+    mk({ userId: 'master1', master: 1 }),
+    mk({ userId: 'sub2', master: 0 }),
+  ]
+  assert.equal(pickAutoSelectTarget(list), 'master1')
+  // 无主卡：取第一个 status=1
+  assert.equal(pickAutoSelectTarget([mk({ userId: 'only', master: 0 })]), 'only')
+  // 全部 status≠1（冻结/删除）：返回 null，sync 不做自动选中
+  assert.equal(
+    pickAutoSelectTarget([mk({ userId: 'frozen', status: 2 }), mk({ userId: 'deleted', status: 3 })]),
+    null,
+  )
+  // 空列表：null
+  assert.equal(pickAutoSelectTarget([]), null)
 })

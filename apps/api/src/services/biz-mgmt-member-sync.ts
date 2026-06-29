@@ -68,6 +68,20 @@ export function pickDefaultBizMgmtMemberName(input: {
 }
 
 /**
+ * 选出登录同步时应自动选中的业管会员（仅在当前用户无任何已选中身份时兜底，不覆盖用户主动选择）。
+ * 优先级：status=1（正常）可用身份中，主卡（isMaster）优先 > 否则第一个 status=1。
+ * 全部不可用（无 status=1）时返回 null，sync 不做自动选中（保持全部 false，余额/生成接口引导选身份）。
+ *
+ * 纯函数，便于单测；调用方在事务内确认「无已选中」后才用返回值置位一条 is_selected=true。
+ */
+export function pickAutoSelectTarget(members: NormalizedBizMgmtMember[]): string | null {
+  const usable = members.filter((m) => m.status === 1)
+  if (usable.length === 0) return null
+  const master = usable.find((m) => m.isMaster)
+  return (master ?? usable[0]).bizMgmtUserId
+}
+
+/**
  * 把 MEMBER-1001 单条会员原始数据标准化为本地绑定所需结构。
  *
  * 显式剔除 pointsNum / sumPointsNum / consumePointsNum：
@@ -375,6 +389,29 @@ export async function syncBizMgmtMembersForLocalUser(
 
       // upsert binding（status=1，正常可用身份）。teamId/workspaceId 此处均已非空。
       await upsertBinding(trx, localUserId, member, teamId!, workspaceId!, existingBinding?.id ?? null, false)
+    }
+
+    // ── 自动选中兜底：用户登录后若没有任何已选中身份，所有余额/生成接口都会 400 报
+    // 「请先选择业管会员身份」。binding 默认 is_selected=false，sync 从不主动选中，
+    // 因此这里在 upsert 全部完成后，仅当该用户当前无 is_selected=true 的绑定时，
+    // 按 pickAutoSelectTarget（主卡优先 > 第一个 status=1）兜底选中一条。
+    // 不覆盖用户已做的选择（已存在 true 时本块跳过），多身份用户主动选身份后不会被改写。
+    const alreadySelected = await trx
+      .selectFrom('biz_mgmt_member_bindings')
+      .select('id')
+      .where('local_user_id', '=', localUserId)
+      .where('is_selected', '=', true)
+      .executeTakeFirst()
+    if (!alreadySelected) {
+      const targetUserId = pickAutoSelectTarget(members)
+      if (targetUserId) {
+        await trx
+          .updateTable('biz_mgmt_member_bindings')
+          .set({ is_selected: true, updated_at: sql`now()` })
+          .where('local_user_id', '=', localUserId)
+          .where('biz_mgmt_user_id', '=', targetUserId)
+          .execute()
+      }
     }
   })
 
