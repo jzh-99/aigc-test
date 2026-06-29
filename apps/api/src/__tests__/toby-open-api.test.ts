@@ -31,7 +31,7 @@ type FetchRecord = {
 
 const TOBY_TEST_DATA = {
   memberQuery: {
-    phone: '17714420972',
+    phone: '13111111111',
   },
   subscribe: {
     requestNo: 'req-1',
@@ -45,8 +45,8 @@ const TOBY_TEST_DATA = {
     status: 1,
   },
   pointsChangeList: {
-    userId: 'member-1',
-    changeType: '1,2',
+    userId: 'D875BB9D3CCC4FA8A1F14569686739D9',
+    changeType: '1', // 1:扣减 ；2:返还；3.赠送；4.过期；5.充值（支持逗号分割）
     pageNum: 1,
     pageSize: 20,
   },
@@ -66,12 +66,11 @@ const TOBY_TEST_DATA = {
     remark: '测试创作成功',
   },
   memberSubCard: {
-    phone: '17714420973',
-    userName: '李四',
-    compName: '测试公司',
-    channel: '2',
-    belongId: 'member-admin-1',
-    initialPointsNum: '100.00',
+    phone: '13111111111',
+    userName: '13111111111',
+    compName: '13111111111',
+    belongId: 'cfa57951-1824-4aca-8f71-77f48055f661',
+    initialPointsNum: '1000.00',
   },
   memberRegister: {
     phone: '17714420972',
@@ -79,7 +78,7 @@ const TOBY_TEST_DATA = {
     channel: '2',
   },
   memberPoints: {
-    userId: 'member-1',
+    userId: 'D875BB9D3CCC4FA8A1F14569686739D9',
   },
   specificationConfig: {
     requestNo: 'spec-1',
