@@ -16,16 +16,16 @@ function getRequiredEnv(name: string): string {
 
 function getTobyConfig() {
   return {
-    baseUrl: getRequiredEnv('TOBY_BASE_URL').replace(/\/$/, ''),
-    appId: getRequiredEnv('TOBY_APP_ID'),
-    appSecret: getRequiredEnv('TOBY_APP_SECRET'),
-    privateKey: getRequiredEnv('TOBY_PRIVATE_KEY'),
+    baseUrl: getRequiredEnv('TOBY_OUTBOUND_BASE_URL').replace(/\/$/, ''),
+    appId: getRequiredEnv('TOBY_OUTBOUND_APP_ID'),
+    appSecret: getRequiredEnv('TOBY_OUTBOUND_APP_SECRET'),
+    privateKey: getRequiredEnv('TOBY_OUTBOUND_PRIVATE_KEY'),
   }
 }
 
 function getDesKey(privateKey: string): Buffer {
   const key = Buffer.from(privateKey, 'utf8')
-  if (key.length < 8) throw new Error('TOBY_PRIVATE_KEY must be at least 8 bytes')
+  if (key.length < 8) throw new Error('TOBY_OUTBOUND_PRIVATE_KEY must be at least 8 bytes')
   return key.subarray(0, 8)
 }
 
