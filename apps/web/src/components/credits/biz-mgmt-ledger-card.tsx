@@ -2,8 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ChevronLeft, ChevronRight, UserRound } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Loader2, UserRound } from 'lucide-react'
+import { Pagination } from '@/components/ui/pagination'
 import { cn } from '@/lib/utils'
 import type { BizMgmtLedgerRow } from '@/hooks/use-biz-mgmt-ledger'
 
@@ -23,7 +23,9 @@ interface Props {
   setChangeType: (t: string) => void
   pageNum: number
   totalPages: number
+  pageSize: number
   setPage: (p: number) => void
+  setPageSize: (pageSize: number) => void
 }
 
 // changeType 筛选 tab：值对应业管 changeType，'' 为全部
@@ -57,7 +59,16 @@ const TYPE_BADGE_CLASS: Record<BizMgmtLedgerRow['type'], string> = {
 }
 
 export function BizMgmtLedgerCard({
-  data, loading, hasIdentity, changeType, setChangeType, pageNum, totalPages, setPage,
+  data,
+  loading,
+  hasIdentity,
+  changeType,
+  setChangeType,
+  pageNum,
+  totalPages,
+  pageSize,
+  setPage,
+  setPageSize,
 }: Props) {
   return (
     <Card>
@@ -98,23 +109,18 @@ export function BizMgmtLedgerCard({
                 <LedgerRowItem key={row.id} row={row} />
               ))}
             </div>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-3 border-t">
-                <span className="text-xs text-muted-foreground">
-                  第 {pageNum} / {totalPages} 页，共 {data.total} 条
-                </span>
-                <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" className="h-7 w-7"
-                    disabled={pageNum <= 1} onClick={() => setPage(pageNum - 1)}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7"
-                    disabled={pageNum >= totalPages} onClick={() => setPage(pageNum + 1)}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
+            <div className="space-y-3 px-6 py-3 border-t">
+              <span className="text-xs text-muted-foreground">
+                第 {pageNum} / {totalPages} 页，共 {data.total} 条
+              </span>
+              <Pagination
+                page={pageNum}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            </div>
           </>
         )}
       </CardContent>

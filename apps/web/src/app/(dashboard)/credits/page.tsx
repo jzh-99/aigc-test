@@ -20,12 +20,13 @@ import Link from 'next/link'
  * - 流水：GET /credits/biz-mgmt/ledger（业管 AIHUB_POINTS_CHANGE_QUERY 现查，经服务层映射成统一契约）
  * 不再区分团队/个人账户，业管以当前选中会员身份查询。
  */
-const PAGE_SIZE = 20
+const DEFAULT_PAGE_SIZE = 10
 
 export default function CreditsPage() {
   const [topupOpen, setTopupOpen] = useState(false)
   const [changeType, setChangeType] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const activeBizMgmtMember = useAuthStore((s) => s.activeBizMgmtMember())
 
   // A豆管理权限 = 当前业管选中身份为公司主卡（与团队管理导航门控一致）。
@@ -38,11 +39,11 @@ export default function CreditsPage() {
 
   // 流水：key 随 changeType/page 变化自动重查
   const { data: ledgerData, isLoading: ledgerLoading, error: ledgerError } =
-    useBizMgmtLedger({ changeType, pageNum: page, pageSize: PAGE_SIZE })
+    useBizMgmtLedger({ changeType, pageNum: page, pageSize })
 
   const balance = balanceData?.balance ?? 0
   const totalPages = ledgerData
-    ? Math.max(1, Math.ceil(ledgerData.total / (ledgerData.pageSize || PAGE_SIZE)))
+    ? Math.max(1, Math.ceil(ledgerData.total / (ledgerData.pageSize || pageSize)))
     : 1
 
   // 防绕过：导航已对非主卡隐藏本页，直接输 URL 进入时显示无权限提示。
@@ -102,7 +103,12 @@ export default function CreditsPage() {
         }}
         pageNum={page}
         totalPages={totalPages}
+        pageSize={pageSize}
         setPage={setPage}
+        setPageSize={(nextPageSize) => {
+          setPageSize(nextPageSize)
+          setPage(1)
+        }}
       />
 
       <Card>
