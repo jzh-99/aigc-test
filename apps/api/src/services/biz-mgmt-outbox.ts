@@ -33,22 +33,9 @@ export interface CreationResultOutboxInput {
   }
 }
 
-export interface MemberSubCardOutboxInput {
-  eventType: 'member_sub_card_sync'
-  dedupeKey: string
-  localUserId: string
-  bizMgmtUserId: string
-  phone: string
-  teamId: string
-  pointsNum: number
-  // 业管 MEMBER-1002 契约（2026-06-29 更新）：移除 compName / channel。
-  payload: {
-    phone: string
-    userName: string
-    belongId: string
-    initialPointsNum: number
-  }
-}
+// 业管 MEMBER-1002 会员副卡同步已于 2026-06-30 改为 API 侧同步调用
+// （apps/api/src/routes/teams/post-create-member.ts 直接调 syncTobyMemberSubCard），
+// 不再经 outbox 异步入队。原 MemberSubCardOutboxInput 已移除。
 
 export interface SubscribeOutboxInput {
   eventType: 'subscribe_sync'
@@ -72,7 +59,7 @@ export interface SubscribeOutboxInput {
   }
 }
 
-export type BizMgmtOutboxInput = CreationResultOutboxInput | MemberSubCardOutboxInput | SubscribeOutboxInput
+export type BizMgmtOutboxInput = CreationResultOutboxInput | SubscribeOutboxInput
 
 // 幂等写入 outbox：dedupe_key 冲突 doNothing，重复入队不重复创建事件
 export async function enqueueBizMgmtOutboxEvent(input: BizMgmtOutboxInput): Promise<void> {
@@ -86,7 +73,6 @@ export async function enqueueBizMgmtOutboxEvent(input: BizMgmtOutboxInput): Prom
       ...(input.eventType === 'subscribe_sync'
         ? { biz_mgmt_user_id: input.bizMgmtUserId ?? null, phone: input.phone, team_id: input.teamId ?? null }
         : { biz_mgmt_user_id: input.bizMgmtUserId }),
-      ...(input.eventType === 'member_sub_card_sync' ? { phone: input.phone, team_id: input.teamId } : {}),
       ...(input.eventType === 'creation_result_notify'
         ? {
             team_id: input.teamId,

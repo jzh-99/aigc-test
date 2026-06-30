@@ -5,15 +5,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   notifyBizMgmtCreationResult,
-  syncBizMgmtMemberSubCard,
   syncBizMgmtSubscribe,
 } from '../lib/biz-mgmt-toby-client.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 test('worker biz-mgmt toby client exports notify and sync functions', () => {
+  // 2026-06-30 起 member_sub_card_sync 已改为 API 同步调用（apps/api/src/lib/toby-open-api.ts），
+  // worker client 不再保留 syncBizMgmtMemberSubCard；本 client 仅服务 outbox 派发的两类事件。
   assert.equal(typeof notifyBizMgmtCreationResult, 'function')
-  assert.equal(typeof syncBizMgmtMemberSubCard, 'function')
   // Task 19: 订购同步函数用于充值/包月订单支付成功后通知业管加 A 豆
   assert.equal(typeof syncBizMgmtSubscribe, 'function')
 })

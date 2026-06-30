@@ -119,13 +119,9 @@ export interface BizMgmtCreationResultRequest {
   remark?: string
 }
 
-// 业管 MEMBER-1002 会员副卡同步请求（2026-06-29 契约更新：移除 compName / channel）。
-export interface BizMgmtMemberSubCardRequest {
-  phone: string
-  userName: string
-  belongId: string
-  initialPointsNum: number | string
-}
+// 业管 MEMBER-1002 会员副卡同步已于 2026-06-30 改为 API 侧同步调用
+// （apps/api/src/lib/toby-open-api.ts 的 syncTobyMemberSubCard），不再经 worker/outbox 异步派发。
+// 原 BizMgmtMemberSubCardRequest / syncBizMgmtMemberSubCard 已移除。
 
 export interface BizMgmtSubscribeRequest {
   requestNo: string
@@ -143,11 +139,6 @@ export interface BizMgmtSubscribeRequest {
 // 创作结果同步 → AIHUB_CREATION_RESULT_NOTIFY
 export function notifyBizMgmtCreationResult(payload: BizMgmtCreationResultRequest) {
   return callTobyApi('/api/toby/points/external/result-notify', 'AIHUB_CREATION_RESULT_NOTIFY', payload)
-}
-
-// 会员副卡同步 → MEMBER-1002
-export function syncBizMgmtMemberSubCard(payload: BizMgmtMemberSubCardRequest) {
-  return callTobyApi('/api/toby/member/sub-card', 'MEMBER-1002', payload)
 }
 
 // 订购同步 → SUBSCRIBE_SERVICE_CODE_1001

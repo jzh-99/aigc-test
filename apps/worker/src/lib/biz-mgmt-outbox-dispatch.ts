@@ -1,6 +1,6 @@
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { notifyBizMgmtCreationResult, syncBizMgmtMemberSubCard, syncBizMgmtSubscribe } from './biz-mgmt-toby-client.js'
+import { notifyBizMgmtCreationResult, syncBizMgmtSubscribe } from './biz-mgmt-toby-client.js'
 import { buildLogger } from '../logger.js'
 
 const logger = buildLogger()
@@ -57,13 +57,19 @@ export async function dispatchBizMgmtOutboxEvent(eventId: string): Promise<void>
   const maxAttempts = Number(event.max_attempts ?? 8)
   try {
     const payload = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload
-    // 按 event_type 分派到对应业管接口
+    // 按 event_type 分派到对应业管接口。
+    // 注意：member_sub_card_sync 已于 2026-06-30 改为 API 同步调用（post-create-member.ts），
+    // 不再经 outbox 入队，此分支也不再处理它。若仍收到该类型事件（理论上的历史遗留），
+    // 显式抛错而非兜底当成 subscribe_sync 错调，避免错误调用业管接口。
     logger.info({ eventId, eventType: event.event_type }, '[outbox-dispatch] 开始调用业管接口')
-    const response = event.event_type === 'creation_result_notify'
-      ? await notifyBizMgmtCreationResult(payload)
-      : event.event_type === 'subscribe_sync'
-        ? await syncBizMgmtSubscribe(payload)
-        : await syncBizMgmtMemberSubCard(payload)
+    let response
+    if (event.event_type === 'creation_result_notify') {
+      response = await notifyBizMgmtCreationResult(payload)
+    } else if (event.event_type === 'subscribe_sync') {
+      response = await syncBizMgmtSubscribe(payload)
+    } else {
+      throw new Error(`[outbox-dispatch] 不支持的事件类型：${event.event_type}（仅支持 creation_result_notify / subscribe_sync；member_sub_card_sync 已改为 API 同步）`)
+    }
 
     logger.info(
       { eventId, eventType: event.event_type, bizCode: response.code, bizMessage: response.message },
