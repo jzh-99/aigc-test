@@ -20,7 +20,8 @@ import { InviteDialog } from './invite-dialog'
 import { BatchInviteDialog } from './batch-invite-dialog'
 import { useConfirm } from '@/hooks/use-confirm'
 import { toast } from 'sonner'
-import { Check, Copy, KeyRound, Loader2, RefreshCw, Trash2, UserPlus, Users } from 'lucide-react'
+import { Check, Coins, Copy, KeyRound, Loader2, RefreshCw, Trash2, UserPlus, Users } from 'lucide-react'
+import { PointsChangeDialog } from './points-change-dialog'
 
 // 本地积分系统已退役：credit_used / credit_quota / credits 等字段后端不再返回。
 // 本组件只做纯成员管理（列表/添加/批量添加/移除），A 豆流水后续对接业管平台。
@@ -83,6 +84,8 @@ export function MemberList({ teamId }: { teamId: string }) {
   const [passwordCopied, setPasswordCopied] = useState(false)
   const [refreshingBalanceUserId, setRefreshingBalanceUserId] = useState<string | null>(null)
   const [syncingBizMgmtUserId, setSyncingBizMgmtUserId] = useState<string | null>(null)
+  // A豆变更目标成员（仅 owner 对已同步副卡操作；null 时弹窗关闭）。
+  const [pointsChangeTarget, setPointsChangeTarget] = useState<Member | null>(null)
 
   // Delayed mutate: give the DB a moment to commit before re-fetching
   const delayedMutate = (ms = 400) => new Promise<void>(res => setTimeout(() => { mutate(); res() }, ms))
@@ -105,6 +108,11 @@ export function MemberList({ teamId }: { teamId: string }) {
   // 保留 handleRemoveMember 与按钮 JSX 代码以便后续恢复，恢复方式：把 ENABLE_REMOVE_MEMBER 改回 true。
   // 说明：后端 DELETE /teams/:id/members/:uid 路由保留不动，仅前端入口下线。
   const ENABLE_REMOVE_MEMBER = false
+
+  // 【暂时取消】团队成员「批量添加」功能。通过此开关仅隐藏「批量添加」按钮，
+  // 保留 BatchInviteDialog 组件与 batchInviteOpen 状态以便后续恢复，恢复方式：把 ENABLE_BATCH_INVITE 改回 true。
+  // 说明：后端 POST /teams/:id/members/batch 路由保留不动，仅前端入口下线。
+  const ENABLE_BATCH_INVITE = false
 
   async function handleRemoveMember(member: Member) {
     if (!await confirm({ title: '移除成员', description: `确定要移除 ${member.username} 吗？`, confirmText: '移除' })) return
@@ -218,10 +226,12 @@ export function MemberList({ teamId }: { teamId: string }) {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">成员列表</CardTitle>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => setBatchInviteOpen(true)}>
-              <Users className="h-4 w-4 mr-2" />
-              批量添加
-            </Button>
+            {ENABLE_BATCH_INVITE && (
+              <Button size="sm" variant="outline" onClick={() => setBatchInviteOpen(true)}>
+                <Users className="h-4 w-4 mr-2" />
+                批量添加
+              </Button>
+            )}
             <Button size="sm" onClick={() => setInviteOpen(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
               添加成员
@@ -322,6 +332,18 @@ export function MemberList({ teamId }: { teamId: string }) {
                                 <KeyRound className="h-3.5 w-3.5" />
                               )}
                             </Button>
+                            {/* A豆变更：仅对已同步业管身份的副卡成员显示，主卡 owner 操作。 */}
+                            {member.biz_mgmt_user_id && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                title="A豆变更"
+                                onClick={() => setPointsChangeTarget(member)}
+                              >
+                                <Coins className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                             {ENABLE_REMOVE_MEMBER && (
                               <Button
                                 size="icon"
@@ -391,6 +413,15 @@ export function MemberList({ teamId }: { teamId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* A豆变更弹窗：成功后刷新列表，主/副卡余额由后端写两份 Redis 缓存即时生效。 */}
+      <PointsChangeDialog
+        teamId={teamId}
+        member={pointsChangeTarget}
+        open={!!pointsChangeTarget}
+        onOpenChange={(o) => !o && setPointsChangeTarget(null)}
+        onSuccess={() => delayedMutate(600)}
+      />
     </>
   )
 }

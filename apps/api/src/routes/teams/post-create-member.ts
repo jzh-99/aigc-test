@@ -7,7 +7,8 @@ import { syncTobyMemberSubCard } from '../../lib/toby-open-api.js'
 
 const route: FastifyPluginAsync = async (app) => {
   // POST /teams/:id/members/create — 公司主卡创建成员（业管副卡同步）。
-  // 本地 A 豆上限已废弃：A 豆账户由业管平台管理，创建成员通过 MEMBER-1002 副卡同步建立。
+  // A 豆账户由业管平台管理，创建成员通过 MEMBER-1002 副卡同步建立；
+  // 副卡创建后不再支持配置初始 A 豆额度（初始额度由业管侧规则决定）。
   // 初始密码由后端生成一次性密码（与业管首登 OTP 一致），返回给团长转告，不再写死 123456。
   //
   // 【同步语义，不再走队列】2026-06-30 改造：先同步调业管 MEMBER-1002 创建副卡，
@@ -21,9 +22,6 @@ const route: FastifyPluginAsync = async (app) => {
       identifier: string
       username: string
       role?: 'editor' | 'viewer'
-      // 新成员的初始 A 豆额度，透传给业管 MEMBER-1002 initialPointsNum。
-      // 默认 1000，主卡创建时可在前端编辑（>=0）；A 豆账户实际由业管平台管理。
-      initial_points_num?: number
     }
   }>('/teams/:id/members/create', {
     preHandler: teamRoleGuard('owner'),
@@ -35,7 +33,6 @@ const route: FastifyPluginAsync = async (app) => {
           identifier: { type: 'string', pattern: '^\\d{11}$', minLength: 11, maxLength: 11 },
           username: { type: 'string', minLength: 2, maxLength: 30 },
           role: { type: 'string', enum: ['editor', 'viewer'] },
-          initial_points_num: { type: 'number', minimum: 0 },
         },
         additionalProperties: false,
       },
@@ -45,10 +42,7 @@ const route: FastifyPluginAsync = async (app) => {
       identifier: rawIdentifier,
       username: rawUsername,
       role = 'editor',
-      initial_points_num: rawInitialPointsNum,
     } = request.body
-    // 业管 MEMBER-1002 约束 initialPointsNum >= 0；未传默认 1000（历史默认值）
-    const initialPointsNum = Math.max(0, Math.trunc(rawInitialPointsNum ?? 1000))
     const teamId = request.params.id
     const db = getDb()
 
@@ -143,7 +137,6 @@ const route: FastifyPluginAsync = async (app) => {
         phone: identifier,
         userName: username,
         belongId: ownerBinding.biz_mgmt_user_id,
-        initialPointsNum,
       })
       if (tobyRes.code !== '0000') {
         request.log.error({ tobyRes, phone: identifier }, '[create-member] 业管副卡创建返回非成功，准备 502 返回')
@@ -249,8 +242,6 @@ const route: FastifyPluginAsync = async (app) => {
       // 仅全新用户返回一次性密码让团长转告；已存在用户保留原密码，不回传。
       one_time_password: existingUser ? null : oneTimePassword,
       created_new_user: !existingUser,
-      // 回传本次为该成员配置的初始 A 豆额度（已透传给业管 MEMBER-1002）
-      initial_points_num: initialPointsNum,
     })
   })
 }

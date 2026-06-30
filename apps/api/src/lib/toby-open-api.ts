@@ -14,6 +14,7 @@ export const TOBY_SERVICE_CODES = {
   specificationConfig: 'SPECIFICATION-CONFIG',
   memberRegister: 'MEMBER-1003',
   memberPoints: 'MEMBER-1004',
+  memberPointsChange: 'MEMBER-1005',
 } as const
 
 export type TobyServiceCode = typeof TOBY_SERVICE_CODES[keyof typeof TOBY_SERVICE_CODES]
@@ -82,13 +83,12 @@ export interface TobySubscribeRequest {
   orderTime?: string
 }
 
-// 业管 MEMBER-1002 会员副卡同步请求（2026-06-29 契约更新：移除 compName / channel）。
-// 仅保留 phone/userName/belongId/initialPointsNum 四个业务字段。
+// 业管 MEMBER-1002 会员副卡同步请求（契约演进：移除 compName / channel / initialPointsNum）。
+// 副卡创建后不再支持配置初始 A 豆额度，仅保留 phone/userName/belongId 三个业务字段。
 export interface TobyMemberSubCardRequest {
   phone: string
   userName: string
   belongId: string
-  initialPointsNum: number | string
 }
 
 export interface TobyMemberRegisterRequest {
@@ -99,6 +99,24 @@ export interface TobyMemberRegisterRequest {
 
 export interface TobyMemberPointsRequest {
   userId: string
+}
+
+// 业管 MEMBER-1005 会员副卡 A豆变动请求。
+// 由公司主卡对名下副卡发起：mainUserId=操作主卡会员编号，subUserId=被变更副卡会员编号，
+// changeType=1副卡增加 / 2副卡扣减，pointsNum=A豆数量(BigDecimal)。
+// timestamp/signature/serviceCode 由 buildTobyRequest 自动注入，调用方无需关心。
+export interface TobyMemberPointsChangeRequest {
+  mainUserId: string
+  subUserId: string
+  changeType: 1 | 2
+  pointsNum: number | string
+}
+
+// 业管 MEMBER-1005 响应解密载荷：变更后主副卡最新 A豆余额（业管权威，单位 A豆）。
+// 字段缺失时调用方按容错跳过对应缓存写入。
+export interface TobyMemberPointsChangeResponse {
+  mainBalancePointsNum?: number | string
+  subBalancePointsNum?: number | string
 }
 
 export interface TobySpecificationConfigPayload {
@@ -422,4 +440,16 @@ export function registerTobyMember(payload: TobyMemberRegisterRequest) {
 
 export function queryTobyMemberPoints(payload: TobyMemberPointsRequest) {
   return callTobyApi('/api/toby/member/query-points', TOBY_SERVICE_CODES.memberPoints, payload)
+}
+
+/**
+ * 业管 MEMBER-1005：主卡变更副卡 A豆（增加/扣减）。
+ * 返回解密后的主副卡最新余额，供调用方更新展示缓存。
+ */
+export function changeTobyMemberPoints(payload: TobyMemberPointsChangeRequest) {
+  return callTobyApi<TobyMemberPointsChangeResponse>(
+    '/api/toby/member/points-change',
+    TOBY_SERVICE_CODES.memberPointsChange,
+    payload,
+  )
 }

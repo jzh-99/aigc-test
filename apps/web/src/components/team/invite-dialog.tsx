@@ -39,8 +39,6 @@ interface CreateMemberResponse {
   // 后端生成的初始密码；仅全新用户返回，已存在用户为 null（保留原密码）
   one_time_password: string | null
   created_new_user: boolean
-  // 本次为该成员配置的初始 A 豆额度（已透传给业管 MEMBER-1002）
-  initial_points_num?: number
 }
 
 export function InviteDialog({
@@ -52,8 +50,6 @@ export function InviteDialog({
   const [identifier, setIdentifier] = useState('')
   const [username, setUsername] = useState('')
   const [role, setRole] = useState<'editor' | 'viewer'>('editor')
-  // 初始 A 豆默认 1000，主卡可编辑；业管 MEMBER-1002 约束 >=0
-  const [initialPointsNum, setInitialPointsNum] = useState<string>('1000')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<CreateMemberResponse | null>(null)
   const [phoneError, setPhoneError] = useState('')
@@ -92,13 +88,10 @@ export function InviteDialog({
 
     setLoading(true)
     try {
-      // 初始 A 豆透传给业管 MEMBER-1002（initialPointsNum），默认 1000 可编辑；A 豆账户实际由业管管理
-      const parsedPoints = Math.max(0, Math.trunc(Number(initialPointsNum) || 0))
       const res = await apiPost<CreateMemberResponse>(`/teams/${teamId}/members/create`, {
         identifier: trimmedId,
         username: trimmedUsername,
         role,
-        initial_points_num: parsedPoints,
       })
 
       setResult(res)
@@ -116,7 +109,6 @@ export function InviteDialog({
       setIdentifier('')
       setUsername('')
       setRole('editor')
-      setInitialPointsNum('1000')
       setResult(null)
       setPhoneError('')
       setUsernameError('')
@@ -159,12 +151,6 @@ export function InviteDialog({
                 <span className="text-muted-foreground">工作区：</span>
                 <span className="font-medium">{result.workspace_name}</span>
               </div>
-              {typeof result.initial_points_num === 'number' && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">初始 A 豆：</span>
-                  <span className="font-medium tabular-nums">{result.initial_points_num.toLocaleString()}</span>
-                </div>
-              )}
               {result.created_new_user && result.one_time_password ? (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">初始密码：</span>
@@ -223,26 +209,11 @@ export function InviteDialog({
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>初始 A 豆</Label>
-              <Input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                placeholder="请输入初始 A 豆额度"
-                value={initialPointsNum}
-                onChange={(e) => setInitialPointsNum(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                通过业管会员副卡接口（MEMBER-1002）为新成员建立 A 豆账户的初始额度，默认 1000，不可小于 0
-              </p>
-            </div>
-
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
               <p className="font-medium text-blue-900 mb-1">创建说明：</p>
               <ul className="text-blue-800 space-y-1 text-xs">
                 <li>• 系统自动生成初始密码，创建成功后展示给组长转告</li>
-                <li>• 通过业管会员副卡接口建立成员 A 豆账户，初始额度由主卡配置</li>
+                <li>• 通过业管会员副卡接口（MEMBER-1002）建立成员 A 豆账户，初始额度由业管平台规则决定</li>
                 <li>• 自动创建独立工作区："{'{用户名}'}工作区"</li>
                 <li>• 手机号作为登录账号，用户名用于成员显示</li>
               </ul>

@@ -54,7 +54,7 @@ describe('team create-member synchronously calls Toby MEMBER-1002 before writing
     assert.match(source, /BIZ_MGMT_SUBCARD_UNREACHABLE/, '调用异常错误码 BIZ_MGMT_SUBCARD_UNREACHABLE')
   })
 
-  test('调业管的 payload 仍包含现行 MEMBER-1002 契约字段（compName/channel 已移除）', async () => {
+  test('调业管的 payload 仍包含现行 MEMBER-1002 契约字段（compName/channel/initialPointsNum 已移除）', async () => {
     const source = await readFile(
       join(__dirname, '../routes/teams/post-create-member.ts'),
       'utf8',
@@ -63,10 +63,10 @@ describe('team create-member synchronously calls Toby MEMBER-1002 before writing
     assert.match(source, /phone: identifier/)
     assert.match(source, /userName: username/)
     assert.match(source, /belongId: ownerBinding\.biz_mgmt_user_id/)
-    assert.match(source, /initialPointsNum,/)
-    // 必须从请求 body 透传 initial_points_num，默认 1000（业管约束 >=0）
-    assert.match(source, /initial_points_num\?: number/)
-    assert.match(source, /rawInitialPointsNum \?\? 1000/)
+    // 契约演进：initialPointsNum 已从 MEMBER-1002 移除，源码不可再透传/计算该字段
+    assert.doesNotMatch(source, /initialPointsNum/, 'initialPointsNum 已从 MEMBER-1002 payload 移除')
+    assert.doesNotMatch(source, /initial_points_num/, 'initial_points_num 已从创建成员请求体移除')
+    assert.doesNotMatch(source, /rawInitialPointsNum/, 'rawInitialPointsNum 已不再解析')
     // 2026-06-29 契约更新：compName / channel 已从 MEMBER-1002 移除，源码不可再构造这两个字段
     assert.doesNotMatch(source, /compName:/, 'compName 已从 MEMBER-1002 payload 移除')
     assert.doesNotMatch(source, /channel:\s*['"]?1['"]?/, 'channel 已从 MEMBER-1002 payload 移除')

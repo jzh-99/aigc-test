@@ -9,6 +9,7 @@ import {
   buildTobyInboundResponse,
   buildTobyRequest,
   buildTobyResponse,
+  changeTobyMemberPoints,
   decryptAndVerifyTobyInboundRequest,
   decryptAndVerifyTobyRequest,
   decryptAndVerifyTobyResponse,
@@ -65,12 +66,11 @@ const TOBY_TEST_DATA = {
     success: true,
     remark: '测试创作成功',
   },
-  // 业管 MEMBER-1002（2026-06-29 契约更新）：移除 compName / channel。
+  // 业管 MEMBER-1002（契约演进）：移除 compName / channel / initialPointsNum。
   memberSubCard: {
     phone: '13111111111',
     userName: '13111111111',
     belongId: 'cfa57951-1824-4aca-8f71-77f48055f661',
-    initialPointsNum: '1000.00',
   },
   memberRegister: {
     phone: '17714420972',
@@ -79,6 +79,13 @@ const TOBY_TEST_DATA = {
   },
   memberPoints: {
     userId: 'D875BB9D3CCC4FA8A1F14569686739D9',
+  },
+  // 业管 MEMBER-1005：主卡对副卡发起 A豆变动（1增加/2扣减）。
+  memberPointsChange: {
+    mainUserId: 'cfa57951-1824-4aca-8f71-77f48055f661',
+    subUserId: 'D875BB9D3CCC4FA8A1F14569686739D9',
+    changeType: 1,
+    pointsNum: '100.00',
   },
   specificationConfig: {
     requestNo: 'spec-1',
@@ -320,10 +327,10 @@ describe('Toby 业务管理平台开放接口协议', () => {
     assert.equal(payload.phone, TOBY_TEST_DATA.memberSubCard.phone)
     assert.equal(payload.userName, TOBY_TEST_DATA.memberSubCard.userName)
     assert.equal(payload.belongId, TOBY_TEST_DATA.memberSubCard.belongId)
-    assert.equal(payload.initialPointsNum, TOBY_TEST_DATA.memberSubCard.initialPointsNum)
-    // 2026-06-29 契约更新：compName / channel 已从请求中移除，绝不可出现在解密后的报文里
+    // 契约演进：compName / channel / initialPointsNum 已从 MEMBER-1002 请求中移除，绝不可出现在解密后的报文里
     assert.equal(payload.compName, undefined, 'compName 已从 MEMBER-1002 契约移除')
     assert.equal(payload.channel, undefined, 'channel 已从 MEMBER-1002 契约移除')
+    assert.equal(payload.initialPointsNum, undefined, 'initialPointsNum 已从 MEMBER-1002 契约移除')
   })
 
   test('个人会员注册使用 MEMBER-1003 和 /api/toby/member/register', async () => {
@@ -362,6 +369,30 @@ describe('Toby 业务管理平台开放接口协议', () => {
     assert.equal(payload.serviceCode, 'MEMBER-1004')
     assert.equal(payload.userId, TOBY_TEST_DATA.memberPoints.userId)
     assert.equal((result.decryptedData as { status: number }).status, 1)
+  })
+
+  test('会员副卡A豆变动使用 MEMBER-1005 和 /api/toby/member/points-change，并回传主副卡余额', async () => {
+    const records: FetchRecord[] = []
+    const env = getTobyTestEnv()
+    createSuccessFetch(TOBY_SERVICE_CODES.memberPointsChange, {
+      mainBalancePointsNum: '9900.00',
+      subBalancePointsNum: '1100.00',
+    }, records)
+
+    const result = await changeTobyMemberPoints(TOBY_TEST_DATA.memberPointsChange)
+
+    assert.equal(records[0].url, `${env.TOBY_OUTBOUND_BASE_URL}/api/toby/member/points-change`)
+    const payload = readSentPayload(records[0], TOBY_SERVICE_CODES.memberPointsChange)
+    printDecrypted('会员副卡A豆变动 requestJson 解密后', payload)
+    printDecrypted('会员副卡A豆变动 responseJson 解密后', result.decryptedData)
+
+    assert.equal(payload.serviceCode, 'MEMBER-1005')
+    assert.equal(payload.mainUserId, TOBY_TEST_DATA.memberPointsChange.mainUserId)
+    assert.equal(payload.subUserId, TOBY_TEST_DATA.memberPointsChange.subUserId)
+    assert.equal(payload.changeType, TOBY_TEST_DATA.memberPointsChange.changeType)
+    assert.equal(payload.pointsNum, TOBY_TEST_DATA.memberPointsChange.pointsNum)
+    assert.equal((result.decryptedData as { mainBalancePointsNum: string }).mainBalancePointsNum, '9900.00')
+    assert.equal((result.decryptedData as { subBalancePointsNum: string }).subBalancePointsNum, '1100.00')
   })
 
   test('模型规格同步使用 SPECIFICATION-CONFIG，并支持 modelParams.params 数组结构', () => {
