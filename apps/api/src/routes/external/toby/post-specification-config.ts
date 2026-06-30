@@ -59,7 +59,7 @@ const route: FastifyPluginAsync = async (app) => {
           params_schema: JSON.stringify(model.params_schema),
           resolution: model.resolution,
           avatar: model.avatar,
-          is_active: true,
+          is_active: model.is_active,
         })
         .onConflict((oc) => oc.columns(['provider_code', 'code']).doUpdateSet({
           name: model.name,
@@ -70,7 +70,7 @@ const route: FastifyPluginAsync = async (app) => {
           params_schema: JSON.stringify(model.params_schema),
           resolution: model.resolution,
           avatar: model.avatar,
-          is_active: true,
+          is_active: model.is_active,
         }))
         .execute()
 

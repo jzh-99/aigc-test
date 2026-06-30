@@ -88,6 +88,7 @@ const TOBY_TEST_DATA = {
       modelName: '图片模型',
       modelDesc: '测试模型',
       modelProvider: 'provider',
+      modelStatus: 0,
       useChannel: 'B,C',
       singleUnit: 'fix',
       materialRatio: '3:4,16:9',
@@ -371,11 +372,12 @@ describe('Toby 业务管理平台开放接口协议', () => {
 
     const payload = decryptAndVerifyTobyRequest<{
       serviceCode: string
-      modelParams: { params: Array<{ resolutionRatio: string }> }
+      modelParams: { modelStatus: number; params: Array<{ resolutionRatio: string }> }
     }>(envelope, TOBY_SERVICE_CODES.specificationConfig)
     printDecrypted('模型规格同步 requestJson 解密后', payload)
 
     assert.equal(payload.serviceCode, 'SPECIFICATION-CONFIG')
+    assert.equal(payload.modelParams.modelStatus, TOBY_TEST_DATA.specificationConfig.modelParams.modelStatus)
     assert.equal(
       payload.modelParams.params[0].resolutionRatio,
       TOBY_TEST_DATA.specificationConfig.modelParams.params[0].resolutionRatio,

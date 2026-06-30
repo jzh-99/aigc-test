@@ -735,7 +735,7 @@ async function main() {
       }),
       resolution: '720p',
       avatar: llmAvatar('volcengine'),
-      is_active: true,
+      is_active: false,
     },
     {
       code: 'ctyun-seedance-2.0-fast',
@@ -756,7 +756,7 @@ async function main() {
       }),
       resolution: '720p',
       avatar: llmAvatar('volcengine'),
-      is_active: true,
+      is_active: false,
     },
   ]
 

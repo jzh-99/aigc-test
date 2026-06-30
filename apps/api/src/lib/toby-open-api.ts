@@ -113,6 +113,7 @@ export interface TobySpecificationConfigPayload {
     modelName: string
     modelDesc: string
     modelProvider: string
+    modelStatus?: number | string
     useChannel: string
     singleUnit: string
     materialRatio: string

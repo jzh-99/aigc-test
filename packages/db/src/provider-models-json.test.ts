@@ -139,6 +139,23 @@ describe('provider models json converter', () => {
     assert.equal(row.provider_code, 'ctyun-edge')
   })
 
+  test('把业管 modelStatus 映射为 provider_models.is_active', () => {
+    const row = normalizeTobyProviderModel({
+      modelCode: 'disabled-model',
+      modelType: '1',
+      modelName: '禁用图片模型',
+      modelDesc: '禁用模型',
+      modelProvider: 'volcengine',
+      modelStatus: 1,
+      useChannel: 'B,C',
+      singleUnit: 'fix',
+      paramsSchema: {},
+      paramsPricing: [],
+    })
+
+    assert.equal(row.is_active, false)
+  })
+
   test('拒绝未知 modelType，避免静默写入错误模块', () => {
     assert.throws(
       () => normalizeTobyProviderModel({

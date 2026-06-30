@@ -16,6 +16,7 @@ export interface TobyProviderModelInput {
   modelName: string
   modelDesc: string
   modelProvider: string
+  modelStatus?: number | string
   useChannel?: string
   singleUnit?: string
   materialRatio?: string
@@ -81,6 +82,14 @@ function normalizeResolution(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function normalizeModelIsActive(value: unknown): boolean {
+  // 业管 modelStatus：0=在用，1=禁用。旧报文未传时保持默认启用。
+  if (value === undefined || value === null || value === '') return true
+  if (value === 0 || value === '0') return true
+  if (value === 1 || value === '1') return false
+  throw new Error(`不支持的模型在用状态：${String(value)}`)
+}
+
 function splitCsv(value: string | undefined): string[] {
   return (value ?? '')
     .split(',')
@@ -128,7 +137,7 @@ export function normalizeTobyProviderModel(input: TobyProviderModelInput): Norma
     params_pricing: buildParamsPricing(input),
     resolution: normalizeResolution(paramsSchema.resolution),
     avatar: null,
-    is_active: true,
+    is_active: normalizeModelIsActive(input.modelStatus),
   }
 }
 
