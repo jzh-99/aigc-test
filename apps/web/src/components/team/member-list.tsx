@@ -20,7 +20,7 @@ import { InviteDialog } from './invite-dialog'
 import { BatchInviteDialog } from './batch-invite-dialog'
 import { useConfirm } from '@/hooks/use-confirm'
 import { toast } from 'sonner'
-import { Check, Copy, KeyRound, Loader2, Trash2, UserPlus, Users } from 'lucide-react'
+import { Check, Copy, KeyRound, Loader2, RefreshCw, Trash2, UserPlus, Users } from 'lucide-react'
 
 // 本地积分系统已退役：credit_used / credit_quota / credits 等字段后端不再返回。
 // 本组件只做纯成员管理（列表/添加/批量添加/移除），A 豆流水后续对接业管平台。
@@ -31,6 +31,9 @@ interface Member {
   avatar_url: string | null
   role: string
   joined_at: string
+  biz_mgmt_user_id?: string | null
+  a_bean_balance?: number | null
+  a_bean_balance_updated_at?: string | null
 }
 
 interface TeamData {
@@ -53,6 +56,13 @@ const roleLabel: Record<string, string> = {
   viewer: '查看',
 }
 
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
 export function MemberList({ teamId }: { teamId: string }) {
   const confirm = useConfirm()
   const { data, error, mutate } = useSWR<TeamData>(`/teams/${teamId}`, {
@@ -71,6 +81,8 @@ export function MemberList({ teamId }: { teamId: string }) {
     password: string
   } | null>(null)
   const [passwordCopied, setPasswordCopied] = useState(false)
+  const [refreshingBalanceUserId, setRefreshingBalanceUserId] = useState<string | null>(null)
+  const [syncingBizMgmtUserId, setSyncingBizMgmtUserId] = useState<string | null>(null)
 
   // Delayed mutate: give the DB a moment to commit before re-fetching
   const delayedMutate = (ms = 400) => new Promise<void>(res => setTimeout(() => { mutate(); res() }, ms))
@@ -140,6 +152,60 @@ export function MemberList({ teamId }: { teamId: string }) {
     }
   }
 
+  async function handleRefreshBalance(member: Member) {
+    setRefreshingBalanceUserId(member.user_id)
+    try {
+      await apiPost<{ user_id: string; balance: number; updated_at: string }>(
+        `/teams/${teamId}/members/${member.user_id}/biz-mgmt-balance/refresh`,
+        {},
+      )
+      toast.success('A豆余额已刷新')
+      mutate()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '刷新A豆余额失败')
+    } finally {
+      setRefreshingBalanceUserId(null)
+    }
+  }
+
+  async function handleSyncBizMgmtMember(member: Member) {
+    setSyncingBizMgmtUserId(member.user_id)
+    try {
+      await apiPost<{
+        user_id: string
+        biz_mgmt_user_id: string
+        balance: number
+        updated_at: string
+      }>(
+        `/teams/${teamId}/members/${member.user_id}/biz-mgmt-sync`,
+        {},
+      )
+      toast.success('业管身份已同步')
+      mutate()
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'BIZ_MGMT_SUBCARD_NOT_FOUND') {
+        const shouldDelete = await confirm({
+          title: '删除未同步成员',
+          description: `业管平台未找到 ${member.username} 对应的当前团队副卡。建议删除该本地账号后重新添加，确认删除吗？`,
+          confirmText: '删除',
+        })
+        if (shouldDelete) {
+          try {
+            await apiDelete(`/teams/${teamId}/members/${member.user_id}`)
+            toast.success('成员已删除')
+            delayedMutate()
+          } catch (deleteErr) {
+            toast.error(deleteErr instanceof ApiError ? deleteErr.message : '删除成员失败')
+          }
+        }
+        return
+      }
+      toast.error(err instanceof ApiError ? err.message : '同步业管身份失败')
+    } finally {
+      setSyncingBizMgmtUserId(null)
+    }
+  }
+
   function handleResetDialogOpenChange(open: boolean) {
     if (open) return
     setResetPasswordResult(null)
@@ -170,6 +236,7 @@ export function MemberList({ teamId }: { teamId: string }) {
                   <th className="text-left py-2 px-2 font-medium">用户名</th>
                   <th className="text-left py-2 px-2 font-medium">账户</th>
                   <th className="text-left py-2 px-2 font-medium">角色</th>
+                  <th className="text-left py-2 px-2 font-medium">A豆余额</th>
                   <th className="text-left py-2 px-2 font-medium">加入时间</th>
                   <th className="text-right py-2 px-2 font-medium">操作</th>
                 </tr>
@@ -177,6 +244,7 @@ export function MemberList({ teamId }: { teamId: string }) {
               <tbody>
                 {data?.members.map((member) => {
                   const joinedAt = member.joined_at ? new Date(member.joined_at) : null
+                  const balanceUpdatedAt = formatDateTime(member.a_bean_balance_updated_at)
                   return (
                     <tr key={member.user_id} className="border-b last:border-0">
                       <td className="py-2 px-2 font-medium">{member.username}</td>
@@ -185,6 +253,54 @@ export function MemberList({ teamId }: { teamId: string }) {
                         <Badge variant={roleBadgeVariant[member.role as keyof typeof roleBadgeVariant] ?? 'outline'}>
                           {roleLabel[member.role] ?? member.role}
                         </Badge>
+                      </td>
+                      <td className="py-2 px-2">
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="font-medium">
+                              {typeof member.a_bean_balance === 'number'
+                                ? `${member.a_bean_balance.toLocaleString()} A豆`
+                                : member.biz_mgmt_user_id
+                                  ? '未刷新'
+                                  : '未同步'}
+                            </div>
+                            {balanceUpdatedAt && (
+                              <div className="text-xs text-muted-foreground">{balanceUpdatedAt}</div>
+                            )}
+                          </div>
+                          {member.biz_mgmt_user_id && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              title="刷新A豆余额"
+                              disabled={refreshingBalanceUserId === member.user_id}
+                              onClick={() => handleRefreshBalance(member)}
+                            >
+                              {refreshingBalanceUserId === member.user_id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          )}
+                          {!member.biz_mgmt_user_id && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              title="同步业管身份"
+                              disabled={syncingBizMgmtUserId === member.user_id}
+                              onClick={() => handleSyncBizMgmtMember(member)}
+                            >
+                              {syncingBizMgmtUserId === member.user_id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2 px-2 text-muted-foreground">
                         {joinedAt ? `${joinedAt.getFullYear()}-${String(joinedAt.getMonth() + 1).padStart(2, '0')}-${String(joinedAt.getDate()).padStart(2, '0')}` : '-'}

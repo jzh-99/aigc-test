@@ -11,6 +11,7 @@ import {
   fetchBizMgmtMembersByPhone,
   purgeLocalUserCascade,
 } from '../../services/biz-mgmt-member-sync.js'
+import { refreshBizMgmtBalanceCache } from '../../services/biz-mgmt-balance-cache.js'
 
 // 账户锁定相关常量
 const MAX_LOGIN_ATTEMPTS = 5
@@ -103,6 +104,7 @@ const route: FastifyPluginAsync = async (app) => {
     // 保证 SSO / 邀请等链路不受影响。
     // ────────────────────────────────────────────────────────────────────────
 
+    let loginBizMgmtUserIds: string[] = []
     let user: {
       id: string
       account: string
@@ -127,6 +129,9 @@ const route: FastifyPluginAsync = async (app) => {
         request.log.error({ err, identifier }, '业管会员查询失败（post-login），按查无处理')
         bizMgmtMembers = []
       }
+      loginBizMgmtUserIds = bizMgmtMembers
+        .filter((member) => member.status === 1)
+        .map((member) => member.bizMgmtUserId)
 
       if (bizMgmtMembers.length === 0) {
         // 分支①②：业管查无（或故障）。
@@ -201,6 +206,22 @@ const route: FastifyPluginAsync = async (app) => {
 
     // 登录成功，清除失败记录
     await clearFailedAttempts(redis, identifier)
+
+    // 登录成功后刷新该手机号名下可用业管身份的 A 豆展示缓存。
+    // Redis 余额只供 UI 展示，不参与生成前余额校验或扣减事务；失败不影响登录。
+    if (loginBizMgmtUserIds.length > 0) {
+      const results = await Promise.allSettled(
+        loginBizMgmtUserIds.map((bizMgmtUserId) => refreshBizMgmtBalanceCache(redis, bizMgmtUserId)),
+      )
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          request.log.warn(
+            { err: result.reason, bizMgmtUserId: loginBizMgmtUserIds[index] },
+            '登录成功后刷新 A 豆展示缓存失败',
+          )
+        }
+      })
+    }
 
     // 撤销旧 refresh token，强制单会话
     await db
