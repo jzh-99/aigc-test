@@ -334,7 +334,10 @@ export async function syncBizMgmtMembersForLocalUser(
             is_deleted: false,
             deleted_at: null,
             name: member.teamName,
-            team_type: member.userType === '1' ? 'personal' : 'company_a',
+            // 公司会员(userType=2)→ avatar_enabled（专业版，全功能：生图+生视频+画布+数字人+视频工作室）；
+            // 个人会员(userType=1)→ personal（生图+生视频，无画布/数字人）。
+            // 注意：company_a 是「省台版」特定客户档位（仅生图），不由业管同步自动赋值，仅 admin 手动指定。
+            team_type: member.userType === '1' ? 'personal' : 'avatar_enabled',
             updated_at: sql`now()`,
           })
           .where('id', '=', teamId)
@@ -363,7 +366,9 @@ export async function syncBizMgmtMembersForLocalUser(
             name: member.teamName,
             owner_id: localUserId,
             plan_tier: 'free',
-            team_type: member.userType === '1' ? 'personal' : 'company_a',
+            // 公司会员(userType=2)→ avatar_enabled（专业版，全功能）；
+            // 个人会员(userType=1)→ personal（生图+生视频）。company_a（省台版）仅 admin 手动指定。
+            team_type: member.userType === '1' ? 'personal' : 'avatar_enabled',
           })
           .returning('id')
           .executeTakeFirstOrThrow()
