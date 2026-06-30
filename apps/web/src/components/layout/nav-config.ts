@@ -49,7 +49,9 @@ export const creativeNavItems: NavItem[] = [
 
 export const managementNavItems: NavItem[] = [
   { href: '/team', label: '团队管理', icon: Users, requireBizMgmtMaster: true },
-  { href: '/credits', label: 'A豆管理', icon: Coins, requireBizMgmtMaster: true },
+  // A 豆管理对普通成员可见：查看余额/流水是只读操作，普通成员（副卡）需要看自己的 A 豆消费记录。
+  // 页面内的「团队成员管理」入口、「充值」按钮才用 isOwner 限制为公司主卡。
+  { href: '/credits', label: 'A豆管理', icon: Coins },
   { href: '/admin', label: '管理后台', icon: Shield, requireUserRole: 'admin' },
   { href: '/settings', label: '设置', icon: Settings },
   { href: '/docs', label: '操作手册', icon: BookOpen },

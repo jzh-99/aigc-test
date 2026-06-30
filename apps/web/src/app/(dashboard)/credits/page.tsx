@@ -34,7 +34,8 @@ export default function CreditsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const activeBizMgmtMember = useAuthStore((s) => s.activeBizMgmtMember())
 
-  // A豆管理权限 = 当前业管选中身份为公司主卡（与团队管理导航门控一致）。
+  // 权限拆分：查看 A 豆余额/流水是只读操作，所有业管会员身份（含普通成员/副卡）都能看；
+  // 只有「管理 A 豆」（充值、团队成员管理入口）才需要公司主卡权限。
   const isOwner =
     activeBizMgmtMember?.userType === '2' &&
     (activeBizMgmtMember.isMaster ?? activeBizMgmtMember.is_master)
@@ -50,27 +51,6 @@ export default function CreditsPage() {
   const totalPages = ledgerData
     ? Math.max(1, Math.ceil(ledgerData.total / (ledgerData.pageSize || pageSize)))
     : 1
-
-  // 防绕过：导航已对非主卡隐藏本页，直接输 URL 进入时显示无权限提示。
-  if (!isOwner) {
-    return (
-      <div className="space-y-6 max-w-3xl">
-        <div>
-          <h1 className="text-2xl font-semibold">A豆管理</h1>
-          <p className="text-muted-foreground">查看当前可用A豆余额（数据来自业务管理平台）</p>
-        </div>
-
-        <SettingsManagementNav showBack />
-
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-lg font-medium">无权限访问</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            仅公司主卡可管理 A 豆，请切换到公司主卡身份后重试
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -91,7 +71,7 @@ export default function CreditsPage() {
             <Coins className="h-5 w-5 text-accent-orange" />
             <span className="text-2xl font-bold">{balance.toLocaleString()}</span>
           </div>
-          {ENABLE_TOPUP && (
+          {ENABLE_TOPUP && isOwner && (
             <Button size="sm" onClick={() => setTopupOpen(true)}>充值A豆</Button>
           )}
         </CardContent>
@@ -128,19 +108,21 @@ export default function CreditsPage() {
         </CardContent>
       </Card>
 
-      <Link href="/team" className="block">
-        <Card className="border-accent-orange/30 hover:border-accent-orange/60 transition-colors cursor-pointer">
-          <CardContent className="flex items-center justify-between py-4 px-5">
-            <div className="flex items-center gap-3">
-              <Coins className="h-5 w-5 text-accent-orange" />
-              <div>
-                <p className="text-sm font-medium">团队成员管理</p>
-                <p className="text-xs text-muted-foreground">查看团队成员与权限</p>
+      {isOwner && (
+        <Link href="/team" className="block">
+          <Card className="border-accent-orange/30 hover:border-accent-orange/60 transition-colors cursor-pointer">
+            <CardContent className="flex items-center justify-between py-4 px-5">
+              <div className="flex items-center gap-3">
+                <Coins className="h-5 w-5 text-accent-orange" />
+                <div>
+                  <p className="text-sm font-medium">团队成员管理</p>
+                  <p className="text-xs text-muted-foreground">查看团队成员与权限</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </Link>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       <TopupModal
         open={topupOpen}
