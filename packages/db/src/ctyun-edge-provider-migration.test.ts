@@ -16,7 +16,7 @@ describe('067_ctyun_edge_provider migration', () => {
     assert.match(source, /ctyun-edge/)
     assert.match(source, /天翼云边缘AI网关/)
     assert.match(source, /ctyun-seedream-5\.0-lite/)
-    assert.match(source, /Doubao-Seedream-5\.0-lite/)
+    assert.doesNotMatch(source, /Doubao-Seedream-5\.0-lite/)
     assert.match(source, /image_to_image/)
     assert.match(source, /resolution:\s*\['2k', '3k', '4k'\]/)
     assert.match(source, /is_active:\s*false/)

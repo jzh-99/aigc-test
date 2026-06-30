@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildCtyunEdgeImageBody } from './ctyun-edge-image.js'
 
-test('天翼云边缘 Seedream 5.0 Lite 使用网关模型 ID 和 URL 响应', () => {
+test('天翼云边缘 Seedream 5.0 Lite 使用 ctyun 网关模型 ID 和 URL 响应', () => {
   const body = buildCtyunEdgeImageBody({
     model: 'ctyun-seedream-5.0-lite',
     prompt: '生成短剧角色定妆照',
@@ -14,7 +14,7 @@ test('天翼云边缘 Seedream 5.0 Lite 使用网关模型 ID 和 URL 响应', (
   })
 
   assert.deepEqual(body, {
-    model: 'Doubao-Seedream-5.0-lite',
+    model: 'ctyun-seedream-5.0-lite',
     prompt: '生成短剧角色定妆照',
     response_format: 'url',
     size: '1600x2848',
@@ -48,13 +48,13 @@ test('天翼云边缘 Seedream 支持官方 3K 和 4K 尺寸参数', () => {
   }).size, '5504x3040')
 })
 
-test('普通生图入队传入网关模型 ID 时仍能构造请求体', () => {
+test('普通生图入队传入 ctyun 模型 ID 时仍能构造请求体', () => {
   const body = buildCtyunEdgeImageBody({
-    model: 'Doubao-Seedream-5.0-lite',
+    model: 'ctyun-seedream-5.0-lite',
     prompt: '生成商品海报',
     params: { resolution: '2k' },
   })
 
-  assert.equal(body.model, 'Doubao-Seedream-5.0-lite')
+  assert.equal(body.model, 'ctyun-seedream-5.0-lite')
   assert.equal(body.prompt, '生成商品海报')
 })

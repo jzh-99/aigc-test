@@ -698,13 +698,13 @@ async function main() {
     {
       code: 'ctyun-seedream-5.0-lite',
       name: 'Cdream 5.0 Lite',
-      description: '天翼云边缘AI网关 Doubao-Seedream-5.0-lite 图片生成',
+      description: '天翼云边缘AI网关 ctyun-seedream-5.0-lite 图片生成',
       module: 'image' as const,
       category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
       params_pricing: [
-        { resolution: '2k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
-        { resolution: '3k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
-        { resolution: '4k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+        { resolution: '2k', model: 'ctyun-seedream-5.0-lite', unit_price: 4 },
+        { resolution: '3k', model: 'ctyun-seedream-5.0-lite', unit_price: 4 },
+        { resolution: '4k', model: 'ctyun-seedream-5.0-lite', unit_price: 4 },
       ],
       params_schema: JSON.stringify({
         resolution: ['2k', '3k', '4k'],

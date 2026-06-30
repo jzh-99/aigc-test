@@ -28,9 +28,9 @@ const SEEDREAM_5_IMAGE_SCHEMA = {
 }
 
 const CTYUN_SEEDREAM_5_PRICING = [
-  { resolution: '2k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
-  { resolution: '3k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
-  { resolution: '4k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+  { resolution: '2k', model: 'ctyun-seedream-5.0-lite', unit_price: 4 },
+  { resolution: '3k', model: 'ctyun-seedream-5.0-lite', unit_price: 4 },
+  { resolution: '4k', model: 'ctyun-seedream-5.0-lite', unit_price: 4 },
 ]
 
 export async function up(db: Kysely<any>): Promise<void> {
@@ -60,7 +60,7 @@ export async function down(db: Kysely<any>): Promise<void> {
         image: [],
       })},
       params_pricing = ${JSON.stringify([
-        { resolution: '2k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+        { resolution: '2k', model: 'ctyun-seedream-5.0-lite', unit_price: 4 },
       ])}
     FROM providers p
     WHERE p.id = pm.provider_id

@@ -1,8 +1,7 @@
 import type { AdapterGenerateResult, ImageGenerationAdapter } from './base.js'
 
 const CTYUN_EDGE_IMAGE_MODEL_ID: Record<string, string> = {
-  'ctyun-seedream-5.0-lite': 'Doubao-Seedream-5.0-lite',
-  'Doubao-Seedream-5.0-lite': 'Doubao-Seedream-5.0-lite',
+  'ctyun-seedream-5.0-lite': 'ctyun-seedream-5.0-lite',
 }
 
 type Resolution = '1k' | '2k' | '3k' | '4k'

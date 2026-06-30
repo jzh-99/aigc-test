@@ -14,7 +14,8 @@ test('070 migration aligns Cdream params with official Seedream while keeping ct
 
   assert.match(source, /image_to_image/)
   assert.match(source, /'2k', '3k', '4k'/)
-  assert.match(source, /Doubao-Seedream-5\.0-lite/)
+  assert.match(source, /model: 'ctyun-seedream-5\.0-lite'/)
   assert.match(source, /pm\.code = 'ctyun-seedream-5\.0-lite'/)
   assert.doesNotMatch(source, /model: 'seedream-5\.0-lite'/)
+  assert.doesNotMatch(source, /Doubao-Seedream-5\.0-lite/)
 })
