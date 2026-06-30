@@ -68,7 +68,7 @@ const route: FastifyPluginAsync = async (app) => {
 
     let query = db
       .selectFrom('provider_models as pm')
-      .innerJoin('providers as p', 'p.id', 'pm.provider_id')
+      .innerJoin('providers as p', 'p.code', 'pm.provider_code')
       .leftJoin('team_model_configs as tmc', (join) =>
         teamId
           ? join.onRef('tmc.model_id', '=', 'pm.id').on('tmc.team_id', '=', teamId)

@@ -427,13 +427,13 @@ const route: FastifyPluginAsync = async (app) => {
     let pricingModelRule: ParamsPricingRule | null = null
     let providerModel = await db
       .selectFrom('provider_models')
-      .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
+      .innerJoin('providers', 'providers.code', 'provider_models.provider_code')
       .select([
         'provider_models.id as modelId',
         'provider_models.code as modelCode',
         'provider_models.params_pricing',
         'provider_models.category_references',
-        'providers.code as providerCode',
+        'provider_models.provider_code as providerCode',
         'providers.id as providerId',
       ])
       .where('provider_models.code', '=', model)
@@ -444,13 +444,13 @@ const route: FastifyPluginAsync = async (app) => {
     if (!providerModel) {
       const activeImageModels = await db
         .selectFrom('provider_models')
-        .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
+        .innerJoin('providers', 'providers.code', 'provider_models.provider_code')
         .select([
           'provider_models.id as modelId',
           'provider_models.code as modelCode',
           'provider_models.params_pricing',
           'provider_models.category_references',
-          'providers.code as providerCode',
+          'provider_models.provider_code as providerCode',
           'providers.id as providerId',
         ])
         .where('provider_models.module', '=', 'image')

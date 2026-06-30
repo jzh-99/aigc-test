@@ -7,14 +7,14 @@ const route: FastifyPluginAsync = async (app) => {
     const db = getDb()
     const rows = await db
       .selectFrom('provider_models as pm')
-      .innerJoin('providers as p', 'p.id', 'pm.provider_id')
+      .innerJoin('providers as p', 'p.code', 'pm.provider_code')
       .leftJoin('team_model_configs as tmc', (join) =>
         join.onRef('tmc.model_id', '=', 'pm.id').on('tmc.team_id', '=', req.params.id)
       )
       .select([
         'pm.id', 'pm.code', 'pm.name', 'pm.module',
         'pm.is_active as global_is_active',
-        'p.code as provider_code',
+        'pm.provider_code as provider_code',
         'tmc.is_active as team_is_active',
       ])
       .orderBy('pm.module', 'asc')

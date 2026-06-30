@@ -276,7 +276,7 @@ export interface ProvidersTable {
 
 export interface ProviderModelsTable {
   id: Generated<string>
-  provider_id: string
+  provider_code: string
   code: string
   name: string
   description: string | null

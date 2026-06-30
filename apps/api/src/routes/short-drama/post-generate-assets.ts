@@ -116,11 +116,11 @@ export default async function postGenerateAssets(app: FastifyInstance): Promise<
       const modelCode = resolveShortDramaAssetImageModel(request.body.model)
       const providerModel = await db
         .selectFrom('provider_models')
-        .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
+        .innerJoin('providers', 'providers.code', 'provider_models.provider_code')
         .select([
           'provider_models.id as modelId',
           'provider_models.params_pricing',
-          'providers.code as providerCode',
+          'provider_models.provider_code as providerCode',
         ])
         .where('provider_models.code', '=', modelCode)
         .where('provider_models.is_active', '=', true)

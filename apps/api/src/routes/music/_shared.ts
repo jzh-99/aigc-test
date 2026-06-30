@@ -870,11 +870,11 @@ export async function assertVoiceCloneReadyForWorkspace(
 async function getActiveProviderModel(db: Db, teamId: string, module: 'music' | 'music_voice_clone', model: string) {
   const providerModel = await db
     .selectFrom('provider_models')
-    .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
+    .innerJoin('providers', 'providers.code', 'provider_models.provider_code')
     .select([
       'provider_models.id as modelId',
       'provider_models.params_pricing',
-      'providers.code as providerCode',
+      'provider_models.provider_code as providerCode',
       'providers.id as providerId',
     ])
     .where('provider_models.code', '=', model)

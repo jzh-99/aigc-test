@@ -158,12 +158,12 @@ const route: FastifyPluginAsync = async (app) => {
     // 查找模型
     const providerModel = await db
       .selectFrom('provider_models')
-      .innerJoin('providers', 'providers.id', 'provider_models.provider_id')
+      .innerJoin('providers', 'providers.code', 'provider_models.provider_code')
       .select([
         'provider_models.id as modelId',
         'provider_models.params_pricing',
         'provider_models.category_references',
-        'providers.code as providerCode',
+        'provider_models.provider_code as providerCode',
       ])
       .where('provider_models.code', '=', model)
       .where('provider_models.is_active', '=', true)

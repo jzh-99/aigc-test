@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { getDb, normalizeTobyProviderModel } from '@aigc/db'
 import {
   TOBY_SERVICE_CODES,
   buildTobyInboundResponse,
@@ -8,7 +9,7 @@ import {
 } from '../../../lib/toby-open-api.js'
 
 const route: FastifyPluginAsync = async (app) => {
-  // POST /external/toby/specification-config — Toby 模型规格同步回调，目前仅解密验签并打印数据。
+  // POST /external/toby/specification-config — Toby 模型规格同步回调，按供应商代码和模型 code 替换模型配置。
   app.post<{ Body: TobyEnvelope }>(
     '/external/toby/specification-config',
     {
@@ -42,7 +43,38 @@ const route: FastifyPluginAsync = async (app) => {
         })
       }
 
-      app.log.info({ payload }, '收到 Toby 模型规格同步数据')
+      const model = normalizeTobyProviderModel(payload.modelParams)
+      const db = getDb()
+
+      await db
+        .insertInto('provider_models')
+        .values({
+          provider_code: model.provider_code,
+          code: model.code,
+          name: model.name,
+          description: model.description,
+          module: model.module,
+          category_references: JSON.stringify(model.category_references),
+          params_pricing: JSON.stringify(model.params_pricing),
+          params_schema: JSON.stringify(model.params_schema),
+          resolution: model.resolution,
+          avatar: model.avatar,
+          is_active: true,
+        })
+        .onConflict((oc) => oc.columns(['provider_code', 'code']).doUpdateSet({
+          name: model.name,
+          description: model.description,
+          module: model.module,
+          category_references: JSON.stringify(model.category_references),
+          params_pricing: JSON.stringify(model.params_pricing),
+          params_schema: JSON.stringify(model.params_schema),
+          resolution: model.resolution,
+          avatar: model.avatar,
+          is_active: true,
+        }))
+        .execute()
+
+      app.log.info({ providerCode: model.provider_code, modelCode: model.code }, 'Toby 模型规格同步完成')
 
       return {
         code: '0000',

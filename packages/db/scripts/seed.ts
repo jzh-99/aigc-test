@@ -1,4 +1,5 @@
 import * as path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { config } from 'dotenv'
 
@@ -6,11 +7,55 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 config({ path: path.resolve(__dirname, '../../../.env') })
 
 import { getDb, closeDb } from '../src/client.js'
+import { flattenProviderModelsSeed, type ProviderModelsSeedGroup } from '../src/provider-models-json.js'
 
 // 模型 avatar 图标：拼接 TOS 公网域名，未配置 TOS_PUBLIC_URL 时返回 null（走占位图标）
 const TOS_PUBLIC_URL = process.env.TOS_PUBLIC_URL ?? ''
 const llmAvatar = (icon: string): string | null =>
   TOS_PUBLIC_URL ? `${TOS_PUBLIC_URL}/assets/llm/${icon}.png` : null
+
+function readProviderModelsJson(): ProviderModelsSeedGroup[] {
+  const modelsJsonPath = path.resolve(__dirname, '../../../models.json')
+  return JSON.parse(readFileSync(modelsJsonPath, 'utf8')) as ProviderModelsSeedGroup[]
+}
+
+async function seedProviderModelsFromJson(db: ReturnType<typeof getDb>) {
+  const models = flattenProviderModelsSeed(readProviderModelsJson())
+
+  await db.deleteFrom('provider_models').execute()
+
+  for (const model of models) {
+    await db
+      .insertInto('provider_models')
+      .values({
+        provider_code: model.provider_code,
+        code: model.code,
+        name: model.name,
+        description: model.description,
+        module: model.module,
+        category_references: JSON.stringify(model.category_references),
+        params_pricing: JSON.stringify(model.params_pricing),
+        params_schema: JSON.stringify(model.params_schema),
+        resolution: model.resolution,
+        avatar: model.avatar,
+        is_active: model.is_active,
+      })
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
+        name: model.name,
+        description: model.description,
+        module: model.module,
+        category_references: JSON.stringify(model.category_references),
+        params_pricing: JSON.stringify(model.params_pricing),
+        params_schema: JSON.stringify(model.params_schema),
+        resolution: model.resolution,
+        avatar: model.avatar,
+        is_active: model.is_active,
+      }))
+      .execute()
+  }
+
+  console.log(`  provider_models seeded from models.json (${models.length} models)`)
+}
 
 async function main() {
   const db = getDb()
@@ -129,7 +174,7 @@ async function main() {
     await db
       .insertInto('provider_models')
       .values({
-        provider_id: qwenProvider.id,
+        provider_code: qwenProvider.code,
         code: m.code,
         name: m.name,
         description: m.description,
@@ -139,7 +184,7 @@ async function main() {
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
       })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
         name: m.name,
         description: m.description,
         module: 'agent',
@@ -285,7 +330,7 @@ async function main() {
     await db
       .insertInto('provider_models')
       .values({
-        provider_id: provider.id,
+        provider_code: provider.code,
         code: m.code,
         name: m.name,
         description: m.description,
@@ -296,7 +341,7 @@ async function main() {
         avatar: m.avatar,
         is_active: true,
       })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
         name: m.name,
         description: m.description,
         module: 'image',
@@ -390,7 +435,7 @@ async function main() {
   //   await db
   //     .insertInto('provider_models')
   //     .values({
-  //       provider_id: provider.id,
+  //       provider_code: provider.code,
   //       code: m.code,
   //       name: m.name,
   //       description: m.description,
@@ -401,7 +446,7 @@ async function main() {
   //       params_schema: m.params_schema,
   //       is_active: true,
   //     })
-  //     .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+  //     .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
   //       name: m.name,
   //       description: m.description,
   //       category_references: JSON.stringify(m.category_references),
@@ -494,7 +539,7 @@ async function main() {
     await db
       .insertInto('provider_models')
       .values({
-        provider_id: volcProvider.id,
+        provider_code: volcProvider.code,
         code: m.code,
         name: m.name,
         description: m.description,
@@ -505,7 +550,7 @@ async function main() {
         avatar: m.avatar,
         is_active: true,
       })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
         name: m.name,
         description: m.description,
         module: 'image',
@@ -603,7 +648,7 @@ async function main() {
     await db
       .insertInto('provider_models')
       .values({
-        provider_id: volcProvider.id,
+        provider_code: volcProvider.code,
         code: m.code,
         name: m.name,
         description: m.description,
@@ -614,7 +659,7 @@ async function main() {
         avatar: m.avatar,
         is_active: true,
       })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
         name: m.name,
         description: m.description,
         category_references: JSON.stringify(m.category_references),
@@ -719,7 +764,7 @@ async function main() {
     await db
       .insertInto('provider_models')
       .values({
-        provider_id: ctyunProvider.id,
+        provider_code: ctyunProvider.code,
         code: m.code,
         name: m.name,
         description: m.description,
@@ -731,7 +776,7 @@ async function main() {
         avatar: m.avatar,
         is_active: m.is_active,
       })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
         name: m.name,
         description: m.description,
         module: m.module,
@@ -755,7 +800,7 @@ async function main() {
     await db
       .insertInto('provider_models')
       .values({
-        provider_id: volcProvider.id,
+        provider_code: volcProvider.code,
         code: m.code,
         name: m.name,
         module: m.module,
@@ -763,7 +808,7 @@ async function main() {
         params_schema: JSON.stringify({}),
         is_active: true,
       })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
         name: m.name,
         params_pricing: JSON.stringify(m.params_pricing),
         is_active: true,
@@ -860,7 +905,7 @@ async function main() {
     await db
       .insertInto('provider_models')
       .values({
-        provider_id: murekaProvider.id,
+        provider_code: murekaProvider.code,
         code: m.code,
         name: m.name,
         description: m.description,
@@ -870,7 +915,7 @@ async function main() {
         params_schema: JSON.stringify(m.params_schema),
         is_active: true,
       })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
         name: m.name,
         description: m.description,
         module: m.module,
@@ -886,7 +931,7 @@ async function main() {
   const staleVoiceCloneModelIds = (await db
     .selectFrom('provider_models')
     .select('id')
-    .where('provider_id', '=', murekaProvider.id)
+    .where('provider_code', '=', murekaProvider.code)
     .where('code', 'in', ['mureka-8-voice-clone', 'mureka-9-voice-clone', 'mureka-voice-clone'])
     .execute()).map((row) => row.id)
   if (staleVoiceCloneModelIds.length) {
@@ -954,7 +999,7 @@ async function main() {
     await db
       .insertInto('provider_models')
       .values({
-        provider_id: minimaxProvider.id,
+        provider_code: minimaxProvider.code,
         code: m.code,
         name: m.name,
         description: m.description,
@@ -963,7 +1008,7 @@ async function main() {
         params_schema: JSON.stringify(minimaxTtsParamsSchema),
         is_active: true,
       })
-      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+      .onConflict((oc: any) => oc.columns(['provider_code', 'code']).doUpdateSet({
         name: m.name,
         description: m.description,
         module: 'tts',
@@ -974,6 +1019,10 @@ async function main() {
       .execute()
     console.log(`  provider_models seeded (${m.code})`)
   }
+
+  // provider_models 最终以业管导出的 models.json 为唯一初始化来源。
+  // 上方历史模型插入仅用于保留 provider 初始化上下文；这里清空并替换为 JSON 数据。
+  await seedProviderModelsFromJson(db)
 
   const minimaxSystemVoiceRows = `
 中文 (普通话)	male-qn-qingse	青涩青年音色

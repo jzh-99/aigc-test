@@ -8,12 +8,12 @@ const route: FastifyPluginAsync = async (app) => {
     const db = getDb()
     const model = await db
       .selectFrom('provider_models as pm')
-      .innerJoin('providers as p', 'p.id', 'pm.provider_id')
+      .innerJoin('providers as p', 'p.code', 'pm.provider_code')
       .select([
         'pm.id', 'pm.code', 'pm.name', 'pm.description', 'pm.module',
         'pm.category_references',
         'pm.params_pricing', 'pm.params_schema', 'pm.resolution', 'pm.is_active',
-        'p.code as provider_code',
+        'pm.provider_code as provider_code',
       ])
       .where('pm.id', '=', req.params.id)
       .executeTakeFirst()
