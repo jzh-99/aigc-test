@@ -146,6 +146,7 @@ const route: FastifyPluginAsync = async (app) => {
         initialPointsNum,
       })
       if (tobyRes.code !== '0000') {
+        request.log.error({ tobyRes, phone: identifier }, '[create-member] 业管副卡创建返回非成功，准备 502 返回')
         // 业管返回非成功（参数错/业务规则错/系统异常）：记录并 502 返回，不落库
         request.log.warn(
           { bizCode: tobyRes.code, bizMessage: tobyRes.message, phone: identifier },
