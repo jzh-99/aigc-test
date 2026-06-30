@@ -2,13 +2,19 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
 import bcrypt from 'bcryptjs'
 import { teamRoleGuard } from '../../plugins/guards.js'
-import { enqueueBizMgmtOutboxEvent } from '../../services/biz-mgmt-outbox.js'
 import { generateOneTimePassword } from '../../services/biz-mgmt-member-sync.js'
+import { syncTobyMemberSubCard } from '../../lib/toby-open-api.js'
 
 const route: FastifyPluginAsync = async (app) => {
   // POST /teams/:id/members/create — 公司主卡创建成员（业管副卡同步）。
   // 本地 A 豆上限已废弃：A 豆账户由业管平台管理，创建成员通过 MEMBER-1002 副卡同步建立。
   // 初始密码由后端生成一次性密码（与业管首登 OTP 一致），返回给团长转告，不再写死 123456。
+  //
+  // 【同步语义，不再走队列】2026-06-30 改造：先同步调业管 MEMBER-1002 创建副卡，
+  // 业管返回成功后才写本地 users/team_members/workspaces/workspace_members。
+  // 业管失败（1000 参数/验签/业务规则异常、9999 系统异常、网络超时）一律 502 返回，
+  // 本地不落任何数据，避免出现「本地有成员但业管侧无 A 豆账户」的脏数据。
+  // outbox 事件类型 member_sub_card_sync 及 worker 派发链路保留不动，仅用于消费改造前的遗留 pending 事件。
   app.post<{
     Params: { id: string }
     Body: {
@@ -127,6 +133,46 @@ const route: FastifyPluginAsync = async (app) => {
     const oneTimePassword = generateOneTimePassword()
     const passwordHash = await bcrypt.hash(oneTimePassword, 10)
 
+    // ── 同步调业管创建会员副卡（MEMBER-1002），成功才落本地数据 ──────────────
+    // 这是本次改造的核心：业管副卡创建放最前，任何本地数据都还没写。
+    // 业管失败（1000/9999/超时）一律 502 直接返回，本地不留任何痕迹。
+    // ownerBinding.biz_mgmt_user_id 作为副卡的 belongId（所属公司主卡会员编号）。
+    // 幂等性：业管侧按 phone+belongId 判重，同一手机号重复创建会返回业务错误（已被上方 existingUser 拦截本地重复）。
+    try {
+      const tobyRes = await syncTobyMemberSubCard({
+        phone: identifier,
+        userName: username,
+        belongId: ownerBinding.biz_mgmt_user_id,
+        initialPointsNum,
+      })
+      if (tobyRes.code !== '0000') {
+        // 业管返回非成功（参数错/业务规则错/系统异常）：记录并 502 返回，不落库
+        request.log.warn(
+          { bizCode: tobyRes.code, bizMessage: tobyRes.message, phone: identifier },
+          '[create-member] 业管副卡创建未成功，本地不落库',
+        )
+        return reply.status(502).send({
+          success: false,
+          error: {
+            code: 'BIZ_MGMT_SUBCARD_FAILED',
+            message: tobyRes.message || '业管副卡创建失败',
+          },
+        })
+      }
+    } catch (err) {
+      // 网络异常/超时/解密失败：502 返回，不落库
+      request.log.error({ err, phone: identifier }, '[create-member] 业管副卡创建调用异常')
+      return reply.status(502).send({
+        success: false,
+        error: {
+          code: 'BIZ_MGMT_SUBCARD_UNREACHABLE',
+          message: err instanceof Error ? err.message : '业管接口调用失败',
+        },
+      })
+    }
+
+    // 业管副卡已创建成功，下面开始写本地数据（users → team_members → workspaces → workspace_members）。
+
     // 如果用户不存在则创建
     let userId: string
     if (!existingUser) {
@@ -192,28 +238,6 @@ const route: FastifyPluginAsync = async (app) => {
         role: 'admin',
       })
       .execute()
-
-    // 通知业管为新成员创建会员副卡（MEMBER-1002），使其在业管侧获得 A 豆账户。
-    // ownerBinding 已在函数顶部通过公司主卡门控校验（user_type=2 且 is_master=true）。
-    // 幂等键：同一团队+成员+手机号重复创建复用同一 outbox 事件。
-    // 2026-06-29 契约更新：业管 MEMBER-1002 移除 compName / channel 字段，仅保留
-    // phone/userName/belongId/initialPointsNum。副卡所属公司由 belongId 在业管侧解析。
-    const dedupeKey = `member-sub-card:${teamId}:${userId}:${identifier}`
-    await enqueueBizMgmtOutboxEvent({
-      eventType: 'member_sub_card_sync',
-      dedupeKey,
-      localUserId: userId,
-      bizMgmtUserId: ownerBinding.biz_mgmt_user_id,
-      phone: identifier,
-      teamId,
-      pointsNum: initialPointsNum,
-      payload: {
-        phone: identifier,
-        userName: username,
-        belongId: ownerBinding.biz_mgmt_user_id,
-        initialPointsNum,
-      },
-    })
 
     return reply.status(201).send({
       user_id: userId,
