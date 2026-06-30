@@ -19,6 +19,7 @@ import type { FastifyPluginAsync } from 'fastify'
 
 import { getStorybookQueue } from '../../lib/queue.js'
 import { successResponse } from '../../lib/open-api-errors.js'
+import { OPENAPI_COMMON_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
 
 // 请求体 schema（对齐源 StorybookGenerateRequest）
@@ -30,14 +31,14 @@ const STORYBOOK_BODY = {
   required: ['task_id', 'bussiness_id', 'prompt', 'age', 'category', 'style', 'pages', 'callback_url'],
   additionalProperties: false,
   properties: {
-    task_id: { type: 'string', maxLength: 50 },
-    bussiness_id: { type: 'string', maxLength: 50 },
-    prompt: { type: 'string' },
-    age: { type: 'string', enum: ['0-3', '3-6', '6+'] },
-    category: { type: 'integer', minimum: 0, maximum: 4 },
-    style: { type: 'integer', minimum: 0, maximum: 3 },
-    pages: { type: 'integer', minimum: 1, maximum: 10 },
-    callback_url: { type: 'string', format: 'uri' },
+    task_id: { type: 'string', maxLength: 50, description: '调用方生成的唯一任务 ID。同一个 API Key 下重复提交相同 task_id 会返回重复任务错误。' },
+    bussiness_id: { type: 'string', maxLength: 50, description: '调用方业务流水号。字段名按历史契约保留为 bussiness_id，回调时会原样带回。' },
+    prompt: { type: 'string', description: '绘本主题或故事梗概，用于生成分镜文案和每页画面。' },
+    age: { type: 'string', enum: ['0-3', '3-6', '6+'], description: '目标儿童年龄段：0-3、3-6 或 6+。会影响文案难度和画面表达。' },
+    category: { type: 'integer', minimum: 0, maximum: 4, description: '故事类别编号，取值 0-4。具体类别由服务端绘本 worker 的分类映射解释。' },
+    style: { type: 'integer', minimum: 0, maximum: 3, description: '绘本画风编号，取值 0-3。具体画风由服务端绘本 worker 的风格映射解释。' },
+    pages: { type: 'integer', minimum: 1, maximum: 10, description: '绘本页数/分镜数量，范围 1-10。' },
+    callback_url: { type: 'string', format: 'uri', description: '异步结果回调地址。任务完成或失败后，worker 会向该地址投递结果。' },
   },
 }
 
@@ -47,7 +48,13 @@ const DEFAULT_STORYBOOK_IMAGE_MODEL = 'seedream-4.5'
 
 const route: FastifyPluginAsync = async (app) => {
   app.post('/storybooks/generations', {
-    schema: { tags: ['OpenApi'], body: STORYBOOK_BODY },
+    schema: {
+      tags: ['OpenApi'],
+      summary: '提交绘本生成任务',
+      description: '创建一个异步儿童绘本生成任务。worker 会先生成分镜/文案，再生成绘本图片，最终通过 callback_url 回调。',
+      body: STORYBOOK_BODY,
+      response: OPENAPI_COMMON_RESPONSES,
+    },
     preHandler: [openApiPreHandler],
   }, async (request, reply) => {
     const b = request.body as {

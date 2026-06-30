@@ -31,6 +31,7 @@ import { getDb } from '@aigc/db'
 
 import { ErrorCode, errorMessage, OpenApiError } from '../../lib/open-api-errors.js'
 import { polishText } from '../../lib/ark-text.js'
+import { OPENAPI_TEXT_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
 
 // 请求体 schema（对齐源 schemas/text.py:TextPolishRequest）
@@ -41,9 +42,13 @@ const TEXT_BODY = {
   required: ['task_id', 'create_mode', 'input_text'],
   additionalProperties: false,
   properties: {
-    task_id: { type: 'string', minLength: 1, maxLength: 50 },
-    create_mode: { type: 'string', enum: ['0', '1', '2', '3', '4'] },
-    input_text: { type: 'string', minLength: 1 },
+    task_id: { type: 'string', minLength: 1, maxLength: 50, description: '调用方生成的唯一任务 ID。同一个 API Key 下重复提交相同 task_id 会返回重复任务错误。' },
+    create_mode: {
+      type: 'string',
+      enum: ['0', '1', '2', '3', '4'],
+      description: '文本处理模式：0-3 为不同润色场景；4 为行业分类。具体提示词策略由服务端 ark-text 模块维护。',
+    },
+    input_text: { type: 'string', minLength: 1, description: '待润色或待分类的原始文本。同步接口会将处理结果返回到 meta.output_text。' },
   },
 }
 
@@ -114,7 +119,13 @@ const route: FastifyPluginAsync = async (app) => {
   app.post(
     '/chat/completions',
     {
-      schema: { tags: ['OpenApi'], body: TEXT_BODY },
+      schema: {
+        tags: ['OpenApi'],
+        summary: '同步文本润色/分类',
+        description: '同步调用文本模型处理 input_text。成功时 HTTP 200 且 result.code=0000，处理结果位于 meta.output_text；该接口不走异步回调。',
+        body: TEXT_BODY,
+        response: OPENAPI_TEXT_RESPONSES,
+      },
       preHandler: [openApiPreHandler],
     },
     async (request, reply) => {

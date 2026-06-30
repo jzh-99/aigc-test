@@ -25,6 +25,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getVideoQueue } from '../../lib/queue.js'
 import { successResponse } from '../../lib/open-api-errors.js'
 import { persistReferenceImages } from '../../lib/reference-images.js'
+import { OPENAPI_COMMON_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
 
 // 请求体 schema（对齐源 VideoGenerateRequest）
@@ -36,26 +37,41 @@ const VIDEO_BODY = {
   required: ['task_id', 'bussiness_id', 'model', 'create_mode', 'prompt', 'resolution', 'duration', 'ratio', 'callback_url'],
   additionalProperties: false,
   properties: {
-    task_id: { type: 'string', maxLength: 50 },
-    bussiness_id: { type: 'string', maxLength: 50 },
-    model: { type: 'string' },
-    create_mode: { type: 'string', enum: ['general', 'start_end_frame', 'text_2_video'] },
-    prompt: { type: 'string' },
+    task_id: { type: 'string', maxLength: 50, description: '调用方生成的唯一任务 ID。同一个 API Key 下重复提交相同 task_id 会返回重复任务错误。' },
+    bussiness_id: { type: 'string', maxLength: 50, description: '调用方业务流水号。字段名按历史契约保留为 bussiness_id，回调时会原样带回。' },
+    model: { type: 'string', description: '视频生成模型标识。服务端会作为供应商模型参数透传。' },
+    create_mode: {
+      type: 'string',
+      enum: ['general', 'start_end_frame', 'text_2_video'],
+      description: '生成模式：general 通用生成；start_end_frame 首尾帧生成；text_2_video 文生视频。',
+    },
+    prompt: { type: 'string', description: '视频生成提示词，描述画面内容、镜头运动、风格和主体动作。' },
     // 参考图：base64 data URI 或 URL，支持单值或数组（脱敏落 TOS 后写入 params.images）
-    images: { type: ['string', 'array'] },
-    resolution: { type: 'string', enum: ['720p', '1080p'] },
-    duration: { type: 'integer', enum: [5, 10, 15] },
+    images: {
+      type: ['string', 'array'],
+      description: '可选参考图/首尾帧。支持单个字符串或字符串数组；每项可为图片 URL 或 base64/data URI。base64 会先转存到对象存储。',
+      items: { type: 'string' },
+    },
+    resolution: { type: 'string', enum: ['720p', '1080p'], description: '输出视频分辨率。' },
+    duration: { type: 'integer', enum: [5, 10, 15], description: '输出视频时长，单位为秒。' },
     ratio: {
       type: 'string',
       enum: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', 'adaptive'],
+      description: '输出视频宽高比。adaptive 表示由模型根据输入内容自适应。',
     },
-    callback_url: { type: 'string', format: 'uri' },
+    callback_url: { type: 'string', format: 'uri', description: '异步结果回调地址。任务完成或失败后，worker 会向该地址投递结果。' },
   },
 }
 
 const route: FastifyPluginAsync = async (app) => {
   app.post('/videos/generations', {
-    schema: { tags: ['OpenApi'], body: VIDEO_BODY },
+    schema: {
+      tags: ['OpenApi'],
+      summary: '提交视频生成任务',
+      description: '创建一个异步视频生成任务。接口立即返回受理结果，实际生成、转存和失败信息通过 callback_url 回调。',
+      body: VIDEO_BODY,
+      response: OPENAPI_COMMON_RESPONSES,
+    },
     preHandler: [openApiPreHandler],
   }, async (request, reply) => {
     const b = request.body as {

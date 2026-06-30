@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto'
 import { getPodcastQueue } from '../../lib/queue.js'
 import { successResponse } from '../../lib/open-api-errors.js'
 import { uploadToTos } from '../../lib/storage.js'
+import { OPENAPI_COMMON_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
 
 // 请求体 schema（对齐源 schemas/podcast.py:PodcastGenerateRequest）
@@ -31,17 +32,18 @@ const PODCAST_BODY = {
   required: ['task_id', 'bussiness_id', 'content_type', 'content', 'speakers', 'callback_url'],
   additionalProperties: false,
   properties: {
-    task_id: { type: 'string', maxLength: 50 },
-    bussiness_id: { type: 'string', maxLength: 50 },
-    content_type: { type: 'string', enum: ['text', 'file', 'url'] },
-    content: { type: 'string' },
+    task_id: { type: 'string', maxLength: 50, description: '调用方生成的唯一任务 ID。同一个 API Key 下重复提交相同 task_id 会返回重复任务错误。' },
+    bussiness_id: { type: 'string', maxLength: 50, description: '调用方业务流水号。字段名按历史契约保留为 bussiness_id，回调时会原样带回。' },
+    content_type: { type: 'string', enum: ['text', 'file', 'url'], description: '内容来源类型：text 直接文本；file 文件内容或文件 URL；url 网页/文档 URL。' },
+    content: { type: 'string', description: '播客生成素材。content_type=text 时为正文；file 时可为 PDF base64/data URI 或 PDF URL；url 时为可访问链接。PDF base64 会先转存对象存储。' },
     speakers: {
       type: 'array',
       minItems: 2,
       maxItems: 2,
-      items: { type: 'string' },
+      description: '播客双人对话角色名称，必须恰好 2 个字符串，例如 ["主持人", "嘉宾"]。',
+      items: { type: 'string', description: '角色名称或音色角色名。' },
     },
-    callback_url: { type: 'string', format: 'uri' },
+    callback_url: { type: 'string', format: 'uri', description: '异步结果回调地址。任务完成或失败后，worker 会向该地址投递结果。' },
   },
 }
 
@@ -77,7 +79,13 @@ const route: FastifyPluginAsync = async (app) => {
   app.post(
     '/podcasts/generations',
     {
-      schema: { tags: ['OpenApi'], body: PODCAST_BODY },
+      schema: {
+        tags: ['OpenApi'],
+        summary: '提交播客生成任务',
+        description: '创建一个异步双人播客生成任务。支持文本、文件和 URL 素材；PDF base64 会脱敏转存，生成音频结果通过 callback_url 回调。',
+        body: PODCAST_BODY,
+        response: OPENAPI_COMMON_RESPONSES,
+      },
       preHandler: [openApiPreHandler],
     },
     async (request, reply) => {

@@ -5,3 +5,4 @@ allowBuilds:
   esbuild: false
   msgpackr-extract: false
   sharp: false
+  tos-crc64-js: set this to true or false

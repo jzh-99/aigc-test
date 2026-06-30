@@ -47,6 +47,12 @@ describe('open-api-errors', () => {
     })
   })
 
+  test('successResponse 支持连接性测试等非生成接口覆盖成功文案', () => {
+    assert.deepEqual(successResponse('ping:c1', '连接性测试成功'), {
+      result: { task_id: 'ping:c1', code: '0000', message: '连接性测试成功' },
+    })
+  })
+
   test('OpenApiError：对外只暴露固定文案，rawMessage 仅内部/日志使用', () => {
     const err = new OpenApiError(ErrorCode.SYSTEM_FAILED, '内部堆栈：连接超时')
     assert.equal(err.code, ErrorCode.SYSTEM_FAILED)

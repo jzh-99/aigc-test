@@ -2,7 +2,7 @@
 //
 // 对齐源项目 app/api/routes_song.py:submit_song_generation 的链路：
 //   1. 校验 schema（task_id/model/promt/gender/instrumental/callback_url 必填，
-//      bussiness_id/tag 可空）
+//      business_id/tag 可空）
 //   2. 字段适配：源 SongGenerateRequest → aigc-test music worker 语义
 //      （promt→prompt、gender→voice_gender、tag→styles、instrumental→type/mode）
 //   3. createOpenApiBatch 事务内建 task_batches + tasks（source=open_api，幂等防重复）
@@ -12,7 +12,7 @@
 //   6. 返回 successResponse(task_id)
 //
 // 字段拼写约定（源项目契约，不得"修正"）：
-//   - 请求体 promt（少一个 p）、bussiness_id（多一个 s）—— 路由映射到内部规范字段
+//   - 请求体 promt（少一个 p）、business_id（多一个 s）—— 路由映射到内部规范字段
 //   - 内部 jobData/DB 用 prompt/businessId
 //
 // 字段适配映射（核心，详见 adaptSongParams 注释）：
@@ -30,25 +30,26 @@ import { getMusicQueue } from '../../lib/queue.js'
 import { getDb } from '@aigc/db'
 import { successResponse } from '../../lib/open-api-errors.js'
 import type { MusicModel, MusicTrackType, MusicVoiceGender } from '@aigc/types'
+import { OPENAPI_COMMON_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
 
 // 请求体 schema（对齐源 SongGenerateRequest）
 // gender/instrumental 为 string 枚举（源 pydantic field_validator 校验字符串值）
-// bussiness_id/tag 可空（源 Field(default=None)）
+// business_id/tag 可空（源 Field(default=None)）
 // promt 拼写为对外契约，不得修正
 const LYRICS_BODY = {
   type: 'object',
-  required: ['task_id', 'model', 'promt', 'gender', 'instrumental', 'callback_url'],
+  required: ['task_id', 'model', 'prompt', 'gender', 'instrumental', 'callback_url'],
   additionalProperties: false,
   properties: {
-    task_id: { type: 'string', maxLength: 50 },
-    bussiness_id: { type: 'string', maxLength: 50 },
-    model: { type: 'string' },
-    promt: { type: 'string' },
-    gender: { type: 'string', enum: ['0', '1', '2'] },
-    tag: { type: 'string' },
-    instrumental: { type: 'string', enum: ['0', '1'] },
-    callback_url: { type: 'string', format: 'uri' },
+    task_id: { type: 'string', maxLength: 50, description: '调用方生成的唯一任务 ID。同一个 API Key 下重复提交相同 task_id 会返回重复任务错误。' },
+    business_id: { type: 'string', maxLength: 50, description: '调用方业务流水号，可不传。字段名按历史契约保留为 business_id，回调时会原样带回或为空字符串。' },
+    model: { type: 'string', description: '音乐生成模型标识，例如 mureka 侧模型。服务端会作为供应商模型参数保存并透传。' },
+    prompt: { type: 'string', description: '歌曲/纯音乐创作灵感描述，用于生成歌词、曲风和编曲方向。' },
+    gender: { type: 'string', enum: ['0', '1', '2'], description: '演唱性别：0 男声；1 女声；2 随机。内部分别映射为 male/female/auto。' },
+    tag: { type: 'string', description: '可选曲风标签，支持逗号、顿号、分号、竖线或空格分隔，例如“流行,治愈,民谣”。' },
+    instrumental: { type: 'string', enum: ['0', '1'], description: '是否纯音乐：0 歌曲（生成歌词和旋律）；1 纯音乐（不生成歌词）。' },
+    callback_url: { type: 'string', format: 'uri', description: '异步结果回调地址。任务完成或失败后，worker 会向该地址投递结果。' },
   },
 }
 
@@ -87,14 +88,14 @@ export interface AdaptedSongParams {
 }
 
 export function adaptSongParams(input: {
-  promt: string
+  prompt: string
   gender: string
   instrumental: string
   tag?: string | null
 }): AdaptedSongParams {
   const isInspirational = input.instrumental !== '1'
   return {
-    prompt: input.promt,
+    prompt: input.prompt,
     type: isInspirational ? 'song' : 'instrumental',
     mode: 'inspiration',
     voiceGender: GENDER_MAP[input.gender] ?? 'auto',
@@ -103,15 +104,21 @@ export function adaptSongParams(input: {
 }
 
 const route: FastifyPluginAsync = async (app) => {
-  app.post('/lyrics/generate', {
-    schema: { tags: ['OpenApi'], body: LYRICS_BODY },
+  app.post('/lyrics/generations', {
+    schema: {
+      tags: ['OpenApi'],
+      summary: '提交音乐生成任务',
+      description: '创建一个异步音乐生成任务，支持歌曲和纯音乐。接口立即返回受理结果，音频结果通过 callback_url 回调。',
+      body: LYRICS_BODY,
+      response: OPENAPI_COMMON_RESPONSES,
+    },
     preHandler: [openApiPreHandler],
   }, async (request, reply) => {
     const b = request.body as {
       task_id: string
-      bussiness_id?: string | null
+      business_id?: string | null
       model: string
-      promt: string
+      prompt: string
       gender: string
       tag?: string | null
       instrumental: string
@@ -122,14 +129,14 @@ const route: FastifyPluginAsync = async (app) => {
 
     // ① 字段适配：源 SongGenerateRequest → aigc-test music worker 语义
     const adapted = adaptSongParams({
-      promt: b.promt,
+      prompt: b.prompt,
       gender: b.gender,
       instrumental: b.instrumental,
       tag: b.tag,
     })
 
-    // bussiness_id 源可空，适配为空串（DB business_id 为 nullable，但回调契约传空串）
-    const bussinessId = b.bussiness_id ?? ''
+    // business_id 源可空，适配为空串（DB business_id 为 nullable，但回调契约传空串）
+    const bussinessId = b.business_id ?? ''
 
     // ② 建 task_batches + tasks（事务内，幂等防重复），返回 batchId/internalTaskId
     //    module='music'、serviceType='song'（对齐源 callbacks.py 的 _song_meta）
@@ -143,7 +150,7 @@ const route: FastifyPluginAsync = async (app) => {
       module: 'music',
       provider: 'mureka',
       model: b.model,
-      prompt: b.promt,
+      prompt: b.prompt,
       params: {
         // music worker parseMusicBatchParams 读取的字段（对齐 MusicBatchParams）
         mode: adapted.mode,

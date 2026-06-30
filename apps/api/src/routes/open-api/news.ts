@@ -16,6 +16,7 @@ import type { FastifyPluginAsync } from 'fastify'
 
 import { getNewsQueue } from '../../lib/queue.js'
 import { successResponse } from '../../lib/open-api-errors.js'
+import { OPENAPI_COMMON_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
 
 // 请求体 schema（对齐源 schemas/news.py:NewsGenerateRequest）
@@ -26,11 +27,11 @@ const NEWS_BODY = {
   required: ['task_id', 'bussiness_id', 'prompt', 'date', 'callback_url'],
   additionalProperties: false,
   properties: {
-    task_id: { type: 'string', maxLength: 50 },
-    bussiness_id: { type: 'string', maxLength: 50 },
-    prompt: { type: 'string', minLength: 1 },
-    date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
-    callback_url: { type: 'string', format: 'uri' },
+    task_id: { type: 'string', maxLength: 50, description: '调用方生成的唯一任务 ID。同一个 API Key 下重复提交相同 task_id 会返回重复任务错误。' },
+    bussiness_id: { type: 'string', maxLength: 50, description: '调用方业务流水号。字段名按历史契约保留为 bussiness_id，回调时会原样带回。' },
+    prompt: { type: 'string', minLength: 1, description: '资讯生成主题或检索/写作要求，例如行业、地区、重点事件和输出风格。' },
+    date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '资讯日期，格式 YYYY-MM-DD。用于限定生成内容对应的日期范围。' },
+    callback_url: { type: 'string', format: 'uri', description: '异步结果回调地址。任务完成或失败后，worker 会向该地址投递结果。' },
   },
 }
 
@@ -41,7 +42,13 @@ const route: FastifyPluginAsync = async (app) => {
   app.post(
     '/news/generations',
     {
-      schema: { tags: ['OpenApi'], body: NEWS_BODY },
+      schema: {
+        tags: ['OpenApi'],
+        summary: '提交资讯生成任务',
+        description: '创建一个异步资讯生成任务。接口受理后由 worker 调用文本模型生成资讯内容，并通过 callback_url 回调结果。',
+        body: NEWS_BODY,
+        response: OPENAPI_COMMON_RESPONSES,
+      },
       preHandler: [openApiPreHandler],
     },
     async (request, reply) => {

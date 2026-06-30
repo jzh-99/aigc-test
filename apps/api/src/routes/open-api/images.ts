@@ -22,6 +22,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { getImageQueue } from '../../lib/queue.js'
 import { successResponse } from '../../lib/open-api-errors.js'
 import { persistReferenceImages } from '../../lib/reference-images.js'
+import { OPENAPI_COMMON_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
 
 // 请求体 schema（对齐源 ImageGenerateRequest）
@@ -31,24 +32,35 @@ const IMAGE_BODY = {
   required: ['task_id', 'bussiness_id', 'model', 'promt', 'size', 'ratio', 'callback_url'],
   additionalProperties: false,
   properties: {
-    task_id: { type: 'string', maxLength: 50 },
-    bussiness_id: { type: 'string', maxLength: 50 },
-    model: { type: 'string' },
-    promt: { type: 'string' },
+    task_id: { type: 'string', maxLength: 50, description: '调用方生成的唯一任务 ID。同一个 API Key 下重复提交相同 task_id 会返回重复任务错误。' },
+    bussiness_id: { type: 'string', maxLength: 50, description: '调用方业务流水号。字段名按历史契约保留为 bussiness_id，回调时会原样带回。' },
+    model: { type: 'string', description: '图片生成模型标识，例如 seedream/火山图片模型。服务端会作为供应商模型参数透传。' },
+    promt: { type: 'string', description: '图片生成提示词。字段名按历史契约保留为 promt（少一个 p），内部会映射为 prompt。' },
     // base64 data URI 或 URL，支持单值或数组（脱敏落 TOS）
-    image: { type: ['string', 'array'] },
-    size: { type: 'string', enum: ['1K', '2K', '3K', '4K', '1k', '2k', '3k', '4k'] },
+    image: {
+      type: ['string', 'array'],
+      description: '可选参考图。支持单个字符串或字符串数组；每项可为图片 URL 或 base64/data URI。base64 会先转存到对象存储，原文不入库不入日志。',
+      items: { type: 'string' },
+    },
+    size: { type: 'string', enum: ['1K', '2K', '3K', '4K', '1k', '2k', '3k', '4k'], description: '输出清晰度档位。大小写均兼容，实际能力以所选模型支持范围为准。' },
     ratio: {
       type: 'string',
       enum: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'],
+      description: '输出图片宽高比。',
     },
-    callback_url: { type: 'string', format: 'uri' },
+    callback_url: { type: 'string', format: 'uri', description: '异步结果回调地址。任务完成或失败后，worker 会向该地址投递结果。' },
   },
 }
 
 const route: FastifyPluginAsync = async (app) => {
   app.post('/images/generations', {
-    schema: { tags: ['OpenApi'], body: IMAGE_BODY },
+    schema: {
+      tags: ['OpenApi'],
+      summary: '提交图片生成任务',
+      description: '创建一个异步图片生成任务。接口立即返回受理结果，实际生成结果通过 callback_url 回调；参考图 base64 会先脱敏转存。',
+      body: IMAGE_BODY,
+      response: OPENAPI_COMMON_RESPONSES,
+    },
     preHandler: [openApiPreHandler],
   }, async (request, reply) => {
     const b = request.body as {

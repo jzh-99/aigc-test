@@ -27,12 +27,12 @@ import { ErrorCode as _ErrorCode } from '@aigc/types'
 
 // 统一成功响应信封（对齐源项目 success_response）
 // 注意：函数名用 camelCase(successResponse)，JSON 字段保持对外契约拼写
-export function successResponse(taskId: string) {
+export function successResponse(taskId: string, message = _errorMessage(_ErrorCode.SUCCESS)) {
   return {
     result: {
       task_id: taskId,
       code: _ErrorCode.SUCCESS,
-      message: _errorMessage(_ErrorCode.SUCCESS),
+      message,
     },
   }
 }
