@@ -199,17 +199,6 @@ imageWorker.on('error', (err) => {
   logger.error({ err: err.message }, 'Image worker error')
 })
 
-logger.info('Worker service started — listening on image-queue')
-logger.info('Transfer worker started — listening on transfer-queue')
-logger.info('Video submit worker started — listening on video-queue')
-logger.info('Storyboard worker started — listening on storyboard-queue')
-logger.info('Music worker started — listening on music-queue')
-logger.info('Music voice clone worker started — listening on music-voice-clone-queue')
-logger.info('Open API callback worker started — listening on open-api-callback-queue')
-logger.info('Storybook worker started — listening on storybook-queue')
-logger.info('Podcast worker started — listening on podcast-queue')
-logger.info('News worker started — listening on news-queue')
-
 // ─── 启动时恢复 stalled/active job ──────────────────────────────────────────
 // Worker 重启后，之前正在执行的 job lock 可能还没过期，手动将它们标记为 failed 并重试
 async function recoverStalledJobs() {
@@ -248,13 +237,11 @@ await recoverStalledJobs()
 // ─── Cron Jobs（BullMQ repeat）────────────────────────────────────────────────
 // upsertJobScheduler 是幂等的，多台机器同时调用也只会存在一个调度
 await scheduleCronJobs()
-logger.info('Cron worker started — listening on cron-queue')
 
 // ─── 业务管理平台通知 Worker（outbox 派发）─────────────────────────────────
 // 消费 biz-mgmt-notify-queue，按 outbox 事件类型调业管接口（创作结果同步/会员副卡同步），
 // 失败按指数退避重试，成功与失败记录都保留在 biz_mgmt_outbox_events。
 const bizMgmtNotifyWorker = startBizMgmtNotifyWorker()
-logger.info('Business management notify worker started — listening on biz-mgmt-notify-queue')
 
 // ─── Video Poller ─────────────────────────────────────────────────────────────
 
@@ -267,6 +254,24 @@ const avatarPollerTimer = startAvatarPoller()
 // ─── Action Imitation Poller ──────────────────────────────────────────────────
 
 const actionImitationPollerTimer = startActionImitationPoller()
+
+logger.info({
+  queues: [
+    'image-queue',
+    'transfer-queue',
+    'video-queue',
+    'storyboard-queue',
+    'music-queue',
+    'music-voice-clone-queue',
+    'open-api-callback-queue',
+    'storybook-queue',
+    'podcast-queue',
+    'news-queue',
+    'cron-queue',
+    'biz-mgmt-notify-queue',
+  ],
+  pollers: ['video', 'avatar', 'action-imitation'],
+}, 'Worker service started')
 
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 
