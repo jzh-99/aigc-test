@@ -197,12 +197,12 @@ async function executeNode(
     if (node.type === 'image_gen' && isImageGenConfig(node.data.config)) {
       const cfg = node.data.config
       const modelType = params.modelType ?? cfg.modelType
-      const resolution = params.resolution ?? cfg.resolution ?? '2k'
+      const resolution = params.resolution ?? cfg.resolution ?? '1k'
       const imageModels = useGenerationStore.getState().imageModels
       const dbModel = imageModels.find((m) => m.code === modelType)
       const modelCode = dbModel?.params_pricing.find((rule) => rule.resolution === resolution)?.model
         ?? modelType
-        ?? 'gemini-3.1-flash-image-preview-2k'
+        ?? 'google/gemini-3.1-flash-image-preview'
 
       // Collect upstream image refs
       const upstreamEdges = edges.filter((e) => e.target === nodeId)

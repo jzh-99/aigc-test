@@ -2,6 +2,7 @@
 // autoload 会忽略以 _ 开头的文件，此文件仅供同目录路由 import
 
 import { getDb } from '@aigc/db'
+import { nanoBananaConfig } from '@aigc/nacos-config'
 import { recordLlmProviderCall, type LlmProviderAuditContext } from '../../lib/provider-api-audit.js'
 
 // 调用 LLM（nano_banana OpenAI 兼容接口）
@@ -11,9 +12,9 @@ export async function callLLM(
   maxTokens = 4000,
   auditContext?: Partial<LlmProviderAuditContext>,
 ): Promise<string> {
-  const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
-  const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
-  const AI_MODEL = process.env.NANO_BANANA_MODEL ?? ''
+  const AI_API_URL = nanoBananaConfig.apiUrl
+  const AI_API_KEY = nanoBananaConfig.apiKey
+  const AI_MODEL = nanoBananaConfig.model
   const endpoint = '/v1/chat/completions'
   const requestPayload = {
     model: AI_MODEL,

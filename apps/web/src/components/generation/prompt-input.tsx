@@ -22,7 +22,7 @@ export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
   const estimatedCredits = currentModel
     ? getPriceByResolution(currentModel, resolution) * quantity
     : quantity
-  const showQualitySelector = modelType !== 'gpt-image-2'
+  const showQualitySelector = true
   const { generate } = useGenerate()
 
   const handleGenerate = async () => {
@@ -73,14 +73,14 @@ export function PromptInput({ onBatchCreated, disabled }: PromptInputProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={modelType} onValueChange={(v) => setModelType(v as 'gemini' | 'gpt-image-2' | 'nano-banana-pro' | 'seedream-5.0-lite' | 'seedream-4.5' | 'seedream-4.0')} disabled={disabled}>
+        <Select value={modelType} onValueChange={(v) => setModelType(v)} disabled={disabled}>
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="模型" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="gemini">全能图片2</SelectItem>
-            <SelectItem value="gpt-image-2">超能图片2</SelectItem>
-            <SelectItem value="nano-banana-pro">全能图片Pro</SelectItem>
+            <SelectItem value="google/gemini-3.1-flash-image-preview">全能图片2</SelectItem>
+            <SelectItem value="openai/gpt-image-2">超能图片2</SelectItem>
+            <SelectItem value="google/gemini-3-pro-image-preview">全能图片Pro</SelectItem>
             <SelectItem value="seedream-5.0-lite">Seedream 5.0</SelectItem>
             <SelectItem value="seedream-4.5">Seedream 4.5</SelectItem>
             <SelectItem value="seedream-4.0">Seedream 4.0</SelectItem>

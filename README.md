@@ -30,6 +30,13 @@ codegraph query "UserService"  # 测试符号搜索
 ### 开发
 
 ```bash
+# 普通开发(默认,不连 Nacos)——和以前完全一样
+docker-compose up -d
+# 只起 postgres + redis
+
+# 想测热更链路时——额外起本地 Nacos
+docker-compose --profile nacos up -d
+
 # 启动所有服务（并行）
 pnpm dev
 
@@ -53,6 +60,7 @@ pnpm openapi:key -- c端联调
 pnpm --filter @aigc/api exec node --import tsx --test --test-name-pattern "会员信息查询" src/__tests__/toby-open-api.test.ts
 pnpm --filter @aigc/api exec node --import tsx --test --test-name-pattern "A豆流水查询" src/__tests__/toby-open-api.test.ts
 pnpm --filter @aigc/api exec node --import tsx --test --test-name-pattern "会员A豆余额查询" src/__tests__/toby-open-api.test.ts
+pnpm --filter @aigc/api exec node --import tsx --test --test-name-pattern "会员副卡变动" src/__tests__/toby-open-api.test.ts
 ```
 
 ### 数据库

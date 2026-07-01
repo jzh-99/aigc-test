@@ -31,6 +31,7 @@ temp
 *.tsbuildinfo
 apps/docs/out/
 logs/
+.codex-logs/
 .pnpm-build-approvals.json
 
 # Local docs

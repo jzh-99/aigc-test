@@ -10,6 +10,7 @@ import { URL } from 'node:url'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
+import { decodeDataUrl } from '../lib/data-url.js'
 import { getTos, getBucket, getPublicUrl, getStorageRuntimeInfo } from '../lib/storage.js'
 import { dispatchBatchResult } from '../lib/dispatch-result.js'
 import { buildLogger } from '../logger.js'
@@ -270,15 +271,29 @@ export const transferWorker = new Worker<TransferJobData>(
     logger.info({ jobId: job.id, taskId, assetId, assetType }, '开始处理 transfer 任务')
 
     try {
-      // SSRF 防护：校验 URL 合法性
-      validateExternalUrl(originalUrl)
-
-      // 下载 AI 生成的文件
-      const buffer = await downloadToBuffer(originalUrl)
+      // 获取待转存的二进制数据与 contentType。两条路径：
+      // - data: URL（Gemini 等适配器只能返回 inline base64）：就地解码，不经过 SSRF 校验，
+      //   因为它本身不是外部网络地址，无 SSRF 风险；contentType 取 data URL 里的真实 mime。
+      // - http/https URL：先做 SSRF 防护（validateExternalUrl 拦截私有地址/非常规协议），
+      //   再下载到 buffer；contentType 按 assetType 兜底（视频 mp4 / 图片 jpeg）。
+      const isDataUrl = originalUrl.startsWith('data:')
+      const ext = assetType === 'video' ? 'mp4' : 'jpg'
+      let buffer: Buffer
+      let contentType: string
+      if (isDataUrl) {
+        const decoded = decodeDataUrl(originalUrl)
+        buffer = decoded.buffer
+        contentType = decoded.contentType
+        logger.info({ jobId: job.id, taskId, contentType, size: buffer.length }, 'data: URL 已解码，直接上传 TOS（跳过 SSRF 与下载）')
+      } else {
+        // SSRF 防护：校验 URL 合法性
+        validateExternalUrl(originalUrl)
+        // 下载 AI 生成的文件
+        buffer = await downloadToBuffer(originalUrl)
+        contentType = assetType === 'video' ? 'video/mp4' : 'image/jpeg'
+      }
 
       // 上传到 TOS，key 格式：assets/{type}/{taskId}.{ext}
-      const ext = assetType === 'video' ? 'mp4' : 'jpg'
-      const contentType = assetType === 'video' ? 'video/mp4' : 'image/jpeg'
       const key = `assets/${assetType}/${taskId}.${ext}`
       const storageUrl = await uploadToTos(key, buffer, contentType)
 

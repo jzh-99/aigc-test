@@ -12,23 +12,9 @@ import { getDb, recordProviderApiLog } from '@aigc/db'
 import { getAdapter } from './adapters/factory.js'
 import { completePipeline } from './pipelines/complete.js'
 import { failPipeline } from './pipelines/fail.js'
-import { transferWorker } from './workers/transfer.js'
-import { videoSubmitWorker } from './workers/video-submit.js'
-import { storyboardWorker } from './workers/storyboard.js'
-import { musicWorker } from './workers/music.js'
-import { musicVoiceCloneWorker } from './workers/music-voice-clone.js'
-import { cronWorker, scheduleCronJobs } from './workers/cron-worker.js'
-import { shortDramaExportWorker } from './workers/short-drama-export.js'
-import { openApiCallbackWorker } from './workers/open-api-callback.js'
-import { storybookWorker } from './workers/storybook.js'
-import { podcastWorker } from './workers/podcast.js'
-import { newsWorker } from './workers/news.js'
-import { startBizMgmtNotifyWorker } from './workers/biz-mgmt-notify.js'
 import { getRedis, getBullMQConnection, closeRedis } from './lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from './lib/queue-options.js'
-import { startVideoPoller } from './pollers/video-poller.js'
-import { startAvatarPoller } from './pollers/avatar-poller.js'
-import { startActionImitationPoller } from './pollers/action-imitation-poller.js'
+import { loadNacosConfig, systemConfig } from '@aigc/nacos-config'
 
 const logger = buildLogger()
 
@@ -37,7 +23,8 @@ const logger = buildLogger()
 const WORKER_LOCK_KEY = `worker:singleton:lock:${hostname()}`
 const LOCK_TTL_MS = 10_000 // 10 秒，心跳续期间隔的 2 倍
 const LOCK_VALUE = String(process.pid)
-const IMAGE_ADAPTER_TIMEOUT_MS = 330_000 // 5.5 分钟，早于 timeout-guardian 的 6 分钟兜底
+// 图片任务总兜底超时改走 systemConfig（Nacos 可热更），不再顶层常量。
+// 取值须 < timeout-guardian 的 IMAGE_GUARDIAN_TIMEOUT_MS（默认 360s）。
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -67,6 +54,48 @@ if (!lockAcquired) {
   logger.error({ existingPid }, '另一个 worker 实例正在运行，当前进程退出。请先停止旧进程再重启。')
   process.exit(1)
 }
+
+// ─── Nacos 远程配置加载 ──────────────────────────────────────────────────────
+// 方案 B：AI 供应商配置只认 Nacos。启动时会先清理本地 AI env，再从 Nacos 拉取并写回；
+// Nacos 不可用或 dataId 拉取失败会阻断启动，避免 .env 旧值兜底。
+// 具体供应商 key 是否为空，由实际调用的 adapter/service 做精确校验。
+await loadNacosConfig()
+
+// 这些模块在顶层会创建 BullMQ Worker。必须等单实例锁和 Nacos 初始化成功后再加载，
+// 否则锁失败/配置失败的进程也会短暂启动消费者，甚至留下后台副作用。
+const [
+  { transferWorker },
+  { videoSubmitWorker },
+  { storyboardWorker },
+  { musicWorker },
+  { musicVoiceCloneWorker },
+  { cronWorker, scheduleCronJobs },
+  { shortDramaExportWorker },
+  { openApiCallbackWorker },
+  { storybookWorker },
+  { podcastWorker },
+  { newsWorker },
+  { startBizMgmtNotifyWorker },
+  { startVideoPoller },
+  { startAvatarPoller },
+  { startActionImitationPoller },
+] = await Promise.all([
+  import('./workers/transfer.js'),
+  import('./workers/video-submit.js'),
+  import('./workers/storyboard.js'),
+  import('./workers/music.js'),
+  import('./workers/music-voice-clone.js'),
+  import('./workers/cron-worker.js'),
+  import('./workers/short-drama-export.js'),
+  import('./workers/open-api-callback.js'),
+  import('./workers/storybook.js'),
+  import('./workers/podcast.js'),
+  import('./workers/news.js'),
+  import('./workers/biz-mgmt-notify.js'),
+  import('./pollers/video-poller.js'),
+  import('./pollers/avatar-poller.js'),
+  import('./pollers/action-imitation-poller.js'),
+])
 
 // 心跳续期：每 5 秒续期一次，防止锁过期被其他进程抢占
 const lockHeartbeat = setInterval(async () => {
@@ -137,10 +166,11 @@ const imageWorker = new Worker<GenerationJobData>(
         prompt: data.prompt,
         params: data.params,
       }
+      const imageTimeoutMs = systemConfig.imageAdapterTimeoutMs
       const result = await withTimeout(
         adapter.generateImage(providerRequest),
-        IMAGE_ADAPTER_TIMEOUT_MS,
-        `Image adapter timed out after ${IMAGE_ADAPTER_TIMEOUT_MS}ms`,
+        imageTimeoutMs,
+        `Image adapter timed out after ${imageTimeoutMs}ms`,
       )
       const aiElapsed = Date.now() - aiStart
       await recordProviderApiLog({

@@ -1,6 +1,5 @@
 import { recordProviderApiLog } from '@aigc/db'
-
-const DEFAULT_MINIMAX_TTS_TIMEOUT_MS = 30000
+import { minimaxConfig } from '@aigc/nacos-config'
 
 interface MiniMaxTtsInput {
   apiBaseUrl: string
@@ -37,13 +36,13 @@ interface MiniMaxTtsResponse {
 }
 
 function getMiniMaxApiKey(): string {
-  const apiKey = process.env.MINIMAX_API_KEY ?? ''
+  const apiKey = minimaxConfig.apiKey
   if (!apiKey) throw new Error('MINIMAX_API_KEY is required')
   return apiKey
 }
 
 function getMiniMaxGroupId(): string | null {
-  return process.env.MINIMAX_GROUP_ID ?? null
+  return minimaxConfig.groupId || null
 }
 
 function buildMiniMaxUrl(apiBaseUrl: string): string {
@@ -104,7 +103,7 @@ export function parseMiniMaxStreamingAudioBuffer(rawText: string): Buffer {
 
 export async function generateMiniMaxTtsAudio(input: MiniMaxTtsInput): Promise<Buffer> {
   const controller = new AbortController()
-  const timeoutMs = Number.parseInt(process.env.MINIMAX_TTS_TIMEOUT_MS ?? String(DEFAULT_MINIMAX_TTS_TIMEOUT_MS), 10)
+  const timeoutMs = minimaxConfig.ttsTimeoutMs
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   const requestPayload = {
     model: input.model,

@@ -196,7 +196,7 @@ async function fetchWithBackoff(input: RequestInfo | URL, init?: RequestInit, ma
 
 export async function executeCanvasNode(params: ExecuteNodeParams, token?: string) {
   const cfg = params.config
-  const modelCode = cfg.modelCode || cfg.model || 'gemini-3.1-flash-image-preview-2k'
+  const modelCode = cfg.modelCode || cfg.model || 'google/gemini-3.1-flash-image-preview'
 
   const payload: {
     idempotency_key: string
@@ -222,7 +222,7 @@ export async function executeCanvasNode(params: ExecuteNodeParams, token?: strin
     prompt: cfg.prompt || '',
     params: {
       aspect_ratio: cfg.aspectRatio || '1:1',
-      ...(modelCode === 'gpt-image-2' ? {} : { resolution: cfg.resolution || '2k' }),
+      resolution: cfg.resolution || '1k',
       ...(cfg.watermark !== undefined ? { watermark: cfg.watermark } : {}),
     },
   }

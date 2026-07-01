@@ -1,5 +1,6 @@
 import { recordProviderApiLog, type ProviderApiLogInput } from '@aigc/db'
 import type { MusicLyricsSection, MusicModel, MusicVoiceGender } from '@aigc/types'
+import { murekaConfig } from '@aigc/nacos-config'
 import { buildLogger } from '../logger.js'
 import { downloadMusicFile } from './music-storage.js'
 import { recordProviderPollAudit } from './provider-poll-audit.js'
@@ -90,13 +91,13 @@ export class MurekaApiError extends Error {
 }
 
 function normalizeBaseUrl(baseUrl: string | undefined): string {
-  const normalized = (baseUrl ?? process.env.MUREKA_API_URL ?? '').trim().replace(/\/+$/, '')
+  const normalized = (baseUrl ?? murekaConfig.apiUrl).trim().replace(/\/+$/, '')
   if (!normalized) throw new MurekaApiError('MUREKA_API_URL 未配置')
   return normalized
 }
 
 function resolveApiKey(apiKey: string | undefined): string {
-  const normalized = (apiKey ?? process.env.MUREKA_API_KEY ?? '').trim()
+  const normalized = (apiKey ?? murekaConfig.apiKey).trim()
   if (!normalized) throw new MurekaApiError('MUREKA_API_KEY 未配置')
   return normalized
 }

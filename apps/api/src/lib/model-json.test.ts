@@ -32,25 +32,25 @@ describe('normalizeModelJsonFields', () => {
 
   test('把单条规则对象形式的 params_pricing 规范化为数组', () => {
     const model = normalizeModelJsonFields({
-      params_pricing: { resolution: '2k', model: 'gpt-image-2', unit_price: 2 },
+      params_pricing: { resolution: '1k', model: 'openai/gpt-image-2', unit_price: 2 },
     })
 
     assert.deepEqual(model.params_pricing, [
-      { resolution: '2k', model: 'gpt-image-2', unit_price: 2 },
+      { resolution: '1k', model: 'openai/gpt-image-2', unit_price: 2 },
     ])
   })
 
   test('把数字键对象形式的 params_pricing 规范化为数组', () => {
     const model = normalizeModelJsonFields({
       params_pricing: {
-        0: { resolution: '1k', model: 'nano-banana-2', unit_price: 4 },
-        1: { resolution: '2k', model: 'nano-banana-2-2k', unit_price: 4 },
+        0: { resolution: '1k', model: 'google/gemini-3-pro-image-preview', unit_price: 2 },
+        1: { resolution: '2k', model: 'google/gemini-3-pro-image-preview', unit_price: 2 },
       },
     })
 
     assert.deepEqual(model.params_pricing, [
-      { resolution: '1k', model: 'nano-banana-2', unit_price: 4 },
-      { resolution: '2k', model: 'nano-banana-2-2k', unit_price: 4 },
+      { resolution: '1k', model: 'google/gemini-3-pro-image-preview', unit_price: 2 },
+      { resolution: '2k', model: 'google/gemini-3-pro-image-preview', unit_price: 2 },
     ])
   })
 })

@@ -11,43 +11,43 @@ describe('provider models json converter', () => {
       {
         modelParams: [
           {
-            modelCode: 'gpt-image-2',
+            modelCode: 'openai/gpt-image-2',
             modelType: '1',
             modelName: '超能图片2',
             modelDesc: '文字渲染准确',
-            modelProvider: 'comfly',
+            modelProvider: 'tokenbus',
             useChannel: 'B,C',
             singleUnit: 'fix',
             paramsSchema: {
-              resolution: ['2k'],
+              resolution: ['1k'],
               aspect_ratio: [{ label: '1:1', value: '1:1' }],
             },
             paramsPricing: [
-              { model: 'gpt-image-2', resolution: '2k', unit_price: 2 },
+              { model: 'openai/gpt-image-2', resolution: '1k', unit_price: 2 },
             ],
           },
         ],
       },
     ])
 
-    assert.equal(rows[0].provider_code, 'comfly')
-    assert.equal(rows[0].code, 'gpt-image-2')
+    assert.equal(rows[0].provider_code, 'tokenbus')
+    assert.equal(rows[0].code, 'openai/gpt-image-2')
     assert.equal(rows[0].name, '超能图片2')
     assert.equal(rows[0].description, '文字渲染准确')
     assert.equal(rows[0].module, 'image')
     assert.deepEqual(rows[0].params_schema, {
-      resolution: ['2k'],
+      resolution: ['1k'],
       aspect_ratio: [{ label: '1:1', value: '1:1' }],
     })
     assert.deepEqual(rows[0].params_pricing, [
-      { model: 'gpt-image-2', resolution: '2k', unit_price: 2 },
+      { model: 'openai/gpt-image-2', resolution: '1k', unit_price: 2 },
     ])
-    assert.equal(rows[0].resolution, '2k')
+    assert.equal(rows[0].resolution, '1k')
     assert.equal(rows[0].avatar, null)
     assert.equal(rows[0].is_active, true)
     assert.equal(
-      (rows[0].category_references.image_to_image as { limits: { image: { max: number } } }).limits.image.max,
-      6,
+      'image_to_image' in rows[0].category_references,
+      false,
     )
   })
 

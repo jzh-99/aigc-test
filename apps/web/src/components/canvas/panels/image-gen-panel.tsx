@@ -61,7 +61,7 @@ export function ImageGenPanel({
     ? getPriceByResolution(currentDbModel, resolution)
     : 0
 
-  const showQualitySelector = modelType !== 'gpt-image-2' && resolutions.length > 1
+  const showQualitySelector = resolutions.length > 1
 
   // 构建模型选项列表
   const modelOptions = (models ?? []).map((m) => {

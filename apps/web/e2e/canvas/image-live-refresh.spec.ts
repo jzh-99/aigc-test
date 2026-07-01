@@ -110,7 +110,7 @@ test('refreshes image node preview and asset library when a generated image repl
                 batch_id: 'batch-image-new',
                 canvas_node_id: nodeId,
                 prompt: '一只白猫',
-                model: 'gemini-3.1-flash-image-preview',
+                model: 'google/gemini-3.1-flash-image-preview',
               },
             ]
           : [],

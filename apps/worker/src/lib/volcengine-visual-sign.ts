@@ -5,6 +5,7 @@
  * Reference: https://www.volcengine.com/docs/6369/67269
  */
 import crypto from 'node:crypto'
+import { volcengineConfig } from '@aigc/nacos-config'
 
 const REGION = 'cn-north-1'
 const SERVICE = 'cv'
@@ -29,8 +30,8 @@ export function buildSignedRequest(
   version: string,
   body: Record<string, unknown>,
 ): { url: string; headers: Record<string, string>; body: string } {
-  const ak = process.env.VOLCENGINE_ACCESS_KEY ?? ''
-  const sk = process.env.VOLCENGINE_SECRET_KEY ?? ''
+  const ak = volcengineConfig.accessKey
+  const sk = volcengineConfig.secretKey
 
   const now = new Date()
   const datestamp = now.toISOString().slice(0, 10).replace(/-/g, '') // e.g. 20240101

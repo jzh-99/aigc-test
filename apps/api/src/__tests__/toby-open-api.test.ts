@@ -70,7 +70,7 @@ const TOBY_TEST_DATA = {
   memberSubCard: {
     phone: '13111111111',
     userName: '13111111111',
-    belongId: 'cfa57951-1824-4aca-8f71-77f48055f661',
+    belongId: 'D875BB9D3CCC4FA8A1F14569686739D9',
   },
   memberRegister: {
     phone: '17714420972',

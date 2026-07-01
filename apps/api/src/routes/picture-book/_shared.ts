@@ -6,6 +6,7 @@ import {
   normalizePictureBookState,
   type PictureBookAssetKind,
 } from '@aigc/types'
+import { qwenConfig } from '@aigc/nacos-config'
 import { recordLlmProviderCall, type LlmProviderAuditContext } from '../../lib/provider-api-audit.js'
 
 export const PICTURE_BOOK_MODELS = {
@@ -79,8 +80,8 @@ export async function callPictureBookQwenStream(
   auditContext: Partial<LlmProviderAuditContext>,
   callbacks: PictureBookStreamCallbacks,
 ): Promise<string> {
-  const apiUrl = process.env.QWEN_API_URL ?? ''
-  const apiKey = process.env.QWEN_API_KEY ?? ''
+  const apiUrl = qwenConfig.apiUrl
+  const apiKey = qwenConfig.apiKey
   const endpoint = '/chat/completions'
   const requestPayload = {
     model: PICTURE_BOOK_MODELS.text,
@@ -217,8 +218,8 @@ export async function callPictureBookQwen(
   maxTokens: number,
   auditContext: Partial<LlmProviderAuditContext>,
 ): Promise<string> {
-  const apiUrl = process.env.QWEN_API_URL ?? ''
-  const apiKey = process.env.QWEN_API_KEY ?? ''
+  const apiUrl = qwenConfig.apiUrl
+  const apiKey = qwenConfig.apiKey
   const endpoint = '/chat/completions'
   const requestPayload = {
     model: PICTURE_BOOK_MODELS.text,

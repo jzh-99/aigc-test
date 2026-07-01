@@ -44,7 +44,7 @@
 
   Worker 消费 image-queue
     → 更新 task.status = 'processing'
-    → 调用 AI 适配器（NanoBanana 或 火山引擎）
+    → 调用 AI 适配器（Tokenbus / 火山引擎 / 天翼云）
 
   成功 → completePipeline（事务）
     → 插入 assets 记录

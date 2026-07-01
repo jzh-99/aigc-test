@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
+import { qwenConfig } from '@aigc/nacos-config'
 import { getStoryboardQueue } from '../../lib/queue.js'
 
 // POST /canvas-agent/storyboard-split — 分镜拆分任务入队（BullMQ 异步）
@@ -70,7 +71,7 @@ const route: FastifyPluginAsync = async (app) => {
             source: 'canvas',
             module: 'storyboard',
             provider: 'qwen',
-            model: process.env.QWEN_MODEL ?? 'qwen3.6-plus',
+            model: qwenConfig.model,
             prompt: script.slice(0, 500),
             params: JSON.stringify({ shotCount }),
             quantity: 1,

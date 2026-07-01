@@ -33,7 +33,7 @@ export function InspirationLightbox({ item, open, onOpenChange }: InspirationLig
     const params = new URLSearchParams({
       mode: 'image',
       prompt: item.description,
-      model: 'gpt-image-2',
+      model: 'openai/gpt-image-2',
     })
     router.push(`/generation?${params.toString()}`)
   }

@@ -53,7 +53,7 @@ export function useGenerate() {
 
       const params: Record<string, unknown> = {
         aspect_ratio: aspectRatio,
-        ...(model === 'gpt-image-2' ? {} : { resolution }),
+        resolution,
         watermark,
       }
 

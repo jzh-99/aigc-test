@@ -67,8 +67,8 @@ interface Props {
 
 const DEFAULT_IMAGE_CONFIG: ImageGenConfig = {
   prompt: '',
-  modelType: 'gemini-3.1-flash-image-preview',
-  resolution: '2k',
+  modelType: 'google/gemini-3.1-flash-image-preview',
+  resolution: '1k',
   aspectRatio: '1:1',
   quantity: 1,
   watermark: false,

@@ -22,6 +22,7 @@ import { sql } from 'kysely'
 import { ErrorCode } from '@aigc/types'
 import type { PodcastJobData } from '@aigc/types'
 import { getDb, recordProviderApiLog } from '@aigc/db'
+import { podcastConfig } from '@aigc/nacos-config'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { dispatchBatchResult } from '../lib/dispatch-result.js'
 import { transferMusicUrl } from '../lib/music-storage.js'
@@ -36,15 +37,15 @@ import { resolvePodcastContent } from '../providers/podcast-content.js'
 
 const logger = buildLogger()
 
-// sami 配置（从环境变量读取，对齐源 config.py 的 PODCAST_* 配置）
+// sami 配置（从 Nacos getter 读取，对齐源 config.py 的 PODCAST_* 配置）
 function buildPodcastTtsConfig(): PodcastTtsConfig {
   return {
-    wsUrl: process.env.PODCAST_WS_URL ?? '',
-    appId: process.env.PODCAST_APP_ID ?? '',
-    accessKey: process.env.PODCAST_ACCESS_KEY ?? '',
-    resourceId: process.env.PODCAST_RESOURCE_ID ?? '',
-    appKey: process.env.PODCAST_APP_KEY ?? '',
-    timeoutSeconds: Number(process.env.PODCAST_TIMEOUT_SECONDS ?? '120'),
+    wsUrl: podcastConfig.wsUrl,
+    appId: podcastConfig.appId,
+    accessKey: podcastConfig.accessKey,
+    resourceId: podcastConfig.resourceId,
+    appKey: podcastConfig.appKey,
+    timeoutSeconds: podcastConfig.timeoutSeconds,
   }
 }
 
