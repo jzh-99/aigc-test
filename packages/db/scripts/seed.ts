@@ -308,6 +308,17 @@ async function main() {
       image: [],
     },
   }
+  const TOKENBUS_GEMINI_IMAGE_SCHEMA = {
+    params_pricing_template: (model: string, unitPrice: number) => [
+      { resolution: '1k', model, unit_price: unitPrice },
+      { resolution: '2k', model, unit_price: unitPrice },
+    ],
+    params_schema: {
+      resolution: ['1k', '2k'],
+      aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
+      image: [],
+    },
+  }
 
   const imageModels = [
     // ---- Comfly 历史模型，code / 能力字段原样保留 ----
@@ -362,8 +373,8 @@ async function main() {
       name: '全能图片2(新版)',
       description: '快速生成，适合日常使用',
       avatar: llmAvatar('nanoBanana'),
-      params_pricing: GEMINI_FLASH_IMAGE_SCHEMA.params_pricing_template('google/gemini-3.1-flash-image-preview'),
-      params_schema: GEMINI_FLASH_IMAGE_SCHEMA.params_schema,
+      params_pricing: TOKENBUS_GEMINI_IMAGE_SCHEMA.params_pricing_template('google/gemini-3.1-flash-image-preview', 1),
+      params_schema: TOKENBUS_GEMINI_IMAGE_SCHEMA.params_schema,
       category_references: SIX_IMAGE_CATEGORY_REFERENCES,
     },
     {
@@ -391,15 +402,9 @@ async function main() {
       description: '高质量输出，细节丰富',
       avatar: llmAvatar('nanoBanana'),
       params_pricing: [
-        { resolution: '1k', model: 'google/gemini-3-pro-image-preview', unit_price: 4 },
-        { resolution: '2k', model: 'google/gemini-3-pro-image-preview', unit_price: 4 },
-        { resolution: '4k', model: 'google/gemini-3-pro-image-preview', unit_price: 4 },
+        ...TOKENBUS_GEMINI_IMAGE_SCHEMA.params_pricing_template('google/gemini-3-pro-image-preview', 4),
       ],
-      params_schema: {
-        resolution: ['1k', '2k', '4k'],
-        aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
-        image: [],
-      },
+      params_schema: TOKENBUS_GEMINI_IMAGE_SCHEMA.params_schema,
       category_references: SIX_IMAGE_CATEGORY_REFERENCES,
     },
   ]
