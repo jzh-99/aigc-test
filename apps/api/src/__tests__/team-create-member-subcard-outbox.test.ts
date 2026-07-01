@@ -54,6 +54,28 @@ describe('team create-member synchronously calls Toby MEMBER-1002 before writing
     assert.match(source, /BIZ_MGMT_SUBCARD_UNREACHABLE/, '调用异常错误码 BIZ_MGMT_SUBCARD_UNREACHABLE')
   })
 
+  test('本地账号必须与业管副卡绑定：成功创建取响应 userId，已存在用 MEMBER-1001 补查', async () => {
+    const source = await readFile(
+      join(__dirname, '../routes/teams/post-create-member.ts'),
+      'utf8',
+    )
+    // 业管「会员已存在」识别：必须按 message 文案判断（业管该错误无稳定业务码），命中不 502
+    assert.match(source, /已存在\|已注册\|已经存在/, '必须按 message 文案识别「会员已存在」')
+    assert.match(source, /memberAlreadyExists = true/, '命中「已存在」时置位标记位')
+    // 业管 0000 成功时必须取响应回传的副卡 userId（否则账号与业管副卡对不上、A 豆查不到）
+    assert.match(source, /tobyRes\.decryptedData\?\.userId/, '0000 成功必须取业管响应的副卡 userId')
+    // 绑定写入是必做项（不能只在「已存在」分支写，成功创建同样要写，否则新成员 A 豆丢失）
+    assert.match(source, /fetchBizMgmtMembersByPhone\(identifier\)/, '必须调 MEMBER-1001 补查副卡完整身份')
+    assert.match(source, /insertInto\('biz_mgmt_member_bindings'\)/, '必须写副卡绑定')
+    assert.match(source, /biz_mgmt_user_id: subMember\.bizMgmtUserId/, '绑定需写入补查到的副卡 userId')
+    // 已知 userId 时精确匹配该副卡（避免一手机号多副卡取错）
+    assert.match(source, /m\.bizMgmtUserId === subBizMgmtUserId/, '已知 userId 时必须精确匹配')
+    // 无已知 userId 时按「公司副卡（userType=2 且 !isMaster 且 status=1）」筛选
+    assert.match(source, /m\.userType === '2' && !m\.isMaster && m\.status === 1/, '无 userId 时按公司副卡筛选')
+    // 同一 biz_mgmt_user_id 已有旧绑定（可能绑错）时必须覆盖更新，纠正错误绑定
+    assert.match(source, /column\('biz_mgmt_user_id'\)\.doUpdateSet/, '绑定冲突时必须覆盖更新（纠正旧错绑定）')
+  })
+
   test('调业管的 payload 仍包含现行 MEMBER-1002 契约字段（compName/channel/initialPointsNum 已移除）', async () => {
     const source = await readFile(
       join(__dirname, '../routes/teams/post-create-member.ts'),

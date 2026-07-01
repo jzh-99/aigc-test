@@ -91,6 +91,12 @@ export interface TobyMemberSubCardRequest {
   belongId: string
 }
 
+// 业管 MEMBER-1002 响应解密载荷：新建成功时回传副卡会员编号 userId。
+// 「会员已存在」时业管不一定回传 userId，调用方需用 MEMBER-1001 补查。
+export interface TobyMemberSubCardResponse {
+  userId?: string
+}
+
 export interface TobyMemberRegisterRequest {
   phone: string
   userName: string
@@ -431,7 +437,7 @@ export function syncTobySubscribe(payload: TobySubscribeRequest) {
 }
 
 export function syncTobyMemberSubCard(payload: TobyMemberSubCardRequest) {
-  return callTobyApi('/api/toby/member/sub-card', TOBY_SERVICE_CODES.memberSubCard, payload)
+  return callTobyApi<TobyMemberSubCardResponse>('/api/toby/member/sub-card', TOBY_SERVICE_CODES.memberSubCard, payload)
 }
 
 export function registerTobyMember(payload: TobyMemberRegisterRequest) {
