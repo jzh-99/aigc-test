@@ -59,6 +59,22 @@ test('Tokenbus Gemini Pro 使用 Gemini 原生 generateContent 路径', () => {
   })
 })
 
+test('Tokenbus Gemini Pro 4K 请求透传 imageSize=4K', () => {
+  const request = buildTokenbusImageRequest({
+    model: 'google/gemini-3-pro-image-preview',
+    prompt: '海绵宝宝和他的朋友们',
+    params: {
+      resolution: '4k',
+      aspect_ratio: '9:16',
+    },
+  })
+
+  assert.deepEqual((request.body.generationConfig as any).imageConfig, {
+    aspectRatio: '9:16',
+    imageSize: '4K',
+  })
+})
+
 test('Tokenbus Gemini 保留 3:2 和 2:3 比例，避免回退成方图', () => {
   const landscape = buildTokenbusImageRequest({
     model: 'google/gemini-3-pro-image-preview',

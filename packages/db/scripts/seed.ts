@@ -312,9 +312,10 @@ async function main() {
     params_pricing_template: (model: string, unitPrice: number) => [
       { resolution: '1k', model, unit_price: unitPrice },
       { resolution: '2k', model, unit_price: unitPrice },
+      { resolution: '4k', model, unit_price: unitPrice },
     ],
     params_schema: {
-      resolution: ['1k', '2k'],
+      resolution: ['1k', '2k', '4k'],
       aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
       image: [],
     },

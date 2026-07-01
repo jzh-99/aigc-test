@@ -74,7 +74,7 @@
         "useChannel": "B,C",
         "singleUnit": "fix",
         "paramsSchema": {
-          "resolution": ["1k", "2k"],
+          "resolution": ["1k", "2k", "4k"],
           "aspect_ratio": [
             {
               "label": "1:1",
@@ -117,6 +117,11 @@
             "model": "google/gemini-3-pro-image-preview",
             "resolution": "2k",
             "unit_price": 4
+          },
+          {
+            "model": "google/gemini-3-pro-image-preview",
+            "resolution": "4k",
+            "unit_price": 4
           }
         ]
       }
@@ -133,7 +138,7 @@
         "useChannel": "B,C",
         "singleUnit": "fix",
         "paramsSchema": {
-          "resolution": ["1k", "2k"],
+          "resolution": ["1k", "2k", "4k"],
           "aspect_ratio": [
             {
               "label": "1:1",
@@ -175,6 +180,11 @@
           {
             "model": "google/gemini-3.1-flash-image-preview",
             "resolution": "2k",
+            "unit_price": 1
+          },
+          {
+            "model": "google/gemini-3.1-flash-image-preview",
+            "resolution": "4k",
             "unit_price": 1
           }
         ]

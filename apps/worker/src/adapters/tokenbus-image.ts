@@ -83,8 +83,12 @@ function resolveGeminiAspectRatio(aspectRatio: unknown): AspectRatio {
     : '1:1'
 }
 
-function resolveGeminiImageSize(resolution: unknown): '1K' | '2K' {
-  return typeof resolution === 'string' && resolution.toLowerCase() === '2k' ? '2K' : '1K'
+function resolveGeminiImageSize(resolution: unknown): '1K' | '2K' | '4K' {
+  if (typeof resolution !== 'string') return '1K'
+  const normalized = resolution.toLowerCase()
+  if (normalized === '4k') return '4K'
+  if (normalized === '2k') return '2K'
+  return '1K'
 }
 
 export function buildTokenbusImageRequest(params: {
