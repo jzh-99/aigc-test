@@ -1,11 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { recordLlmProviderCall } from '../../lib/provider-api-audit.js'
+// Nano Banana 配置走 getter 门面，支持 Nacos 热更（改 key/model 免重启）。详见 @aigc/nacos-config。
+import { nanoBananaConfig, systemConfig } from '@aigc/nacos-config'
 
 // POST /canvas-agent/script-write — AI 剧本生成
 const route: FastifyPluginAsync = async (app) => {
-  const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
-  const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
-  const AI_MODEL = process.env.NANO_BANANA_MODEL ?? ''
   const SCRIPT_WRITER_SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_SCRIPT_WRITER ?? ''
 
   app.post<{
@@ -32,13 +31,13 @@ const route: FastifyPluginAsync = async (app) => {
 
       const userPrompt = `风格：${style}\n目标时长：${duration}秒（约${shotCount}个镜头）\n\n用户描述：${description}`
       const requestPayload = {
-        model: AI_MODEL,
+        model: nanoBananaConfig.model,
         messages: [
           { role: 'system', content: SCRIPT_WRITER_SYSTEM_PROMPT },
           { role: 'user', content: userPrompt },
         ],
         stream: false,
-        max_tokens: 4000,
+        max_tokens: systemConfig.canvasAgentScriptMaxTokens,
       }
 
       const controller = new AbortController()
@@ -47,11 +46,11 @@ const route: FastifyPluginAsync = async (app) => {
 
       let res: Response
       try {
-        res = await fetch(`${AI_API_URL}${endpoint}`, {
+        res = await fetch(`${nanoBananaConfig.apiUrl}${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${AI_API_KEY}`,
+            Authorization: `Bearer ${nanoBananaConfig.apiKey}`,
           },
           body: JSON.stringify(requestPayload),
           signal: controller.signal,
@@ -62,7 +61,7 @@ const route: FastifyPluginAsync = async (app) => {
           userId: request.user.id,
           module: 'agent',
           provider: 'nano-banana',
-          model: AI_MODEL,
+          model: nanoBananaConfig.model,
           operation: 'script.generate',
           endpoint,
           requestPayload,
@@ -81,7 +80,7 @@ const route: FastifyPluginAsync = async (app) => {
           userId: request.user.id,
           module: 'agent',
           provider: 'nano-banana',
-          model: AI_MODEL,
+          model: nanoBananaConfig.model,
           operation: 'script.generate',
           endpoint,
           requestPayload,
@@ -100,7 +99,7 @@ const route: FastifyPluginAsync = async (app) => {
         userId: request.user.id,
         module: 'agent',
         provider: 'nano-banana',
-        model: AI_MODEL,
+        model: nanoBananaConfig.model,
         operation: 'script.generate',
         endpoint,
         requestPayload,

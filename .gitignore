@@ -10,6 +10,8 @@ dist/
 .playwright-mcp
 .vscode/
 .superpowers/
+deploy/nacos/configs/*.properties
+!deploy/nacos/configs/*.properties.example
 
 # Local Claude/session state
 .claude

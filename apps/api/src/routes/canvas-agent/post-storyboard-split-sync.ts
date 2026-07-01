@@ -1,11 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { qwenConfig, systemConfig } from '@aigc/nacos-config'
 import { recordLlmProviderCall } from '../../lib/provider-api-audit.js'
 
 // POST /canvas-agent/storyboard-split-sync — 同步分镜拆分（供 wizard 流程使用，不走队列）
 const route: FastifyPluginAsync = async (app) => {
-  const API_URL = process.env.QWEN_API_URL ?? ''
-  const API_KEY = process.env.QWEN_API_KEY ?? ''
-  const MODEL = process.env.QWEN_MODEL ?? 'qwen3.6-plus'
   const SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_STORYBOARD_SPLIT ?? ''
   const STORYBOARD_SEGMENT_DURATION_INSTRUCTION = '每个分镜约3-5秒，该时段内展示的分镜不宜过长'
   const CHINESE_STORYBOARD_OUTPUT_INSTRUCTION = [
@@ -38,6 +36,10 @@ const route: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { script, shotCount } = request.body
+      // 每次请求实时读取 Nacos getter，支持热更（改 key/model 免重启）。
+      const API_URL = qwenConfig.apiUrl
+      const API_KEY = qwenConfig.apiKey
+      const MODEL = qwenConfig.model
       const endpoint = '/chat/completions'
 
       const countInstruction = shotCount > 0
@@ -52,7 +54,7 @@ const route: FastifyPluginAsync = async (app) => {
         ],
         stream: false,
         enable_thinking: true,
-        max_tokens: 16000,
+        max_tokens: systemConfig.canvasAgentStoryboardMaxTokens,
       }
 
       const controller = new AbortController()

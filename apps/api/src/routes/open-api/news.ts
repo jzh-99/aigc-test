@@ -18,6 +18,8 @@ import { getNewsQueue } from '../../lib/queue.js'
 import { successResponse } from '../../lib/open-api-errors.js'
 import { OPENAPI_COMMON_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
+// 资讯模型 id 走 getter 门面，支持 Nacos 热更（改 model 免重启）。详见 @aigc/nacos-config。
+import { doubaoConfig } from '@aigc/nacos-config'
 
 // 请求体 schema（对齐源 schemas/news.py:NewsGenerateRequest）
 // date 格式 YYYY-MM-DD（对齐源 field_validator 的 strptime 校验）
@@ -36,7 +38,7 @@ const NEWS_BODY = {
 }
 
 // 资讯生成模型（对齐源 config.py:ark_news_model，worker 侧也从 env 读，此处仅用于 params 快照）
-const DOUBAO_NEWS_MODEL = process.env.DOUBAO_NEWS_MODEL ?? 'doubao-seed-2-0-code-preview-260215'
+// 通过 doubaoConfig.newsModel getter 实时读取，支持 Nacos 热更。
 
 const route: FastifyPluginAsync = async (app) => {
   app.post(
@@ -74,7 +76,7 @@ const route: FastifyPluginAsync = async (app) => {
         callbackUrl: b.callback_url,
         module: 'news',
         provider: 'ark',
-        model: DOUBAO_NEWS_MODEL,
+        model: doubaoConfig.newsModel,
         prompt: b.prompt,
         params: { date: b.date },
       })

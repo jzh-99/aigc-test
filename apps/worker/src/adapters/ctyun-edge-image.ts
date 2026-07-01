@@ -1,8 +1,5 @@
+import { ctyunEdgeConfig, systemConfig } from '@aigc/nacos-config'
 import type { AdapterGenerateResult, ImageGenerationAdapter } from './base.js'
-
-const CTYUN_EDGE_IMAGE_MODEL_ID: Record<string, string> = {
-  'ctyun-seedream-5.0-lite': 'ctyun-seedream-5.0-lite',
-}
 
 type Resolution = '1k' | '2k' | '3k' | '4k'
 type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4'
@@ -55,10 +52,8 @@ export function buildCtyunEdgeImageBody(params: {
   prompt: string
   params: Record<string, unknown>
 }): Record<string, unknown> {
-  const gatewayModel = CTYUN_EDGE_IMAGE_MODEL_ID[params.model]
-  if (!gatewayModel) {
-    throw new Error(`未知的天翼云边缘图片模型: ${params.model}`)
-  }
+  // DB 的 params_pricing.model 已是真实 API id（经 resolveUnitPrice 透传），adapter 直传，不再映射。
+  const gatewayModel = params.model
 
   const resolution = typeof params.params.resolution === 'string'
     ? params.params.resolution
@@ -89,8 +84,11 @@ export class CtyunEdgeImageAdapter implements ImageGenerationAdapter {
   private readonly apiKey: string
 
   constructor() {
-    this.apiBaseUrl = (process.env.CTYUN_EDGE_API_BASE_URL || 'https://ai.ctaigw.cn/v1').replace(/\/$/, '')
-    this.apiKey = process.env.CTYUN_EDGE_API_KEY || ''
+    this.apiBaseUrl = ctyunEdgeConfig.apiBaseUrl.replace(/\/$/, '')
+    this.apiKey = ctyunEdgeConfig.apiKey
+    if (!this.apiBaseUrl) {
+      throw new Error('CTYUN_EDGE_API_BASE_URL is required')
+    }
     if (!this.apiKey) {
       throw new Error('CTYUN_EDGE_API_KEY is required')
     }
@@ -109,7 +107,7 @@ export class CtyunEdgeImageAdapter implements ImageGenerationAdapter {
         Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(330_000),
+      signal: AbortSignal.timeout(systemConfig.ctyunEdgeImageTimeoutMs),
     })
 
     const text = await res.text()

@@ -1,0 +1,25 @@
+# ============================================================
+# 字节播客 TTS（sami WebSocket，开放接口 /api/v3 播客业务）
+# Data ID: ai-providers-podcast.properties   Group: AI_GROUP
+#
+# 本文件是留空模板（.example）。复制为 ai-providers-podcast.properties 后填真实值。
+# 注意：*.properties 被 .gitignore 忽略（防止密钥入库），只有 .example 进 git。
+# ============================================================
+
+# 播客 TTS WebSocket 地址（必填，由字节提供）
+PODCAST_WS_URL=
+
+# 应用 ID（必填，字节分配）
+PODCAST_APP_ID=
+
+# Access Key（必填，字节分配）
+PODCAST_ACCESS_KEY=
+
+# Resource ID（必填，字节分配，对应 sami 的资源标识）
+PODCAST_RESOURCE_ID=
+
+# App Key（必填，字节分配）
+PODCAST_APP_KEY=
+
+# 单次合成超时（秒），默认 30；生产建议 120（长文本合成耗时）
+PODCAST_TIMEOUT_SECONDS=120

@@ -1,0 +1,18 @@
+# ============================================================
+# 火山引擎（图片 Seedream / 视频 Seedance + Visual 数字人）
+# Data ID: ai-providers-volcengine.properties   Group: AI_GROUP
+#
+# 本文件是留空模板（.example）。复制为 ai-providers-volcengine.properties 后填真实值。
+# 注意：*.properties 被 .gitignore 忽略（防止密钥入库），只有 .example 进 git。
+# ============================================================
+
+# 火山引擎 ARK OpenAI 兼容接口基址（Seedream 图片 / Seedance 视频）
+VOLCENGINE_API_URL=https://ark.cn-beijing.volces.com/api/v3
+
+# 火山引擎 ARK API Key（Seedream 图片 / Seedance 视频，走 Ark 接口）
+VOLCENGINE_API_KEY=
+
+# 火山引擎 Visual API — OmniHuman 数字人（AK/SK 签名，与上面 ARK API Key 不同体系）
+# 去火山引擎「访问控制」创建 IAM 子账号获取 AccessKey / SecretKey
+VOLCENGINE_ACCESS_KEY=
+VOLCENGINE_SECRET_KEY=

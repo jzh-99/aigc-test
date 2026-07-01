@@ -1,0 +1,13 @@
+# ============================================================
+# 天翼云边缘 AI 网关（Seedream 图片 + Seedance 视频，OpenAI/火山兼容网关）
+# Data ID: ai-providers-ctyun.properties   Group: AI_GROUP
+#
+# 本文件是留空模板（.example）。复制为 ai-providers-ctyun.properties 后填真实值。
+# 注意：*.properties 被 .gitignore 忽略（防止密钥入库），只有 .example 进 git。
+# ============================================================
+
+# 天翼云边缘网关基址（一般不用改）
+CTYUN_EDGE_API_BASE_URL=https://ai.ctaigw.cn/v1
+
+# 天翼云边缘网关 API Key（必填，去天翼云控制台开通后获取）
+CTYUN_EDGE_API_KEY=

@@ -6,6 +6,7 @@ import type { GenerationJobData } from '@aigc/types'
 import { failPipeline } from '../pipelines/fail.js'
 import { getRedis, getBullMQConnection } from '../lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
+import { systemConfig } from '@aigc/nacos-config'
 
 const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
@@ -18,11 +19,12 @@ function getImageQueue(): Queue {
   return _imageQueue
 }
 
-const TIMEOUT_MS = 6 * 60 * 1000 // 6 minutes (slightly longer than API timeout to allow completion)
+// 图片任务卡死判定阈值改走 systemConfig（Nacos 可热更），须 > IMAGE_ADAPTER_TIMEOUT_MS。
 const MAX_RETRIES = 0 // Disabled: no retries, fail immediately on timeout
 
 export async function runTimeoutGuardian(): Promise<void> {
   const db = getDb()
+  const TIMEOUT_MS = systemConfig.imageGuardianTimeoutMs
   const cutoff = new Date(Date.now() - TIMEOUT_MS).toISOString()
 
   // Find stuck tasks: pending or processing for >6 minutes

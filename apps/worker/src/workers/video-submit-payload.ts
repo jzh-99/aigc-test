@@ -1,16 +1,5 @@
 import crypto from 'node:crypto'
 
-const VOLCENGINE_MODEL_ID: Record<string, string> = {
-  'seedance-1.5-pro': 'doubao-seedance-1-5-pro-251215',
-  'seedance-2.0': 'doubao-seedance-2-0-260128',
-  'seedance-2.0-fast': 'doubao-seedance-2-0-fast-260128',
-}
-
-const CTYUN_EDGE_MODEL_ID: Record<string, string> = {
-  'ctyun-seedance-2.0': 'cdance2.0-0611',
-  'ctyun-seedance-2.0-fast': 'cdance2.0-fast-0611',
-}
-
 const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
 
 type ReferenceRole = 'first_frame' | 'last_frame' | 'reference_image' | 'reference_video' | 'reference_audio'
@@ -125,10 +114,8 @@ export function buildVolcengineTaskBody(
   prompt: string,
   params: Record<string, unknown>,
 ): VolcengineTaskBody {
-  const volcModel = VOLCENGINE_MODEL_ID[model]
-  if (!volcModel) throw new Error(`未知的火山引擎视频模型: ${model}`)
-
-  return buildTaskBody(volcModel, prompt, params)
+  // DB 的 params_pricing.model 已是真实 API id（经 resolveUnitPrice 透传），adapter 直传，不再映射。
+  return buildTaskBody(model, prompt, params)
 }
 
 export function buildCtyunEdgeTaskBody(
@@ -136,10 +123,8 @@ export function buildCtyunEdgeTaskBody(
   prompt: string,
   params: Record<string, unknown>,
 ): VolcengineTaskBody {
-  const ctyunModel = CTYUN_EDGE_MODEL_ID[model]
-  if (!ctyunModel) throw new Error(`未知的天翼云边缘视频模型: ${model}`)
-
-  return buildTaskBody(ctyunModel, prompt, params)
+  // DB 的 params_pricing.model 已是真实 API id（经 resolveUnitPrice 透传），adapter 直传，不再映射。
+  return buildTaskBody(model, prompt, params)
 }
 
 function buildTaskBody(

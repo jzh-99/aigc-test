@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@aigc/db": "workspace:*",
+    "@aigc/nacos-config": "workspace:*",
     "@aigc/types": "workspace:*",
     "@volcengine/tos-sdk": "^2.9.1",
     "bullmq": "^5.0.0",

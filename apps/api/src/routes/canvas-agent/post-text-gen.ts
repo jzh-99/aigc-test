@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { qwenConfig, systemConfig } from '@aigc/nacos-config'
 import {
   recordLlmProviderCall,
   summarizeLlmStreamChunk,
@@ -7,9 +8,6 @@ import {
 
 // POST /canvas-agent/text-gen — 画布文本节点 AI 生成（Qwen SSE 流式）
 const route: FastifyPluginAsync = async (app) => {
-  const API_URL = process.env.QWEN_API_URL ?? ''
-  const API_KEY = process.env.QWEN_API_KEY ?? ''
-  const MODEL = process.env.QWEN_MODEL ?? 'qwen3.6-plus'
 
   app.post<{ Body: { prompt: string } }>(
     '/canvas-agent/text-gen',
@@ -26,6 +24,10 @@ const route: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { prompt } = request.body
+      // 每次请求实时读取 Nacos getter，支持热更（改 key/model 免重启）。
+      const API_URL = qwenConfig.apiUrl
+      const API_KEY = qwenConfig.apiKey
+      const MODEL = qwenConfig.model
       const endpoint = '/chat/completions'
 
       if (!API_URL || !API_KEY) {
@@ -36,7 +38,7 @@ const route: FastifyPluginAsync = async (app) => {
         model: MODEL,
         messages: [{ role: 'user', content: prompt }],
         stream: true,
-        max_tokens: 2000,
+        max_tokens: systemConfig.canvasAgentTextGenMaxTokens,
         enable_thinking: false,
       }
       const controller = new AbortController()

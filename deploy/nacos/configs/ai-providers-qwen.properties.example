@@ -1,0 +1,17 @@
+# ============================================================
+# 通义千问 Qwen（分镜拆分、画布文本节点生成）
+# Data ID: ai-providers-qwen.properties   Group: AI_GROUP
+#
+# 本文件是留空模板（.example）。复制为 ai-providers-qwen.properties 后填真实值。
+# 注意：*.properties 被 .gitignore 忽略（防止密钥入库），只有 .example 进 git。
+# ============================================================
+
+# 通义千问 DashScope OpenAI 兼容基址（一般不用改）
+QWEN_API_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+# DashScope API Key（必填，去阿里云百炼控制台创建）
+QWEN_API_KEY=
+
+# 模型名（注意：canvas-agent 的 storyboard-split / text-gen 默认用 qwen3.6-plus，
+# short-drama / picture-book 默认用 qwen3.7-max；此处仅作兜底，按你的业务实际填写）
+QWEN_MODEL=qwen3.7-max

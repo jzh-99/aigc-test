@@ -11,26 +11,14 @@
 import { getTos, getBucket, getPublicUrl } from '../lib/storage.js'
 import { validateExternalUrl } from '../lib/url-validator.js'
 import { buildLogger } from '../logger.js'
+// 豆包配置走 getter 门面，支持 Nacos 热更（改 key/model 免重启）。详见 @aigc/nacos-config。
+import { doubaoConfig, systemConfig } from '@aigc/nacos-config'
 
 const logger = buildLogger()
 
-// 火山方舟 API 基址（统一用 DOUBAO_API_URL，与主线一致）
-const DOUBAO_API_BASE = process.env.DOUBAO_API_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
-// 绘本润色分镜模型（Ark chat/completions）
-const STORYBOOK_POLISH_MODEL = process.env.DOUBAO_STORYBOOK_POLISH_MODEL ?? 'doubao-pro-32k'
-// 绘本组图模型（seedream，支持 sequential_image_generation）
-const STORYBOOK_IMAGE_MODEL = process.env.DOUBAO_STORYBOOK_IMAGE_MODEL ?? 'seedream-4.5'
-// seedream 模型 ID 映射（对齐 volcengine-image.ts 的 MODEL_ID_MAP）
-const SEEDREAM_MODEL_ID_MAP: Record<string, string> = {
-  'seedream-5.0-lite': 'doubao-seedream-5-0-lite-260128',
-  'seedream-4.5': 'doubao-seedream-4-5-251128',
-  'seedream-4.0': 'doubao-seedream-4-0-250828',
-}
-// 组图请求超时（10 分钟，组图耗时长）
-export const GROUP_IMAGE_TIMEOUT_MS = 600_000
-// 润色请求超时（5 分钟）
-export const POLISH_TIMEOUT_MS = 300_000
-// 图片下载超时（30 秒）
+// 火山方舟 API 基址 / 绘本润色模型 / 组图模型：通过 doubaoConfig getter 实时读 process.env。
+// 组图/润色超时走 systemConfig（Nacos 可热更）。
+// 图片下载超时（30 秒，非核心 AI 调用，保持固定）
 export const IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000
 
 // 故事类别文案（对齐源 storybook_provider.py:CATEGORY_LABELS）
@@ -189,7 +177,7 @@ export async function polishPrompt(params: {
   const systemPrompt = buildPolishPrompt(prompt, age, category, style, pages)
 
   const requestBody = {
-    model: STORYBOOK_POLISH_MODEL,
+    model: doubaoConfig.storybookPolishModel,
     messages: [{ role: 'user', content: systemPrompt }],
     // 对齐源 _build_storybook_response_format：强制返回结构化 JSON
     response_format: {
@@ -212,13 +200,13 @@ export async function polishPrompt(params: {
     },
   }
 
-  logger.info({ caller, taskId, model: STORYBOOK_POLISH_MODEL, pages }, '[storybook] 步骤1 润色分镜请求')
+  logger.info({ caller, taskId, model: doubaoConfig.storybookPolishModel, pages }, '[storybook] 步骤1 润色分镜请求')
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), POLISH_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), systemConfig.polishTimeoutMs)
   let response: Response
   try {
-    response = await fetch(`${DOUBAO_API_BASE}/chat/completions`, {
+    response = await fetch(`${doubaoConfig.apiUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -263,7 +251,8 @@ export async function generateGroupImages(params: {
   taskId: string
 }): Promise<string[]> {
   const { apiKey, model, userPrompt, scenesDetail, pages, caller, taskId } = params
-  const volcengineModel = SEEDREAM_MODEL_ID_MAP[model] ?? model
+  // DB 的 params_pricing.model 已是真实 API id（经 resolveUnitPrice 透传），直传不再映射。
+  const volcengineModel = model
   const imagePrompt = buildImagePrompt(userPrompt, scenesDetail, pages)
 
   // 移植源 _generate_group_images 的 payload
@@ -285,10 +274,10 @@ export async function generateGroupImages(params: {
   )
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), GROUP_IMAGE_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), systemConfig.groupImageTimeoutMs)
   let response: Response
   try {
-    response = await fetch(`${DOUBAO_API_BASE}/images/generations`, {
+    response = await fetch(`${doubaoConfig.apiUrl}/images/generations`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

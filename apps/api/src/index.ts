@@ -7,8 +7,14 @@ config({ path: path.resolve(__dirname, '../../../.env') })
 config({ path: path.resolve(__dirname, '../../../prompts.env'), override: false })
 
 import { buildApp } from './app.js'
+import { loadNacosConfig } from '@aigc/nacos-config'
 
 async function main() {
+  // 在 buildApp 之前加载 Nacos 远程配置：远程值覆盖本地 .env，让 AI 相关参数
+  // （key/endpoint/model 等）支持热更。Nacos 不可用时阻断启动，避免混用本地旧值。
+  // 详见 packages/nacos-config。时序：dotenv(L6-7) → Nacos 覆盖 → buildApp。
+  await loadNacosConfig()
+
   const app = await buildApp()
 
   const host = process.env.API_HOST ?? '0.0.0.0'

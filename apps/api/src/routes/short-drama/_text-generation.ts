@@ -15,15 +15,12 @@ import {
   type LlmProviderAuditContext,
   type LlmStreamSummary,
 } from '../../lib/provider-api-audit.js'
+// Qwen 配置走 getter 门面，支持 Nacos 热更（改 key/model 免重启）。详见 @aigc/nacos-config。
+import { qwenConfig, systemConfig } from '@aigc/nacos-config'
 
 // ============================================================================
 // AI 调用配置
 // ============================================================================
-
-// 使用 Qwen API
-const QWEN_API_URL = process.env.QWEN_API_URL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-const QWEN_API_KEY = process.env.QWEN_API_KEY ?? ''
-const QWEN_MODEL = process.env.QWEN_MODEL ?? 'qwen3.7-max'
 
 // 文本生成计费：每千字 1 A豆
 export const TEXT_CREDITS_PER_THOUSAND_CHARS = 1
@@ -76,11 +73,11 @@ export async function callQwenForText(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  if (!QWEN_API_KEY) {
+  if (!qwenConfig.apiKey) {
     throw new Error('QWEN_API_KEY 未配置，无法调用 AI 生成')
   }
 
-  const chatEndpoint = `${QWEN_API_URL}/chat/completions`
+  const chatEndpoint = `${qwenConfig.apiUrl}/chat/completions`
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TEXT_TIMEOUT_MS)
@@ -92,16 +89,16 @@ export async function callQwenForText(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        Authorization: `Bearer ${QWEN_API_KEY}`,
+        Authorization: `Bearer ${qwenConfig.apiKey}`,
       },
       body: JSON.stringify({
-        model: QWEN_MODEL,
+        model: qwenConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
         stream: false,
-        max_tokens: 4000,
+        max_tokens: systemConfig.shortDramaMaxTokens,
         temperature: 0.7,
       }),
       signal: controller.signal,
@@ -149,11 +146,11 @@ export async function callQwenForTextStream(
   // 采样温度：默认 0.7；JSON 格式重试时可降到 0.3 以提升结构稳定性
   temperature: number = 0.7,
 ): Promise<string> {
-  if (!QWEN_API_KEY) {
+  if (!qwenConfig.apiKey) {
     throw new Error('QWEN_API_KEY 未配置，无法调用 AI 生成')
   }
 
-  const chatEndpoint = `${QWEN_API_URL}/chat/completions`
+  const chatEndpoint = `${qwenConfig.apiUrl}/chat/completions`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TEXT_TIMEOUT_MS)
 
@@ -188,7 +185,7 @@ export async function callQwenForTextStream(
 
   const startedAt = Date.now()
   const requestPayload = {
-    model: QWEN_MODEL,
+    model: qwenConfig.model,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -216,7 +213,7 @@ export async function callQwenForTextStream(
     auditRecorded = true
     await recordLlmProviderCall({
       ...callbacks.audit,
-      model: callbacks.audit.model ?? QWEN_MODEL,
+      model: callbacks.audit.model ?? qwenConfig.model,
       requestPayload,
       responseStatus,
       responsePayload: input.responsePayload,
@@ -232,7 +229,7 @@ export async function callQwenForTextStream(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
-        Authorization: `Bearer ${QWEN_API_KEY}`,
+        Authorization: `Bearer ${qwenConfig.apiKey}`,
       },
       body: JSON.stringify(requestPayload),
       signal: controller.signal,

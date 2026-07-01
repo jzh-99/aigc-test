@@ -1,10 +1,10 @@
+import { volcengineConfig } from '@aigc/nacos-config'
+import { systemConfig } from '@aigc/nacos-config'
 import type { ImageGenerationAdapter, AdapterGenerateResult } from './base.js'
 import { buildLogger } from '../logger.js'
 
 // 适配器模块：复用 worker 单例 logger，确保错误日志写入 logs/worker/error.log
 const logger = buildLogger()
-
-const VOLCENGINE_API_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
 // Volcengine image constraints (per API docs)
 const VOLCENGINE_MAX_IMAGES = 14
@@ -160,18 +160,17 @@ async function prepareVolcengineImage(urlOrDataUri: string, index: number): Prom
 }
 
 
-const MODEL_ID_MAP: Record<string, string> = {
-  'seedream-5.0-lite': 'doubao-seedream-5-0-lite-260128',
-  'seedream-4.5':      'doubao-seedream-4-5-251128',
-  'seedream-4.0':      'doubao-seedream-4-0-250828',
-}
-
 export class VolcengineImageAdapter implements ImageGenerationAdapter {
   readonly providerCode = 'volcengine'
+  private readonly apiUrl: string
   private readonly apiKey: string
 
   constructor() {
-    this.apiKey = process.env.VOLCENGINE_API_KEY || ''
+    this.apiUrl = volcengineConfig.apiUrl.replace(/\/$/, '')
+    this.apiKey = volcengineConfig.apiKey
+    if (!this.apiUrl) {
+      throw new Error('VOLCENGINE_API_URL is required')
+    }
     if (!this.apiKey) {
       throw new Error('VOLCENGINE_API_KEY is required')
     }
@@ -184,10 +183,8 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
   }): Promise<AdapterGenerateResult> {
     const { model, prompt, params: extraParams } = params
 
-    const volcengineModel = MODEL_ID_MAP[model]
-    if (!volcengineModel) {
-      return { success: false, errorMessage: `Unknown Volcengine model: ${model}` }
-    }
+    // DB 的 params_pricing.model 已是真实 API id（经 resolveUnitPrice 透传），adapter 直传，不再映射。
+    const volcengineModel = model
 
     // Resolve size from aspect_ratio + resolution → pixel dimensions
     const resolution  = typeof extraParams.resolution  === 'string' ? extraParams.resolution  : '2k'
@@ -202,7 +199,7 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     }
 
     // Only seedream-5.0-lite supports output_format
-    if (model === 'seedream-5.0-lite') {
+    if (model === 'doubao-seedream-5-0-lite-260128') {
       body.output_format = 'png'
     }
 
@@ -232,11 +229,11 @@ export class VolcengineImageAdapter implements ImageGenerationAdapter {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 300_000) // 5 minutes
+    const timeout = setTimeout(() => controller.abort(), systemConfig.volcengineImageTimeoutMs)
 
     try {
       console.log(`[volcengine-image] 发起 HTTP 请求 model=${volcengineModel} size=${body.size}`)
-      const res = await fetch(`${VOLCENGINE_API_URL}/images/generations`, {
+      const res = await fetch(`${this.apiUrl}/images/generations`, {
         method:  'POST',
         headers: {
           'Content-Type':  'application/json',

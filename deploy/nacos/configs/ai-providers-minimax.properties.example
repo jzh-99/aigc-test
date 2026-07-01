@@ -1,0 +1,16 @@
+# ============================================================
+# MiniMax（语音合成 TTS）
+# Data ID: ai-providers-minimax.properties   Group: AI_GROUP
+#
+# 本文件是留空模板（.example）。复制为 ai-providers-minimax.properties 后填真实值。
+# 注意：*.properties 被 .gitignore 忽略（防止密钥入库），只有 .example 进 git。
+# ============================================================
+
+# MiniMax API Key（必填，去 MiniMax 开放平台创建）
+MINIMAX_API_KEY=
+
+# MiniMax Group ID（可选；留空时按无 group 调用，代码会自动跳过该参数）
+MINIMAX_GROUP_ID=
+
+# TTS 请求超时（毫秒），默认 30000
+MINIMAX_TTS_TIMEOUT_MS=30000

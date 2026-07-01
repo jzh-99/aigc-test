@@ -1,11 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { normalizeContentForUpstream, firstHeader } from './_shared.js'
+// Nano Banana 配置走 getter 门面，支持 Nacos 热更（改 key/model 免重启）。详见 @aigc/nacos-config。
+import { nanoBananaConfig, systemConfig } from '@aigc/nacos-config'
 
 // POST /canvas-agent/chat — 画布 AI 助手对话（SSE 流式响应）
 const route: FastifyPluginAsync = async (app) => {
-  const AI_API_URL = process.env.NANO_BANANA_API_URL ?? ''
-  const AI_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
-  const AI_MODEL = process.env.NANO_BANANA_MODEL ?? ''
   const AI_SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_AGENT ?? ''
 
   app.post<{
@@ -127,14 +126,14 @@ const route: FastifyPluginAsync = async (app) => {
 
       let geminiRes: Response
       try {
-        geminiRes = await fetch(`${AI_API_URL}/v1/chat/completions`, {
+        geminiRes = await fetch(`${nanoBananaConfig.apiUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            Authorization: `Bearer ${AI_API_KEY}`,
+            Authorization: `Bearer ${nanoBananaConfig.apiKey}`,
           },
-          body: JSON.stringify({ model: AI_MODEL, messages, stream: true, max_tokens: 8000 }),
+          body: JSON.stringify({ model: nanoBananaConfig.model, messages, stream: true, max_tokens: systemConfig.canvasAgentChatMaxTokens }),
           signal: controller.signal,
         })
       } finally {

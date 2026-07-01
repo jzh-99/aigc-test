@@ -209,7 +209,11 @@ const route: FastifyPluginAsync = async (app) => {
       ? params.reference_video_durations.filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
       : []
     const resolutionStr = typeof params.resolution === 'string' ? params.resolution : undefined
-    const { unitPrice } = resolveUnitPrice(providerModel.params_pricing, resolutionStr)
+    const { unitPrice, resolvedModel } = resolveUnitPrice(providerModel.params_pricing, resolutionStr)
+    // params_pricing.model 现在存的是真实 API model id（如 doubao-seedance-2-0-260128），
+    // 命中时用它替换前端传入的业务名 code（如 seedance-2.0），让 worker/adapter 直接透传给 AI。
+    // 与图片链路（post-image.ts 的 actualModel）机制统一。计费/备注仍用原始业务名 model。
+    const actualModel = resolvedModel ?? model
     const estimatedCredits = calculateVideoEstimatedCredits({
       generatedDuration: durationSec,
       referenceVideoDurations,
@@ -253,7 +257,7 @@ const route: FastifyPluginAsync = async (app) => {
             }),
             module: 'video',
             provider: providerModel.providerCode,
-            model,
+            model: actualModel,
             prompt,
             params: JSON.stringify(params),
             quantity: 1,
@@ -288,7 +292,7 @@ const route: FastifyPluginAsync = async (app) => {
         teamId,
         workspaceId,
         provider: providerModel.providerCode,
-        model,
+        model: actualModel,
         prompt,
         params,
         estimatedCredits,

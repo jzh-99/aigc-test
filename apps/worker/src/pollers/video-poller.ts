@@ -1,5 +1,6 @@
 import { getDb } from '@aigc/db'
 import { ErrorCode } from '@aigc/types'
+import { ctyunEdgeConfig, nanoBananaConfig, volcengineConfig, systemConfig } from '@aigc/nacos-config'
 import { sql } from 'kysely'
 import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
 import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
@@ -29,14 +30,10 @@ const logger = buildLogger()
 // Track consecutive poll errors per task to detect persistent API failures
 const pollErrorCounts = new Map<string, number>()
 let pollTick = 0
-const POLL_CONCURRENCY = 10
-const VIDEO_POLL_REQUEST_TIMEOUT_MS = 30_000
+// 并发/轮询超时/视频寿命改走 systemConfig（Nacos 可热更），不再顶层常量。
 
-const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
-const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
-const CTYUN_EDGE_API_URL = (process.env.CTYUN_EDGE_API_BASE_URL || 'https://ai.ctaigw.cn/v1').replace(/\/$/, '')
-const CTYUN_EDGE_API_KEY = process.env.CTYUN_EDGE_API_KEY ?? ''
-const MAX_VIDEO_AGE_MS = 60 * 60 * 1000 // 1 hour
+// 注意：AI API 配置不在此处顶层读取，而是在轮询函数体内通过 Nacos getter 实时读取，
+// 支持配置热更（改 key/endpoint 免重启）。
 const VEO_STATUS_MAP: Record<string, VideoPollStatus> = {
   SUCCESS: 'SUCCESS',
   FAILURE: 'FAILURE',
@@ -66,8 +63,11 @@ interface VideoTaskRow {
 }
 
 async function checkVeoTask(externalTaskId: string): Promise<VideoPollResult> {
+  // 每次轮询实时读取 Nacos getter，支持热更（改 key/endpoint 免重启）。
+  const VEO_API_URL = nanoBananaConfig.apiUrl.replace(/\/$/, '')
+  const VEO_API_KEY = nanoBananaConfig.apiKey
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), systemConfig.videoPollRequestTimeoutMs)
   const endpoint = `/v2/videos/generations/${externalTaskId}`
   const startedAt = Date.now()
   try {
@@ -105,12 +105,12 @@ async function checkVeoTask(externalTaskId: string): Promise<VideoPollResult> {
 
 async function checkVolcengineTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), systemConfig.videoPollRequestTimeoutMs)
   const endpoint = `/contents/generations/tasks/${externalTaskId}`
   const startedAt = Date.now()
   try {
-    const volcengineApiUrl = 'https://ark.cn-beijing.volces.com/api/v3'
-    const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
+    const volcengineApiUrl = volcengineConfig.apiUrl.replace(/\/$/, '')
+    const volcengineApiKey = volcengineConfig.apiKey
     const res = await fetch(`${volcengineApiUrl}${endpoint}`, {
       headers: { Authorization: `Bearer ${volcengineApiKey}` },
       signal: controller.signal,
@@ -142,8 +142,11 @@ async function checkVolcengineTask(externalTaskId: string): Promise<VideoPollRes
 }
 
 async function checkCtyunEdgeTask(externalTaskId: string): Promise<VideoPollResult> {
+  // 每次轮询实时读取 Nacos getter，支持热更（改 key/endpoint 免重启）。
+  const CTYUN_EDGE_API_URL = ctyunEdgeConfig.apiBaseUrl.replace(/\/$/, '')
+  const CTYUN_EDGE_API_KEY = ctyunEdgeConfig.apiKey
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), systemConfig.videoPollRequestTimeoutMs)
   const endpoint = `/contents/generations/tasks/${externalTaskId}`
   const startedAt = Date.now()
   try {
@@ -370,15 +373,17 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
 
 async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void> {
   try {
+    const maxVideoAgeMs = systemConfig.maxVideoAgeMs
     const ageMs = task.processingStartedAt
       ? Date.now() - new Date(task.processingStartedAt).getTime()
-      : MAX_VIDEO_AGE_MS + 1
+      : maxVideoAgeMs + 1
 
-    if (ageMs > MAX_VIDEO_AGE_MS) {
+    if (ageMs > maxVideoAgeMs) {
       if (task.provider === 'volcengine') {
         try {
-          const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
-          await fetch(`https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/${task.externalTaskId}`, {
+          const volcengineApiKey = volcengineConfig.apiKey
+          const volcengineApiUrl = volcengineConfig.apiUrl.replace(/\/$/, '')
+          await fetch(`${volcengineApiUrl}/contents/generations/tasks/${task.externalTaskId}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${volcengineApiKey}` },
             signal: AbortSignal.timeout(10_000),
@@ -496,8 +501,9 @@ async function pollVideoTasks(): Promise<void> {
   logger.debug({ count: tasks.length, tick: pollTick }, 'Polling video tasks')
 
   // Process in parallel chunks to cap concurrent outbound requests
-  for (let i = 0; i < tasks.length; i += POLL_CONCURRENCY) {
-    await Promise.all(tasks.slice(i, i + POLL_CONCURRENCY).map((t) => processVideoTask(t, pollTick)))
+  const pollConcurrency = systemConfig.videoPollConcurrency
+  for (let i = 0; i < tasks.length; i += pollConcurrency) {
+    await Promise.all(tasks.slice(i, i + pollConcurrency).map((t) => processVideoTask(t, pollTick)))
   }
 }
 

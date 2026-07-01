@@ -19,16 +19,13 @@
 //   - 启用 web_search 工具 + thinking 推理
 
 import { buildLogger } from '../logger.js'
+// 豆包配置走 getter 门面，支持 Nacos 热更（改 key/model 免重启）。详见 @aigc/nacos-config。
+import { doubaoConfig, systemConfig } from '@aigc/nacos-config'
 
 const logger = buildLogger()
 
-// 火山方舟 API 基址（Ark /responses 端点）
-// 统一用 DOUBAO_API_URL（与 aigc-test 主线一致，官方 Ark 域名）
-const DOUBAO_API_BASE = process.env.DOUBAO_API_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
-// 资讯生成模型（对齐源 config.py:ark_news_model，默认 doubao-seed-2-0-code-preview）
-const DOUBAO_NEWS_MODEL = process.env.DOUBAO_NEWS_MODEL ?? 'doubao-seed-2-0-code-preview-260215'
-// 资讯生成超时（对齐源 httpx.Client(timeout=900)，15 分钟）
-const NEWS_GENERATE_TIMEOUT_MS = 900_000
+// 火山方舟 API 基址 / 资讯模型：通过 doubaoConfig getter 实时读 process.env。
+// 资讯生成超时走 systemConfig（Nacos 可热更）。
 
 // meta 标签提取正则（移植源 news_provider.py:_META_PATTERN）
 // 匹配 <meta name="news-title|news-abstract" content="..." />（单双引号兼容、自闭合可选）
@@ -250,7 +247,7 @@ export async function callArkResponses(params: {
   deps?: ArkResponsesDeps
 }): Promise<NewsGenerationResult> {
   const { apiKey, prompt, date } = params
-  const model = params.model ?? DOUBAO_NEWS_MODEL
+  const model = params.model ?? doubaoConfig.newsModel
   const text = buildNewsPrompt(prompt, date)
 
   // payload 对齐源 news_provider.py:176-190
@@ -273,11 +270,11 @@ export async function callArkResponses(params: {
   }
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), NEWS_GENERATE_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), systemConfig.newsGenerateTimeoutMs)
   const fetchFn = params.deps?.fetch ?? fetch
   let response: Awaited<ReturnType<typeof fetchFn>>
   try {
-    response = await fetchFn(`${DOUBAO_API_BASE}/responses`, {
+    response = await fetchFn(`${doubaoConfig.apiUrl}/responses`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),

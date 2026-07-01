@@ -231,6 +231,27 @@ packages/
   2. 生产 / PM2 / `pnpm start`：必须先 `pnpm --filter @aigc/worker build` 重编 `dist/`，再重启进程；服务器镜像部署同理（重新构建镜像 = 重建 dist）。
 - **验证方式**：`grep -n "<旧错误文案>" apps/worker/dist/lib/<对应文件>.js` 应无输出（确认 dist 已更新）；对比 `apps/worker/src` 与 `apps/worker/dist` 对应文件的修改时间，dist 应新于 src；重启后观察 `biz_mgmt_outbox_events.last_error` 或 worker 日志不再出现旧错误文案。
 
+### 8. Nacos 配置中心：AI 参数热更接入与 ESM 静态绑定陷阱
+
+- **问题现象**：改了 Nacos 控制台的 AI 配置（如 `DOUBAO_API_KEY`），api/worker 日志显示「配置加载完成」，但实际 AI 调用仍用旧 key/旧 model，必须重启进程才换值。
+- **根本原因**：ESM 的 `export const X = process.env...` 在**模块加载时静态求值一次**，此后即使把新值写进 `process.env`，已 `import { X }` 的代码拿到的仍是旧值——这是 JS 引擎层面的静态绑定，**无法绕过**。Nacos loader 把远程值写回 `process.env` 是对的，但下游若用 `export const` 一次性求值就读不到新值。此外 adapter factory 用单例缓存（`new XxxAdapter()` 只构造一次，env 在构造时读一次）也会锁死旧值。
+- **解决办法**：
+  1. **热更只能靠 getter / 函数内读取**：`packages/nacos-config/src/ai-config.ts` 导出的 `doubaoConfig` / `nanoBananaConfig` / `tokenbusConfig` 等 getter 门面，每个属性都是 `get xxx() { return process.env.XXX ?? '' }`，每次访问实时取最新值。新代码读 AI 配置一律用这些 getter，**禁止 `export const X = process.env...` 顶层求值**。
+  2. **adapter factory 去缓存**：`apps/worker/src/adapters/factory.ts` 不再 `cache` 单例，`getAdapter()` 每次新建实例，让构造函数重新读 getter，热更即时生效（图片生成频率不高，new 开销可忽略）。
+  3. **入口注入点**：`apps/api/src/index.ts` 的 `main()` 内、`apps/worker/src/index.ts` 单实例锁之后，调用 `await loadNacosConfig()`；loader 会先清理 AI 相关 env，再从 Nacos 写回。Nacos 是 **AI 配置强依赖**：未配置、连接失败或 DataID 拉取失败都会抛错阻止启动，不再使用 `.env` 兜底。具体供应商 key 是否为空由实际调用的 adapter/service 校验，避免未启用供应商（如播客）阻断整个 worker/api 启动。
+  4. **配置归属**：AI key/endpoint/model → Nacos；模型价格 → DB（`provider_models`）；`DATABASE_URL`/`JWT_SECRET`/TOS AK/SK → 容器 env；`NEXT_PUBLIC_*` → 构建期（打进 bundle，Nacos 改不动）；`NACOS_SERVER_ADDR` 等 Nacos 自身变量 → 容器 env（鸡生蛋）。
+- **验证方式**：`grep -rn "export const .* = process.env" apps/api/src apps/worker/src` 确认 AI 相关无新增顶层 const 求值；改 Nacos 配置后 `docker logs aigc-worker --tail 50 | grep nacos` 见「配置加载完成」且下一次 AI 请求即用新值；`packages/nacos-config` 跑 `pnpm test`（mock 测试，不连真 Nacos）全绿；生产部署后必 `build` 重打 api/worker 镜像（第 7 条同样适用，loader 才会进 dist）。部署/初始化/DataID 规划见 `deploy/nacos/README.md`；9 个提供商的配置模板与一键导入脚本在 `deploy/nacos/configs/`（改完真实值后 `bash import-to-nacos.sh` 批量发布）。
+- **踩坑补充**：① Nacos v1 OpenAPI 的 dataId **不允许含 `/`**（报 `Param 'dataId' is illegal`），故本项目 dataId 用 `ai-providers-xxx.properties` 命名（`-` 连接），不能用 `ai-providers/xxx` 路径风格；② 默认 public namespace 在 OpenAPI 里的 tenant 参数必须传**空串**，传 `"public"` 字符串会把配置写进一个名为 "public" 的自定义命名空间，导致默认连 public 的应用订阅不到——`import-to-nacos.sh` 已处理此映射；③ **Windows 上 `NACOS_SERVER_ADDR=localhost:8848` 会让 nacos-sdk-nodejs 把 localhost 解析成 IPv6 `::1`，长轮询连接持续报 `EADDRINUSE`（误导性错误）并刷屏，偶发导致进程崩溃（worker `Exit status 3221226505`）**——`client.ts` 的 `normalizeServerAddr` 已自动把 localhost 归一化为 `127.0.0.1`；④ **nacos-sdk-nodejs 的 `client.subscribe` 长轮询与 worker Redis 单实例锁心跳在 Windows 下并存时，也会触发无 JS 异常的 `Exit status 3221226505` 原生退出**——本项目已禁用 SDK subscribe，改为 `getConfig` 轮询热更（默认 30 秒，`NACOS_POLL_INTERVAL_MS` 可调整）。
+- **配置来源诊断**：启动时 `loadNacosConfig` 会打印一张对照表，标明每个 AI 配置来自哪里——`仅Nacos`（.env 未配此 key）、`Nacos覆盖`（.env 和 Nacos 都配，Nacos 的生效）、`一致`（两边相同）。敏感值（key 名以 `_KEY`/`_SECRET`/`_PASSWORD`/`_TOKEN` 结尾的凭证类变量）自动打码（只显示首尾各 4 字符），空值显示 `(空)`。⚠️ 打码用后缀匹配而非子串——否则会把 `TOKENBUS_IMAGE_TIMEOUT_MS`、`*_MAX_TOKENS` 等含 TOKEN/KEY 子串的【数字型配置】误打码。排查「为什么改了 Nacos 没生效 / 到底用的哪个值」看这张表即可。
+- **系统级配置 vs 供应商配置（两类策略）**：① 供应商配置（`ai-providers-*.properties`，key/endpoint/model）严格无默认值，必须由 Nacos 提供（`loadNacosConfig` 会先清理本地 env 再由 Nacos 写回，`volcengineConfig.apiUrl` 等不带兜底）；② 系统级配置（`system.properties`，跨供应商的超时链/并发/max_tokens）宽容——有合理默认值（`envNumberOr`，对齐原硬编码），留空用代码默认，填了用填的值，热更价值在线上调优免重启。新增系统级参数时在 `systemConfig` 加 getter + 注册 `AI_CONFIG_ENV_KEYS` + 在 `system.properties` 补默认值。
+
+### 9. provider_models 的 code（业务名）与 params_pricing.model（真实 API id）分工
+
+- **问题现象**：新增/更换火山或天翼云模型时，必须在 adapter 里改 `MODEL_ID_MAP` 等硬编码映射表（业务名→真实 API id），改一次要发版；且映射表在 volcengine-image / storybook-core / video-submit-payload 多处重复维护，容易漂移。
+- **根本原因**：早期 `provider_models.params_pricing[].model` 存的是业务友好名（如 `seedream-4.5`），与 `code` 相同；真实 API id（如 `doubao-seedream-4-5-251128`）只活在 adapter 的硬编码映射表里，没进 DB。
+- **解决办法（方案 C）**：让两者分工——`code` 保持业务名（前端展示/路由查询/计费备注用，向后兼容），`params_pricing[].model` 改存**真实 API id**。利用现有 `resolveUnitPrice` 替换链路（图片 `post-image.ts:537`、视频 `post-generate.ts` 的 `actualModel = resolvedModel ?? model`）把真实 id 传给 adapter，adapter **直传不再查映射表**（参考 tokenbus 模式，其 code 本就是真实 id）。改造后：① adapter 删掉所有 `MODEL_ID_MAP`/`SEEDREAM_MODEL_ID_MAP`/`VOLCENGINE_MODEL_ID`/`CTYUN_EDGE_MODEL_ID`；② 换模型 id 只改 `models.json` 的 `paramsPricing[].model` + 迁移，零代码改动；③ 前端零改动（前端传业务名 code，被 resolveUnitPrice 替换成真实 id）。
+- **验证方式**：`SELECT code, params_pricing->0->>'model' FROM provider_models WHERE code='seedream-4.5'` —— code 应是业务名 `seedream-4.5`，model 应是真实 id `doubao-seedream-4-5-251128`；`grep -rn "MODEL_ID_MAP\|SEEDREAM_MODEL_ID_MAP" apps/worker/src` 应无残留（映射表已删）；新增模型时只在 `models.json` 填真实 id，不要在 adapter 加映射表。
+
 ---
 
 ## Docker 部署
@@ -242,9 +263,12 @@ packages/
 | 服务器 | 内容 | 关键端口 |
 |--------|------|----------|
 | 基础设施服务器 | PostgreSQL + Redis | 5432 / 6379 |
+| 配置服务器 | Nacos 配置中心（AI 参数热更） | 8848 / 9848 |
 | API 服务器 | `aigc-api` 容器 | 7001 |
 | Web 服务器 | `aigc-web` 容器 | 6006 |
 | Worker 服务器 | `aigc-worker` 容器（BullMQ 消费者，无 HTTP 端口） | — |
+
+> **配置服务器为 AI 能力必需组件**：api/worker 的 AI provider key、endpoint、model、timeout 全部来自 Nacos，不再使用 `.env` 兜底。详见 `deploy/nacos/README.md`。
 
 各服务器的 compose 配置在 `deploy/<service>/` 目录。部署在内网环境通过跳板机进行，本机只负责构建镜像，传输和启动全部在服务器侧手动完成。
 

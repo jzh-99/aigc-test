@@ -1,0 +1,60 @@
+name: aigc-nacos
+
+# ============================================================
+# 配置中心服务器：Nacos 2.3.x（单机模式，内嵌 Derby）
+#
+# 职责：集中管理 AI 提供商的运行时参数（API key / endpoint / model id 等），
+# 支持热更（控制台改配置秒级推送到 api/worker，免重启、免重新打包镜像）。
+#
+# 与其他服务器的关系：
+#   - 本服务器独立部署，不与基础设施/api/worker/web 混部（避免抢内存）
+#   - api/worker 通过 NACOS_SERVER_ADDR 连接本机 8848(HTTP)/9848(gRPC)
+#   - web 不连 Nacos（前端配置走构建期注入）
+#
+# 持久化：内嵌 Derby，数据落在 ./data 挂卷，备份该目录即可。
+# 高可用：当前单机起步；规模上来后可改 MySQL 后端 + 3 节点集群（见 README）。
+# ============================================================
+
+services:
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: aigc-nacos
+    restart: unless-stopped
+    environment:
+      # 单机模式，使用内嵌 Derby 存储（无需额外数据库）
+      - MODE=standalone
+      # 开启鉴权（生产必须）：客户端需带 NACOS_USERNAME/PASSWORD
+      - NACOS_AUTH_ENABLE=true
+      # JWT 签名密钥：Base64 编码，至少 32 字符。生产必须在 .env 中覆盖默认值。
+      - NACOS_AUTH_TOKEN=${NACOS_AUTH_TOKEN:?必须设置 NACOS_AUTH_TOKEN（至少32字符的 Base64 串）}
+      # 服务端身份标识（用于内部接口鉴权，避免被未授权访问）
+      - NACOS_AUTH_IDENTITY_KEY=${NACOS_AUTH_IDENTITY_KEY:-serverIdentity}
+      - NACOS_AUTH_IDENTITY_VALUE=${NACOS_AUTH_IDENTITY_VALUE:?必须设置 NACOS_AUTH_IDENTITY_VALUE}
+      # JVM 内存：单机配置中心负载很轻，512m 足够
+      - JVM_XMS=512m
+      - JVM_XMX=512m
+      - JVM_XMN=256m
+      # 时区（控制台时间戳与日志对齐北京时间）
+      - TZ=Asia/Shanghai
+    ports:
+      # 8848：HTTP/OpenAPI/Web 控制台（http://<IP>:8848/nacos）
+      # 9848：gRPC，Node 客户端必须（客户端 SDK 会自动用 主端口+1000）
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      # Derby 数据 + 配置快照持久化（备份此目录即可）
+      - ./data:/home/nacos/data
+      - ./logs:/home/nacos/logs
+    healthcheck:
+      # Nacos 健康检查端点（readiness）
+      test: ["CMD-SHELL", "curl -fs http://localhost:8848/nacos/v1/console/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+        reservations:
+          memory: 256m

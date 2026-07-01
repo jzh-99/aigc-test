@@ -27,6 +27,7 @@ import { sql } from 'kysely'
 import { ErrorCode } from '@aigc/types'
 import type { StorybookJobData } from '@aigc/types'
 import { getDb, recordProviderApiLog } from '@aigc/db'
+import { doubaoConfig, volcengineConfig } from '@aigc/nacos-config'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { dispatchBatchResult } from '../lib/dispatch-result.js'
 import { buildLogger } from '../logger.js'
@@ -35,11 +36,12 @@ import {
   generateGroupImages,
   transferImageToTos,
 } from './storybook-core.js'
+// 绘本组图模型走 getter 门面，支持 Nacos 热更（改 model 免重启）。详见 @aigc/nacos-config。
 
 const logger = buildLogger()
 
 // 绘本组图模型（seedream，支持 sequential_image_generation）
-const STORYBOOK_IMAGE_MODEL = process.env.DOUBAO_STORYBOOK_IMAGE_MODEL ?? 'seedream-4.5'
+// 通过 doubaoConfig.storybookImageModel getter 实时读取，支持 Nacos 热更。
 
 // ─── 状态流转：task → processing（对齐 image worker）──────────────────────────
 async function markTaskProcessing(taskId: string, batchId: string, jobId: string | undefined): Promise<void> {
@@ -165,7 +167,7 @@ export const storybookWorker = new Worker<StorybookJobData>(
     await markTaskProcessing(data.taskId, data.batchId, job.id)
 
     // 火山 API Key（统一用 VOLCENGINE_API_KEY，与 volcengine-image adapter 一致）
-    const apiKey = process.env.VOLCENGINE_API_KEY ?? ''
+    const apiKey = volcengineConfig.apiKey
     if (!apiKey) {
       throw new Error('VOLCENGINE_API_KEY 未配置')
     }
@@ -192,11 +194,11 @@ export const storybookWorker = new Worker<StorybookJobData>(
         teamId: data.teamId,
         module: 'storybook',
         provider: 'volcengine',
-        model: STORYBOOK_IMAGE_MODEL,
+        model: doubaoConfig.storybookImageModel,
         operation: 'storybook.polish',
         method: 'POST',
         endpoint: '/chat/completions',
-        requestPayload: { model: STORYBOOK_IMAGE_MODEL, pages: data.pages },
+        requestPayload: { model: doubaoConfig.storybookImageModel, pages: data.pages },
         responsePayload: { title: outline.title, summary: outline.summary },
         durationMs: 0,
         status: 'success',
@@ -206,7 +208,7 @@ export const storybookWorker = new Worker<StorybookJobData>(
       // 步骤②：组图（用 seedream 模型）
       const tempImageUrls = await generateGroupImages({
         apiKey,
-        model: STORYBOOK_IMAGE_MODEL,
+        model: doubaoConfig.storybookImageModel,
         userPrompt: data.prompt,
         scenesDetail: outline.scenesDetail,
         pages: data.pages,
@@ -221,11 +223,11 @@ export const storybookWorker = new Worker<StorybookJobData>(
         teamId: data.teamId,
         module: 'storybook',
         provider: 'volcengine',
-        model: STORYBOOK_IMAGE_MODEL,
+        model: doubaoConfig.storybookImageModel,
         operation: 'storybook.group_images',
         method: 'POST',
         endpoint: '/images/generations',
-        requestPayload: { model: STORYBOOK_IMAGE_MODEL, pages: data.pages },
+        requestPayload: { model: doubaoConfig.storybookImageModel, pages: data.pages },
         responsePayload: { image_count: tempImageUrls.length },
         durationMs: 0,
         status: 'success',

@@ -22,13 +22,6 @@ export const MIME_MAP: Record<string, string> = {
 }
 export const SAFE_ID = /^[\w-]+\.(jpg|jpeg|png|webp|bmp|tiff|gif|mp4|mov|webm|mp3|wav)$/
 
-// 前端模型代码 → 火山引擎实际模型 ID 映射
-export const VOLCENGINE_MODEL_ID: Record<string, string> = {
-  'seedance-1.5-pro': 'doubao-seedance-1-5-pro-251215',
-  'seedance-2.0':     'doubao-seedance-2-0-260128',
-  'seedance-2.0-fast':'doubao-seedance-2-0-fast-260128',
-}
-
 // concat-export 内存任务存储（热路径），DB 作为持久化兜底
 export const concatJobStore: ConcatJobStore = new Map()
 

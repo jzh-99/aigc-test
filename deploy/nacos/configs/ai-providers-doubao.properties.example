@@ -1,0 +1,31 @@
+# ============================================================
+# 豆包 / 火山方舟 Ark（文本对话、绘本润色、资讯生成、图片生成）
+# Data ID: ai-providers-doubao.properties   Group: AI_GROUP
+#
+# 本文件是留空模板（.example）。复制为 ai-providers-doubao.properties 后填真实值。
+# 注意：*.properties 被 .gitignore 忽略（防止密钥入库），只有 .example 进 git。
+# ============================================================
+
+# AI 助手对话供应商切换：doubao（默认，走下方 DOUBAO_*）| nano_banana（走 NANO_BANANA_*）
+AI_CHAT_PROVIDER=doubao
+
+# 火山方舟 OpenAI 兼容接口基址（一般不用改）
+DOUBAO_API_URL=https://ark.cn-beijing.volces.com/api/v3
+
+# 火山方舟 API Key（必填，去火山引擎控制台创建）
+DOUBAO_API_KEY=
+
+# 主线对话模型（ai-assistant 用），填 Ark 的 endpoint id，如 ep-2024xxxx
+DOUBAO_MODEL=doubao-seed-2-0-lite-260428
+
+# 资讯生成模型（开放接口 /api/v3 news 业务专用）
+DOUBAO_NEWS_MODEL=doubao-seed-2-0-code-preview-260215
+
+# 文本润色模型（开放接口 /api/v3 text 业务专用）
+DOUBAO_TEXT_MODEL=doubao-seed-2-0-lite-260215
+
+# 绘本分镜润色模型（Ark chat/completions）
+DOUBAO_STORYBOOK_POLISH_MODEL=doubao-pro-32k
+
+# 绘本组图模型（seedream，支持 sequential_image_generation）
+DOUBAO_STORYBOOK_IMAGE_MODEL=seedream-4.5

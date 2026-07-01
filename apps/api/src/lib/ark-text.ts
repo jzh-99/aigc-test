@@ -16,11 +16,10 @@
 // 同步链路：api 进程直接调用（不走 BullMQ），对齐源 routes_text.py 的同步语义。
 // 纯逻辑函数（无 DB/无 worker 副作用），便于单元测试 mock fetch。
 
-// Ark 文本基址（统一用 DOUBAO_API_URL，与 aigc-test 主线一致，官方 Ark 域名）
-// 生产环境必须由 .env 配置真实地址（否则 MODEL_CONFIG_ERROR）。
-const DOUBAO_API_BASE = process.env.DOUBAO_API_URL ?? 'https://ark.cn-beijing.volces.com/api/v3'
-// 文本润色模型（对齐源 config.py:ark_text_model，默认 doubao-seed-2-0-lite-260215）
-const DOUBAO_TEXT_MODEL = process.env.DOUBAO_TEXT_MODEL ?? 'doubao-seed-2-0-lite-260215'
+// Ark 文本基址 / 文本润色模型：通过 doubaoConfig getter 实时读 process.env，
+// 让 Nacos 配置中心热更（改 key/model 免重启）。详见 @aigc/nacos-config。
+import { doubaoConfig } from '@aigc/nacos-config'
+
 // 超时（对齐源 httpx.Client(timeout=60)，60 秒）
 const TEXT_POLISH_TIMEOUT_MS = 60_000
 // 最大输出 token（对齐源 payload max_tokens=500）
@@ -82,7 +81,7 @@ export async function polishText(params: {
   deps?: ArkTextDeps
 }): Promise<string> {
   const { apiKey, inputText, createMode } = params
-  const model = params.model ?? DOUBAO_TEXT_MODEL
+  const model = params.model ?? doubaoConfig.textModel
 
   // payload 对齐源 ark_text.py:13-21
   const payload = {
@@ -105,7 +104,7 @@ export async function polishText(params: {
   const fetchFn = params.deps?.fetch ?? fetch
   let response: Awaited<ReturnType<typeof fetchFn>>
   try {
-    response = await fetchFn(`${DOUBAO_API_BASE}/chat/completions`, {
+    response = await fetchFn(`${doubaoConfig.apiUrl}/chat/completions`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),

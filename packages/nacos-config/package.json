@@ -1,0 +1,25 @@
+{
+  "name": "@aigc/nacos-config",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "nacos": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}

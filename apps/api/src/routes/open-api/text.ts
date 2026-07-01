@@ -33,6 +33,8 @@ import { ErrorCode, errorMessage, OpenApiError } from '../../lib/open-api-errors
 import { polishText } from '../../lib/ark-text.js'
 import { OPENAPI_TEXT_RESPONSES } from './_docs.js'
 import { createOpenApiBatch, openApiPreHandler } from './_shared.js'
+// 文本润色模型 id 走 getter 门面，支持 Nacos 热更（改 model 免重启）。详见 @aigc/nacos-config。
+import { doubaoConfig } from '@aigc/nacos-config'
 
 // 请求体 schema（对齐源 schemas/text.py:TextPolishRequest）
 // create_mode 枚举 0-4（对齐源 field_validator：0-3 润色场景，4 行业分类）
@@ -53,7 +55,7 @@ const TEXT_BODY = {
 }
 
 // 文本润色模型（对齐源 config.py:ark_text_model；与 ark-text.ts 同源，此处仅 params 快照用）
-const DOUBAO_TEXT_MODEL = process.env.DOUBAO_TEXT_MODEL ?? 'doubao-seed-2-0-lite-260215'
+// 通过 doubaoConfig.textModel getter 实时读取，支持 Nacos 热更。
 
 // ─── 同步状态流转：task pending → completed/failed（零积分，不建 ledger）────────
 // 文本润色 estimated_credits=0，不涉及冻结/扣减/退还，故跳过 credit_accounts 与 ledger 变动，
@@ -139,7 +141,7 @@ const route: FastifyPluginAsync = async (app) => {
 
       // 步骤①：校验 DOUBAO_API_KEY 配置（对齐源 _provider_key 的 MODEL_CONFIG_ERROR）
       // 源项目通过 HTTPException(400) 抛出，此处对齐 HTTP 400 + body code + meta:{}
-      const arkApiKey = process.env.DOUBAO_API_KEY
+      const arkApiKey = doubaoConfig.apiKey
       if (!arkApiKey) {
         return reply.status(400).send({
           result: {
@@ -165,7 +167,7 @@ const route: FastifyPluginAsync = async (app) => {
           callbackUrl: '',
           module: 'text',
           provider: 'ark',
-          model: DOUBAO_TEXT_MODEL,
+          model: doubaoConfig.textModel,
           prompt: b.input_text,
           params: { create_mode: b.create_mode, input_text: b.input_text },
         })

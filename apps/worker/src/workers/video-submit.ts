@@ -1,5 +1,6 @@
 import { Worker } from 'bullmq'
 import { getDb, recordProviderApiLog } from '@aigc/db'
+import { ctyunEdgeConfig, nanoBananaConfig, volcengineConfig } from '@aigc/nacos-config'
 import { sql } from 'kysely'
 import type { VideoSubmitJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
@@ -9,9 +10,8 @@ import { buildCreationResultOutboxPayload, enqueueCreationResultOutbox } from '.
 
 const logger = buildLogger()
 
-const VOLCENGINE_API_URL = 'https://ark.cn-beijing.volces.com/api/v3'
-const CTYUN_EDGE_API_URL = (process.env.CTYUN_EDGE_API_BASE_URL || 'https://ai.ctaigw.cn/v1').replace(/\/$/, '')
-const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
+// 注意：AI API 配置不在此处顶层读取，而是在提交函数体内通过 Nacos getter 实时读取，
+// 支持配置热更（改 key/endpoint 免重启）。
 
 interface VideoSubmitAuditContext {
   taskId: string
@@ -52,11 +52,12 @@ async function submitVolcengine(
 ): Promise<string> {
   const body = buildVolcengineTaskBody(model, prompt, params)
   const endpoint = '/contents/generations/tasks'
-  const apiKey = process.env.VOLCENGINE_API_KEY ?? ''
+  const apiUrl = volcengineConfig.apiUrl.replace(/\/$/, '')
+  const apiKey = volcengineConfig.apiKey
   const startedAt = Date.now()
   let responseStatus: number | null = null
   try {
-    const res = await fetch(`${VOLCENGINE_API_URL}${endpoint}`, {
+    const res = await fetch(`${apiUrl}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
@@ -127,9 +128,11 @@ async function submitCtyunEdge(
   params: Record<string, unknown>,
   audit: VideoSubmitAuditContext,
 ): Promise<string> {
+  // 每次提交实时读取 Nacos getter，支持热更（改 endpoint 免重启）。
+  const CTYUN_EDGE_API_URL = ctyunEdgeConfig.apiBaseUrl.replace(/\/$/, '')
   const body = buildCtyunEdgeTaskBody(model, prompt, params)
   const endpoint = '/contents/generations/tasks'
-  const apiKey = process.env.CTYUN_EDGE_API_KEY ?? ''
+  const apiKey = ctyunEdgeConfig.apiKey
   const startedAt = Date.now()
   let responseStatus: number | null = null
   try {
@@ -204,11 +207,13 @@ async function submitVeo(
   params: Record<string, unknown>,
   audit: VideoSubmitAuditContext,
 ): Promise<string> {
+  // 每次提交实时读取 Nacos getter，支持热更（改 endpoint 免重启）。
+  const VEO_API_URL = nanoBananaConfig.apiUrl.replace(/\/$/, '')
   const body: Record<string, unknown> = { model, prompt }
   if (params.aspect_ratio) body.aspect_ratio = params.aspect_ratio
   if (typeof params.duration === 'number' && params.duration > 0) body.duration = params.duration
 
-  const apiKey = process.env.NANO_BANANA_API_KEY ?? ''
+  const apiKey = nanoBananaConfig.apiKey
   const endpoint = '/v2/videos/generations'
   const startedAt = Date.now()
   let responseStatus: number | null = null

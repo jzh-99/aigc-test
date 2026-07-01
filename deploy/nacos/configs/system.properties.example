@@ -1,0 +1,60 @@
+# ============================================================
+# 系统级参数（跨供应商，集中管理）
+# Data ID: system.properties   Group: AI_GROUP
+#
+# 本文件是留空模板（.example）。复制为 system.properties 后填值。
+# 注意：*.properties 被 .gitignore 忽略（防止误入库），只有 .example 进 git。
+#
+# 与各 ai-providers-*.properties 的区别：
+#   - 供应商配置（volcengine/ctyun 等）严格：必须由 Nacos 提供，无默认值
+#   - 系统级配置（本文件）宽容：有合理默认值，留空时用代码默认（对齐原硬编码），
+#     填了就用填的值。热更价值在于线上调优免重启。
+# ============================================================
+
+# ── 图片生成超时链（adapter 调用 → 总兜底 → guardian 卡死判定，三者需联动）──
+# 注意：imageGuardianTimeoutMs 必须略大于 imageAdapterTimeoutMs，否则 guardian 会误杀正在跑的任务。
+
+# Volcengine 图片单次请求超时（ms），默认 300000
+VOLCENGINE_IMAGE_TIMEOUT_MS=300000
+
+# Tokenbus 图片单次请求超时（ms），默认 330000
+TOKENBUS_IMAGE_TIMEOUT_MS=330000
+
+# 天翼云图片单次请求超时（ms），默认 330000
+CTYUN_EDGE_IMAGE_TIMEOUT_MS=330000
+
+# 图片任务总兜底超时（ms，worker 调用 adapter 的 withTimeout），默认 330000
+IMAGE_ADAPTER_TIMEOUT_MS=330000
+
+# timeout-guardian 判定图片任务卡死的阈值（ms，须 > IMAGE_ADAPTER_TIMEOUT_MS），默认 360000
+IMAGE_GUARDIAN_TIMEOUT_MS=360000
+
+# ── 视频链路 ──
+# 视频轮询并发数，默认 10
+VIDEO_POLL_CONCURRENCY=10
+# 视频单次轮询请求超时（ms），默认 30000
+VIDEO_POLL_REQUEST_TIMEOUT_MS=30000
+# 视频任务最大寿命（ms，超此判定僵尸任务），默认 3600000（1 小时）
+MAX_VIDEO_AGE_MS=3600000
+
+# ── 资讯 / 绘本超时 ──
+# 资讯生成超时（ms，Ark /responses 长尾任务），默认 900000（15 分钟）
+NEWS_GENERATE_TIMEOUT_MS=900000
+# 绘本组图超时（ms），默认 600000（10 分钟）
+GROUP_IMAGE_TIMEOUT_MS=600000
+# 绘本分镜润色超时（ms），默认 300000（5 分钟）
+POLISH_TIMEOUT_MS=300000
+
+# ── 文本生成 max_tokens（各业务场景独立）──
+# AI 助手对话，默认 4000
+AI_ASSISTANT_MAX_TOKENS=4000
+# 画布 agent 对话，默认 8000
+CANVAS_AGENT_CHAT_MAX_TOKENS=8000
+# 画布 agent 剧本生成，默认 4000
+CANVAS_AGENT_SCRIPT_MAX_TOKENS=4000
+# 画布 agent 分镜拆分，默认 16000
+CANVAS_AGENT_STORYBOARD_MAX_TOKENS=16000
+# 画布 agent 文本节点生成，默认 2000
+CANVAS_AGENT_TEXT_GEN_MAX_TOKENS=2000
+# 短剧文本生成，默认 4000
+SHORT_DRAMA_MAX_TOKENS=4000

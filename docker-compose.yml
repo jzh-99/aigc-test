@@ -1,10 +1,19 @@
 name: aigc-platform
 
 # ============================================================
-# 本地开发用：仅启动基础设施（PostgreSQL + Redis）
+# 本地开发用：基础设施（PostgreSQL + Redis）+ Nacos 配置中心
 # 应用服务在本机直接 pnpm dev 运行
 # 对象存储使用火山引擎 TOS（需在 .env 中配置 TOS_* 环境变量）
 # 生产部署请使用 deploy/ 目录下的各服务独立配置
+#
+# 【三个服务一并声明，docker-compose up -d 全部启动】
+# 不需要某个服务时，自行手动停掉，例如：
+#   docker stop aigc-nacos-local      # 暂停 Nacos
+#   docker-compose up -d postgres redis   # 或只起指定服务
+# Nacos 是否生效，取决于 .env 的 NACOS_SERVER_ADDR：
+#   - 留空 → loadNacosConfig 跳过、走本地 .env（即使 Nacos 容器在跑也不连）
+#   - 填 localhost:8848 → 连本地 Nacos，可端到端验证热更
+# 详见 packages/nacos-config 和 deploy/nacos/README.md。
 # ============================================================
 
 services:
@@ -36,6 +45,35 @@ services:
       timeout: 3s
       retries: 5
 
+  # ─── Nacos 配置中心 ────────────────────────────────────────────────────────
+  # docker-compose up -d 会一并启动。不需要时自行 docker stop aigc-nacos-local。
+  # 控制台：http://localhost:8848/nacos （本地镜像默认关了鉴权，账号随意填/留空）
+  # 数据落在 nacos_data 卷，docker-compose down -v 才会删除。
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: aigc-nacos-local
+    restart: unless-stopped
+    environment:
+      - MODE=standalone          # 单机模式，内嵌 Derby，无需额外数据库
+      - NACOS_AUTH_ENABLE=false  # 本地开发图省事关掉鉴权；生产必须开（见 deploy/nacos/）
+      - JVM_XMS=512m
+      - JVM_XMX=512m
+      - JVM_XMN=256m
+      - TZ=Asia/Shanghai
+    ports:
+      # 8848：HTTP/Web 控制台；9848：gRPC（Node 客户端必须，SDK 自动用 主端口+1000）
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos_data:/home/nacos/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8848/nacos/v1/console/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 volumes:
   postgres_data:
   redis_data:
+  nacos_data:

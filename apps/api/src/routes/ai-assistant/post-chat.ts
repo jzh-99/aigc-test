@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { getDb } from '@aigc/db'
-import { chatEndpoint, AI_API_KEY, AI_MODEL, SYSTEM_PROMPT } from './_shared.js'
+import { aiAssistant, SYSTEM_PROMPT } from './_shared.js'
+import { systemConfig } from '@aigc/nacos-config'
 
 // POST /ai-assistant/chat — 流式对话（支持文本、图片 base64、视频 URL）
 const route: FastifyPluginAsync = async (app) => {
@@ -104,18 +105,18 @@ const route: FastifyPluginAsync = async (app) => {
 
       let doubaoRes: Response
       try {
-        doubaoRes = await fetch(chatEndpoint, {
+        doubaoRes = await fetch(aiAssistant.chatEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            Authorization: `Bearer ${AI_API_KEY}`,
+            Authorization: `Bearer ${aiAssistant.apiKey}`,
           },
-          body: JSON.stringify({ 
-            model: AI_MODEL,
+          body: JSON.stringify({
+            model: aiAssistant.model,
             messages,
             stream: true,
-            max_tokens: 4000,
+            max_tokens: systemConfig.aiAssistantMaxTokens,
             thinking: {
               "type":"disabled"
             }

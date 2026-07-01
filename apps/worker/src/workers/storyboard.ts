@@ -2,14 +2,14 @@ import { Worker } from 'bullmq'
 import { sql } from 'kysely'
 import type { StoryboardJobData } from '@aigc/types'
 import { getDb, recordProviderApiLog } from '@aigc/db'
+import { qwenConfig } from '@aigc/nacos-config'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { buildLogger } from '../logger.js'
 
 const logger = buildLogger()
 
-const API_URL = process.env.QWEN_API_URL ?? ''
-const API_KEY = process.env.QWEN_API_KEY ?? ''
-const MODEL = process.env.QWEN_MODEL ?? 'qwen3.6-plus'
+// 注意：QWEN_API_URL/KEY/MODEL 不在此处顶层读取，而是移入 callQwen 函数体内，
+// 每次处理 job 时实时读取 Nacos getter，支持热更（改 key/model 免重启）。
 const SYSTEM_PROMPT = process.env.AI_PROMPT_CANVAS_STORYBOARD_SPLIT ?? ''
 const QWEN_STORYBOARD_TIMEOUT_MS = 300_000
 const STORYBOARD_SEGMENT_DURATION_INSTRUCTION = '每个分镜约3-5秒，该时段内展示的分镜不宜过长'
@@ -49,6 +49,10 @@ async function callQwen(
   logCtx: Record<string, unknown>,
 ): Promise<ShotItem[]> {
   const { script, shotCount } = data
+  // 每次调用实时读取 Nacos getter，支持热更（改 key/model 免重启）。
+  const API_URL = qwenConfig.apiUrl
+  const API_KEY = qwenConfig.apiKey
+  const MODEL = qwenConfig.model
   const countInstruction = shotCount > 0
     ? `分割成 ${shotCount} 个分镜，每个分镜约3-5秒`
     : `根据剧本内容自动决定分镜数量，${STORYBOARD_SEGMENT_DURATION_INSTRUCTION}`

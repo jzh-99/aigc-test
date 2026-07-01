@@ -1,0 +1,13 @@
+# ============================================================
+# 算力巴士 Tokenbus（三个图片模型）
+# Data ID: ai-providers-tokenbus.properties   Group: AI_GROUP
+#
+# 本文件是留空模板（.example）。复制为 ai-providers-tokenbus.properties 后填真实值。
+# 注意：*.properties 被 .gitignore 忽略（防止密钥入库），只有 .example 进 git。
+# ============================================================
+
+# Tokenbus OpenAI 兼容图片生成基址（一般不用改）
+TOKENBUS_API_BASE_URL=https://tokenbus.wangpudata.com
+
+# Tokenbus API Token（必填，Authorization: Bearer <token>）
+TOKENBUS_API_KEY=
