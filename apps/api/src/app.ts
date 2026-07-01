@@ -23,6 +23,13 @@ export async function buildApp() {
 
   const app = Fastify({
     logger: logger as unknown as boolean,
+    ajv: {
+      customOptions: {
+        // 项目里部分 JSON Schema 使用 type: ['string', 'array'] 表达联合类型；
+        // 显式允许后可避免 Ajv strictTypes 启动警告，不改变校验语义。
+        allowUnionTypes: true,
+      },
+    },
     bodyLimit: 100 * 1024 * 1024, // 100 MB — supports up to 10 reference images at 20 MB each (base64 overhead ~33%)
   })
 
