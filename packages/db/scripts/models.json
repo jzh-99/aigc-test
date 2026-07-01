@@ -2,50 +2,11 @@
   {
     "modelParams": [
       {
-        "modelCode": "gpt-image-2",
+        "modelCode": "openai/gpt-image-2",
         "modelType": "1",
-        "modelName": "超能图片2",
+        "modelName": "超能图片2(新版)",
         "modelDesc": "文字渲染准确，UI截图逼真，照片级真实感",
-        "modelProvider": "comfly",
-        "useChannel": "B,C",
-        "singleUnit": "fix",
-        "paramsSchema": {
-          "resolution": ["2k"],
-          "aspect_ratio": [
-            {
-              "label": "1:1",
-              "value": "1:1"
-            },
-            {
-              "label": "4:3",
-              "value": "4:3"
-            },
-            {
-              "label": "3:4",
-              "value": "3:4"
-            }
-          ],
-          "image": [],
-          "image_ref": "6"
-        },
-        "paramsPricing": [
-          {
-            "model": "gpt-image-2",
-            "resolution": "2k",
-            "unit_price": 2
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "modelParams": [
-      {
-        "modelCode": "nano-banana-2",
-        "modelType": "1",
-        "modelName": "全能图片Pro",
-        "modelDesc": "高质量输出，细节丰富",
-        "modelProvider": "comfly",
+        "modelProvider": "tokenbus",
         "useChannel": "B,C",
         "singleUnit": "fix",
         "paramsSchema": {
@@ -80,22 +41,21 @@
               "value": "9:16"
             }
           ],
-          "image": [],
-          "image_ref": "6"
+          "image": []
         },
         "paramsPricing": [
           {
-            "model": "nano-banana-2",
+            "model": "openai/gpt-image-2",
             "resolution": "1k",
             "unit_price": 2
           },
           {
-            "model": "nano-banana-2",
+            "model": "openai/gpt-image-2",
             "resolution": "2k",
             "unit_price": 2
           },
           {
-            "model": "nano-banana-2",
+            "model": "openai/gpt-image-2",
             "resolution": "4k",
             "unit_price": 2
           }
@@ -106,11 +66,11 @@
   {
     "modelParams": [
       {
-        "modelCode": "gemini-3.1-flash-image-preview",
+        "modelCode": "google/gemini-3-pro-image-preview",
         "modelType": "1",
-        "modelName": "全能图片2",
-        "modelDesc": "快速生成，适合日常使用",
-        "modelProvider": "comfly",
+        "modelName": "全能图片Pro(新版)",
+        "modelDesc": "高质量输出，细节丰富",
+        "modelProvider": "tokenbus",
         "useChannel": "B,C",
         "singleUnit": "fix",
         "paramsSchema": {
@@ -145,22 +105,85 @@
               "value": "9:16"
             }
           ],
-          "image": [],
-          "image_ref": "6"
+          "image": []
         },
         "paramsPricing": [
           {
-            "model": "gemini-3.1-flash-image-preview",
+            "model": "google/gemini-3-pro-image-preview",
+            "resolution": "1k",
+            "unit_price": 4
+          },
+          {
+            "model": "google/gemini-3-pro-image-preview",
+            "resolution": "2k",
+            "unit_price": 4
+          },
+          {
+            "model": "google/gemini-3-pro-image-preview",
+            "resolution": "4k",
+            "unit_price": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "modelParams": [
+      {
+        "modelCode": "google/gemini-3.1-flash-image-preview",
+        "modelType": "1",
+        "modelName": "全能图片2(新版)",
+        "modelDesc": "快速生成，适合日常使用",
+        "modelProvider": "tokenbus",
+        "useChannel": "B,C",
+        "singleUnit": "fix",
+        "paramsSchema": {
+          "resolution": ["1k", "2k", "4k"],
+          "aspect_ratio": [
+            {
+              "label": "1:1",
+              "value": "1:1"
+            },
+            {
+              "label": "4:3",
+              "value": "4:3"
+            },
+            {
+              "label": "3:4",
+              "value": "3:4"
+            },
+            {
+              "label": "3:2",
+              "value": "3:2"
+            },
+            {
+              "label": "2:3",
+              "value": "2:3"
+            },
+            {
+              "label": "16:9",
+              "value": "16:9"
+            },
+            {
+              "label": "9:16",
+              "value": "9:16"
+            }
+          ],
+          "image": []
+        },
+        "paramsPricing": [
+          {
+            "model": "google/gemini-3.1-flash-image-preview",
             "resolution": "1k",
             "unit_price": 1
           },
           {
-            "model": "gemini-3.1-flash-image-preview",
+            "model": "google/gemini-3.1-flash-image-preview",
             "resolution": "2k",
             "unit_price": 1
           },
           {
-            "model": "gemini-3.1-flash-image-preview",
+            "model": "google/gemini-3.1-flash-image-preview",
             "resolution": "4k",
             "unit_price": 1
           }
@@ -207,17 +230,17 @@
         },
         "paramsPricing": [
           {
-            "model": "seedream-5.0-lite",
+            "model": "doubao-seedream-5-0-lite-260128",
             "resolution": "2k",
             "unit_price": 3
           },
           {
-            "model": "seedream-5.0-lite",
+            "model": "doubao-seedream-5-0-lite-260128",
             "resolution": "3k",
             "unit_price": 3
           },
           {
-            "model": "seedream-5.0-lite",
+            "model": "doubao-seedream-5-0-lite-260128",
             "resolution": "4k",
             "unit_price": 3
           }
@@ -264,12 +287,12 @@
         },
         "paramsPricing": [
           {
-            "model": "seedream-4.5",
+            "model": "doubao-seedream-4-5-251128",
             "resolution": "2k",
             "unit_price": 3
           },
           {
-            "model": "seedream-4.5",
+            "model": "doubao-seedream-4-5-251128",
             "resolution": "4k",
             "unit_price": 3
           }
@@ -316,17 +339,17 @@
         },
         "paramsPricing": [
           {
-            "model": "seedream-4.0",
+            "model": "doubao-seedream-4-0-250828",
             "resolution": "1k",
             "unit_price": 3
           },
           {
-            "model": "seedream-4.0",
+            "model": "doubao-seedream-4-0-250828",
             "resolution": "2k",
             "unit_price": 3
           },
           {
-            "model": "seedream-4.0",
+            "model": "doubao-seedream-4-0-250828",
             "resolution": "4k",
             "unit_price": 3
           }
@@ -494,17 +517,17 @@
         },
         "paramsPricing": [
           {
-            "model": "seedance-1.5-pro",
+            "model": "doubao-seedance-1-5-pro-251215",
             "resolution": "480p",
             "unit_price": 5
           },
           {
-            "model": "seedance-1.5-pro",
+            "model": "doubao-seedance-1-5-pro-251215",
             "resolution": "720p",
             "unit_price": 10
           },
           {
-            "model": "seedance-1.5-pro",
+            "model": "doubao-seedance-1-5-pro-251215",
             "resolution": "1080p",
             "unit_price": 20
           }
@@ -615,17 +638,17 @@
         },
         "paramsPricing": [
           {
-            "model": "seedance-2.0",
+            "model": "doubao-seedance-2-0-260128",
             "resolution": "480p",
             "unit_price": 5
           },
           {
-            "model": "seedance-2.0",
+            "model": "doubao-seedance-2-0-260128",
             "resolution": "720p",
             "unit_price": 10
           },
           {
-            "model": "seedance-2.0",
+            "model": "doubao-seedance-2-0-260128",
             "resolution": "1080p",
             "unit_price": 25
           }
@@ -736,12 +759,12 @@
         },
         "paramsPricing": [
           {
-            "model": "seedance-2.0-fast",
+            "model": "doubao-seedance-2-0-fast-260128",
             "resolution": "720p",
             "unit_price": 8
           },
           {
-            "model": "seedance-2.0-fast",
+            "model": "doubao-seedance-2-0-fast-260128",
             "resolution": "480p",
             "unit_price": 4
           }
@@ -852,17 +875,17 @@
         },
         "paramsPricing": [
           {
-            "model": "ctyun-seedance-2.0",
+            "model": "cdance2.0-0611",
             "resolution": "720p",
             "unit_price": 10
           },
           {
-            "model": "ctyun-seedance-2.0",
+            "model": "cdance2.0-0611",
             "resolution": "1080p",
             "unit_price": 20
           },
           {
-            "model": "ctyun-seedance-2.0",
+            "model": "cdance2.0-0611",
             "resolution": "480p",
             "unit_price": 5
           }
@@ -973,12 +996,12 @@
         },
         "paramsPricing": [
           {
-            "model": "ctyun-seedance-2.0-fast",
+            "model": "cdance2.0-fast-0611",
             "resolution": "720p",
             "unit_price": 8
           },
           {
-            "model": "ctyun-seedance-2.0-fast",
+            "model": "cdance2.0-fast-0611",
             "resolution": "480p",
             "unit_price": 4
           }

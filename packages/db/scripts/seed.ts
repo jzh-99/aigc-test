@@ -15,14 +15,23 @@ const llmAvatar = (icon: string): string | null =>
   TOS_PUBLIC_URL ? `${TOS_PUBLIC_URL}/assets/llm/${icon}.png` : null
 
 function readProviderModelsJson(): ProviderModelsSeedGroup[] {
-  const modelsJsonPath = path.resolve(__dirname, '../../../models.json')
+  const modelsJsonPath = path.resolve(__dirname, 'models.json')
   return JSON.parse(readFileSync(modelsJsonPath, 'utf8')) as ProviderModelsSeedGroup[]
 }
 
 async function seedProviderModelsFromJson(db: ReturnType<typeof getDb>) {
   const models = flattenProviderModelsSeed(readProviderModelsJson())
 
-  await db.deleteFrom('provider_models').execute()
+  // 只删除 models.json 实际覆盖的 (provider_code, code) 组合，
+  // 保留 models.json 未纳管的历史模型（如 comfly 图片模型、数字人/动作模仿模型），
+  // 避免“业管未导出但业务仍在用”的模型被清空。
+  for (const model of models) {
+    await db
+      .deleteFrom('provider_models')
+      .where('provider_code', '=', model.provider_code)
+      .where('code', '=', model.code)
+      .execute()
+  }
 
   for (const model of models) {
     await db
@@ -197,8 +206,8 @@ async function main() {
     console.log(`  provider_models seeded (${m.code})`)
   }
 
-  // 10. Provider: Nano Banana — upsert by code
-  const providerResult = await db
+  // 10a. Provider: Comfly — 历史图片 provider，模型与能力保持不变
+  const comflyProviderResult = await db
     .insertInto('providers')
     .values({
       code: 'comfly',
@@ -224,8 +233,32 @@ async function main() {
     .returningAll()
     .execute()
 
-  const provider = providerResult[0]
+  const comflyProvider = comflyProviderResult[0]
   console.log('  providers seeded (comfly)')
+
+  // 10b. Provider: Tokenbus — 新增图片 provider，能力与 Comfly 对齐
+  const tokenbusProviderResult = await db
+    .insertInto('providers')
+    .values({
+      code: 'tokenbus',
+      name: '算力巴士',
+      region: 'cn',
+      modules: JSON.stringify(['image']),
+      is_active: true,
+      config: JSON.stringify({ api_base_url: 'https://tokenbus.wangpudata.com' }),
+    })
+    .onConflict((oc: any) => oc.column('code').doUpdateSet({
+      name: '算力巴士',
+      region: 'cn',
+      modules: JSON.stringify(['image']),
+      is_active: true,
+      config: JSON.stringify({ api_base_url: 'https://tokenbus.wangpudata.com' }),
+    }))
+    .returningAll()
+    .execute()
+
+  const tokenbusProvider = tokenbusProviderResult[0]
+  console.log('  providers seeded (tokenbus)')
 
   const SIX_IMAGE_CATEGORY_REFERENCES = {
     text_to_image: {
@@ -261,32 +294,35 @@ async function main() {
     },
   }
 
-  // 11. Provider models: comfly 图片模型 — upsert by code
+  // 11. 图片模型 — Comfly（历史）与 Tokenbus（新增）能力一致，仅 code/provider 不同
+  // 共用的能力快照（resolution / aspect_ratio / category_references）保持模型本身能力，不随 provider 收窄。
+  const GEMINI_FLASH_IMAGE_SCHEMA = {
+    params_pricing_template: (model: string) => [
+      { resolution: '1k', model, unit_price: 1 },
+      { resolution: '2k', model: `${model}-2k`, unit_price: 1 },
+      { resolution: '4k', model: `${model}-4k`, unit_price: 1 },
+    ],
+    params_schema: {
+      resolution: ['1k', '2k', '4k'],
+      aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
+      image: [],
+    },
+  }
+
   const imageModels = [
-    // {
-    //   code: 'nano-banana-2-2k',
-    //   name: 'Nano Banana 2-2k',
-    //   description: '高质量输出，细节丰富',
-    //   credit_cost: 10,
-    // },
+    // ---- Comfly 历史模型，code / 能力字段原样保留 ----
     {
+      provider: comflyProvider.code,
       code: 'gemini-3.1-flash-image-preview',
       name: '全能图片2',
       description: '快速生成，适合日常使用',
       avatar: llmAvatar('nanoBanana'),
-      params_pricing: [
-        { resolution: '1k', model: 'gemini-3.1-flash-image-preview', unit_price: 1 },
-        { resolution: '2k', model: 'gemini-3.1-flash-image-preview-2k', unit_price: 1 },
-        { resolution: '4k', model: 'gemini-3.1-flash-image-preview-4k', unit_price: 1 },
-      ],
-      params_schema: {
-        resolution: ['1k', '2k', '4k'],
-        aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
-        image: [],
-      },
+      params_pricing: GEMINI_FLASH_IMAGE_SCHEMA.params_pricing_template('gemini-3.1-flash-image-preview'),
+      params_schema: GEMINI_FLASH_IMAGE_SCHEMA.params_schema,
       category_references: SIX_IMAGE_CATEGORY_REFERENCES,
     },
     {
+      provider: comflyProvider.code,
       code: 'gpt-image-2',
       name: '超能图片2',
       description: '文字渲染准确，UI截图逼真，照片级真实感',
@@ -302,6 +338,7 @@ async function main() {
       category_references: SIX_IMAGE_CATEGORY_REFERENCES,
     },
     {
+      provider: comflyProvider.code,
       code: 'nano-banana-2',
       name: '全能图片Pro',
       description: '高质量输出，细节丰富',
@@ -318,19 +355,60 @@ async function main() {
       },
       category_references: SIX_IMAGE_CATEGORY_REFERENCES,
     },
+    // ---- Tokenbus 新增模型，能力与 Comfly 对齐 ----
+    {
+      provider: tokenbusProvider.code,
+      code: 'google/gemini-3.1-flash-image-preview',
+      name: '全能图片2(新版)',
+      description: '快速生成，适合日常使用',
+      avatar: llmAvatar('nanoBanana'),
+      params_pricing: GEMINI_FLASH_IMAGE_SCHEMA.params_pricing_template('google/gemini-3.1-flash-image-preview'),
+      params_schema: GEMINI_FLASH_IMAGE_SCHEMA.params_schema,
+      category_references: SIX_IMAGE_CATEGORY_REFERENCES,
+    },
+    {
+      provider: tokenbusProvider.code,
+      code: 'openai/gpt-image-2',
+      name: '超能图片2(新版)',
+      description: '文字渲染准确，UI截图逼真，照片级真实感',
+      avatar: llmAvatar('openai'),
+      params_pricing: [
+        { resolution: '1k', model: 'openai/gpt-image-2', unit_price: 2 },
+        { resolution: '2k', model: 'openai/gpt-image-2', unit_price: 2 },
+        { resolution: '4k', model: 'openai/gpt-image-2', unit_price: 2 },
+      ],
+      params_schema: {
+        resolution: ['1k', '2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
+        image: [],
+      },
+      category_references: SIX_IMAGE_CATEGORY_REFERENCES,
+    },
+    {
+      provider: tokenbusProvider.code,
+      code: 'google/gemini-3-pro-image-preview',
+      name: '全能图片Pro(新版)',
+      description: '高质量输出，细节丰富',
+      avatar: llmAvatar('nanoBanana'),
+      params_pricing: [
+        { resolution: '1k', model: 'google/gemini-3-pro-image-preview', unit_price: 4 },
+        { resolution: '2k', model: 'google/gemini-3-pro-image-preview', unit_price: 4 },
+        { resolution: '4k', model: 'google/gemini-3-pro-image-preview', unit_price: 4 },
+      ],
+      params_schema: {
+        resolution: ['1k', '2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'],
+        image: [],
+      },
+      category_references: SIX_IMAGE_CATEGORY_REFERENCES,
+    },
   ]
-
-  // const imageModelsParamsSchema = JSON.stringify({
-  //   resolution: ['480p', '720p', '1080p'],
-  //   aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
-  //   image: [],
-  // })
 
   for (const m of imageModels) {
     await db
       .insertInto('provider_models')
       .values({
-        provider_code: provider.code,
+        provider_code: m.provider,
         code: m.code,
         name: m.name,
         description: m.description,
@@ -352,10 +430,10 @@ async function main() {
         is_active: true,
       }))
       .execute()
-    console.log(`  provider_models seeded (${m.code})`)
+    console.log(`  provider_models seeded (${m.provider}/${m.code})`)
   }
 
-  // 11b. veo3.1 视频模型 — 挂在 nano-banana provider 下
+  // 11b. 历史视频模型上下文 — 最终会由 models.json 覆盖 provider_models
   const aspectRatioDefaultArr = [{label: '自适应', value : 'adaptive'}, '16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
   const timeDefaultArr = [
     // { label: '自动', value: -1 },
@@ -1020,8 +1098,8 @@ async function main() {
     console.log(`  provider_models seeded (${m.code})`)
   }
 
-  // provider_models 最终以业管导出的 models.json 为唯一初始化来源。
-  // 上方历史模型插入仅用于保留 provider 初始化上下文；这里清空并替换为 JSON 数据。
+  // 用业管导出的 models.json 增量覆盖对应 (provider_code, code) 的模型规格；
+  // 未被 models.json 纳管的历史模型（comfly 图片、数字人/动作模仿等）予以保留。
   await seedProviderModelsFromJson(db)
 
   const minimaxSystemVoiceRows = `
