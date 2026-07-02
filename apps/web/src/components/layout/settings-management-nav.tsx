@@ -1,20 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { ArrowLeft, Settings } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import { Settings } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useNavigationStore } from '@/stores/navigation-store'
 import { managementNavItems } from './nav-config'
 import { cn } from '@/lib/utils'
 
-interface SettingsManagementNavProps {
-  showBack?: boolean
-}
-
-export function SettingsManagementNav({ showBack = false }: SettingsManagementNavProps) {
+export function SettingsManagementNav() {
   const pathname = usePathname()
-  const router = useRouter()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const startNavigation = useNavigationStore((s) => s.startNavigation)
@@ -29,26 +24,8 @@ export function SettingsManagementNav({ showBack = false }: SettingsManagementNa
     }),
   ]
 
-  function handleBack() {
-    if (window.history.length > 1) {
-      router.back()
-      return
-    }
-    router.push('/settings')
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/70 p-2">
-      {showBack && (
-        <button
-          type="button"
-          onClick={handleBack}
-          className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          返回上一步
-        </button>
-      )}
       {tabs.map((item) => {
         const Icon = item.icon
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)

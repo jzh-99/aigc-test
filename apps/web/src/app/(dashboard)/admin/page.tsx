@@ -37,7 +37,7 @@ export default function AdminPage() {
         <p className="text-muted-foreground">管理所有团队、用户和A豆</p>
       </div>
 
-      <SettingsManagementNav showBack />
+      <SettingsManagementNav />
 
       <div className="flex gap-1 border-b">
         {tabs.map((tab) => (

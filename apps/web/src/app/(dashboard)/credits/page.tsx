@@ -78,7 +78,7 @@ export default function CreditsPage() {
         <p className="text-muted-foreground">查看当前工作区可用A豆和消费记录</p>
       </div>
 
-      <SettingsManagementNav showBack />
+      <SettingsManagementNav />
 
       {/* Team credits nav for owner */}
       {isOwner && activeTeamId && (

@@ -40,7 +40,7 @@ function TeamPageContent() {
         <p className="text-muted-foreground">管理团队成员、配额和工作区</p>
       </div>
 
-      <SettingsManagementNav showBack />
+      <SettingsManagementNav />
 
       <div className="flex gap-1 border-b">
         {tabs.map((tab) => (
