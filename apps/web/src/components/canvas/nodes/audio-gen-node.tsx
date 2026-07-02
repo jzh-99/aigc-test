@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react'
 import { Handle, Position } from 'reactflow'
-import { AlertCircle, ChevronLeft, ChevronRight, Loader2, Music, Pause, Play, X } from 'lucide-react'
+import { AlertCircle, ChevronLeft, ChevronRight, Download, Loader2, Music, Pause, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
 import type { AudioGenConfig, CanvasNodeData } from '@/lib/canvas/types'
@@ -68,6 +68,19 @@ export const AudioGenNode = memo(function AudioGenNode({ id, data }: { id: strin
     }
   }
 
+  function handleDownload(event: React.MouseEvent) {
+    event.stopPropagation()
+    if (!currentUrl) return
+    const a = document.createElement('a')
+    a.href = currentUrl
+    a.download = data.label || 'audio'
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   return (
     <div
       className={cn(
@@ -120,7 +133,7 @@ export const AudioGenNode = memo(function AudioGenNode({ id, data }: { id: strin
         )}
       </div>
 
-      <div className="p-2">
+      <div className="relative p-2">
         {currentUrl ? (
           <div className="rounded-lg border border-border bg-muted/30 p-3">
             <audio ref={audioRef} src={currentUrl} preload="metadata" onEnded={() => setPlaying(false)} />
@@ -146,6 +159,17 @@ export const AudioGenNode = memo(function AudioGenNode({ id, data }: { id: strin
               <span className="text-[11px]">点击节点配置音频</span>
             )}
           </div>
+        )}
+        {currentUrl && (
+          <button
+            onClick={handleDownload}
+            onMouseDown={(event) => event.stopPropagation()}
+            className="absolute bottom-3.5 right-3.5 z-20 rounded-md bg-black/45 p-1.5 text-white opacity-0 shadow-sm transition-opacity hover:bg-black/70 group-hover:opacity-100"
+            title="下载"
+            aria-label="下载音频"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </button>
         )}
       </div>
 

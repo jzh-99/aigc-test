@@ -254,6 +254,42 @@ function ContextNodeMenu({
       menuEl.appendChild(titleEl)
     }
 
+    if (onUpload) {
+      const uploadBtn = document.createElement('button')
+      uploadBtn.type = 'button'
+      uploadBtn.disabled = !!uploadingFromMenu
+      uploadBtn.style.cssText = `
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        color: hsl(var(--foreground));
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        margin-bottom: 4px;
+        cursor: ${uploadingFromMenu ? 'not-allowed' : 'pointer'};
+        opacity: ${uploadingFromMenu ? '0.6' : '1'};
+        transition: all 0.15s;
+      `
+      uploadBtn.innerHTML = `<span>${uploadingFromMenu ? '上传中...' : uploadLabel}</span>`
+      if (!uploadingFromMenu) {
+        uploadBtn.onmouseenter = () => {
+          uploadBtn.style.background = 'hsl(var(--muted))'
+        }
+        uploadBtn.onmouseleave = () => {
+          uploadBtn.style.background = 'transparent'
+        }
+        uploadBtn.onclick = () => {
+          onUpload()
+        }
+      }
+      menuEl.appendChild(uploadBtn)
+    }
+
     // 创建按钮
     NODE_MENU_CATEGORIES.forEach((category) => {
       const btn = document.createElement('button')
@@ -307,7 +343,7 @@ function ContextNodeMenu({
         menuRef.current = null
       }
     }
-  }, [x, y, title, onSelect, compatibleTypes])
+  }, [x, y, title, onSelect, onUpload, uploadLabel, uploadingFromMenu, compatibleTypes])
 
   // 返回一个占位符（实际渲染在 useEffect 中完成）
   return null
@@ -1379,7 +1415,7 @@ function Flow({
       <input
         ref={uploadFromMenuRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/*,video/*,audio/*"
         className="hidden"
         onChange={handleUploadFromMenu}
       />

@@ -5,7 +5,7 @@ import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useShallow } from 'zustand/react/shallow'
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
@@ -99,6 +99,19 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
     }
   }
 
+  function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!currentImageUrl) return
+    const a = document.createElement('a')
+    a.href = currentImageUrl
+    a.download = data.label || 'image'
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   return (
     <div
       className={cn(
@@ -157,34 +170,47 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
 
       {/* Preview */}
       <div className="p-2 bg-card">
-        {currentImageUrl ? (
-          <img
-            src={currentImageUrl}
-            alt="Generated"
-            className="w-full h-auto rounded-lg block [transform:translateZ(0)] [backface-visibility:hidden]"
-            loading="lazy"
-            onLoad={(e) => {
-              const img = e.currentTarget
-              setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
-            }}
-          />
-        ) : (
-          <div
-            className="flex flex-col items-center justify-center gap-2 text-muted-foreground rounded-lg bg-muted"
-            style={{ aspectRatio: '4/3' }}
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="font-mono text-[10px] tracking-widest uppercase">
-                  {Math.round(progress)}<span className="text-muted-foreground/50 ml-0.5">%</span>
-                </span>
-              </>
-            ) : (
-              <span className="text-[11px]">点击节点展开参数</span>
-            )}
-          </div>
-        )}
+        <div className="relative">
+          {currentImageUrl ? (
+            <img
+              src={currentImageUrl}
+              alt="Generated"
+              className="w-full h-auto rounded-lg block [transform:translateZ(0)] [backface-visibility:hidden]"
+              loading="lazy"
+              onLoad={(e) => {
+                const img = e.currentTarget
+                setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
+              }}
+            />
+          ) : (
+            <div
+              className="flex flex-col items-center justify-center gap-2 text-muted-foreground rounded-lg bg-muted"
+              style={{ aspectRatio: '4/3' }}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="font-mono text-[10px] tracking-widest uppercase">
+                    {Math.round(progress)}<span className="text-muted-foreground/50 ml-0.5">%</span>
+                  </span>
+                </>
+              ) : (
+                <span className="text-[11px]">点击节点展开参数</span>
+              )}
+            </div>
+          )}
+          {currentImageUrl && (
+            <button
+              onClick={handleDownload}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="absolute bottom-1.5 right-1.5 z-20 rounded-md bg-black/45 p-1.5 text-white opacity-0 shadow-sm transition-opacity hover:bg-black/70 group-hover:opacity-100"
+              title="下载"
+              aria-label="下载图片"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {warningMessage && (

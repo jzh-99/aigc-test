@@ -5,7 +5,7 @@ import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useShallow } from 'zustand/react/shallow'
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Pause, Film } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Pause, Film, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
@@ -160,6 +160,19 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
     }
   }
 
+  function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!currentUrl) return
+    const a = document.createElement('a')
+    a.href = currentUrl
+    a.download = data.label || 'video'
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   const isVideo = currentUrl && (currentUrl.includes('.mp4') || currentUrl.includes('.mov') || currentUrl.includes('.webm') || selectedOutput?.type === 'video')
   const ratioFromVideo = videoSize && videoSize.h > 0 ? (videoSize.w / videoSize.h) : null
   const ratioFromConfig = aspectRatioToNumber(data.config?.aspectRatio)
@@ -293,6 +306,17 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
               <span className="text-[11px]">点击节点配置参数</span>
             )}
           </div>
+        )}
+        {currentUrl && (
+          <button
+            onClick={handleDownload}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="absolute bottom-2 right-2 z-20 rounded-md bg-black/45 p-1.5 text-white opacity-0 shadow-sm transition-opacity hover:bg-black/70 group-hover:opacity-100"
+            title="下载"
+            aria-label="下载视频"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </button>
         )}
       </div>
 

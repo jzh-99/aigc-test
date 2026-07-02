@@ -7,7 +7,7 @@ import { useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { uploadAssetFile } from '@/lib/canvas/canvas-api'
-import { Image as ImageIcon, X, FileVideo, Music, Upload, Play, Pause, Loader2 } from 'lucide-react'
+import { Image as ImageIcon, X, FileVideo, Music, Upload, Play, Pause, Loader2, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
@@ -92,6 +92,19 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
     }
   }
 
+  function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!cfg.url) return
+    const a = document.createElement('a')
+    a.href = cfg.url
+    a.download = cfg.name || data.label || 'asset'
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   const TypeIcon = isVideo ? FileVideo : isAudio ? Music : ImageIcon
   const displayRatio = isVideo && videoSize ? `${videoSize.w} / ${videoSize.h}` : '16 / 9'
   const nodeWidth = isVideo && videoSize ? nodeWidthFromRatio(videoSize.w, videoSize.h) : 160
@@ -123,83 +136,97 @@ export const AssetNode = memo(function AssetNode({ id, data }: { id: string; dat
 
       {/* Preview / Upload area */}
       <div className="p-2 bg-card rounded-b-xl">
-        {uploading ? (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-lg bg-muted" style={{ aspectRatio: '4/3' }}>
-            <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
-            <span className="text-[10px] text-muted-foreground">上传中…</span>
-          </div>
-        ) : cfg.url ? (
-          isAudio ? (
-            <div className="flex flex-col gap-1">
-              <div
-                className="flex items-center justify-center gap-2 rounded-lg bg-muted cursor-pointer hover:bg-accent transition-colors"
-                style={{ aspectRatio: '4/3' }}
-                onClick={togglePlay}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <div className="w-10 h-10 rounded-full bg-card border border-border shadow flex items-center justify-center">
-                {playing ? <Pause className="w-4 h-4 text-foreground" /> : <Play className="w-4 h-4 text-foreground ml-0.5" />}
+        <div className="relative">
+          {uploading ? (
+            <div className="flex flex-col items-center justify-center gap-2 rounded-lg bg-muted" style={{ aspectRatio: '4/3' }}>
+              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+              <span className="text-[10px] text-muted-foreground">上传中…</span>
+            </div>
+          ) : cfg.url ? (
+            isAudio ? (
+              <div className="flex flex-col gap-1">
+                <div
+                  className="flex items-center justify-center gap-2 rounded-lg bg-muted cursor-pointer hover:bg-accent transition-colors"
+                  style={{ aspectRatio: '4/3' }}
+                  onClick={togglePlay}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className="w-10 h-10 rounded-full bg-card border border-border shadow flex items-center justify-center">
+                  {playing ? <Pause className="w-4 h-4 text-foreground" /> : <Play className="w-4 h-4 text-foreground ml-0.5" />}
+                  </div>
+                  <Music className="w-5 h-5 text-muted-foreground/40" />
                 </div>
-                <Music className="w-5 h-5 text-muted-foreground/40" />
+                <audio
+                  ref={audioRef}
+                  src={cfg.url}
+                  onEnded={() => setPlaying(false)}
+                  className="hidden"
+                />
               </div>
-              <audio
-                ref={audioRef}
+            ) : isVideo ? (
+              <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: displayRatio }}>
+                <video
+                  ref={videoRef}
+                  src={cfg.url}
+                  className="w-full h-full object-contain"
+                  muted
+                  preload="metadata"
+                  onLoadedMetadata={(e) => {
+                    const video = e.currentTarget
+                    if (video.videoWidth > 0 && video.videoHeight > 0) {
+                      setVideoSize({ w: video.videoWidth, h: video.videoHeight })
+                    }
+                  }}
+                  onEnded={() => setPlaying(false)}
+                />
+                <button
+                  onClick={togglePlay}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className={cn(
+                    'absolute inset-0 flex items-center justify-center transition-colors',
+                    playing
+                      ? 'bg-transparent opacity-0 hover:opacity-100 hover:bg-black/20'
+                      : 'bg-black/30 hover:bg-black/40'
+                  )}
+                >
+                  <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
+                  {playing ? <Pause className="w-4 h-4 text-foreground" /> : <Play className="w-4 h-4 text-foreground ml-0.5" />}
+                  </div>
+                </button>
+              </div>
+            ) : (
+              <img
                 src={cfg.url}
-                onEnded={() => setPlaying(false)}
-                className="hidden"
+                alt={cfg.name ?? 'asset'}
+                className="w-full h-auto rounded-lg block"
+                loading="lazy"
               />
-            </div>
-          ) : isVideo ? (
-            <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: displayRatio }}>
-              <video
-                ref={videoRef}
-                src={cfg.url}
-                className="w-full h-full object-contain"
-                muted
-                preload="metadata"
-                onLoadedMetadata={(e) => {
-                  const video = e.currentTarget
-                  if (video.videoWidth > 0 && video.videoHeight > 0) {
-                    setVideoSize({ w: video.videoWidth, h: video.videoHeight })
-                  }
-                }}
-                onEnded={() => setPlaying(false)}
-              />
-              <button
-                onClick={togglePlay}
-                onMouseDown={(e) => e.stopPropagation()}
-                className={cn(
-                  'absolute inset-0 flex items-center justify-center transition-colors',
-                  playing
-                    ? 'bg-transparent opacity-0 hover:opacity-100 hover:bg-black/20'
-                    : 'bg-black/30 hover:bg-black/40'
-                )}
-              >
-                <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
-                {playing ? <Pause className="w-4 h-4 text-foreground" /> : <Play className="w-4 h-4 text-foreground ml-0.5" />}
-                </div>
-              </button>
-            </div>
+            )
           ) : (
-            <img
-              src={cfg.url}
-              alt={cfg.name ?? 'asset'}
-              className="w-full h-auto rounded-lg block"
-              loading="lazy"
-            />
-          )
-        ) : (
-          <button
-            onClick={handleClickUpload}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="w-full flex flex-col items-center justify-center gap-2 rounded-lg bg-muted hover:bg-accent border-2 border-dashed border-border hover:border-border/60 transition-colors cursor-pointer"
-            style={{ aspectRatio: '4/3' }}
-          >
-            <Upload className="w-5 h-5 text-muted-foreground/40" />
-            <span className="text-[10px] text-muted-foreground">点击上传</span>
-            <span className="text-[9px] text-muted-foreground/60">图片 / 视频 / 音频</span>
-          </button>
-        )}
+            <button
+              onClick={handleClickUpload}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-full flex flex-col items-center justify-center gap-2 rounded-lg bg-muted hover:bg-accent border-2 border-dashed border-border hover:border-border/60 transition-colors cursor-pointer"
+              style={{ aspectRatio: '4/3' }}
+            >
+              <Upload className="w-5 h-5 text-muted-foreground/40" />
+              <span className="text-[10px] text-muted-foreground">点击上传</span>
+              <span className="text-[9px] text-muted-foreground/60">图片 / 视频 / 音频</span>
+            </button>
+          )}
+
+          {cfg.url && !uploading && (
+            <button
+              onClick={handleDownload}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="absolute bottom-1.5 right-1.5 z-20 p-1.5 rounded-md bg-black/45 text-white shadow-sm opacity-0 transition-opacity hover:bg-black/70 group-hover:opacity-100"
+              title="下载"
+              aria-label="下载资源"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
 
         {cfg.url && (
           <button
