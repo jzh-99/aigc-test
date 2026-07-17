@@ -33,7 +33,7 @@ export function ConfirmPlanCard({ summary, estimatedCredits, estimatedMinutes, i
           {estimatedCredits ? (
             <span className="flex items-center gap-1">
               <Zap className="w-3 h-3" />
-              约 {estimatedCredits} 积分
+              约 {estimatedCredits} A豆
             </span>
           ) : null}
           {estimatedMinutes ? (

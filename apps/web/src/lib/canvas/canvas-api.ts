@@ -5,7 +5,9 @@
 
 import { apiGet, apiPost } from '@/lib/api-client'
 import type {
+  AudioGenConfig,
   ImageGenConfig,
+  ShotItem,
   TaskBatchStatus,
 } from '@/lib/canvas/types'
 
@@ -50,18 +52,31 @@ export interface ExecuteVideoNodeParams {
   model: string
   videoMode: 'multiref' | 'keyframe'
   aspectRatio?: string
+  /** 视频分辨率，可选，如 '720p'、'1080p' 等 */
+  resolution?: string
   duration?: number
   generateAudio?: boolean
-  cameraFixed?: boolean
+  hasDurationControl?: boolean
+  hasAudioControl?: boolean
+  usesReferenceResourceFields?: boolean
   enableUpsample?: boolean
   watermark?: boolean
   // multiref mode: reference images, videos, audios
   referenceImages?: string[]
   referenceVideos?: string[]
+  referenceVideoDurations?: number[]
   referenceAudios?: string[]
   // keyframe mode: first and last frame
   frameStart?: string
   frameEnd?: string
+}
+
+export interface ExecuteAudioNodeParams {
+  canvasId: string
+  canvasNodeId: string
+  workspaceId?: string
+  idempotencyKey?: string
+  config: AudioGenConfig
 }
 
 export interface VideoConcatSegment {
@@ -101,6 +116,7 @@ export interface CanvasAssetItem {
   id: string
   type: string
   storage_url: string | null
+  thumbnail_url: string | null
   original_url: string | null
   created_at: string
   batch_id: string
@@ -117,6 +133,8 @@ interface CursorListResponse<T> {
 export interface CanvasNodeOutputRow {
   id: string
   output_urls: string[]
+  thumbnail_url?: string | null
+  params_snapshot?: Record<string, unknown> | null
   is_selected: boolean
   created_at: string
   asset_type?: 'image' | 'video' | 'audio' | null
@@ -125,7 +143,7 @@ export interface CanvasNodeOutputRow {
 export interface CanvasActiveBatch {
   id: string
   canvas_node_id: string
-  status: Extract<TaskBatchStatus, 'pending' | 'processing'>
+  status: TaskBatchStatus
   quantity: number
   completed_count: number
   failed_count: number
@@ -278,8 +296,15 @@ export async function updateCanvasThumbnail(canvasId: string, thumbnailUrl: stri
 /**
  * 上传素材文件，返回 proxy URL（公网可访问，用于前端显示和 AI 调用）
  */
-export async function uploadAssetFile(file: File, token?: string): Promise<string> {
+export interface UploadAssetFileOptions {
+  canvasId?: string
+  canvasNodeId?: string
+}
+
+export async function uploadAssetFile(file: File, token?: string, options: UploadAssetFileOptions = {}): Promise<string> {
   const formData = new FormData()
+  if (options.canvasId) formData.append('canvas_id', options.canvasId)
+  if (options.canvasNodeId) formData.append('canvas_node_id', options.canvasNodeId)
   formData.append('file', file)
 
   const res = await fetch('/api/v1/canvases/asset-upload', {
@@ -294,7 +319,7 @@ export async function uploadAssetFile(file: File, token?: string): Promise<strin
   }
 
   const data = await res.json()
-  return data.url as string
+  return data.storageUrl as string
 }
 
 /**
@@ -381,6 +406,30 @@ export async function fetchCanvasAssets(
   return await res.json() as CursorListResponse<CanvasAssetItem>
 }
 
+export async function createNodeOutput(
+  canvasId: string,
+  nodeId: string,
+  outputUrl: string,
+  token?: string,
+): Promise<string> {
+  const res = await fetch(`/api/v1/canvases/${canvasId}/node-outputs/${nodeId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ output_urls: [outputUrl], is_selected: true }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw toCanvasApiError('保存输出失败', res.status, err)
+  }
+
+  const data = await res.json() as { id: string }
+  return data.id
+}
+
 export async function selectNodeOutputForCanvas(
   canvasId: string,
   nodeId: string,
@@ -409,27 +458,32 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
     throw new Error('缺少工作区信息，请刷新页面后重试')
   }
 
-  const isSeedance = params.model.startsWith('seedance-')
-  const isSeedance2 = params.model === 'seedance-2.0' || params.model === 'seedance-2.0-fast'
+  const hasDurationControl = params.hasDurationControl === true
+  const hasAudioControl = params.hasAudioControl === true
+  const usesReferenceResourceFields = params.usesReferenceResourceFields === true
 
   const body: Record<string, unknown> = {
     idempotency_key: params.idempotencyKey ?? `cv_${(params.canvasNodeId ?? '').slice(-8)}_${Date.now()}`,
     prompt: params.prompt,
     workspace_id: params.workspaceId,
     model: params.model,
+    video_category: params.videoMode === 'keyframe' ? 'frames' : 'multimodal',
     canvas_id: params.canvasId,
     canvas_node_id: params.canvasNodeId,
   }
 
   if (params.aspectRatio) body.aspect_ratio = params.aspectRatio
+  // 透传分辨率参数（可选）
+  if (params.resolution) body.resolution = params.resolution
 
-  if (isSeedance) {
+  if (hasDurationControl) {
     if (params.duration && params.duration !== 0) body.duration = params.duration
-    body.generate_audio = params.generateAudio ?? true
-    body.camera_fixed = params.cameraFixed ?? false
     body.watermark = params.watermark ?? false
   } else {
     body.enable_upsample = params.enableUpsample ?? false
+  }
+  if (hasAudioControl) {
+    body.generate_audio = params.generateAudio ?? true
   }
 
   if (params.videoMode === 'keyframe') {
@@ -441,9 +495,10 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
     const refImages = (params.referenceImages ?? []).filter(Boolean)
     const refVideos = (params.referenceVideos ?? []).filter(Boolean)
     const refAudios = (params.referenceAudios ?? []).filter(Boolean)
-    if (isSeedance2) {
+    if (usesReferenceResourceFields) {
       if (refImages.length > 0) body.reference_images = refImages
       if (refVideos.length > 0) body.reference_videos = refVideos
+      if (params.referenceVideoDurations?.length) body.reference_video_durations = params.referenceVideoDurations
       if (refAudios.length > 0) body.reference_audios = refAudios
     } else {
       // non-seedance2 multiref: use images field
@@ -463,6 +518,43 @@ export async function executeVideoNode(params: ExecuteVideoNodeParams, token?: s
   if (!res.ok) {
     const error = await res.json().catch(() => ({}))
     throw toCanvasApiError('视频生成任务提交失败', res.status, error)
+  }
+
+  return await res.json()
+}
+
+export async function executeAudioNode(params: ExecuteAudioNodeParams, token?: string) {
+  if (!params.workspaceId) {
+    throw new Error('缺少工作区信息，请刷新页面后重试')
+  }
+
+  const body = {
+    idempotency_key: params.idempotencyKey ?? `ca_${(params.canvasNodeId ?? '').slice(-8)}_${Date.now()}`,
+    workspace_id: params.workspaceId,
+    model: params.config.model,
+    text: params.config.text,
+    voice_id: params.config.voiceId,
+    voice_source_id: params.config.voiceSourceId,
+    speed: params.config.speed,
+    volume: params.config.volume,
+    pitch: params.config.pitch,
+    emotion: params.config.emotion || undefined,
+    canvas_id: params.canvasId,
+    canvas_node_id: params.canvasNodeId,
+  }
+
+  const res = await fetch('/api/v1/tts/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw toCanvasApiError('音频生成任务提交失败', res.status, error)
   }
 
   return await res.json()
@@ -492,12 +584,16 @@ export async function executeScriptWriterNode(params: {
   return await res.json()
 }
 
-// ── Storyboard splitter ───────────────────────────────────────────────────────
+// ── Storyboard splitter（BullMQ 队列异步）────────────────────────────────────
 
-export async function executeStoryboardSplitterNode(params: {
-  script: string
-  shotCount: number
-}, token?: string): Promise<{ shots: Array<{ id: string; label: string; content: string }> }> {
+/**
+ * 提交分镜拆分任务到队列，立即返回 batchId/taskId
+ * 前端通过 active-tasks 轮询感知完成，结果从 node-outputs 读取
+ */
+export async function submitStoryboardSplitterJob(
+  params: { script: string; shotCount: number; canvasId: string; canvasNodeId: string },
+  token?: string,
+): Promise<{ batchId: string; taskId: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
@@ -509,9 +605,120 @@ export async function executeStoryboardSplitterNode(params: {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}))
+    throw toCanvasApiError('分镜拆分提交失败', res.status, error)
+  }
+
+  const data = await res.json() as { batchId: string; taskId: string }
+  return data
+}
+
+/**
+ * 同步分镜拆分（供 wizard 流程使用，直接返回结果，不走队列）
+ */
+export async function splitStoryboardSync(
+  params: { script: string; shotCount: number },
+  token?: string,
+): Promise<{ shots: ShotItem[] }> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch('/api/v1/canvas-agent/storyboard-split-sync', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
     throw toCanvasApiError('分镜拆分失败', res.status, error)
   }
 
-  return await res.json()
+  return await res.json() as { shots: ShotItem[] }
+}
+
+/**
+ * 流式调用文本生成接口，通过 onChunk 回调逐步输出内容
+ * @returns 完整生成文本
+ */
+export async function executeTextGenNode(
+  params: { prompt: string },
+  onChunk: (delta: string) => void,
+  token?: string,
+): Promise<string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch('/api/v1/canvas-agent/text-gen', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw toCanvasApiError('文本生成失败', res.status, error)
+  }
+
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let fullText = ''
+  let buffer = ''
+  let streamDone = false
+
+  const processLine = (line: string) => {
+    const normalized = line.trim()
+    if (!normalized.startsWith('data:')) return
+
+    const data = normalized.slice(5).trim()
+    if (data === '[DONE]') {
+      streamDone = true
+      return
+    }
+
+    try {
+      const json = JSON.parse(data) as {
+        choices?: Array<{
+          delta?: { content?: string }
+          message?: { content?: string }
+          text?: string
+        }>
+      }
+      const choice = json.choices?.[0]
+      const delta = choice?.delta?.content ?? choice?.message?.content ?? choice?.text ?? ''
+      if (delta) {
+        fullText += delta
+        onChunk(delta)
+      }
+    } catch {
+      // 跳过非 JSON 行
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    // 最后一行可能不完整，保留到下次
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      processLine(line)
+      if (streamDone) break
+    }
+
+    if (streamDone) break
+  }
+
+  buffer += decoder.decode()
+  if (!streamDone && buffer.trim()) {
+    for (const line of buffer.split('\n')) {
+      processLine(line)
+      if (streamDone) break
+    }
+  }
+
+  return fullText
 }
 

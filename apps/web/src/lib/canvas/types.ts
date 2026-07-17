@@ -1,5 +1,6 @@
-import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
 import type { ComponentType } from 'react'
+import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
+import type { CategoryReferences } from '@aigc/types'
 
 export type HandleType = 'image' | 'text' | 'video' | 'audio' | 'any'
 
@@ -10,21 +11,76 @@ export type HandleRole =
   | 'frame-start' | 'frame-end'           // keyframe: first/last frame
   | 'text-in' | 'image-out' | 'video-out' // generic I/O
 
-export type CanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'asset' | 'script_writer' | 'storyboard_splitter' | 'video_stitch'
+export type CanvasNodeType = 'text_input' | 'image_gen' | 'video_gen' | 'audio_gen' | 'asset' | 'script_writer' | 'storyboard_splitter' | 'video_stitch'
 export type VideoMode = 'multiref' | 'keyframe'
 
-export type ImageModelType =
-  | 'gemini'
-  | 'gpt-image-2'
-  | 'nano-banana-pro'
-  | 'seedream-5.0-lite'
-  | 'seedream-4.5'
-  | 'seedream-4.0'
+export const DEFAULT_VIDEO_CATEGORY_LIMITS = {
+  multimodal: {
+    label: '全能参考',
+    limits: {
+      image: { min: 0, max: 9 },
+      video: { min: 0, max: 3 },
+      audio: { min: 0, max: 3 },
+      text: { min: 0, max: 0 },
+    },
+  },
+  frames: {
+    label: '首尾帧',
+    limits: {
+      image: { min: 1, max: 2 },
+      video: { min: 0, max: 0 },
+      audio: { min: 0, max: 0 },
+      text: { min: 0, max: 0 },
+    },
+  },
+} as const satisfies CategoryReferences
 
-export type ImageResolution = '1k' | '2k' | '3k' | '4k'
+export const CANVAS_VIDEO_MODE_TO_CATEGORY = {
+  multiref: 'multimodal',
+  keyframe: 'frames',
+} as const satisfies Record<VideoMode, keyof CategoryReferences>
+
+export const DEFAULT_IMAGE_CATEGORY_LIMITS = {
+  text_to_image: {
+    label: '文生图',
+    limits: {
+      image: { min: 0, max: 0 },
+      video: { min: 0, max: 0 },
+      audio: { min: 0, max: 0 },
+      text: { min: 0, max: 0 },
+    },
+  },
+  image_to_image: {
+    label: '图生图',
+    limits: {
+      image: { min: 0, max: 10 },
+      video: { min: 0, max: 0 },
+      audio: { min: 0, max: 0 },
+      text: { min: 0, max: 0 },
+    },
+  },
+} as const satisfies CategoryReferences
+
+export const DEFAULT_TEXT_CATEGORY_LIMITS = {
+  text_to_text: {
+    label: '文本生成',
+    limits: {
+      image: { min: 0, max: 0 },
+      video: { min: 0, max: 0 },
+      audio: { min: 0, max: 0 },
+      text: { min: 0, max: 0 },
+    },
+  },
+} as const satisfies CategoryReferences
+
+// 保留 union 类型供静态 fallback 使用，实际存储和运行时用 string
+export type ImageModelType = string
+export type ImageResolution = string
 
 export interface TextInputConfig {
   text: string
+  model: string
+  categoryReferences?: CategoryReferences
 }
 
 export interface ImageGenConfig {
@@ -34,6 +90,7 @@ export interface ImageGenConfig {
   aspectRatio: string
   quantity: number
   watermark: boolean
+  categoryReferences?: CategoryReferences
 }
 
 export interface VideoGenConfig {
@@ -43,15 +100,31 @@ export interface VideoGenConfig {
   aspectRatio: string
   duration: number
   generateAudio: boolean
-  cameraFixed: boolean
   watermark: boolean
+  categoryReferences?: CategoryReferences
+  /** 视频分辨率，可选，如 '720p'、'1080p' 等 */
+  resolution?: string
+}
+
+export interface AudioGenConfig {
+  text: string
+  model: string
+  voiceId: string
+  voiceSourceId?: string
+  speed: number
+  pitch: number
+  volume: number
+  emotion: string
 }
 
 export interface AssetConfig {
   url: string
   name?: string
   mimeType?: string
+  thumbnailUrl?: string
+  thumbnail_url?: string
   duration?: number
+  canvasId?: string
 }
 
 export interface ScriptWriterConfig {
@@ -64,6 +137,70 @@ export interface StoryboardSplitterConfig {
   shotCount: number
 }
 
+/** 分镜拆分结果中单个镜头的数据结构 */
+export interface ShotItem {
+  shotNumber: number
+  duration: number
+  sceneDescription: string
+  character1: string
+  characterDesc1: string
+  character2: string
+  characterDesc2: string
+  reference: string
+  shotType: string
+  characterAction: string
+  emotion: string
+  sceneTags: string[]
+  lightAtmosphere: string
+  soundEffect: string
+  dialogue: string
+  compositionPrompt: string
+  cameraMotionPrompt: string
+}
+
+export interface LegacyShotItem {
+  id?: string
+  label?: string
+  content?: string
+}
+
+export type StoryboardShot = ShotItem | LegacyShotItem
+
+const DEFAULT_SHOT_DURATION = 4
+
+export function isShotItem(shot: StoryboardShot): shot is ShotItem {
+  return typeof (shot as Partial<ShotItem>).shotNumber === 'number'
+}
+
+export function normalizeStoryboardShots(rawShots: unknown): ShotItem[] {
+  if (!Array.isArray(rawShots)) return []
+
+  return rawShots.map((rawShot, index) => {
+    const shot = rawShot as Partial<ShotItem & LegacyShotItem>
+    const fallbackText = shot.sceneDescription ?? shot.content ?? ''
+
+    return {
+      shotNumber: typeof shot.shotNumber === 'number' ? shot.shotNumber : index + 1,
+      duration: typeof shot.duration === 'number' ? shot.duration : DEFAULT_SHOT_DURATION,
+      sceneDescription: fallbackText,
+      character1: shot.character1 ?? '',
+      characterDesc1: shot.characterDesc1 ?? '',
+      character2: shot.character2 ?? '',
+      characterDesc2: shot.characterDesc2 ?? '',
+      reference: shot.reference ?? '',
+      shotType: shot.shotType ?? '',
+      characterAction: shot.characterAction ?? '',
+      emotion: shot.emotion ?? '',
+      sceneTags: Array.isArray(shot.sceneTags) ? shot.sceneTags : [],
+      lightAtmosphere: shot.lightAtmosphere ?? '',
+      soundEffect: shot.soundEffect ?? '',
+      dialogue: shot.dialogue ?? '无',
+      compositionPrompt: shot.compositionPrompt ?? fallbackText,
+      cameraMotionPrompt: shot.cameraMotionPrompt ?? '',
+    }
+  })
+}
+
 export interface VideoStitchConfig {
   inputOrder: string[]
 }
@@ -72,6 +209,7 @@ export interface CanvasNodeConfigMap {
   text_input: TextInputConfig
   image_gen: ImageGenConfig
   video_gen: VideoGenConfig
+  audio_gen: AudioGenConfig
   asset: AssetConfig
   script_writer: ScriptWriterConfig
   storyboard_splitter: StoryboardSplitterConfig
@@ -106,7 +244,7 @@ export type AppEdge = ReactFlowEdge
 
 export function isCanvasNodeType(type: string): type is CanvasNodeType {
   return type === 'text_input' || type === 'image_gen' || type === 'video_gen' || type === 'asset'
-    || type === 'script_writer' || type === 'storyboard_splitter' || type === 'video_stitch'
+    || type === 'audio_gen' || type === 'script_writer' || type === 'storyboard_splitter' || type === 'video_stitch'
 }
 
 export function isTextInputConfig(config: unknown): config is TextInputConfig {
@@ -121,6 +259,11 @@ export function isImageGenConfig(config: unknown): config is ImageGenConfig {
 export function isVideoGenConfig(config: unknown): config is VideoGenConfig {
   const c = config as Partial<VideoGenConfig> | null | undefined
   return typeof c?.prompt === 'string' && typeof c?.model === 'string' && (c?.videoMode === 'multiref' || c?.videoMode === 'keyframe')
+}
+
+export function isAudioGenConfig(config: unknown): config is AudioGenConfig {
+  const c = config as Partial<AudioGenConfig> | null | undefined
+  return typeof c?.text === 'string' && typeof c?.model === 'string'
 }
 
 export function isAssetConfig(config: unknown): config is AssetConfig {
@@ -149,6 +292,7 @@ export interface NodeOutputAsset {
   id: string           // 资产或快照 ID
   url: string          // S3 访问地址
   type: HandleType     // 输出类型 (image/video/text)
+  thumbnailUrl?: string
   paramsSnapshot?: unknown // 当时的参数快照
 }
 

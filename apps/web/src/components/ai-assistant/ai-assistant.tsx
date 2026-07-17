@@ -6,9 +6,11 @@ import { useAuthStore } from '@/stores/auth-store'
 import { loadAiChatHistory, saveAiChatHistory, clearAiChatHistory } from '@/hooks/use-ai-chat-history'
 import type { AiChatMessage } from '@/hooks/use-ai-chat-history'
 import { cn, generateUUID } from '@/lib/utils'
-import { fetchWithAuth } from '@/lib/fetch-with-auth'
+import { fetchRawWithAuth } from '@/lib/fetch-with-auth'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import {
   Bot, X, Send, ImageIcon, Video, Trash2, Loader2, Upload, MessageSquare, GripVertical, Copy, Check,
+  ArrowUp, ArrowDown,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -18,7 +20,7 @@ type Tab = 'chat' | 'image' // | 'video'
 
 const TAB_CONFIG: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat', label: '对话助手', icon: <MessageSquare className="h-3.5 w-3.5" /> },
-  { id: 'image', label: '图片解析', icon: <ImageIcon className="h-3.5 w-3.5" /> },
+  // { id: 'image', label: '图片解析', icon: <ImageIcon className="h-3.5 w-3.5" /> },
   // { id: 'video', label: '视频解析', icon: <Video className="h-3.5 w-3.5" /> },
 ]
 
@@ -49,22 +51,35 @@ export function AiAssistant() {
   // const [videoUploadProgress, setVideoUploadProgress] = useState(0)
   // const [videoTempId, setVideoTempId] = useState<string | null>(null)
 
-  // Draggable & resizable state
-  const [position, setPosition] = useState({ x: 0, y: 0 })
+  // 拖拽 & 缩放 —— 用 ref 直接操作 DOM，避免 mousemove 触发 re-render 导致卡顿
+  const positionRef = useRef<{ x: number; y: number } | null>(null)
   const [width, setWidth] = useState(420)
-  const [isDragging, setIsDragging] = useState(false)
-  const [isResizing, setIsResizing] = useState(false)
-  const [resizeEdge, setResizeEdge] = useState<'left' | 'right'>('left')
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [resizeStart, setResizeStart] = useState({ x: 0, width: 0, posX: 0 })
+  const widthRef = useRef(420)
+  const isDraggingRef = useRef(false)
+  const isResizingRef = useRef(false)
+  const resizeEdgeRef = useRef<'left' | 'right'>('left')
+  const dragOffsetRef = useRef({ x: 0, y: 0 })
+  const resizeStartRef = useRef({ x: 0, width: 0, posX: 0 })
+
+  // 按钮贴边隐藏
+  const [buttonDockedEdge, setButtonDockedEdge] = useState<'left' | 'right' | null>(null)
+  const [isButtonDockedExpanded, setIsButtonDockedExpanded] = useState(false)
+  const BUTTON_DOCK_THRESHOLD = 80
+  const BUTTON_DRAG_THRESHOLD = 8
+  const BUTTON_PEEK = 20
+  const BUTTON_SIZE = 56
 
   // Floating button draggable state
   const [buttonPosition, setButtonPosition] = useState({ x: 0, y: 0 })
   const [isButtonDragging, setIsButtonDragging] = useState(false)
-  const [buttonDragStart, setButtonDragStart] = useState({ x: 0, y: 0 })
+  const buttonPointerStartRef = useRef({ x: 0, y: 0 })
+  const buttonDragOriginRef = useRef({ x: 0, y: 0 })
+  const buttonDragStartedRef = useRef(false)
   const buttonDraggedRef = useRef(false)
 
+  const topRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const chatImageRef = useRef<HTMLInputElement>(null)
   // const chatVideoRef = useRef<HTMLInputElement>(null)
   const imageTabRef = useRef<HTMLInputElement>(null)
@@ -86,10 +101,24 @@ export function AiAssistant() {
     return () => clearTimeout(timer)
   }, [user?.id])
 
+  const scrollMessagesToTop = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    topRef.current?.scrollIntoView({ behavior, block: 'start' })
+  }, [])
+
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    bottomRef.current?.scrollIntoView({ behavior, block: 'end' })
+  }, [])
+
   // Auto-scroll
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    scrollMessagesToBottom('smooth')
+  }, [messages, scrollMessagesToBottom])
+
+  useEffect(() => {
+    if (!open) return
+    const frame = requestAnimationFrame(() => scrollMessagesToBottom('auto'))
+    return () => cancelAnimationFrame(frame)
+  }, [open, messages.length, scrollMessagesToBottom])
 
   // Save history whenever messages change
   useEffect(() => {
@@ -122,53 +151,85 @@ export function AiAssistant() {
     }
   }, [open])
 
+  // 将面板 DOM 样式同步到当前 positionRef（非贴边状态下调用）
+  const applyPanelPosition = useCallback((x: number, y: number) => {
+    if (!panelRef.current) return
+    panelRef.current.style.left = `${x}px`
+    panelRef.current.style.right = 'auto'
+    panelRef.current.style.top = `${y}px`
+    panelRef.current.style.transform = 'translateX(0px)'
+    panelRef.current.style.transition = 'none'
+  }, [])
+
   // Drag & resize handlers
   useEffect(() => {
-    if (!isDragging && !isResizing && !isButtonDragging) return
-
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        setPosition({
-          x: e.clientX - dragStart.x,
-          y: e.clientY - dragStart.y,
-        })
-      } else if (isResizing) {
-        const delta = e.clientX - resizeStart.x
-        if (resizeEdge === 'left') {
-          // 从左边拖动：调整左侧边界（同时改变位置和宽度）
-          const targetWidth = resizeStart.width - delta
+      if (isDraggingRef.current) {
+        const x = e.clientX - dragOffsetRef.current.x
+        const y = e.clientY - dragOffsetRef.current.y
+        positionRef.current = { x, y }
+        applyPanelPosition(x, y)
+      } else if (isResizingRef.current) {
+        const delta = e.clientX - resizeStartRef.current.x
+        if (resizeEdgeRef.current === 'left') {
+          const targetWidth = resizeStartRef.current.width - delta
           const newWidth = Math.max(360, Math.min(800, targetWidth))
-          // 计算实际可以移动的距离（考虑宽度限制）
-          const actualWidthChange = resizeStart.width - newWidth
-          const newLeft = resizeStart.posX + actualWidthChange
+          const actualWidthChange = resizeStartRef.current.width - newWidth
+          const newLeft = resizeStartRef.current.posX + actualWidthChange
+          widthRef.current = newWidth
           setWidth(newWidth)
-          setPosition(prev => ({
-            ...prev,
-            x: newLeft
-          }))
+          if (panelRef.current) {
+            panelRef.current.style.width = `${newWidth}px`
+            panelRef.current.style.left = `${newLeft}px`
+          }
+          if (positionRef.current) positionRef.current.x = newLeft
         } else {
-          // 从右边拖动：调整右侧边界（只改变宽度）
-          const newWidth = Math.max(360, Math.min(800, resizeStart.width + delta))
+          const newWidth = Math.max(360, Math.min(800, resizeStartRef.current.width + delta))
+          widthRef.current = newWidth
           setWidth(newWidth)
+          if (panelRef.current) panelRef.current.style.width = `${newWidth}px`
         }
       } else if (isButtonDragging) {
-        const newX = e.clientX - buttonDragStart.x
-        const newY = e.clientY - buttonDragStart.y
-        // 如果移动超过5px，认为是拖动而不是点击
-        if (Math.abs(newX - buttonPosition.x) > 5 || Math.abs(newY - buttonPosition.y) > 5) {
+        const deltaX = e.clientX - buttonPointerStartRef.current.x
+        const deltaY = e.clientY - buttonPointerStartRef.current.y
+        const movedDistance = Math.hypot(deltaX, deltaY)
+        if (!buttonDragStartedRef.current && movedDistance < BUTTON_DRAG_THRESHOLD) return
+
+        if (!buttonDragStartedRef.current) {
+          buttonDragStartedRef.current = true
           buttonDraggedRef.current = true
+          if (buttonDockedEdge) {
+            setButtonDockedEdge(null)
+            setIsButtonDockedExpanded(false)
+          }
         }
+
         setButtonPosition({
-          x: newX,
-          y: newY,
+          x: buttonDragOriginRef.current.x + deltaX,
+          y: buttonDragOriginRef.current.y + deltaY,
         })
       }
     }
 
     const handleMouseUp = () => {
-      setIsDragging(false)
-      setIsResizing(false)
+      // 面板拖拽结束，不做贴边检测
+      isDraggingRef.current = false
+      isResizingRef.current = false
+
+      // 按钮拖拽结束，检测是否靠近屏幕边缘触发贴边
+      if (isButtonDragging && buttonDraggedRef.current && buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect()
+        const vw = window.innerWidth
+        if (rect.left < BUTTON_DOCK_THRESHOLD) {
+          setButtonDockedEdge('left')
+          setIsButtonDockedExpanded(false)
+        } else if (vw - rect.right < BUTTON_DOCK_THRESHOLD) {
+          setButtonDockedEdge('right')
+          setIsButtonDockedExpanded(false)
+        }
+      }
       setIsButtonDragging(false)
+      buttonDragStartedRef.current = false
     }
 
     document.addEventListener('mousemove', handleMouseMove)
@@ -177,40 +238,40 @@ export function AiAssistant() {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging, isResizing, isButtonDragging, dragStart, resizeStart, buttonDragStart])
+  }, [isButtonDragging, buttonDockedEdge, applyPanelPosition])
 
   const handleDragStart = (e: React.MouseEvent) => {
     if (!panelRef.current) return
     const rect = panelRef.current.getBoundingClientRect()
-    setDragStart({
+    dragOffsetRef.current = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
-    })
-    setIsDragging(true)
+    }
+    isDraggingRef.current = true
   }
 
   const handleResizeStart = (edge: 'left' | 'right') => (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!panelRef.current) return
     const rect = panelRef.current.getBoundingClientRect()
-    setResizeEdge(edge)
-    setResizeStart({
+    resizeEdgeRef.current = edge
+    resizeStartRef.current = {
       x: e.clientX,
-      width,
-      posX: rect.left, // 使用实际的左边界位置，而不是 position.x
-    })
-    setIsResizing(true)
+      width: widthRef.current,
+      posX: rect.left,
+    }
+    isResizingRef.current = true
   }
 
   const handleButtonDragStart = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!buttonRef.current) return
+    if (e.button !== 0) return
     const rect = buttonRef.current.getBoundingClientRect()
-    setButtonDragStart({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    })
-    buttonDraggedRef.current = false // 重置拖动标记
+    buttonPointerStartRef.current = { x: e.clientX, y: e.clientY }
+    buttonDragOriginRef.current = { x: rect.left, y: rect.top }
+    buttonDragStartedRef.current = false
+    buttonDraggedRef.current = false
     setIsButtonDragging(true)
   }
 
@@ -314,12 +375,12 @@ export function AiAssistant() {
     tab: Tab
     image_base64?: string | null
     image_type?: string | null
-    video_temp_id?: string | null
+    video_url?: string | null
     userLabel?: string
     imagePreview?: string
     mediaLabel?: string
   }) => {
-    const { message = '', tab: sendTab, image_base64, image_type, video_temp_id, userLabel, imagePreview, mediaLabel } = opts
+    const { message = '', tab: sendTab, image_base64, image_type, video_url, userLabel, imagePreview, mediaLabel } = opts
 
     const userMsg: AiChatMessage = {
       id: generateUUID(),
@@ -340,6 +401,9 @@ export function AiAssistant() {
     setMessages((prev) => [...prev, userMsg, assistantMsg])
     setLoading(true)
 
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
     // Build history (text only, last 6 messages, content truncated to 12000 chars)
     const history = messages
       .filter((m) => !m.mediaLabel || m.role === 'assistant')
@@ -347,17 +411,18 @@ export function AiAssistant() {
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 12000) }))
 
     try {
-      const res = await fetchWithAuth('/api/v1/ai-assistant/chat', {
+      const res = await fetchRawWithAuth('/api/v1/ai-assistant/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: abortController.signal,
         body: JSON.stringify({
           message: message || undefined,
           tab: sendTab,
           image_base64: image_base64 ?? null,
           image_type: image_type ?? null,
-          video_temp_id: video_temp_id ?? null,
+          video_url: video_url ?? null,
           history,
         }),
       })
@@ -409,10 +474,13 @@ export function AiAssistant() {
         }
       }
     } catch (err) {
+      // 用户主动中止，不显示错误
+      if (err instanceof Error && err.name === 'AbortError') return
       setMessages((prev) => prev.map((m) =>
         m.id === assistantMsg.id ? { ...m, content: '请求失败，请检查网络后重试' } : m
       ))
     } finally {
+      abortControllerRef.current = null
       setLoading(false)
     }
   }, [messages])
@@ -487,7 +555,7 @@ export function AiAssistant() {
 
   const handleCopy = useCallback(async (content: string, id: string) => {
     try {
-      await navigator.clipboard.writeText(content)
+      await copyTextToClipboard(content)
       setCopiedId(id)
       toast.success('已复制到剪贴板')
       setTimeout(() => setCopiedId(null), 2000)
@@ -503,29 +571,44 @@ export function AiAssistant() {
         ref={buttonRef}
         onMouseDown={handleButtonDragStart}
         onClick={handleButtonClick}
+        onMouseEnter={() => { if (buttonDockedEdge) setIsButtonDockedExpanded(true) }}
+        onMouseLeave={() => { if (buttonDockedEdge) setIsButtonDockedExpanded(false) }}
         className={cn(
-          'fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-200 gradient-accent hover:scale-105 active:scale-95 cursor-move',
+          'fixed z-50 flex h-14 w-14 items-center justify-center shadow-lg gradient-accent cursor-pointer active:cursor-grabbing',
+          'transition-[transform,border-radius] duration-300 ease-in-out',
+          !buttonDockedEdge && 'hover:scale-105 active:scale-95',
           open && 'rotate-90',
-          showHint && !open && 'ring-4 ring-primary/30 shadow-2xl shadow-primary/40'
+          showHint && !open && !buttonDockedEdge && 'ring-4 ring-primary/30 shadow-2xl shadow-primary/40',
+          buttonDockedEdge === 'left' ? 'rounded-r-full rounded-l-none' :
+          buttonDockedEdge === 'right' ? 'rounded-l-full rounded-r-none' : 'rounded-full',
         )}
-        style={{
-          left: buttonPosition.x ? `${buttonPosition.x}px` : 'auto',
-          right: buttonPosition.x ? 'auto' : '24px',
-          top: buttonPosition.y ? `${buttonPosition.y}px` : 'auto',
-          bottom: buttonPosition.y ? 'auto' : '80px',
+        style={buttonDockedEdge ? {
+          // 贴边时：固定到对应屏幕边缘，translateX 控制露出量
+          left: buttonDockedEdge === 'left' ? '0px' : 'auto',
+          right: buttonDockedEdge === 'right' ? '0px' : 'auto',
+          top: buttonPosition.y !== 0 ? `${buttonPosition.y}px` : 'auto',
+          bottom: buttonPosition.y !== 0 ? 'auto' : '80px',
+          transform: isButtonDockedExpanded
+            ? 'translateX(0px)'
+            : `translateX(${buttonDockedEdge === 'left' ? -(BUTTON_SIZE - BUTTON_PEEK) : BUTTON_SIZE - BUTTON_PEEK}px)`,
+        } : {
+          left: buttonPosition.x !== 0 ? `${buttonPosition.x}px` : 'auto',
+          right: buttonPosition.x !== 0 ? 'auto' : '24px',
+          top: buttonPosition.y !== 0 ? `${buttonPosition.y}px` : 'auto',
+          bottom: buttonPosition.y !== 0 ? 'auto' : '80px',
         }}
         aria-label="AI助手"
       >
         {open ? <X className="h-6 w-6 text-white" /> : <Bot className="h-6 w-6 text-white" />}
       </button>
-      {showHint && !open && (
+      {showHint && !open && !buttonDockedEdge && (
         <div
           className="fixed z-50 w-64 rounded-2xl bg-background p-[2px] text-sm text-foreground shadow-2xl shadow-primary/20 animate-in fade-in slide-in-from-bottom-3 zoom-in-95 duration-500 gradient-accent"
           style={{
-            right: buttonPosition.x ? 'auto' : '24px',
-            left: buttonPosition.x ? `${Math.max(16, buttonPosition.x - 208)}px` : 'auto',
-            bottom: buttonPosition.y ? 'auto' : '152px',
-            top: buttonPosition.y ? `${Math.max(16, buttonPosition.y - 104)}px` : 'auto',
+            right: buttonPosition.x !== 0 ? 'auto' : '24px',
+            left: buttonPosition.x !== 0 ? `${Math.max(16, buttonPosition.x - 208)}px` : 'auto',
+            bottom: buttonPosition.y !== 0 ? 'auto' : '152px',
+            top: buttonPosition.y !== 0 ? `${Math.max(16, buttonPosition.y - 104)}px` : 'auto',
           }}
         >
           <div className="relative rounded-[14px] bg-background p-4">
@@ -556,97 +639,126 @@ export function AiAssistant() {
       {open && (
         <div
           ref={panelRef}
-          className="fixed z-50 flex flex-col rounded-2xl border border-border bg-background shadow-2xl overflow-hidden"
+          className="fixed z-50 flex flex-col overflow-hidden rounded-2xl ai-glass-panel"
           style={{
-            left: position.x ? `${position.x}px` : 'auto',
-            right: position.x ? 'auto' : '104px',
-            top: position.y ? `${position.y}px` : '16px',
+            left: positionRef.current !== null ? `${positionRef.current.x}px` : 'auto',
+            right: positionRef.current !== null ? 'auto' : '104px',
+            top: positionRef.current !== null ? `${positionRef.current.y}px` : '16px',
             width: `${width}px`,
             height: 'calc(100vh - 32px)',
-          }}>
-
+          }}
+        >
           {/* Header - draggable */}
           <div
-            className="flex items-center justify-between px-4 py-3 gradient-accent cursor-move"
+            className="flex items-center justify-between px-4 py-3 cursor-move shrink-0 ai-glass-header"
             onMouseDown={handleDragStart}>
             <div className="flex items-center gap-2">
               <GripVertical className="h-4 w-4 text-white/50" />
               <Bot className="h-5 w-5 text-white" />
               <span className="font-semibold text-white text-sm">Toby.AI 创作助手</span>
             </div>
-            <button onClick={handleClear} className="text-red-400 hover:text-red-300 transition-colors" title="清空对话">
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={handleClear} className="text-white/50 hover:text-white/80 transition-colors" title="清空对话">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Resize handle - left edge */}
           <div
-            className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/50 transition-colors z-10"
+            className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-violet-300/30 transition-colors z-10"
             onMouseDown={handleResizeStart('left')}
           />
 
           {/* Resize handle - right edge */}
           <div
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/50 transition-colors z-10"
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-violet-300/30 transition-colors z-10"
             onMouseDown={handleResizeStart('right')}
           />
 
           {/* Messages */}
-          <ScrollArea className="flex-1 px-3 py-3 overflow-x-hidden">
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-12 gap-2">
-                <Bot className="h-10 w-10 opacity-20" />
-                <p className="text-sm">你好！我是 Toby.AI 创作助手</p>
-                <p className="text-xs opacity-60">可以帮你设计提示词、解析图片/视频</p>
+          <div className="relative flex-1 min-h-0">
+            <div className="group/scroll-controls absolute right-1 top-1/2 z-20 flex h-32 w-12 -translate-y-1/2 items-center justify-center">
+              <div className="flex flex-col gap-2 opacity-0 transition-opacity duration-200 group-hover/scroll-controls:opacity-100">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => scrollMessagesToTop()}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/70 shadow-lg backdrop-blur-xl transition-colors hover:border-white/30 hover:bg-white/18 hover:text-white"
+                  aria-label="滚动到顶部"
+                  title="滚动到顶部"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => scrollMessagesToBottom()}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/70 shadow-lg backdrop-blur-xl transition-colors hover:border-white/30 hover:bg-white/18 hover:text-white"
+                  aria-label="滚动到底部"
+                  title="滚动到底部"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </button>
               </div>
-            )}
-            {messages.map((msg) => (
-              <div key={msg.id} className={cn(
-                'mb-3 flex min-w-0 w-full overflow-hidden',
-                msg.role === 'user' ? 'justify-end pl-8' : 'justify-start pr-8'
-              )}>
-                <div className={cn(
-                  'max-w-full min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words overflow-hidden relative group',
-                  msg.role === 'user'
-                    ? 'gradient-accent text-white rounded-br-sm'
-                    : 'bg-muted text-foreground rounded-bl-sm'
-                )}>
-                  {msg.imagePreview && (
-                    <img src={msg.imagePreview} alt="附件" className="mb-1.5 max-h-32 rounded-lg object-cover" />
-                  )}
-                  {msg.content === '' && msg.role === 'assistant'
-                    ? <Loader2 className="h-4 w-4 animate-spin opacity-50" />
-                    : msg.role === 'assistant'
-                    ? (
-                      <>
-                        <div className="prose prose-sm dark:prose-invert max-w-full break-words overflow-hidden pb-8 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
-                        {msg.content && (
-                          <button
-                            onClick={() => handleCopy(msg.content, msg.id)}
-                            className="absolute bottom-2 right-2 p-1.5 rounded-md bg-background/80 hover:bg-background border border-border opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="复制"
-                          >
-                            {copiedId === msg.id ? (
-                              <Check className="h-3.5 w-3.5 text-green-500" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        )}
-                      </>
-                    )
-                    : <span className="whitespace-pre-wrap break-words">{msg.content}</span>
-                  }
+            </div>
+            <ScrollArea className="h-full px-3 py-3 overflow-x-hidden">
+              <div ref={topRef} />
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center py-12 gap-2">
+                  <Bot className="h-10 w-10 text-white/20" />
+                  <p className="text-sm text-white/60">你好！我是 Toby.AI 创作助手</p>
+                  <p className="text-xs text-white/40">可以帮你设计提示词、解析图片/视频</p>
                 </div>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </ScrollArea>
+              )}
+              {messages.map((msg) => (
+                <div key={msg.id} className={cn(
+                  'mb-3 flex min-w-0 w-full overflow-hidden',
+                  msg.role === 'user' ? 'justify-end pl-8' : 'justify-start pr-8'
+                )}>
+                  <div className={cn(
+                    'max-w-full min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words overflow-hidden relative group',
+                    msg.role === 'user'
+                      ? 'gradient-accent text-white rounded-br-sm'
+                      : 'ai-glass-msg-bot rounded-bl-sm'
+                  )}>
+                    {msg.imagePreview && (
+                      <img src={msg.imagePreview} alt="附件" className="mb-1.5 max-h-32 rounded-lg object-cover" />
+                    )}
+                    {msg.content === '' && msg.role === 'assistant'
+                      ? <Loader2 className="h-4 w-4 animate-spin opacity-50" />
+                      : msg.role === 'assistant'
+                      ? (
+                        <>
+                          <div className="prose prose-sm prose-invert max-w-full break-words overflow-hidden pb-4 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto [&_*]:max-w-full [&_p]:break-words [&_li]:break-words [&_a]:text-violet-300 [&_a:hover]:text-violet-200"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                          {msg.content && (
+                            <button
+                              onClick={() => handleCopy(msg.content, msg.id)}
+                              className="absolute bottom-2 right-2 p-1.5 rounded-md ai-glass-bg-copy border ai-glass-border-faint opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="复制"
+                            >
+                              {copiedId === msg.id ? (
+                                <Check className="h-3.5 w-3.5 text-green-500" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </>
+                      )
+                      : <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                    }
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </ScrollArea>
+          </div>
 
           {/* Input area */}
-          <div className="border-t border-border bg-background">
+          <div className="border-t ai-glass-border-subtle ai-glass-bg-deep">
             {/* Tab bar */}
-            <div className="flex border-b border-border">
+            <div className="flex border-b ai-glass-border-subtle">
               {TAB_CONFIG.map((t) => (
                 <button
                   key={t.id}
@@ -654,8 +766,8 @@ export function AiAssistant() {
                   className={cn(
                     'flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors',
                     tab === t.id
-                      ? 'border-b-2 border-primary text-primary'
-                      : 'text-muted-foreground hover:text-foreground'
+                      ? 'border-b-2 border-violet-400 text-violet-300'
+                      : 'text-white/40 hover:text-white/70'
                   )}
                 >
                   {t.icon}
@@ -669,12 +781,12 @@ export function AiAssistant() {
               <div className="p-3 space-y-2">
                 {/* Attachment preview */}
                 {chatImage && ( // || chatVideo || chatVideoUploading
-                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 rounded-lg ai-glass-bg-surface px-3 py-1.5 text-xs text-white/50">
                     {chatImage && (
                       <>
                         <img src={chatImage.preview} alt="" className="h-8 w-8 rounded object-cover" />
                         <span className="flex-1 truncate">{chatImage.name}</span>
-                        <button onClick={() => setChatImage(null)} className="hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => setChatImage(null)} className="hover:text-white/80"><X className="h-3.5 w-3.5" /></button>
                       </>
                     )}
                     {/* {chatVideoUploading && <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span>上传中...</span></>}
@@ -693,23 +805,24 @@ export function AiAssistant() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleChatSend() } }}
                     placeholder="描述需求，或上传图片... (Shift+Enter 发送)"
-                    className="min-h-[60px] max-h-[120px] resize-none text-sm"
+                    className="min-h-[60px] max-h-[120px] resize-none text-sm ai-glass-bg-surface border-[rgba(236,233,255,0.1)] text-white/90 placeholder:text-white/30 focus-visible:ring-violet-400/30"
                     disabled={loading}
                   />
                   <div className="flex flex-col gap-1">
                     <input ref={chatImageRef} type="file" accept="image/*" className="hidden" onChange={handleChatImagePick} />
                     {/* <input ref={chatVideoRef} type="file" accept="video/*" className="hidden" onChange={handleChatVideoPick} /> */}
                     <button onClick={() => chatImageRef.current?.click()} title="附加图片"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors">
-                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border ai-glass-border-faint hover:bg-[rgba(82,70,180,0.15)] transition-colors">
+                      <ImageIcon className="h-4 w-4 text-white/50" />
                     </button>
                     {/* <button onClick={() => chatVideoRef.current?.click()} title="附加视频"
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors">
                       <Video className="h-4 w-4 text-muted-foreground" />
                     </button> */}
-                    <Button size="icon" className="h-8 w-8 gradient-accent" onClick={handleChatSend}
-                      disabled={loading || (!input.trim() && !chatImage)}>
-                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    <Button size="icon" className="h-8 w-8 gradient-accent" onClick={loading ? () => abortControllerRef.current?.abort() : handleChatSend}
+                      disabled={!loading && (!input.trim() && !chatImage)}
+                      title={loading ? '停止生成' : '发送'}>
+                      {loading ? <X className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                     </Button>
                   </div>
                 </div>
@@ -722,17 +835,17 @@ export function AiAssistant() {
                 <input ref={imageTabRef} type="file" accept="image/*" className="hidden" onChange={handleImageTabPick} />
                 {!imageFile ? (
                   <button onClick={() => imageTabRef.current?.click()}
-                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-6 text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed ai-glass-border-faint py-6 text-white/40 hover:border-violet-400/40 hover:text-violet-300 transition-colors">
                     <Upload className="h-8 w-8" />
                     <span className="text-sm font-medium">点击上传图片</span>
                     <span className="text-xs opacity-60">JPG / PNG / WEBP</span>
                   </button>
                 ) : (
                   <div className="space-y-2">
-                    <div className="relative rounded-xl overflow-hidden bg-muted">
+                    <div className="relative rounded-xl overflow-hidden ai-glass-bg-surface">
                       <img src={imageFile.preview} alt="预览" className="w-full max-h-40 object-contain" />
                       <button onClick={() => setImageFile(null)}
-                        className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
+                        className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white/70 hover:bg-black/80 hover:text-white">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>

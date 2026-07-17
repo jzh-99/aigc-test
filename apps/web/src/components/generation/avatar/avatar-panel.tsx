@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Sparkles, Loader2, Coins, ImagePlus, Music, X } from 'lucide-react'
+import { MentionEditor } from '@/components/shared/mention-editor'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import { cn, generateUUID } from '@/lib/utils'
@@ -29,13 +29,12 @@ interface AvatarPanelProps {
 }
 
 export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
-  const { videoDefaults, avatarDefaults, userDefaults } = useGenerationStore()
+  const { videoDefaults, avatarDefaults, userDefaults, avatarPrompt, setAvatarPrompt } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { save: saveDefaults } = useGenerationDefaults()
 
   const [avatarImage, setAvatarImage] = useState<FrameImage | null>(null)
   const [avatarAudio, setAvatarAudio] = useState<AvatarAudio | null>(null)
-  const [avatarPrompt, setAvatarPrompt] = useState('')
   const [avatarResolution, setAvatarResolution] = useState<'720p' | '1080p'>(
     (avatarDefaults?.avatarResolution as '720p' | '1080p') ?? '720p'
   )
@@ -70,7 +69,22 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
   }
 
   const handleAvatarGenerate = async () => {
-    if (!avatarImage || !avatarAudio) return
+    if (!avatarImage) {
+      toast.error('请先上传人物图片')
+      return
+    }
+    if (avatarImage.file && avatarImage.file.size > 5 * 1024 * 1024) {
+      toast.error('人物图片不能超过 5 MB')
+      return
+    }
+    if (!avatarAudio) {
+      toast.error('请先上传驱动音频')
+      return
+    }
+    if (avatarAudio.duration > 60) {
+      toast.error('驱动音频时长不能超过 60 秒')
+      return
+    }
     setIsAvatarGenerating(true)
     try {
       // 并行上传图片和音频
@@ -126,7 +140,7 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
     toast.success('已保存为默认参数')
   }
 
-  const estimatedCredits = avatarAudio ? `${Math.ceil(avatarAudio.duration) * 50} 积分` : '50 积分/秒'
+  const estimatedCredits = avatarAudio ? `${Math.ceil(avatarAudio.duration) * 50} A豆` : '50 A豆/秒'
   const isDisabled = isAvatarGenerating || !!disabled
 
   return (
@@ -134,7 +148,7 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
       <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-3">
         {/* 人物图片上传 */}
         <div className="shrink-0">
-          <p className="text-[11px] text-muted-foreground mb-1">人物图片（必填，≤5MB）</p>
+          <p className="text-[11px] text-muted-foreground mb-1">人物图片</p>
           {avatarImage ? (
             <div className="relative h-[90px] w-full rounded-lg overflow-hidden border bg-muted group"
               onDragOver={(e) => e.preventDefault()} onDrop={handleAvatarImageDrop}>
@@ -149,12 +163,11 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
               onClick={() => avatarImageRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleAvatarImageDrop}
-              className="h-[90px] w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
+              className="h-[90px] w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center justify-center gap-3 px-4"
             >
               <ImagePlus className="h-5 w-5 text-primary shrink-0" />
-              <div className="text-left">
+              <div className="text-center">
                 <div className="text-sm font-medium text-primary">上传人物图片</div>
-                <div className="text-[11px] text-primary/60">jpg / png / webp · 最大 5MB</div>
               </div>
             </button>
           )}
@@ -162,7 +175,7 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
 
         {/* 音频上传 */}
         <div className="shrink-0">
-          <p className="text-[11px] text-muted-foreground mb-1">驱动音频（必填，≤60秒）</p>
+          <p className="text-[11px] text-muted-foreground mb-1">驱动音频</p>
           {avatarAudio ? (
             <div className="flex items-center gap-3 h-10 px-3 rounded-lg border bg-muted"
               onDragOver={(e) => e.preventDefault()} onDrop={handleAvatarAudioDrop}>
@@ -178,23 +191,27 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
               onClick={() => avatarAudioRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleAvatarAudioDrop}
-              className="h-10 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center gap-3 px-4"
+              className="h-10 w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all flex items-center justify-center gap-3 px-4"
             >
               <Music className="h-4 w-4 text-primary shrink-0" />
               <div className="text-sm font-medium text-primary">上传音频文件</div>
-              <div className="text-[11px] text-primary/60 ml-1">mp3 / wav / m4a · 最大 60s</div>
             </button>
           )}
         </div>
 
         {/* 提示词 */}
         <div className="flex-1 min-h-0">
-          <Textarea
-            placeholder="可选：描述动作、运镜或画面风格..."
+          <MentionEditor
             value={avatarPrompt}
-            onChange={(e) => setAvatarPrompt(e.target.value)}
-            className="h-full resize-none"
+            onChange={setAvatarPrompt}
+            resources={[]}
+            placeholder="可选：描述动作、运镜或画面风格..."
+            className="h-full"
+            editorClassName="h-full min-h-full bg-transparent px-0 py-1 rounded-none cursor-text focus:ring-0"
             disabled={isAvatarGenerating}
+            maxLength={null}
+            showCharacterCount={false}
+            emptyText="暂无可引用资源"
           />
         </div>
 
@@ -269,7 +286,7 @@ export function AvatarPanel({ onBatchCreated, disabled }: AvatarPanelProps) {
         </div>
         <Button variant="gradient" size="lg" className="gap-2 px-8"
           onClick={handleAvatarGenerate}
-          disabled={isDisabled || !avatarImage || !avatarAudio}
+          disabled={isDisabled}
         >
           {isAvatarGenerating
             ? <><Loader2 className="h-4 w-4 animate-spin" />生成中...</>

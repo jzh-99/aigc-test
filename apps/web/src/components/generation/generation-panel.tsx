@@ -8,10 +8,21 @@ import { useTeamFeatures } from '@/hooks/use-team-features'
 import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
 import { cn } from '@/lib/utils'
 import type { BatchResponse } from '@aigc/types'
+import dynamic from 'next/dynamic'
 import { ImagePanel } from './image/image-panel'
-import { VideoPanel } from './video/video-panel'
-import { AvatarPanel } from './avatar/avatar-panel'
-import { ActionImitationPanel } from './action-imitation/action-imitation-panel'
+
+const VideoPanel = dynamic(
+  () => import('./video/video-panel').then((m) => ({ default: m.VideoPanel })),
+  { ssr: false }
+)
+const AvatarPanel = dynamic(
+  () => import('./avatar/avatar-panel').then((m) => ({ default: m.AvatarPanel })),
+  { ssr: false }
+)
+const ActionImitationPanel = dynamic(
+  () => import('./action-imitation/action-imitation-panel').then((m) => ({ default: m.ActionImitationPanel })),
+  { ssr: false }
+)
 
 type Mode = 'image' | 'video' | 'avatar' | 'action_imitation'
 
@@ -22,14 +33,15 @@ interface GenerationPanelProps {
 }
 
 export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image' }: GenerationPanelProps) {
-  const { applyServerDefaults, videoParams, pendingModule, clearPendingModule } = useGenerationStore()
+  const { applyServerDefaults, videoParams, pendingModule, clearPendingModule, pendingVideoReferenceImages } = useGenerationStore()
   const { load: loadDefaults } = useGenerationDefaults()
   const { isCompanyA, showVideoTab, showAvatarTab, showActionImitationTab } = useTeamFeatures()
 
   const [mode, setMode] = useState<Mode>(initialMode)
-  // key 变化时强制 VideoPanel 重新 mount，以便 initialParams 生效
+  // key 变化时强制 VideoPanel/AvatarPanel 重新 mount，以便 initialParams 生效
   const [videoPanelKey, setVideoPanelKey] = useState(0)
   const [videoPanelInitialParams, setVideoPanelInitialParams] = useState<VideoParams | null>(null)
+  const [avatarPanelKey, setAvatarPanelKey] = useState(0)
 
   // 加载服务端默认参数，写入 store（VideoPanel/AvatarPanel 从 store 读取初始值）
   useEffect(() => {
@@ -45,10 +57,9 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
         videoDefaults: d.video ? {
           videoModel: d.video.videoModel ?? 'seedance-2.0',
           videoAspectRatio: d.video.videoAspectRatio ?? '',
-          videoUpsample: d.video.videoUpsample ?? false,
+          videoResolution: d.video.videoResolution ?? '',
           videoDuration: d.video.videoDuration ?? 5,
           videoGenerateAudio: d.video.videoGenerateAudio ?? true,
-          videoCameraFixed: d.video.videoCameraFixed ?? false,
         } : null,
         avatarDefaults: d.avatar ? {
           avatarResolution: (d.avatar.avatarResolution as never) ?? '720p',
@@ -61,10 +72,16 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   useEffect(() => {
     if (!pendingModule) return
     if (pendingModule === 'video') {
-      setVideoPanelInitialParams(videoParams ?? null)
-      setVideoPanelKey(k => k + 1)
+      // 有 pending 参考素材但没有 videoParams 时（来自"变视频"操作），不要重建面板，
+      // 否则 VideoPanel 的 useEffect 刚将素材写入 multimodalImages 就被 key 变更销毁。
+      // 复用视频会同时带 videoParams，需要重建面板来恢复模型、比例、时长等参数。
+      if (pendingVideoReferenceImages.length === 0 || videoParams) {
+        setVideoPanelInitialParams(videoParams ?? null)
+        setVideoPanelKey(k => k + 1)
+      }
       setMode('video')
     } else if (pendingModule === 'avatar') {
+      setAvatarPanelKey(k => k + 1)
       setMode('avatar')
     } else if (pendingModule === 'action_imitation') {
       setMode('action_imitation')
@@ -81,18 +98,18 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
   }, [mode, showAvatarTab, showActionImitationTab])
 
   const tabBtnCls = (active: boolean) => cn(
-    'flex items-center gap-1.5 px-4 py-2 rounded-t-lg border-t border-l border-r text-sm font-medium transition-all relative -mb-px',
+    'generation-dream-mode-tab flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all',
     active
-      ? 'bg-card border-border text-foreground z-10'
-      : 'bg-muted/60 border-muted text-muted-foreground hover:text-foreground hover:bg-muted'
+      ? 'generation-dream-mode-tab-active'
+      : 'generation-dream-mode-tab-idle'
   )
 
   return (
-    <div className="flex flex-col gap-3 h-full">
+    <div className="flex flex-col gap-4 h-full">
       <div className="flex flex-col flex-1 min-h-0">
         {/* 书签标签（公司A只有图片模式，隐藏标签） */}
         {!isCompanyA && (
-          <div className="flex items-end">
+          <div className="generation-dream-mode-tabs flex items-center gap-1.5 rounded-full p-1.5">
             <button onClick={() => setMode('image')} className={tabBtnCls(mode === 'image')}>
               <ImageIcon className="h-3.5 w-3.5" />图片
             </button>
@@ -122,7 +139,7 @@ export function GenerationPanel({ onBatchCreated, disabled, initialMode = 'image
           <VideoPanel key={videoPanelKey} onBatchCreated={onBatchCreated} disabled={disabled} initialParams={videoPanelInitialParams} />
         )}
         {mode === 'avatar' && (
-          <AvatarPanel onBatchCreated={onBatchCreated} disabled={disabled} />
+          <AvatarPanel key={avatarPanelKey} onBatchCreated={onBatchCreated} disabled={disabled} />
         )}
         {mode === 'action_imitation' && (
           <ActionImitationPanel onBatchCreated={onBatchCreated} disabled={disabled} />

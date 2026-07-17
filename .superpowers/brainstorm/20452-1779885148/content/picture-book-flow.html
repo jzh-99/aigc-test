@@ -1,0 +1,77 @@
+<h2>Toby AI 绘本 · 完整模块流程骨架</h2>
+<p class="subtitle">先看创作路径是否符合你的预期：入口对话框 → 剧本双语编辑 → 角色/背景资产 → 分镜图片和双语语音。</p>
+
+<div class="mockup">
+  <div class="mockup-header">Step 0 · 初始入口</div>
+  <div class="mockup-body">
+    <div style="display:grid;gap:18px;place-items:center;padding:18px 8px;">
+      <div style="width:min(860px,100%);border:1px solid #d8dbe5;border-radius:12px;background:#fff;padding:22px;box-shadow:0 18px 40px rgba(15,23,42,.08);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;">
+          <div>
+            <div style="font-size:12px;color:#64748b;font-weight:700;">AI 生产剧本</div>
+            <h3 style="margin:6px 0 0;">Toby AI绘本</h3>
+          </div>
+          <button class="mock-button">全部 · 我的绘本</button>
+        </div>
+        <textarea class="mock-input" style="min-height:96px;width:100%;resize:none;" placeholder="输入绘本主题，例如：一只哈士奇第一次学会帮助朋友"></textarea>
+        <div style="display:grid;grid-template-columns:2fr 1fr auto;gap:10px;margin-top:12px;">
+          <div class="mock-input">绘本风格：吉卜力风</div>
+          <div class="mock-input">页数：15 页</div>
+          <button class="mock-button">生成剧本</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;width:min(860px,100%);">
+        <div class="placeholder">项目卡片 1</div>
+        <div class="placeholder">项目卡片 2</div>
+        <div class="placeholder">项目卡片 3</div>
+        <div class="placeholder">项目卡片 4</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">线性创作 Wizard</div>
+  <div class="mockup-body">
+    <div style="display:grid;grid-template-columns:190px 1fr;gap:18px;">
+      <div class="mock-sidebar">
+        <div>1 剧本与页文案</div>
+        <div>2 角色 / 背景</div>
+        <div>3 绘本分镜</div>
+        <div>4 预览与导出</div>
+      </div>
+      <div class="mock-content">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button class="mock-button">中文</button>
+          <button class="mock-button" style="background:#eef2ff;color:#334155;">English</button>
+        </div>
+        <div class="placeholder" style="height:92px;">上方：故事内容文本框，可编辑中英双语版本</div>
+        <div style="display:grid;gap:10px;margin-top:12px;">
+          <div class="placeholder">Page 01 · 画面描述 + 中文独白 + English narration</div>
+          <div class="placeholder">Page 02 · 画面描述 + 中文独白 + English narration</div>
+          <div class="placeholder">Page 03 · 画面描述 + 中文独白 + English narration</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">资产与分镜生成</div>
+  <div class="mockup-body">
+    <div class="split">
+      <div>
+        <h3>角色 / 背景</h3>
+        <p class="subtitle">只先生成提示词；用户编辑后批量生成图片，支持单卡重生成。</p>
+        <div class="placeholder">角色卡：名称、提示词、参考图、生成状态、图片结果</div>
+        <div class="placeholder">背景卡：名称、提示词、生成状态、图片结果</div>
+      </div>
+      <div>
+        <h3>绘本分镜</h3>
+        <p class="subtitle">每页先显示分镜图片提示词和音频脚本提示词；确认后批量生成图片和中英双语音频。</p>
+        <div class="placeholder">Page 01：图片提示词 + 中文语音脚本 + English audio script</div>
+        <div class="placeholder">Page 02：图片提示词 + 中文语音脚本 + English audio script</div>
+      </div>
+    </div>
+  </div>
+</div>

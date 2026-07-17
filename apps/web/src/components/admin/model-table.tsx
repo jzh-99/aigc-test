@@ -15,6 +15,7 @@ import type { AigcModule, ModelItem } from '@aigc/types'
 const MODULE_TABS: { key: AigcModule; label: string }[] = [
   { key: 'image', label: '图片模型' },
   { key: 'video', label: '视频模型' },
+  { key: 'agent', label: '文本模型' },
   // { key: 'avatar', label: '数字人' },
   // { key: 'action_imitation', label: '动作模仿' },
 ]
@@ -105,7 +106,7 @@ function ModelList({ models, onEdit }: ModelListProps): React.ReactElement {
           <th className="text-left py-2 px-2 font-medium">描述</th>
           <th className="text-left py-2 px-2 font-medium">Code</th>
           <th className="text-left py-2 px-2 font-medium">提供商</th>
-          {/* <th className="text-right py-2 px-2 font-medium">积分消耗</th> */}
+          {/* <th className="text-right py-2 px-2 font-medium">A豆消耗</th> */}
           <th className="text-left py-2 px-2 font-medium">状态</th>
           <th className="text-right py-2 px-2 font-medium">操作</th>
         </tr>
@@ -119,7 +120,6 @@ function ModelList({ models, onEdit }: ModelListProps): React.ReactElement {
             </td>
             <td className="py-2 px-2 text-muted-foreground font-mono">{model.code}</td>
             <td className="py-2 px-2 text-muted-foreground">{model.provider_code}</td>
-            {/* <td className="py-2 px-2 text-right">{model.credit_cost.toLocaleString()}</td> */}
             <td className="py-2 px-2">
               <Badge
                 variant={model.is_active ? 'success' : 'outline'}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Image as ImageIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,12 @@ import {
 import { apiPatch, ApiError } from '@/lib/api-client'
 import type { ModelItem, ParamsPricingRule } from '@aigc/types'
 
+const MUSIC_PRICING_LABELS: Record<string, string> = {
+  inspiration_song: '灵感模式生成歌曲',
+  instrumental: '纯音乐',
+  custom_song: '自定义模式生成歌曲',
+}
+
 interface ModelEditDialogProps {
   model: ModelItem | null
   open: boolean
@@ -29,15 +35,19 @@ interface ModelEditDialogProps {
 /** 编辑模型信息弹窗 */
 export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEditDialogProps): React.ReactElement | null {
   const [description, setDescription] = useState('')
+  const [avatar, setAvatar] = useState('')
   const [isActive, setIsActive] = useState(true)
   // 可编辑的定价规则列表，unit_price 允许修改
   const [pricingRules, setPricingRules] = useState<ParamsPricingRule[]>([])
   const [saving, setSaving] = useState(false)
+  const isMusicModel = model?.module === 'music'
+  const isAgentModel = model?.module === 'agent'
 
   // 每次打开弹窗时，将表单重置为当前模型数据
   useEffect(() => {
     if (model) {
       setDescription(model.description ?? '')
+      setAvatar(model.avatar ?? '')
       setIsActive(model.is_active)
       // 深拷贝，避免直接修改原始数据
       setPricingRules(model.params_pricing.map((r) => ({ ...r })))
@@ -59,7 +69,7 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
     // 校验所有 unit_price 必须为非负数
     const hasInvalidPrice = pricingRules.some((r) => isNaN(r.unit_price) || r.unit_price < 0)
     if (hasInvalidPrice) {
-      toast.error('积分单价必须为非负数')
+      toast.error('A豆单价必须为非负数')
       return
     }
 
@@ -67,6 +77,7 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
     try {
       await apiPatch(`/admin/models/${model.id}`, {
         description: description.trim() || null,
+        avatar: avatar.trim() || null,
         is_active: isActive,
         params_pricing: pricingRules,
       })
@@ -112,18 +123,43 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
             />
           </div>
 
-          {/* 分辨率定价规则 */}
+          {/* 模型图标 avatar */}
+          <div className="space-y-1.5">
+            <Label htmlFor="model-avatar">模型图标 URL</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="model-avatar"
+                value={avatar}
+                onChange={(e) => setAvatar(e.target.value)}
+                placeholder="TOS 存储地址，如 https://.../assets/llm/openai.png"
+              />
+              {avatar.trim() && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatar}
+                  alt="图标预览"
+                  className="h-9 w-9 shrink-0 rounded object-contain ring-1 ring-border"
+                />
+              )}
+              {!avatar.trim() && <ImageIcon className="h-9 w-9 shrink-0 text-muted-foreground" />}
+            </div>
+          </div>
+
+          {/* 定价规则 */}
           {pricingRules.length > 0 && (
             <div className="space-y-2">
-              {/* 图片模型按次计费，视频模型按秒计费 */}
               <Label>
-                分辨率定价（{model?.module === 'video' ? '积分/秒' : '积分/张'}）
+                {isMusicModel
+                  ? '音乐模式定价（A豆/次）'
+                  : isAgentModel
+                    ? '千字定价（A豆/千字）'
+                    : `分辨率定价（${model?.module === 'video' ? 'A豆/秒' : 'A豆/张'}）`}
               </Label>
               {/* 表头 */}
               <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground px-1">
                 <span>底层模型</span>
-                <span>分辨率</span>
-                <span>积分单价</span>
+                <span>{isMusicModel ? '业务模式' : isAgentModel ? '规格' : '分辨率'}</span>
+                <span>A豆单价</span>
               </div>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {pricingRules.map((rule, index) => (
@@ -134,13 +170,13 @@ export function ModelEditDialog({ model, open, onOpenChange, onSaved }: ModelEdi
                       disabled
                       className="cursor-not-allowed opacity-60 text-xs h-8"
                     />
-                    {/* 分辨率：只读 */}
+                    {/* 分辨率/规格：只读 */}
                     <Input
-                      value={rule.resolution}
+                      value={isMusicModel ? MUSIC_PRICING_LABELS[rule.resolution] ?? rule.resolution : rule.resolution}
                       disabled
                       className="cursor-not-allowed opacity-60 text-xs h-8"
                     />
-                    {/* 积分单价：可编辑 */}
+                    {/* A豆单价：可编辑 */}
                     <Input
                       type="number"
                       min={0}

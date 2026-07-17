@@ -1,5 +1,9 @@
-export type ModuleType = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
-export type VideoCategory = 'multimodal' | 'frames' | 'components'
+export type BatchSource = 'generation' | 'studio' | 'canvas'
+export type ModuleType = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation' | 'storyboard' | 'upload' | 'music' | 'music_voice_clone' | 'picture_book' | 'short_drama'
+export type VideoCategory = 'multimodal' | 'frames'
+export type ImageCategory = 'text_to_image' | 'image_to_image'
+export type TextCategory = 'text_to_text'
+export type CategoryReferenceKey = VideoCategory | ImageCategory | TextCategory
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed'
 export type BatchStatus = 'pending' | 'processing' | 'completed' | 'partial_complete' | 'failed'
 export type TransferStatus = 'pending' | 'completed' | 'failed'

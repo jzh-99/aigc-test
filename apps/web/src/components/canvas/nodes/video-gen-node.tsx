@@ -5,13 +5,17 @@ import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useShallow } from 'zustand/react/shallow'
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Pause, Film } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Play, Pause, Film, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
-import type { CanvasNodeData } from '@/lib/canvas/types'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
+import type { AppNode, CanvasNodeData } from '@/lib/canvas/types'
+import { isAssetConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
+import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
+import { NodeHandle } from './node-handle'
 
 export type VideoMode = 'multiref' | 'keyframe'
 
@@ -22,7 +26,6 @@ export interface VideoGenConfig {
   aspectRatio: string
   duration: number
   generateAudio: boolean
-  cameraFixed: boolean
   watermark: boolean
 }
 
@@ -55,18 +58,47 @@ function toCssAspectRatio(aspectRatio: string | undefined): string {
   return `${wRaw} / ${hRaw}`
 }
 
+function getReferenceKind(node: AppNode | undefined): 'image' | 'video' | 'audio' | null {
+  if (!node || node.type === 'text_input') return null
+  if (node.type === 'image_gen') return 'image'
+  if (node.type === 'video_gen' || node.type === 'video_stitch') return 'video'
+  if (!isAssetConfig(node.data.config)) return null
+
+  const mimeType = node.data.config.mimeType ?? ''
+  if (mimeType.startsWith('image')) return 'image'
+  if (mimeType.startsWith('video')) return 'video'
+  if (mimeType.startsWith('audio')) return 'audio'
+  return null
+}
+
 export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: string; data: CanvasNodeData<VideoGenConfig> }) {
   const execState = useNodeExecutionState(id)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const canvasId = useCanvasStructureStore((s) => s.canvasId)
-  // Count incoming multiref edges (non-text, any-in handle only)
-  const multirefCount = useCanvasStructureStore(
+  // 按素材类型统计全能参考连线，避免图片/音频被误显示成视频数量
+  const multirefCounts = useCanvasStructureStore(
     useShallow((s) => {
+      const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
+      return incoming.reduce(
+        (counts, edge) => {
+          const kind = getReferenceKind(s.nodes.find((n) => n.id === edge.source))
+          if (!kind) return counts
+          return { ...counts, [kind]: counts[kind] + 1 }
+        },
+        { image: 0, video: 0, audio: 0, text: 0 },
+      )
+    })
+  )
+  const hasMultirefReferences = multirefCounts.image > 0 || multirefCounts.video > 0 || multirefCounts.audio > 0
+  // Count image assets connected in keyframe mode
+  const keyframeImageCount = useCanvasStructureStore(
+    useShallow((s) => {
+      if ((data.config?.videoMode ?? 'multiref') !== 'keyframe') return 0
       const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
       return incoming.filter((e) => {
         const src = s.nodes.find((n) => n.id === e.source)
-        return src?.type !== 'text_input'
+        return getReferenceKind(src) === 'image'
       }).length
     })
   )
@@ -80,19 +112,8 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
         .map((n) => n.data.label ?? '文本')
     })
   )
-  // Count image assets connected in keyframe mode
-  const keyframeImageCount = useCanvasStructureStore(
-    useShallow((s) => {
-      if ((data.config?.videoMode ?? 'multiref') !== 'keyframe') return 0
-      const incoming = s.edges.filter((e) => e.target === id && (!e.targetHandle || e.targetHandle === 'any-in'))
-      return incoming.filter((e) => {
-        const src = s.nodes.find((n) => n.id === e.source)
-        const mt = (src?.data.config as any)?.mimeType as string | undefined
-        return src?.type !== 'text_input' && (!mt || mt.startsWith('image'))
-      }).length
-    })
-  )
   const token = useAuthStore((s) => s.accessToken)
+  const { inputRef, uploading: nodeUploading, triggerUpload, handleChange } = useNodeUpload(id, canvasId ?? '', 'video/*')
   const [confirming, setConfirming] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [videoSize, setVideoSize] = useState<{ w: number; h: number } | null>(null)
@@ -108,6 +129,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
   const currentUrl = selectedOutput?.url
   const currentIndex = outputs.findIndex((o) => o.id === selectedOutputId)
   const elapsed = useElapsedTimer(isGenerating ? startedAt : null)
+  const theme = getCanvasNodeTheme('video_gen')
 
   // Reset play state when switching outputs
   useEffect(() => {
@@ -131,11 +153,24 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
     try {
       await selectNodeOutputForCanvas(canvasId, id, selectedOutputId, token)
       toast.success('已设为定稿视频')
-    } catch (err: any) {
-      toast.error(err?.message ?? '设为定稿失败')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '设为定稿失败')
     } finally {
       setConfirming(false)
     }
+  }
+
+  function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!currentUrl) return
+    const a = document.createElement('a')
+    a.href = currentUrl
+    a.download = data.label || 'video'
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
   }
 
   const isVideo = currentUrl && (currentUrl.includes('.mp4') || currentUrl.includes('.mov') || currentUrl.includes('.webm') || selectedOutput?.type === 'video')
@@ -151,14 +186,14 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
     <div
       className={cn(
         'group relative flex flex-col rounded-xl shadow-md border transition-all duration-200',
-        'bg-white',
+        'bg-card',
         isGenerating
           ? 'border-blue-400 shadow-blue-200 ring-1 ring-blue-400'
           : isFailed
           ? 'border-red-400 shadow-red-100 ring-1 ring-red-300'
           : isUpstream
           ? 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100'
-          : 'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
+          : 'border-border hover:border-border/60 hover:shadow-lg',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
         '[contain:layout_style] [will-change:transform]',
       )}
@@ -167,16 +202,34 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
       {/* Delete */}
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
-        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-white text-zinc-400 hover:text-red-500 border-zinc-200"
+        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-red-500 border-border"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <X size={11} />
       </button>
 
+      {/* 上传按钮 — 顶部居中，hover 显示 */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleChange}
+      />
+      <button
+        onClick={(e) => { e.stopPropagation(); triggerUpload() }}
+        onMouseDown={(e) => e.stopPropagation()}
+        disabled={nodeUploading}
+        className="absolute -top-3 left-1/2 z-50 rounded-full border border-border bg-card p-1 text-muted-foreground opacity-0 shadow transition-opacity -translate-x-1/2 scale-90 hover:scale-100 hover:text-blue-500 group-hover:opacity-100 disabled:opacity-40"
+        title="上传视频"
+      >
+        {nodeUploading ? <Loader2 size={11} className="animate-spin" /> : <span className="text-xs font-bold leading-none">+</span>}
+      </button>
+
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50 flex items-center justify-between">
+      <div className={cn('px-3 py-1.5 border-b border-border rounded-t-xl flex items-center justify-between', theme.headerClassName)}>
         <div className="flex items-center gap-1.5 min-w-0">
-          <Film className="w-3 h-3 text-zinc-400 shrink-0" />
+          <Film className={cn('w-3 h-3 shrink-0', theme.iconClassName)} />
           <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -198,7 +251,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
       </div>
 
       {/* Preview */}
-      <div className="p-1 bg-white relative">
+      <div className="p-1 bg-card relative">
         {currentUrl ? (
           isVideo ? (
             <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: displayAspect }}>
@@ -230,7 +283,7 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
                 )}
               >
                 <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
-                  {playing ? <Pause className="w-4 h-4 text-zinc-800" /> : <Play className="w-4 h-4 text-zinc-800 ml-0.5" />}
+                {playing ? <Pause className="w-4 h-4 text-foreground" /> : <Play className="w-4 h-4 text-foreground ml-0.5" />}
                 </div>
               </button>
             </div>
@@ -239,20 +292,31 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
           )
         ) : (
           <div
-            className="flex flex-col items-center justify-center gap-2 text-zinc-400 rounded-lg bg-zinc-50"
+            className="flex flex-col items-center justify-center gap-2 text-muted-foreground rounded-lg bg-muted"
             style={{ aspectRatio: '16/9' }}
           >
             {isGenerating ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span className="font-mono text-[10px] tracking-widest uppercase">
-                  {Math.round(progress)}<span className="text-zinc-300 ml-0.5">%</span>
+                  {Math.round(progress)}<span className="text-muted-foreground/50 ml-0.5">%</span>
                 </span>
               </>
             ) : (
               <span className="text-[11px]">点击节点配置参数</span>
             )}
           </div>
+        )}
+        {currentUrl && (
+          <button
+            onClick={handleDownload}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="absolute bottom-2 right-2 z-20 rounded-md bg-black/45 p-1.5 text-white opacity-0 shadow-sm transition-opacity hover:bg-black/70 group-hover:opacity-100"
+            title="下载"
+            aria-label="下载视频"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </button>
         )}
       </div>
 
@@ -273,22 +337,22 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
 
       {/* History pager */}
       {outputs.length >= 1 && (
-        <div className="border-t border-zinc-100 px-3 py-1 flex items-center justify-between bg-zinc-50 rounded-b-xl">
-          <button onClick={handlePrev} disabled={currentIndex <= 0} className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded">
+        <div className="border-t border-border px-3 py-1 flex items-center justify-between bg-muted rounded-b-xl">
+          <button onClick={handlePrev} disabled={currentIndex <= 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5 rounded">
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] text-zinc-400">{currentIndex + 1} / {outputs.length}</span>
+            <span className="font-mono text-[10px] text-muted-foreground">{currentIndex + 1} / {outputs.length}</span>
             <button
               onClick={handleConfirmSelect}
               disabled={!token || !canvasId || !selectedOutputId || confirming}
-              className="px-1.5 py-0.5 text-[10px] rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 flex items-center gap-1"
+              className="px-1.5 py-0.5 text-[10px] rounded border border-border text-foreground hover:bg-muted disabled:opacity-40 flex items-center gap-1"
             >
               {confirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               设为定稿
             </button>
           </div>
-          <button onClick={handleNext} disabled={currentIndex >= outputs.length - 1} className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded">
+          <button onClick={handleNext} disabled={currentIndex >= outputs.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5 rounded">
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -298,14 +362,26 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
       <>
         {videoMode === 'multiref' ? (
           <>
-            {multirefCount > 0 && (
+            {hasMultirefReferences && (
               <div
-                className="absolute flex items-center pointer-events-none"
+                className="absolute flex flex-col items-end gap-1 pointer-events-none"
                 style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
               >
-                <span className="text-[9px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
-                  全能×{multirefCount}
-                </span>
+                {multirefCounts.image > 0 && (
+                  <span className="text-[9px] font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                    图×{multirefCounts.image}
+                  </span>
+                )}
+                {multirefCounts.video > 0 && (
+                  <span className="text-[9px] font-medium text-violet-600 bg-violet-50 border border-violet-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                    视频×{multirefCounts.video}
+                  </span>
+                )}
+                {multirefCounts.audio > 0 && (
+                  <span className="text-[9px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+                    音频×{multirefCounts.audio}
+                  </span>
+                )}
               </div>
             )}
             {upstreamTextLabels.length > 0 && (
@@ -343,21 +419,22 @@ export const VideoGenNode = memo(function VideoGenNode({ id, data }: { id: strin
             )}
           </>
         )}
-        <Handle
+        <NodeHandle
           type="target"
           position={Position.Left}
           id="any-in"
+          nodeId={id}
           style={{ top: '50%' }}
-          className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
         />
       </>
 
       {/* Output handle */}
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         id="video-out"
-        className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all"
+        nodeId={id}
+        showOnGroupHover
       />
     </div>
   )

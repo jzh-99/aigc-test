@@ -8,6 +8,8 @@ RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@10.31.0 --activate
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+RUN pnpm config set registry "$NPM_REGISTRY"
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/worker/package.json ./apps/worker/
@@ -32,7 +34,7 @@ RUN pnpm --filter @aigc/worker --prod deploy --legacy /app/deploy
 # ============================================================
 FROM node:20-alpine AS runner
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat ffmpeg
 
 WORKDIR /app
 

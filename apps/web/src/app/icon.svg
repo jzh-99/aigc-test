@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="bg" cx="32" cy="20" r="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E1B4B" />
+      <stop offset="0.58" stop-color="#10173A" />
+      <stop offset="1" stop-color="#070B1F" />
+    </radialGradient>
+    <linearGradient id="fill" x1="18" y1="10" x2="46" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8F4FF" />
+      <stop offset="0.45" stop-color="#A8DCFF" />
+      <stop offset="1" stop-color="#B98CFF" />
+    </linearGradient>
+    <linearGradient id="stroke" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" />
+      <stop offset="0.52" stop-color="#8EE7FF" />
+      <stop offset="1" stop-color="#C08BFF" />
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="3.2" flood-color="#A88BFF" flood-opacity="0.78" />
+      <feDropShadow dx="0" dy="3" stdDeviation="6.4" flood-color="#55D6FF" flood-opacity="0.3" />
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)" />
+  <path d="M11 8h42v48H11z" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" />
+  <path
+    d="M18.4 12.5C21.2 10.8 26.2 10 32 10s10.8.8 13.6 2.5c1.1.7 1.6 2.1 1.4 3.4l-1.5 7.2c-.4 1.8-2.1 2.8-3.8 2.4-1.6-.4-3.5-.7-5.9-.8v23.1c0 2-1.6 3.7-3.6 3.9l-4.8.4c-2.3.2-4.1-1.6-4.1-3.9V24.7c-2.4.1-4.3.4-5.9.8-1.7.4-3.4-.6-3.8-2.4L17 15.9c-.2-1.3.3-2.7 1.4-3.4Z"
+    fill="url(#fill)"
+    filter="url(#glow)"
+  />
+  <path
+    d="M32 10c5.8 0 10.8.8 13.6 2.5 1.1.7 1.6 2.1 1.4 3.4l-1.5 7.2c-.4 1.8-2.1 2.8-3.8 2.4-1.6-.4-3.5-.7-5.9-.8v23.1c0 2-1.6 3.7-3.6 3.9l-4.8.4c-2.3.2-4.1-1.6-4.1-3.9V24.7c-2.4.1-4.3.4-5.9.8-1.7.4-3.4-.6-3.8-2.4L17 15.9c-.2-1.3.3-2.7 1.4-3.4C21.2 10.8 26.2 10 32 10Z"
+    fill="none"
+    stroke="url(#stroke)"
+    stroke-width="1.8"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M26.3 16.8c3.3-.6 8.1-.6 11.4 0M30 24v21.6"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-linecap="round"
+    stroke-width="2.2"
+    opacity="0.42"
+  />
+</svg>

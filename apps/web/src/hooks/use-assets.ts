@@ -33,6 +33,7 @@ const PAGE_SIZE = 24
 
 export function useAssets(type?: 'image' | 'video', date?: string) {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
 
   const typeParam = type ? `&type=${type}` : ''
   const dateParam = date ? `&date=${date}` : ''
@@ -40,7 +41,7 @@ export function useAssets(type?: 'image' | 'video', date?: string) {
 
   const { data, error, size, setSize, isValidating, mutate } = useSWRInfinite<AssetListResponse>(
     (pageIndex, previousPageData) => {
-      if (!activeWorkspaceId) return null
+      if (!isInitialized || !activeWorkspaceId) return null
       if (previousPageData && !previousPageData.cursor) return null
       if (pageIndex === 0) return `/assets?limit=${PAGE_SIZE}${wsParam}${typeParam}${dateParam}`
       return `/assets?limit=${PAGE_SIZE}&cursor=${previousPageData!.cursor}${wsParam}${typeParam}${dateParam}`
@@ -67,8 +68,9 @@ export function useAssets(type?: 'image' | 'video', date?: string) {
 
 export function useTrashAssets(enabled: boolean) {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const { data, error, mutate } = useSWR<{ data: TrashAssetItem[] }>(
-    enabled && activeWorkspaceId ? `/assets/trash?workspace_id=${activeWorkspaceId}` : null,
+    enabled && isInitialized && activeWorkspaceId ? `/assets/trash?workspace_id=${activeWorkspaceId}` : null,
   )
   return { assets: data?.data ?? [], error, isLoading: !data && !error, mutate }
 }

@@ -1,6 +1,7 @@
 import type { ColumnType, Generated } from 'kysely'
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>
+type JsonArrayInput<T> = T[] | string
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
 
@@ -155,7 +156,22 @@ export interface TaskBatchesTable {
   credit_account_id: string
   parent_batch_id: string | null
   idempotency_key: string
-  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
+  source: 'generation' | 'studio' | 'canvas'
+  module:
+    | 'image'
+    | 'video'
+    | 'tts'
+    | 'lipsync'
+    | 'agent'
+    | 'avatar'
+    | 'action_imitation'
+    | 'storyboard'
+    | 'upload'
+    | 'music'
+    | 'music_voice_clone'
+    | 'picture_book'
+    | 'short_drama'
+    | 'text'
   provider: string
   model: string
   prompt: string
@@ -172,6 +188,10 @@ export interface TaskBatchesTable {
   canvas_id: string | null
   canvas_node_id: string | null
   video_studio_project_id: string | null
+  picture_book_project_id: string | null
+  short_drama_project_id: string | null
+  short_drama_episode_id: string | null
+  short_drama_segment_id: string | null
   created_at: Generated<Date>
   updated_at: Generated<Date>
 }
@@ -267,12 +287,21 @@ export interface ProviderModelsTable {
   code: string
   name: string
   description: string | null
-  module: 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
-  video_categories: ColumnType<unknown, string, string> | null
-  credit_cost: number
+  module:
+    | 'image'
+    | 'video'
+    | 'tts'
+    | 'lipsync'
+    | 'agent'
+    | 'avatar'
+    | 'action_imitation'
+    | 'music'
+    | 'music_voice_clone'
+  category_references: ColumnType<unknown, string, string> | null
   params_pricing: ColumnType<unknown, string, string>
   params_schema: ColumnType<unknown, string, string>
   resolution: string | null
+  avatar: string | null
   is_active: Generated<boolean>
 }
 
@@ -283,6 +312,18 @@ export interface TeamModelConfigsTable {
   is_active: Generated<boolean>
   created_at: Generated<Date>
   updated_at: Generated<Date>
+}
+
+export interface ProviderSystemVoicesTable {
+  id: Generated<string>
+  provider_id: string
+  voice_id: string
+  name: string
+  language: string
+  metadata: ColumnType<unknown, string, string>
+  demo_audio_url: string | null
+  is_active: Generated<boolean>
+  created_at: Generated<Date>
 }
 
 export interface VoiceProfilesTable {
@@ -359,6 +400,150 @@ export interface VideoStudioProjectsTable {
   updated_at: Generated<Date>
 }
 
+export interface ProviderApiLogsTable {
+  id: Generated<string>
+  batch_id: string | null
+  task_id: string | null
+  user_id: string | null
+  team_id: string | null
+  workspace_id: string | null
+  module: string
+  provider: string
+  model: string | null
+  operation: string
+  method: string
+  endpoint: string
+  request_url: string | null
+  referer: string | null
+  request_payload: ColumnType<unknown, string | null, string | null> | null
+  request_truncated: Generated<boolean>
+  response_status: number | null
+  response_payload: ColumnType<unknown, string | null, string | null> | null
+  response_truncated: Generated<boolean>
+  external_task_id: string | null
+  duration_ms: number | null
+  status: 'success' | 'failed'
+  error_message: string | null
+  created_at: Generated<Date>
+}
+
+// ─── System Configs ───────────────────────────────────────────────────────────
+
+export interface SystemCostConfigsTable {
+  key: string
+  label: string
+  description: string | null
+  credit_cost: number
+  updated_at: Generated<Date>
+}
+
+// ─── Music ───────────────────────────────────────────────────────────────────
+
+export interface MusicVoiceClonesTable {
+  id: Generated<string>
+  workspace_id: string
+  user_id: string
+  team_id: string
+  batch_id: string | null
+  task_id: string | null
+  name: string
+  description: string | null
+  gender: Generated<'auto' | 'male' | 'female'>
+  source_audio_url: string
+  source_audio_storage_url: string | null
+  voice_id: string | null
+  external_voice_id: string | null
+  external_task_id: string | null
+  status: Generated<'pending' | 'processing' | 'ready' | 'failed'>
+  error_message: string | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface MusicTracksTable {
+  id: Generated<string>
+  workspace_id: string
+  user_id: string
+  team_id: string
+  batch_id: string | null
+  task_id: string | null
+  type: 'song' | 'instrumental'
+  mode: 'inspiration' | 'custom'
+  title: string | null
+  prompt: string | null
+  lyrics: string | null
+  lyrics_sections: ColumnType<Array<Record<string, unknown>>, JsonArrayInput<Record<string, unknown>> | undefined, JsonArrayInput<Record<string, unknown>>>
+  styles: ColumnType<string[], JsonArrayInput<string> | undefined, JsonArrayInput<string>>
+  voice_clone_id: string | null
+  voice_gender: Generated<'auto' | 'male' | 'female'>
+  model: string
+  cover_url: string | null
+  cover_storage_url: string | null
+  stream_url: string | null
+  audio_url: string | null
+  audio_storage_url: string | null
+  flac_url: string | null
+  flac_storage_url: string | null
+  wav_url: string | null
+  wav_storage_url: string | null
+  duration_seconds: number | null
+  external_task_id: string | null
+  status: Generated<
+    | 'pending'
+    | 'lyrics_generating'
+    | 'song_generating'
+    | 'cover_generating'
+    | 'transferring'
+    | 'completed'
+    | 'failed'
+  >
+  error_message: string | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+// ─── Short Drama ──────────────────────────────────────────────────────────────
+
+export interface ShortDramaProjectsTable {
+  id: Generated<string>
+  workspace_id: string
+  team_id: string
+  user_id: string
+  title: string
+  prompt: string
+  style: string
+  aspect_ratio: string
+  episode_count: number
+  status: string
+  cover_url: string | null
+  state: ColumnType<unknown, string, string>
+  estimated_credits: number
+  actual_credits: number
+  draft_saved_at: Timestamp | null
+  is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface ShortDramaSegmentsTable {
+  id: Generated<string>
+  project_id: string
+  episode_number: number
+  segment_id: string
+  order_index: number
+  title: string
+  prompt: string
+  mention_refs: ColumnType<unknown, string | undefined, string>
+  duration_seconds: number
+  status: Generated<'idle' | 'pending' | 'generating' | 'completed' | 'failed'>
+  video_url: string | null
+  video_batch_id: string | null
+  video_task_id: string | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 // ─── AI Assistant Errors ──────────────────────────────────────────────────────
 
 export interface AiAssistantErrorsTable {
@@ -367,6 +552,84 @@ export interface AiAssistantErrorsTable {
   http_status: number | null
   error_detail: string | null
   created_at: Generated<Date>
+}
+
+// ─── Picture Book ─────────────────────────────────────────────────────────────
+
+export interface PictureBookProjectsTable {
+  id: Generated<string>
+  workspace_id: string
+  team_id: string
+  user_id: string
+  title: string
+  prompt: string
+  style: string
+  page_count: 10 | 15 | 20
+  status: Generated<
+    | 'draft'
+    | 'generating'
+    | 'script_ready'
+    | 'assets_ready'
+    | 'storyboard_ready'
+    | 'completed'
+    | 'failed'
+  >
+  active_step: Generated<'script' | 'assets' | 'storyboard' | 'preview'>
+  cover_url: string | null
+  state: ColumnType<unknown, string | undefined, string>
+  draft_saved_at: Timestamp | null
+  estimated_credits: Generated<number>
+  actual_credits: Generated<number>
+  is_deleted: Generated<boolean>
+  deleted_at: Timestamp | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface PictureBookProjectChargesTable {
+  id: Generated<string>
+  project_id: string
+  workspace_id: string
+  team_id: string
+  user_id: string
+  charge_type: string
+  model: string
+  target_count: number
+  estimated_credits: number
+  actual_credits: number | null
+  status: Generated<
+    | 'pending'
+    | 'processing'
+    | 'completed'
+    | 'partial_failed'
+    | 'failed'
+    | 'refunded'
+  >
+  batch_ids: ColumnType<string[], JsonArrayInput<string> | undefined, JsonArrayInput<string>>
+  metadata: ColumnType<unknown, string | undefined, string>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+export interface PictureBookProjectAssetsTable {
+  id: Generated<string>
+  project_id: string
+  kind:
+    | 'character'
+    | 'background'
+    | 'page_image'
+    | 'page_audio_zh'
+    | 'page_audio_en'
+  ref_id: string
+  name: string
+  prompt: string
+  selected_asset_url: string | null
+  selected_asset_id: string | null
+  batch_id: string | null
+  status: Generated<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>
+  metadata: ColumnType<unknown, string | undefined, string>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
 }
 
 // ─── Submission Errors ────────────────────────────────────────────────────────
@@ -403,9 +666,12 @@ export interface Database {
   assets: AssetsTable
   prompt_filter_logs: PromptFilterLogsTable
   webhook_logs: WebhookLogsTable
+  provider_api_logs: ProviderApiLogsTable
+  system_cost_configs: SystemCostConfigsTable
   payment_orders: PaymentOrdersTable
   providers: ProvidersTable
   provider_models: ProviderModelsTable
+  provider_system_voices: ProviderSystemVoicesTable
   team_model_configs: TeamModelConfigsTable
   voice_profiles: VoiceProfilesTable
   prompt_filter_rules: PromptFilterRulesTable
@@ -413,6 +679,13 @@ export interface Database {
   canvas_node_outputs: CanvasNodeOutputsTable
   canvas_agent_sessions: CanvasAgentSessionsTable
   video_studio_projects: VideoStudioProjectsTable
+  music_voice_clones: MusicVoiceClonesTable
+  music_tracks: MusicTracksTable
+  picture_book_projects: PictureBookProjectsTable
+  picture_book_project_charges: PictureBookProjectChargesTable
+  picture_book_project_assets: PictureBookProjectAssetsTable
+  short_drama_projects: ShortDramaProjectsTable
+  short_drama_segments: ShortDramaSegmentsTable
   ai_assistant_errors: AiAssistantErrorsTable
   submission_errors: SubmissionErrorsTable
 }

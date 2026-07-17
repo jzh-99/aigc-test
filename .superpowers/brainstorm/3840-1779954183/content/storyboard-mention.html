@@ -1,0 +1,84 @@
+<h2>@ 引用功能设计</h2>
+<p class="subtitle">在提示词编辑器中 @ 引用角色/背景图片，生成图片时自动附带参考图</p>
+
+<div class="mockup">
+  <div class="mockup-header">提示词编辑器 — @ 引用交互</div>
+  <div class="mockup-body" style="background:#1a1a2e;padding:20px;">
+    <!-- 编辑器模拟 -->
+    <div style="background:#16213e;border-radius:8px;border:1px solid #334155;padding:16px;">
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;">画面提示词</div>
+      <div style="background:#1e293b;border-radius:6px;padding:12px;min-height:80px;position:relative;border:1px solid #475569;">
+        <span style="color:#cbd5e1;font-size:13px;">一只小狗站在月光下的花园里，</span>
+        <span style="display:inline-flex;align-items:center;gap:3px;background:#312e81;border:1px solid #4338ca;border-radius:4px;padding:1px 6px;font-size:12px;color:#a5b4fc;vertical-align:middle;">
+          <img src="" style="width:14px;height:14px;border-radius:2px;background:#4338ca;" />
+          @小狗
+        </span>
+        <span style="color:#cbd5e1;font-size:13px;"> 抬头望着星空，</span>
+        <span style="display:inline-flex;align-items:center;gap:3px;background:#1e3a5f;border:1px solid #2563eb;border-radius:4px;padding:1px 6px;font-size:12px;color:#93c5fd;vertical-align:middle;">
+          <img src="" style="width:14px;height:14px;border-radius:2px;background:#2563eb;" />
+          @花园夜景
+        </span>
+        <span style="color:#cbd5e1;font-size:13px;"> 周围萤火虫飞舞</span>
+        <span style="display:inline-block;width:2px;height:16px;background:#a5b4fc;vertical-align:middle;animation:blink 1s infinite;"></span>
+      </div>
+
+      <!-- @ 下拉选择器 -->
+      <div style="margin-top:8px;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px;max-width:280px;box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+        <div style="font-size:10px;color:#64748b;padding:4px 8px;margin-bottom:4px;">角色</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;background:#1e293b;margin-bottom:4px;cursor:pointer;">
+          <div style="width:28px;height:28px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border-radius:4px;"></div>
+          <div>
+            <div style="font-size:12px;color:#e2e8f0;">小狗</div>
+            <div style="font-size:10px;color:#64748b;">character_1</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;margin-bottom:4px;cursor:pointer;">
+          <div style="width:28px;height:28px;background:linear-gradient(135deg,#059669,#34d399);border-radius:4px;"></div>
+          <div>
+            <div style="font-size:12px;color:#e2e8f0;">小猫</div>
+            <div style="font-size:10px;color:#64748b;">character_2</div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:#64748b;padding:4px 8px;margin-bottom:4px;border-top:1px solid #334155;padding-top:8px;">背景</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;">
+          <div style="width:28px;height:28px;background:linear-gradient(135deg,#0369a1,#38bdf8);border-radius:4px;"></div>
+          <div>
+            <div style="font-size:12px;color:#e2e8f0;">花园夜景</div>
+            <div style="font-size:10px;color:#64748b;">background_1</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 说明 -->
+    <div style="margin-top:16px;padding:12px;background:#0f172a;border-radius:6px;border:1px solid #334155;">
+      <div style="font-size:12px;color:#a5b4fc;font-weight:600;margin-bottom:8px;">工作原理</div>
+      <div style="font-size:11px;color:#94a3b8;line-height:1.8;">
+        1. 输入 <code style="background:#1e293b;padding:1px 4px;border-radius:2px;color:#e2e8f0;">@</code> 触发选择器，从资产库中选择角色/背景<br>
+        2. 选中后插入 pill 标记（如 <span style="background:#312e81;padding:1px 4px;border-radius:2px;color:#a5b4fc;">@小狗</span>）<br>
+        3. 生成图片时，解析提示词中的 @ 标记，将对应资产图片作为参考图传给大模型<br>
+        4. 大模型根据参考图 + 提示词生成一致性更高的分镜画面
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 style="margin-top:32px;">关于 AI 自动生成带标记的提示词</h2>
+<p class="subtitle">你提到希望 AI 生成分镜提示词时就自动带上 @角色/@背景 标记</p>
+
+<div class="options">
+  <div class="option" data-choice="auto-mark" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>AI 自动标记（推荐）</h3>
+      <p>修改 storyboard-prompts 的 system prompt，让 AI 在生成每页 imagePrompt 时自动插入 <code>@角色名</code> / <code>@背景名</code> 标记。前端渲染为 pill，生成图片时解析并附带参考图。用户也可以手动增删标记。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="manual-only" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>仅手动标记</h3>
+      <p>AI 生成纯文本提示词，用户需要自己输入 @ 来引用角色/背景。灵活但操作成本高，15-20 页绘本每页都要手动标记。</p>
+    </div>
+  </div>
+</div>

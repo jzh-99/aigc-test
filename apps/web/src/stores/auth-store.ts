@@ -9,6 +9,7 @@ interface AuthState {
   activeTeamId: string | null
   activeWorkspaceId: string | null
   isInitialized: boolean
+  isRefreshing: boolean
 
   // Computed
   activeTeam: () => UserTeam | null
@@ -21,6 +22,7 @@ interface AuthState {
   setActiveWorkspace: (workspaceId: string) => void
   updateUser: (user: UserProfile) => void
   setInitialized: () => void
+  setIsRefreshing: (isRefreshing: boolean) => void
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -29,6 +31,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   activeTeamId: null,
   activeWorkspaceId: null,
   isInitialized: false,
+  isRefreshing: false,
 
   activeTeam: () => {
     const { user, activeTeamId } = get()
@@ -52,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       activeTeamId: firstTeam?.id ?? null,
       activeWorkspaceId: firstWs?.id ?? null,
       isInitialized: true,
+      isRefreshing: false,
     })
   },
 
@@ -61,6 +65,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     activeTeamId: null,
     activeWorkspaceId: null,
     isInitialized: true,
+    isRefreshing: false,
   }),
 
   setActiveTeam: (teamId) => {
@@ -78,4 +83,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   updateUser: (user) => set({ user }),
 
   setInitialized: () => set({ isInitialized: true }),
+
+  setIsRefreshing: (isRefreshing) => set({ isRefreshing }),
 }))

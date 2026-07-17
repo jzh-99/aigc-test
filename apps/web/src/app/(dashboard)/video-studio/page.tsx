@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { VideoStudioTrashDrawer } from '@/components/video-studio/video-studio-trash-drawer'
 import { useAuthStore } from '@/stores/auth-store'
 import { fetchWithAuth } from '@/lib/api-client'
+import { useConfirm } from '@/hooks/use-confirm'
+import { useRelativeTimeLabel } from '@/hooks/use-relative-time-label'
 
 interface Project {
   id: string
@@ -16,17 +18,39 @@ interface Project {
   updated_at: string
 }
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return '刚刚'
-  if (m < 60) return `${m} 分钟前`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} 小时前`
-  return `${Math.floor(h / 24)} 天前`
+function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
+  const updatedAtLabel = useRelativeTimeLabel(project.updated_at)
+
+  return (
+    <div className="relative group border rounded-xl hover:bg-muted/40 transition-colors">
+      <Link
+        href={`/video-studio/wizard?id=${project.id}&name=${encodeURIComponent(project.name)}`}
+        className="block p-4 space-y-3"
+      >
+        <div className="w-full aspect-video rounded-lg bg-muted flex items-center justify-center">
+          <Film className="w-8 h-8 text-muted-foreground/40" />
+        </div>
+        <div>
+          <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">{project.name}</p>
+          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+            <Clock className="w-3 h-3" />
+            {updatedAtLabel}
+          </p>
+        </div>
+      </Link>
+      <button
+        onClick={(e) => { e.preventDefault(); onDelete(project.id) }}
+        className="absolute right-2 top-2 rounded-md bg-background/90 p-1.5 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-red-600 group-hover:opacity-100"
+        title="删除项目"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  )
 }
 
 export default function VideoStudioPage() {
+  const confirm = useConfirm()
   const workspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const isInitialized = useAuthStore((s) => s.isInitialized)
   const [projects, setProjects] = useState<Project[]>([])
@@ -43,7 +67,7 @@ export default function VideoStudioPage() {
   }, [isInitialized, workspaceId])
 
   const deleteProject = async (id: string) => {
-    if (!confirm('删除后项目会进入回收站，7 天内可恢复。确认删除？')) return
+    if (!await confirm({ title: '删除项目', description: '删除后项目会进入回收站，7 天内可恢复。确认删除？' })) return
     try {
       await fetchWithAuth(`/video-studio/projects/${id}`, { method: 'DELETE' })
       setProjects((items) => items.filter((item) => item.id !== id))
@@ -118,30 +142,7 @@ export default function VideoStudioPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {projects.map((p) => (
-            <div key={p.id} className="relative group border rounded-xl hover:bg-muted/40 transition-colors">
-              <Link
-                href={`/video-studio/wizard?id=${p.id}&name=${encodeURIComponent(p.name)}`}
-                className="block p-4 space-y-3"
-              >
-                <div className="w-full aspect-video rounded-lg bg-muted flex items-center justify-center">
-                  <Film className="w-8 h-8 text-muted-foreground/40" />
-                </div>
-                <div>
-                  <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">{p.name}</p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <Clock className="w-3 h-3" />
-                    {timeAgo(p.updated_at)}
-                  </p>
-                </div>
-              </Link>
-              <button
-                onClick={(e) => { e.preventDefault(); deleteProject(p.id) }}
-                className="absolute right-2 top-2 rounded-md bg-background/90 p-1.5 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-red-600 group-hover:opacity-100"
-                title="删除项目"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+            <ProjectCard key={p.id} project={p} onDelete={deleteProject} />
           ))}
           <Link
             href="/video-studio/new"

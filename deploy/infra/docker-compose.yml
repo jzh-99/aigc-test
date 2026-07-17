@@ -1,7 +1,8 @@
 name: aigc-infra
 
 # ============================================================
-# 基础设施服务器：PostgreSQL + Redis + MinIO
+# 基础设施服务器：PostgreSQL + Redis
+# 对象存储使用火山引擎 TOS（需在 API/Worker .env 中配置）
 # 部署后其他服务通过本机 IP 访问
 # ============================================================
 
@@ -14,10 +15,34 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-aigc}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必须设置 POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-aigc_dev}
+    # PostgreSQL 内存调优（默认配置在 credits_ledger 等大表上会触发 53200 OOM）
+    # 参数说明见 README.md「内存调优」一节，需根据宿主机物理内存调整：
+    #   shared_buffers ≈ 物理内存的 1/4
+    #   effective_cache_size ≈ 物理内存的 1/2 ~ 3/4
+    #   max_connections 需 ≥ 所有应用容器 PG_POOL_MAX 之和 ×1.5（预留运维连接）
+    # 默认值为 8GB 服务器档位，生产环境通过 .env 覆盖
+    command: >
+      postgres
+        -c shared_buffers=${PG_SHARED_BUFFERS:-1GB}
+        -c work_mem=${PG_WORK_MEM:-16MB}
+        -c maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-256MB}
+        -c effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-3GB}
+        -c max_connections=${PG_MAX_CONNECTIONS:-80}
+        -c wal_buffers=16MB
+        -c checkpoint_completion_target=0.9
+        -c random_page_cost=1.1
+        -c default_statistics_target=100
+    shm_size: '256mb'
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: ${PG_CONTAINER_MEMORY_LIMIT:-3g}
+        reservations:
+          memory: 512m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aigc} -d ${POSTGRES_DB:-aigc_dev}"]
       interval: 10s
@@ -28,57 +53,28 @@ services:
     image: redis:7-alpine
     container_name: aigc-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    command: >
+      redis-server
+        --appendonly yes
+        --requirepass ${REDIS_PASSWORD:-}
+        --maxmemory ${REDIS_MAXMEMORY:-512mb}
+        --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_CONTAINER_MEMORY_LIMIT:-768m}
+        reservations:
+          memory: 256m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    container_name: aigc-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?必须设置 STORAGE_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?必须设置 STORAGE_SECRET_KEY}
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  # 首次启动自动创建 bucket
-  minio-init:
-    image: minio/mc:latest
-    container_name: aigc-minio-init
-    restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-        mc alias set local http://minio:9000 $${STORAGE_ACCESS_KEY} $${STORAGE_SECRET_KEY} &&
-        mc mb --ignore-existing local/$${STORAGE_BUCKET:-aigc-assets} &&
-        mc anonymous set download local/$${STORAGE_BUCKET:-aigc-assets} &&
-        echo 'bucket 初始化完成'
-      "
-    environment:
-      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY}
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY}
-      STORAGE_BUCKET: ${STORAGE_BUCKET:-aigc-assets}
-
 volumes:
   postgres_data:
   redis_data:
-  minio_data:

@@ -8,6 +8,8 @@ RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@10.31.0 --activate
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+RUN pnpm config set registry "$NPM_REGISTRY"
 
 # 先复制所有 package.json，利用层缓存
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -36,7 +38,8 @@ RUN pnpm --filter @aigc/api --prod deploy --legacy /app/deploy
 # ============================================================
 FROM node:20-alpine AS runner
 
-RUN apk add --no-cache libc6-compat
+# sharp 原生模块依赖 + 编译工具（用于 rebuild sharp）
+RUN apk add --no-cache libc6-compat vips-dev python3 make g++
 
 WORKDIR /app
 
@@ -46,6 +49,14 @@ COPY --from=builder /app/deploy ./
 # 复制 packages 的构建产物（pnpm deploy 不包含 workspace 包的 dist）
 COPY --from=builder /repo/packages/db/dist ./node_modules/@aigc/db/dist
 COPY --from=builder /repo/packages/types/dist ./node_modules/@aigc/types/dist
+
+# 启用 pnpm（pnpm deploy 产物需要用 pnpm 管理）
+RUN corepack enable && corepack prepare pnpm@10.31.0 --activate
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+RUN pnpm config set registry "$NPM_REGISTRY" && npm config set registry "$NPM_REGISTRY"
+
+# sharp 在 Alpine 环境重新编译（避免 Windows 构建的二进制兼容问题）
+RUN pnpm rebuild sharp
 
 # 复制迁移脚本、seed 脚本和迁移文件（供 docker exec 手动执行）
 COPY --from=builder /repo/packages/db/scripts ./migrate/scripts

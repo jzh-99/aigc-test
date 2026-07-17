@@ -18,6 +18,7 @@ import {
 import { apiPatch, apiPost, apiDelete, ApiError } from '@/lib/api-client'
 import { InviteDialog } from './invite-dialog'
 import { BatchInviteDialog } from './batch-invite-dialog'
+import { useConfirm } from '@/hooks/use-confirm'
 import { toast } from 'sonner'
 import { UserPlus, Trash2, Edit2, RotateCcw, Users, Settings2 } from 'lucide-react'
 
@@ -61,6 +62,7 @@ const periodLabel: Record<string, string> = {
 }
 
 export function MemberList({ teamId }: { teamId: string }) {
+  const confirm = useConfirm()
   const { data, error, mutate } = useSWR<TeamData>(`/teams/${teamId}`, {
     // Skip retry on 429 (rate-limited) — prevent hammering the server when overloaded
     onErrorRetry: (err, _key, _config, revalidate, { retryCount }) => {
@@ -168,10 +170,10 @@ export function MemberList({ teamId }: { teamId: string }) {
   }
 
   async function handleResetCredits(member: Member) {
-    if (!confirm(`确定要重置 ${member.username} 的已用积分吗？`)) return
+    if (!await confirm({ title: '重置已用A豆', description: `确定要重置 ${member.username} 的已用A豆吗？`, confirmText: '重置' })) return
     try {
       await apiPost(`/teams/${teamId}/members/${member.user_id}/reset-credits`, {})
-      toast.success(`${member.username} 的已用积分已重置为 0`)
+      toast.success(`${member.username} 的已用A豆已重置为 0`)
       delayedMutate()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : '重置失败')
@@ -179,7 +181,7 @@ export function MemberList({ teamId }: { teamId: string }) {
   }
 
   async function handleRemoveMember(member: Member) {
-    if (!confirm(`确定要移除 ${member.username} 吗？`)) return
+    if (!await confirm({ title: '移除成员', description: `确定要移除 ${member.username} 吗？`, confirmText: '移除' })) return
     try {
       await apiDelete(`/teams/${teamId}/members/${member.user_id}`)
       toast.success('成员已移除')
@@ -337,7 +339,7 @@ export function MemberList({ teamId }: { teamId: string }) {
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7"
-                                title="重置已用积分"
+                                title="重置已用A豆"
                                 onClick={() => handleResetCredits(member)}
                               >
                                 <RotateCcw className="h-3.5 w-3.5" />
@@ -375,7 +377,7 @@ export function MemberList({ teamId }: { teamId: string }) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">积分额度上限</label>
+              <label className="text-sm font-medium">A豆额度上限</label>
               <Input
                 type="number"
                 placeholder="留空为无限制"
@@ -383,7 +385,7 @@ export function MemberList({ teamId }: { teamId: string }) {
                 onChange={(e) => setQuotaValue(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                成员在一个周期内最多可使用的积分数。留空表示不限制（受团队总余额约束）。
+                成员在一个周期内最多可使用的A豆数。留空表示不限制（受团队总余额约束）。
               </p>
             </div>
             <div className="space-y-2">
@@ -399,7 +401,7 @@ export function MemberList({ teamId }: { teamId: string }) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                自动重置会在周期到期时将"已用积分"清零。不影响团队总余额。
+                自动重置会在周期到期时将"已用A豆"清零。不影响团队总余额。
               </p>
             </div>
             {editingMember && editingMember.credit_used > 0 && (
@@ -426,7 +428,7 @@ export function MemberList({ teamId }: { teamId: string }) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">积分额度上限</label>
+              <label className="text-sm font-medium">A豆额度上限</label>
               <Input
                 type="number"
                 placeholder="留空则不修改此项"

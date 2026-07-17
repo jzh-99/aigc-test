@@ -15,12 +15,13 @@ interface CursorSection<T> {
   lastFetchedAt: number | null
 }
 
-type AssetSubTab = 'image' | 'video'
+type AssetSubTab = 'image' | 'video' | 'audio'
 
 interface CanvasSidebarBucket {
   history: CursorSection<CanvasHistoryItem>
   assets: CursorSection<CanvasAssetItem>
   videoAssets: CursorSection<CanvasAssetItem>
+  audioAssets: CursorSection<CanvasAssetItem>
   assetSubTab: AssetSubTab
 }
 
@@ -31,9 +32,11 @@ interface CanvasSidebarDataState {
   refreshHistory: (canvasId: string, token: string) => Promise<void>
   refreshAssets: (canvasId: string, token: string) => Promise<void>
   refreshVideoAssets: (canvasId: string, token: string) => Promise<void>
+  refreshAudioAssets: (canvasId: string, token: string) => Promise<void>
   loadMoreHistory: (canvasId: string, token: string) => Promise<void>
   loadMoreAssets: (canvasId: string, token: string) => Promise<void>
   loadMoreVideoAssets: (canvasId: string, token: string) => Promise<void>
+  loadMoreAudioAssets: (canvasId: string, token: string) => Promise<void>
   setAssetSubTab: (canvasId: string, subTab: AssetSubTab) => void
   clearCanvasData: (canvasId: string) => void
   prependHistoryItem: (canvasId: string, item: CanvasHistoryItem) => void
@@ -56,6 +59,7 @@ function makeBucket(): CanvasSidebarBucket {
     history: makeSection<CanvasHistoryItem>(),
     assets: makeSection<CanvasAssetItem>(),
     videoAssets: makeSection<CanvasAssetItem>(),
+    audioAssets: makeSection<CanvasAssetItem>(),
     assetSubTab: 'image',
   }
 }
@@ -293,6 +297,73 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
     }
   },
 
+  refreshAudioAssets: async (canvasId, token) => {
+    if (!canvasId || !token) return
+    const current = ensureBucket(get(), canvasId)
+    if (current.audioAssets.loading) return
+
+    set((state) => {
+      const bucket = ensureBucket(state, canvasId)
+      return {
+        byCanvas: {
+          ...state.byCanvas,
+          [canvasId]: {
+            ...bucket,
+            audioAssets: {
+              ...bucket.audioAssets,
+              items: [],
+              nextCursor: null,
+              loading: true,
+              error: null,
+            },
+          },
+        },
+      }
+    })
+
+    try {
+      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token, null, 'audio'))
+      set((state) => {
+        const bucket = ensureBucket(state, canvasId)
+        return {
+          byCanvas: {
+            ...state.byCanvas,
+            [canvasId]: {
+              ...bucket,
+              audioAssets: {
+                ...bucket.audioAssets,
+                items: data.items,
+                nextCursor: data.nextCursor,
+                loaded: true,
+                loading: false,
+                error: null,
+                lastFetchedAt: Date.now(),
+              },
+            },
+          },
+        }
+      })
+    } catch (err: any) {
+      set((state) => {
+        const bucket = ensureBucket(state, canvasId)
+        return {
+          byCanvas: {
+            ...state.byCanvas,
+            [canvasId]: {
+              ...bucket,
+              audioAssets: {
+                ...bucket.audioAssets,
+                loading: false,
+                loaded: true,
+                error: err?.message ?? '加载音频资产失败',
+              },
+            },
+          },
+        }
+      })
+    }
+  },
+
   loadMoreHistory: async (canvasId, token) => {
     if (!canvasId || !token) return
     const current = ensureBucket(get(), canvasId)
@@ -477,6 +548,70 @@ export const useCanvasSidebarDataStore = create<CanvasSidebarDataState>((set, ge
                 ...bucket.videoAssets,
                 loading: false,
                 error: err?.message ?? '加载更多视频资产失败',
+              },
+            },
+          },
+        }
+      })
+    }
+  },
+
+  loadMoreAudioAssets: async (canvasId, token) => {
+    if (!canvasId || !token) return
+    const current = ensureBucket(get(), canvasId)
+    if (current.audioAssets.loading || !current.audioAssets.nextCursor) return
+
+    set((state) => {
+      const bucket = ensureBucket(state, canvasId)
+      return {
+        byCanvas: {
+          ...state.byCanvas,
+          [canvasId]: {
+            ...bucket,
+            audioAssets: {
+              ...bucket.audioAssets,
+              loading: true,
+              error: null,
+            },
+          },
+        },
+      }
+    })
+
+    try {
+      const data = await retryOnceIfRateLimited(() => fetchCanvasAssets(canvasId, token, current.audioAssets.nextCursor, 'audio'))
+      set((state) => {
+        const bucket = ensureBucket(state, canvasId)
+        return {
+          byCanvas: {
+            ...state.byCanvas,
+            [canvasId]: {
+              ...bucket,
+              audioAssets: {
+                ...bucket.audioAssets,
+                items: [...bucket.audioAssets.items, ...data.items],
+                nextCursor: data.nextCursor,
+                loaded: true,
+                loading: false,
+                error: null,
+                lastFetchedAt: Date.now(),
+              },
+            },
+          },
+        }
+      })
+    } catch (err: any) {
+      set((state) => {
+        const bucket = ensureBucket(state, canvasId)
+        return {
+          byCanvas: {
+            ...state.byCanvas,
+            [canvasId]: {
+              ...bucket,
+              audioAssets: {
+                ...bucket.audioAssets,
+                loading: false,
+                error: err?.message ?? '加载更多音频资产失败',
               },
             },
           },

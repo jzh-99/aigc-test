@@ -262,7 +262,7 @@ export function ErrorDashboard() {
                     {new Date(e.created_at).toLocaleString('zh-CN')}
                   </span>
                 </div>
-                <div className="rounded bg-amber-500/10 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400 font-mono break-all">
+                <div className="rounded bg-amber-500/10 px-2 py-1.5 text-xs text-amber-400 font-mono break-all">
                   {e.detail || '（无详情）'}
                 </div>
               </div>
@@ -288,7 +288,7 @@ export function ErrorDashboard() {
                     {new Date(e.created_at).toLocaleString('zh-CN')}
                   </span>
                 </div>
-                <div className="rounded bg-orange-500/10 px-2 py-1.5 text-xs text-orange-700 dark:text-orange-400 font-mono break-all">
+                <div className="rounded bg-orange-500/10 px-2 py-1.5 text-xs text-orange-400 font-mono break-all">
                   {e.error_detail || '（无详情）'}
                 </div>
               </div>

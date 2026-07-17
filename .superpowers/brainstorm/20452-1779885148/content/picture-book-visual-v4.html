@@ -1,0 +1,163 @@
+<h2>Toby AI 绘本 · 简约主题适配方向</h2>
+<p class="subtitle">这一版不追求花哨装饰，重点是干净、留白、主题变量可适配、生成流程清晰。</p>
+
+<style>
+  .theme-frame {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --text: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --primary: #6d5dfc;
+    --primary-soft: #ede9fe;
+    --shadow: 0 16px 44px rgba(15, 23, 42, .08);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 18px;
+    padding: 28px;
+  }
+  .theme-dark {
+    --bg: #0b0d12;
+    --surface: #121620;
+    --surface-2: #1b2030;
+    --text: #f8fafc;
+    --muted: #94a3b8;
+    --line: #2c3345;
+    --primary: #8b7cff;
+    --primary-soft: #282348;
+    --shadow: 0 16px 44px rgba(0, 0, 0, .28);
+  }
+  .topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
+  .brand { display:flex; align-items:center; gap:12px; font-weight:800; font-size:20px; }
+  .iconbox { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; background:var(--primary-soft); color:var(--primary); }
+  .ghost-btn { border:1px solid var(--line); background:var(--surface); color:var(--text); border-radius:999px; padding:10px 16px; font-weight:700; }
+  .hero-panel { max-width:880px; margin:0 auto; background:var(--surface); border:1px solid var(--line); border-radius:22px; padding:22px; box-shadow:var(--shadow); }
+  .panel-label { font-size:13px; color:var(--muted); font-weight:800; margin-bottom:10px; }
+  .prompt { height:150px; border:1px solid var(--line); background:var(--surface-2); border-radius:16px; padding:16px; color:var(--muted); }
+  .controls { display:flex; align-items:center; gap:12px; margin-top:14px; }
+  .select { min-width:160px; border:1px solid var(--line); background:var(--surface); border-radius:12px; padding:11px 14px; font-weight:700; }
+  .primary-btn { margin-left:auto; border:0; background:var(--primary); color:white; border-radius:12px; padding:12px 22px; font-weight:800; }
+  .section-head { display:flex; align-items:center; justify-content:space-between; margin:34px 0 14px; }
+  .project-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .project-card { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:10px; }
+  .cover { height:112px; border-radius:12px; background:linear-gradient(135deg,#fde68a,#dbeafe); margin-bottom:10px; }
+  .project-title { font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta { color:var(--muted); font-size:12px; margin-top:4px; }
+  .steps { display:flex; justify-content:center; align-items:center; gap:16px; margin:8px 0 26px; }
+  .step { display:flex; align-items:center; gap:8px; color:var(--muted); font-weight:800; }
+  .dot { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:var(--surface-2); border:1px solid var(--line); }
+  .step.active { color:var(--text); }
+  .step.active .dot { background:var(--primary); color:white; border-color:var(--primary); }
+  .dash { width:44px; border-top:1px dashed var(--line); }
+  .workarea { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:22px; }
+  .summary { border:1px solid var(--line); border-radius:14px; padding:18px; min-height:120px; background:var(--surface-2); color:var(--muted); line-height:1.8; }
+  .page-card { margin-top:18px; border:1px solid var(--line); border-radius:16px; padding:18px; background:var(--surface); }
+  .fields { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .field { border:1px solid var(--line); background:var(--surface-2); border-radius:12px; min-height:96px; padding:14px; color:var(--muted); }
+  .asset-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .asset { display:grid; grid-template-columns:84px 1fr; gap:14px; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:12px; }
+  .asset-img { border-radius:12px; background:linear-gradient(135deg,#fef3c7,#e0f2fe); }
+  .shot-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .shot { background:var(--surface); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+  .shot-img { height:128px; background:linear-gradient(135deg,#fde68a,#86efac,#93c5fd); }
+  .shot-body { padding:12px; color:var(--muted); }
+  .mini-title { color:var(--text); font-weight:800; margin-bottom:6px; }
+</style>
+
+<div class="mockup">
+  <div class="mockup-header">Light Theme · 首页入口</div>
+  <div class="mockup-body">
+    <div class="theme-frame">
+      <div class="topbar">
+        <div class="brand"><span class="iconbox">📖</span>Toby AI绘本</div>
+        <button class="ghost-btn">我的绘本</button>
+      </div>
+      <div class="hero-panel">
+        <div class="panel-label">AI 生成绘本</div>
+        <div class="prompt">输入你想要的绘本主题、角色或教育目标...</div>
+        <div class="controls">
+          <div class="select">风格：吉卜力风</div>
+          <div class="select">页数：15页</div>
+          <button class="primary-btn">生成剧本</button>
+        </div>
+      </div>
+      <div class="section-head"><h3 style="margin:0;">最近项目</h3><strong>全部</strong></div>
+      <div class="project-grid">
+        <div class="project-card"><div class="cover"></div><div class="project-title">哈噜的奇妙朋友</div><div class="meta">15页 · 刚刚更新</div></div>
+        <div class="project-card"><div class="cover"></div><div class="project-title">小月亮回家</div><div class="meta">10页 · 昨天</div></div>
+        <div class="project-card"><div class="cover"></div><div class="project-title">风里的糖果店</div><div class="meta">20页 · 05-24</div></div>
+        <div class="project-card"><div class="cover"></div><div class="project-title">云朵邮差</div><div class="meta">15页 · 05-20</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Light Theme · 创作页</div>
+  <div class="mockup-body">
+    <div class="theme-frame">
+      <div class="topbar">
+        <div class="brand"><span class="iconbox">←</span>哈噜的奇妙朋友</div>
+        <button class="ghost-btn">自动保存中</button>
+      </div>
+      <div class="steps">
+        <div class="step active"><span class="dot">1</span>剧本大纲</div><span class="dash"></span>
+        <div class="step"><span class="dot">2</span>资产库</div><span class="dash"></span>
+        <div class="step"><span class="dot">3</span>绘本分镜</div><span class="dash"></span>
+        <div class="step"><span class="dot">4</span>预览导出</div>
+      </div>
+      <div class="workarea">
+        <h3>故事摘要</h3>
+        <div class="summary">只显示中文摘要，用于确认故事主线、角色动机和结尾。</div>
+        <div class="page-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><strong>第 1 页 · 初遇新朋友</strong><span class="meta">1 / 15</span></div>
+          <div class="fields">
+            <div><div class="mini-title">画面描述</div><div class="field">清晨客厅里，哈噜发现手机里出现一位会发光的新朋友。</div></div>
+            <div><div class="mini-title">中文独白</div><div class="field">哈噜睁大眼睛说：“你好呀，你是从星星里来的吗？”</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Light Theme · 资产库与分镜卡片</div>
+  <div class="mockup-body">
+    <div class="theme-frame">
+      <div class="asset-grid">
+        <div class="asset"><div class="asset-img"></div><div><div class="mini-title">哈噜</div><p class="meta">角色 · 待生成</p><p>三视图、白底、全身照、治愈系氛围...</p></div></div>
+        <div class="asset"><div class="asset-img"></div><div><div class="mini-title">星星朋友</div><p class="meta">角色 · 待生成</p><p>圆润发光的小机器人，表情友好...</p></div></div>
+        <div class="asset"><div class="asset-img"></div><div><div class="mini-title">客厅</div><p class="meta">背景 · 待生成</p><p>温暖阳光、绿植、木地板、儿童绘本风...</p></div></div>
+      </div>
+      <div class="section-head"><h3 style="margin:0;">绘本分镜</h3><button class="primary-btn" style="margin:0;">批量生成</button></div>
+      <div class="shot-grid">
+        <div class="shot"><div class="shot-img"></div><div class="shot-body"><div class="mini-title">第 1 页</div><p>画面提示词、中文语音脚本、英文语音脚本。</p></div></div>
+        <div class="shot"><div class="shot-img"></div><div class="shot-body"><div class="mini-title">第 2 页</div><p>画面提示词、中文语音脚本、英文语音脚本。</p></div></div>
+        <div class="shot"><div class="shot-img"></div><div class="shot-body"><div class="mini-title">第 3 页</div><p>画面提示词、中文语音脚本、英文语音脚本。</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Dark Theme · 同结构适配</div>
+  <div class="mockup-body">
+    <div class="theme-frame theme-dark">
+      <div class="topbar">
+        <div class="brand"><span class="iconbox">📖</span>Toby AI绘本</div>
+        <button class="ghost-btn">主题自适配</button>
+      </div>
+      <div class="hero-panel">
+        <div class="panel-label">AI 生成绘本</div>
+        <div class="prompt">深色主题下保持层次、边框和按钮对比，不单独做一套页面。</div>
+        <div class="controls">
+          <div class="select">风格：梦幻光影厚涂风</div>
+          <div class="select">页数：20页</div>
+          <button class="primary-btn">生成剧本</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

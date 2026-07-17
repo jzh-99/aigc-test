@@ -5,16 +5,19 @@ import { Handle, Position } from 'reactflow'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useNodeExecutionState, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useShallow } from 'zustand/react/shallow'
-import { X } from 'lucide-react'
+import { Type, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { CanvasNodeData } from '@/lib/canvas/types'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
+import type { CanvasNodeData, TextInputConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
+import { NodeHandle } from './node-handle'
 
-export const TextNode = memo(function TextNode({ id, data }: { id: string; data: CanvasNodeData<{ text: string }> }) {
+export const TextNode = memo(function TextNode({ id, data }: { id: string; data: CanvasNodeData<TextInputConfig> }) {
   const updateNodeData = useCanvasStructureStore((s) => s.updateNodeData)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
-  const { isGenerating } = useNodeExecutionState(id)
+  const { isGenerating, progress } = useNodeExecutionState(id)
   const isUpstream = useNodeHighlighted(id)
+  const theme = getCanvasNodeTheme('text_input')
 
   // Upstream text nodes connected via any-in
   const upstreamTextLabels = useCanvasStructureStore(
@@ -58,8 +61,8 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
     <div
       className={cn(
         'group relative flex flex-col rounded-xl shadow-md border transition-shadow duration-150',
-        'bg-white',
-        'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
+        'bg-card',
+        'border-border hover:border-border/80 hover:shadow-lg',
         isGenerating && 'ring-1 ring-blue-400 shadow-blue-200',
         isUpstream && !isGenerating && 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
@@ -70,14 +73,25 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
     >
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
-        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-white text-zinc-400 hover:text-red-500 border-zinc-200"
+        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-red-500 border-border"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <X size={11} />
       </button>
 
-      <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50">
-        <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
+      <div className={cn('flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border rounded-t-xl', theme.headerClassName)}>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-current/10', theme.iconClassName)}>
+            <Type size={12} />
+          </span>
+          <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
+        </div>
+        {isGenerating && (
+          <div className="flex shrink-0 items-center gap-1 text-blue-500">
+            <span className="font-mono text-[10px]">{Math.round(progress)}%</span>
+            <Loader2 className="h-3 w-3 animate-spin" />
+          </div>
+        )}
       </div>
 
       <div className="p-2 flex-1">
@@ -91,19 +105,18 @@ export const TextNode = memo(function TextNode({ id, data }: { id: string; data:
           </div>
         )}
         <textarea
-          className="w-full h-20 p-2 text-xs bg-zinc-50 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-blue-400/50 placeholder:text-zinc-400 text-zinc-700"
+          className="nodrag nowheel w-full h-20 p-2 text-xs bg-muted rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-blue-400/50 placeholder:text-muted-foreground text-foreground select-text"
           placeholder="输入提示词内容..."
           value={localText}
           onChange={handleChange}
           onBlur={handleBlur}
           onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         />
       </div>
 
-      <Handle type="target" position={Position.Left} id="any-in"
-        className="!w-2 !h-2 !bg-zinc-300 !border !border-zinc-400 !-left-1 hover:!bg-blue-400 transition-colors" />
-      <Handle type="source" position={Position.Right} id="text-out"
-        className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all" />
+      <NodeHandle type="target" position={Position.Left} id="any-in" nodeId={id} />
+      <NodeHandle type="source" position={Position.Right} id="text-out" nodeId={id} showOnGroupHover />
     </div>
   )
 })

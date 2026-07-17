@@ -1,0 +1,6 @@
+{"type":"server-started","port":54065,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:54065","screen_dir":"D:\\haobai\\aigc-test\\.superpowers\\brainstorm\\20452-1779885148\\content","state_dir":"D:\\haobai\\aigc-test\\.superpowers\\brainstorm\\20452-1779885148\\state"}
+{"type":"screen-added","file":"D:\\haobai\\aigc-test\\.superpowers\\brainstorm\\20452-1779885148\\content\\picture-book-flow.html"}
+{"type":"screen-added","file":"D:\\haobai\\aigc-test\\.superpowers\\brainstorm\\20452-1779885148\\content\\picture-book-flow-v2.html"}
+{"type":"screen-added","file":"D:\\haobai\\aigc-test\\.superpowers\\brainstorm\\20452-1779885148\\content\\picture-book-flow-v3.html"}
+{"type":"screen-added","file":"D:\\haobai\\aigc-test\\.superpowers\\brainstorm\\20452-1779885148\\content\\picture-book-visual-v4.html"}
+{"type":"server-stopped","reason":"idle timeout"}

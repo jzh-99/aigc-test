@@ -1,67 +1,59 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect } from 'react'
 import { useBatches } from '@/hooks/use-batches'
+import { useMultipleBatchSSE } from '@/hooks/use-multiple-batch-sse'
 import { BatchListCard } from '@/components/history/batch-list-card'
-import { BatchDetail } from '@/components/history/batch-detail'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+
+const TERMINAL_STATUSES = ['completed', 'failed', 'partial_complete']
 
 export function RecentBatches() {
-  const { batches, isLoadingInitial } = useBatches()
-  const recent = batches.slice(0, 5)
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
-  const [detailOpen, setDetailOpen] = useState(false)
+  const { batches, isLoadingInitial, updateBatchInList } = useBatches('generation')
+  
+  const activeBatchIds = batches
+    .filter(b => !TERMINAL_STATUSES.includes(b.status))
+    .map(b => b.id)
+
+  const handleBatchUpdate = (updatedBatch: typeof batches[0]) => {
+    console.log(`[RecentBatches] Received SSE update: id=${updatedBatch.id}, status=${updatedBatch.status}`)
+    updateBatchInList(updatedBatch)
+  }
+
+  useMultipleBatchSSE({
+    batchIds: activeBatchIds,
+    onUpdate: handleBatchUpdate,
+    enabled: batches.length > 0
+  })
+
+  useEffect(() => {
+    console.log(`[RecentBatches] Total batches: ${batches.length}, active: ${activeBatchIds.length}`)
+  }, [batches, activeBatchIds.length])
 
   if (isLoadingInitial) {
     return (
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 w-full rounded-lg" />
-        ))}
+      <div className="flex flex-col items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-accent-blue" />
       </div>
     )
   }
 
-  if (recent.length === 0) {
+  if (batches.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-center">
-        <p className="text-muted-foreground">暂无记录</p>
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="text-center">
+          <p className="text-lg font-medium text-muted-foreground">暂无任务</p>
+          <p className="text-sm text-muted-foreground mt-1">点击上方按钮开始创建生成任务</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <>
-      <div className="space-y-3">
-        {recent.map((batch) => (
-          <BatchListCard
-            key={batch.id}
-            batch={batch}
-            onClick={() => {
-              setSelectedBatchId(batch.id)
-              setDetailOpen(true)
-            }}
-          />
-        ))}
-        {batches.length > 5 && (
-          <div className="flex justify-center">
-            <Button variant="ghost" className="gap-2" asChild>
-              <Link href="/history">
-                查看全部 <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        )}
-      </div>
-
-      <BatchDetail
-        batchId={selectedBatchId}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-      />
-    </>
+    <div className="space-y-4">
+      {batches.slice(0, 5).map((batch) => (
+        <BatchListCard key={batch.id} batch={batch} />
+      ))}
+    </div>
   )
 }

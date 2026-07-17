@@ -5,36 +5,8 @@ import { apiPost, ApiError, reportClientSubmissionError } from '@/lib/api-client
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { generateUUID } from '@/lib/utils'
+import { validateImageReferencesForModel } from '@/lib/image-categories'
 import type { BatchResponse, GenerateImageRequest } from '@aigc/types'
-
-const MODEL_CODE_MAP = {
-  gemini: {
-    '1k': 'gemini-3.1-flash-image-preview',
-    '2k': 'gemini-3.1-flash-image-preview-2k',
-    '4k': 'gemini-3.1-flash-image-preview-4k',
-  },
-  'gpt-image-2': {
-    '2k': 'gpt-image-2',
-  },
-  'nano-banana-pro': {
-    '1k': 'nano-banana-2',
-    '2k': 'nano-banana-2-2k',
-    '4k': 'nano-banana-2-4k',
-  },
-  'seedream-5.0-lite': {
-    '2k': 'seedream-5.0-lite',
-    '3k': 'seedream-5.0-lite',
-  },
-  'seedream-4.5': {
-    '2k': 'seedream-4.5',
-    '4k': 'seedream-4.5',
-  },
-  'seedream-4.0': {
-    '1k': 'seedream-4.0',
-    '2k': 'seedream-4.0',
-    '4k': 'seedream-4.0',
-  },
-} as const
 
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -45,27 +17,38 @@ async function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
-async function imageUrlToDataUrl(url: string): Promise<string> {
-  const resp = await fetch(url)
-  if (!resp.ok) throw new Error('reference image fetch failed')
-  const blob = await resp.blob()
-  return fileToDataUrl(new File([blob], 'reference', { type: blob.type || 'image/jpeg' }))
+function getReusableReferenceUrls(referenceImages: Array<{ file?: File; previewUrl: string; dataUrl?: string }>): string[] {
+  return referenceImages
+    .filter((img) => !img.file && !img.previewUrl.startsWith('blob:') && !img.previewUrl.startsWith('data:'))
+    .map((img) => img.previewUrl)
+}
+
+async function resolveReferenceImagePayload(img: { file?: File; previewUrl: string; dataUrl?: string }): Promise<string> {
+  if (img.file) return fileToDataUrl(img.file)
+  if (img.dataUrl?.startsWith('data:')) return img.dataUrl
+  return img.previewUrl
 }
 
 export function useGenerate() {
-  const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, setIsGenerating, setActiveBatchId } = useGenerationStore()
+  const { prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, imageModels, setIsGenerating, setActiveBatchId } = useGenerationStore()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
 
-  const generate = useCallback(async (): Promise<BatchResponse | null> => {
-    if (!prompt.trim()) return null
+  const generate = useCallback(async (overridePrompt?: string): Promise<BatchResponse | null> => {
+    const finalPrompt = (overridePrompt ?? prompt).trim()
+    if (!finalPrompt) return null
 
     let resolvedModel: string | undefined
+    const model = modelType
+    const currentModel = imageModels.find((item) => item.code === model)
+    const limitResult = validateImageReferencesForModel(currentModel, referenceImages.length)
+    if (!limitResult.valid) {
+      throw new Error(limitResult.message ?? '参考图数量不符合当前模型限制')
+    }
+
     setIsGenerating(true)
     try {
-      const modelMap = MODEL_CODE_MAP[modelType] as Record<string, string> | undefined
-      if (!modelMap) throw new Error(`Unknown model type: ${modelType}`)
-      const model = modelMap[resolution]
-      if (!model) throw new Error(`Unknown resolution for ${modelType}: ${resolution}`)
+      // 直接用 modelType（DB code）作为 model 发给后端
+      // API 侧会根据 params.resolution 从 params_pricing 查实际调用的底层 model code
       resolvedModel = model
 
       const params: Record<string, unknown> = {
@@ -75,17 +58,19 @@ export function useGenerate() {
       }
 
       if (referenceImages.length > 0) {
+        const reusableReferenceUrls = getReusableReferenceUrls(referenceImages)
+        if (reusableReferenceUrls.length > 0) {
+          params.reference_image_urls = reusableReferenceUrls
+        }
         params.image = await Promise.all(referenceImages.map(async (img) => {
-          if (img.dataUrl) return img.dataUrl
-          if (img.file) return fileToDataUrl(img.file)
-          return imageUrlToDataUrl(img.previewUrl)
+          return resolveReferenceImagePayload(img)
         }))
       }
 
       const body: GenerateImageRequest = {
         idempotency_key: generateUUID(),
         model,
-        prompt: prompt.trim(),
+        prompt: finalPrompt,
         quantity,
         params,
         workspace_id: activeWorkspaceId ?? '',
@@ -119,7 +104,7 @@ export function useGenerate() {
     } finally {
       setIsGenerating(false)
     }
-  }, [prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, activeWorkspaceId, setIsGenerating, setActiveBatchId])
+  }, [prompt, modelType, resolution, quantity, aspectRatio, referenceImages, watermark, imageModels, activeWorkspaceId, setIsGenerating, setActiveBatchId])
 
   return { generate }
 }

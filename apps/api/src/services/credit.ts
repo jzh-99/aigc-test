@@ -18,6 +18,7 @@ export async function freezeCredits(
   teamId: string,
   userId: string,
   amount: number,
+  description?: string,
 ): Promise<{ creditAccountId: string }> {
   const db = getDb()
 
@@ -32,11 +33,11 @@ export async function freezeCredits(
 
     const row = account.rows[0]
     if (!row) {
-      throw new Error('未找到团队积分账户')
+      throw new Error('未找到A豆账户')
     }
 
     if (row.balance - row.frozen_credits < amount) {
-      throw new Error('团队积分余额不足')
+      throw new Error('A豆余额不足')
     }
 
     // 2. Lock and check member quota (after team lock to prevent race)
@@ -96,7 +97,7 @@ export async function freezeCredits(
         user_id: userId,
         amount: -amount,
         type: 'freeze',
-        description: 'Credits frozen for image generation',
+        description: description ?? '积分冻结',
       })
       .execute()
 
@@ -113,6 +114,7 @@ export async function confirmCredits(
   amount: number,
   taskId?: string,
   batchId?: string,
+  description?: string,
 ): Promise<void> {
   const db = getDb()
 
@@ -136,7 +138,7 @@ export async function confirmCredits(
         type: 'confirm',
         task_id: taskId ?? null,
         batch_id: batchId ?? null,
-        description: 'Credits confirmed for completed task',
+        description: description ?? '任务完成确认扣费',
       })
       .execute()
   })
@@ -152,6 +154,7 @@ export async function refundCredits(
   amount: number,
   taskId?: string,
   batchId?: string,
+  description?: string,
 ): Promise<void> {
   const db = getDb()
 
@@ -184,7 +187,7 @@ export async function refundCredits(
         type: 'refund',
         task_id: taskId ?? null,
         batch_id: batchId ?? null,
-        description: 'Credits refunded for failed task',
+        description: description ?? '任务失败退回积分',
       })
       .execute()
   })

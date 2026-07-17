@@ -155,7 +155,6 @@ function WizardContent() {
           aspectRatio: wizard.describeData?.aspectRatio ?? 'adaptive',
           duration: fragment.duration,
           generateAudio: true,
-          cameraFixed: false,
           watermark: false,
         }))
         edges.push(makeEdge(`e-ref-vidgen-${i}`, refNodeId, vidGenNodeId))

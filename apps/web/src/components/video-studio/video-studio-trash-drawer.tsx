@@ -5,6 +5,7 @@ import { Loader2, RotateCcw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { fetchWithAuth } from '@/lib/api-client'
+import { useConfirm } from '@/hooks/use-confirm'
 
 interface TrashProject {
   id: string
@@ -26,6 +27,7 @@ function daysRemaining(deletedAt: string) {
 }
 
 export function VideoStudioTrashDrawer({ open, workspaceId, onClose, onChanged }: Props) {
+  const confirm = useConfirm()
   const [items, setItems] = useState<TrashProject[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -52,7 +54,7 @@ export function VideoStudioTrashDrawer({ open, workspaceId, onClose, onChanged }
   }
 
   const purge = async (id: string) => {
-    if (!confirm('永久删除会同时清理项目资产，且无法恢复。确认继续？')) return
+    if (!await confirm({ title: '永久删除项目', description: '永久删除会同时清理项目资产，且无法恢复。确认继续？', confirmText: '永久删除' })) return
     await fetchWithAuth(`/video-studio/projects/${id}/permanent`, { method: 'DELETE' })
     toast.success('项目已永久删除')
     await load()

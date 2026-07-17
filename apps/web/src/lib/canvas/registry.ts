@@ -1,9 +1,11 @@
 import type { CanvasNodeDefinition, CanvasNodeData, AppNode, CanvasNodeType } from './types'
+import { DEFAULT_TEXT_CATEGORY_LIMITS, DEFAULT_VIDEO_CATEGORY_LIMITS } from './types'
 import { generateUUID } from '@/lib/utils'
 import { TextNode } from '@/components/canvas/nodes/text-node'
 import { ImageGenNode } from '@/components/canvas/nodes/image-gen-node'
 import { AssetNode } from '@/components/canvas/nodes/asset-node'
 import { VideoGenNode } from '@/components/canvas/nodes/video-gen-node'
+import { AudioGenNode } from '@/components/canvas/nodes/audio-gen-node'
 import { ScriptWriterNode } from '@/components/canvas/nodes/script-writer-node'
 import { StoryboardSplitterNode } from '@/components/canvas/nodes/storyboard-splitter-node'
 import { VideoStitchNode } from '@/components/canvas/nodes/video-stitch-node'
@@ -21,20 +23,20 @@ export class NodeRegistry {
       type: 'text_input',
       label: '文本输入',
       CanvasComponent: TextNode as any,
-      inputs: [{ id: 'any-in', type: 'any', position: 'left' }],
+      inputs: [{ id: 'any-in', type: 'text', position: 'left' }],
       outputs: [{ id: 'text-out', type: 'text', position: 'right' }],
-      defaultConfig: { text: '' },
+      defaultConfig: { text: '', model: 'qwen3.6-plus', categoryReferences: DEFAULT_TEXT_CATEGORY_LIMITS },
     })
 
     this.register({
       type: 'image_gen',
-      label: 'AI 生图',
+      label: '图片',
       CanvasComponent: ImageGenNode as any,
       inputs: [
         { id: 'any-in', type: 'any', position: 'left', isList: true },
       ],
       outputs: [{ id: 'image-out', type: 'image', position: 'right' }],
-      defaultConfig: { prompt: '', modelType: 'gemini', resolution: '2k', aspectRatio: '1:1', quantity: 1, watermark: false },
+      defaultConfig: { prompt: '', modelType: 'gemini-3.1-flash-image-preview', resolution: '2k', aspectRatio: '1:1', quantity: 1, watermark: false },
     })
 
     this.register({
@@ -48,7 +50,7 @@ export class NodeRegistry {
 
     this.register({
       type: 'video_gen',
-      label: 'AI 视频',
+      label: '视频',
       CanvasComponent: VideoGenNode as any,
       inputs: [
         // single any-in handle for both multiref and keyframe modes
@@ -62,8 +64,25 @@ export class NodeRegistry {
         aspectRatio: 'adaptive',
         duration: 5,
         generateAudio: true,
-        cameraFixed: false,
         watermark: false,
+        categoryReferences: DEFAULT_VIDEO_CATEGORY_LIMITS,
+      },
+    })
+
+    this.register({
+      type: 'audio_gen',
+      label: '音频',
+      CanvasComponent: AudioGenNode as any,
+      inputs: [{ id: 'text-in', type: 'text', position: 'left' }],
+      outputs: [{ id: 'audio-out', type: 'audio', position: 'right' }],
+      defaultConfig: {
+        text: '',
+        model: 'speech-2.8-turbo',
+        voiceId: 'female-yujie',
+        speed: 1,
+        pitch: 0,
+        volume: 1,
+        emotion: '',
       },
     })
 
@@ -78,7 +97,7 @@ export class NodeRegistry {
 
     this.register({
       type: 'storyboard_splitter',
-      label: '分镜拆分',
+      label: '脚本',
       CanvasComponent: StoryboardSplitterNode as any,
       inputs: [{ id: 'any-in', type: 'any', position: 'left' }],
       outputs: [{ id: 'text-out', type: 'text', position: 'right' }],

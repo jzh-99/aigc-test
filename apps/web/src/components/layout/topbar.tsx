@@ -13,11 +13,12 @@ import {
 import { useLayoutStore } from '@/stores/layout-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
-import { useMemo } from 'react'
+import { useMemo, Suspense } from 'react'
 import { apiPost } from '@/lib/api-client'
 import { useRouter } from 'next/navigation'
 import { MobileSidebar } from './mobile-sidebar'
 import Link from 'next/link'
+import { CreativeTopNav } from './creative-top-nav'
 
 interface TopbarProps {
   title?: string
@@ -30,6 +31,7 @@ export function Topbar({ title }: TopbarProps) {
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const resetGeneration = useGenerationStore((s) => s.reset)
   const router = useRouter()
+  const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
 
   const canViewCredits = useMemo(() => {
     if (!activeTeam) return true
@@ -47,23 +49,24 @@ export function Topbar({ title }: TopbarProps) {
 
   return (
     <header className="relative z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6">
-      {/* Mobile menu button */}
       <Button
         variant="ghost"
         size="icon"
-        className="md:hidden"
+        className="lg:hidden"
         onClick={() => setMobileOpen(true)}
       >
         <Menu className="h-5 w-5" />
         <span className="sr-only">菜单</span>
       </Button>
 
-      {/* Page title */}
-      {title && (
+      {title ? (
         <h1 className="text-lg font-semibold">{title}</h1>
+      ) : (
+        <Suspense fallback={<div className="h-8 w-48" />}>
+          <CreativeTopNav />
+        </Suspense>
       )}
 
-      {/* Right side - user dropdown */}
       <div className="ml-auto flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -80,7 +83,7 @@ export function Topbar({ title }: TopbarProps) {
           <DropdownMenuContent align="end" className="w-48">
             <div className="px-2 py-1.5">
               <p className="text-sm font-medium">{user?.username}</p>
-              <p className="text-xs text-muted-foreground">{user?.email}</p>
+              <p className="text-xs text-muted-foreground">{accountDisplay}</p>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
@@ -93,7 +96,7 @@ export function Topbar({ title }: TopbarProps) {
               <DropdownMenuItem asChild>
                 <Link href="/credits">
                   <Coins className="mr-2 h-4 w-4" />
-                  积分管理
+                  A豆管理
                 </Link>
               </DropdownMenuItem>
             )}
@@ -106,11 +109,12 @@ export function Topbar({ title }: TopbarProps) {
         </DropdownMenu>
       </div>
 
-      {/* Mobile sidebar sheet */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="p-0 w-60">
           <SheetTitle className="sr-only">导航菜单</SheetTitle>
-          <MobileSidebar />
+          <Suspense fallback={null}>
+            <MobileSidebar />
+          </Suspense>
         </SheetContent>
       </Sheet>
     </header>

@@ -73,7 +73,14 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
   }
 
   const handleActionImitationGenerate = async () => {
-    if (!actionImage || !actionVideo) return
+    if (!actionImage) {
+      toast.error('请先上传人物图片')
+      return
+    }
+    if (!actionVideo) {
+      toast.error('请先上传驱动视频')
+      return
+    }
     setIsActionGenerating(true)
     try {
       const videoForm = new FormData()
@@ -111,7 +118,7 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
     }
   }
 
-  const estimatedCredits = actionVideo ? `${Math.ceil(actionVideo.duration) * 20} 积分` : '20 积分/秒'
+  const estimatedCredits = actionVideo ? `${Math.ceil(actionVideo.duration) * 20} A豆` : '20 A豆/秒'
   const isDisabled = isActionGenerating || !!disabled
 
   return (
@@ -119,7 +126,7 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
       <div className="rounded-b-xl rounded-tr-xl border border-border bg-card p-4 flex-1 flex flex-col min-h-0 gap-2">
         {/* 人物图片上传 */}
         <div className="flex-1 min-h-0 flex flex-col">
-          <p className="text-[11px] text-muted-foreground mb-1 shrink-0">人物图片（必填，≤4.7MB）</p>
+          <p className="text-[11px] text-muted-foreground mb-1 shrink-0">人物图片</p>
           {actionImage ? (
             <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-muted group"
               onDragOver={(e) => e.preventDefault()} onDrop={handleActionImageDrop}>
@@ -139,7 +146,6 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
               <ImagePlus className="h-5 w-5 text-primary shrink-0" />
               <div className="text-center">
                 <div className="text-sm font-medium text-primary">上传人物图片</div>
-                <div className="text-[11px] text-primary/60">jpg / png · 最大 4.7MB</div>
               </div>
             </button>
           )}
@@ -147,7 +153,7 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
 
         {/* 驱动视频上传 */}
         <div className="flex-1 min-h-0 flex flex-col">
-          <p className="text-[11px] text-muted-foreground mb-1 shrink-0">驱动视频（必填，≤30秒）</p>
+          <p className="text-[11px] text-muted-foreground mb-1 shrink-0">驱动视频</p>
           {actionVideo ? (
             <div
               className="flex-1 min-h-0 relative rounded-lg overflow-hidden border bg-black group cursor-pointer"
@@ -182,7 +188,6 @@ export function ActionImitationPanel({ onBatchCreated, disabled }: ActionImitati
               <Clapperboard className="h-4 w-4 text-primary shrink-0" />
               <div className="text-center">
                 <div className="text-sm font-medium text-primary">上传驱动视频</div>
-                <div className="text-[11px] text-primary/60">mp4 / mov / webm · 最大 30s</div>
               </div>
             </button>
           )}

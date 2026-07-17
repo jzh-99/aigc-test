@@ -3,80 +3,70 @@
 import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
-import { useGenerationStore } from '@/stores/generation-store'
 import { toast } from 'sonner'
-import { apiGet } from '@/lib/api-client'
+import { apiGet, dedupedRefresh } from '@/lib/api-client'
 
 const PUBLIC_PATHS = ['/login', '/accept-invite']
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { isInitialized, user, accessToken, setAuth, clearAuth, setInitialized } = useAuthStore()
-  const resetGeneration = useGenerationStore((s) => s.reset)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+  const user = useAuthStore((s) => s.user)
+  const isRefreshing = useAuthStore((s) => s.isRefreshing)
+  const clearAuth = useAuthStore((s) => s.clearAuth)
+  const setIsRefreshing = useAuthStore((s) => s.setIsRefreshing)
 
   useEffect(() => {
     if (isInitialized) return
 
     async function tryRefresh() {
       try {
-        const res = await fetch('/api/v1/auth/refresh', {
-          method: 'POST',
-          credentials: 'include',
-        })
-        if (res.ok) {
-          const data = await res.json()
-          resetGeneration()
-          setAuth(data.user, data.access_token)
-        } else {
-          if (res.status === 403) {
-            const data = await res.json().catch(() => null)
-            if (data?.error?.code === 'ACCOUNT_SUSPENDED') {
-              toast.error('您的账户已被停用，请联系团队管理员')
-            }
-          }
+        setIsRefreshing(true)
+        const refreshResult = await dedupedRefresh()
+        if (refreshResult.rateLimited) {
+          clearAuth()
+          return
+        }
+        if (!refreshResult.token) {
           clearAuth()
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && /ACCOUNT_SUSPENDED/.test(err.message)) {
+          toast.error('您的账户已被停用，请联系团队管理员')
+        }
         clearAuth()
+      } finally {
+        setIsRefreshing(false)
       }
     }
 
     tryRefresh()
-  }, [isInitialized, setAuth, clearAuth, setInitialized, resetGeneration])
+  }, [isInitialized, clearAuth, setIsRefreshing])
 
   useEffect(() => {
-    if (!isInitialized) return
+    // refresh 进行中时不做跳转判断，避免刷新页面时 token 还未取回就误跳登录页
+    if (!isInitialized || isRefreshing) return
     if (!user && !PUBLIC_PATHS.includes(pathname)) {
       router.replace('/login')
     }
-  }, [isInitialized, user, pathname, router])
+  }, [isInitialized, isRefreshing, user, pathname, router])
 
-  // Setup periodic heartbeat to detect background kicks
   useEffect(() => {
-    if (!isInitialized || !user || !accessToken) return
+    if (!isInitialized || !user) return
 
     const interval = setInterval(async () => {
       try {
-        // Just call a lightweight authenticated endpoint to trigger the JWT middleware
-        // If the token is revoked, the API client interceptor will automatically clear auth and redirect
         await apiGet('/users/me')
       } catch (err) {
         // 429 (rate limited) — server is busy but user is still logged in, do nothing
-        // TOKEN_REVOKED / AUTH_REQUIRED — handled by api-client.ts (clears auth + redirects)
       }
-    }, 60000) // Check every 60 seconds (was 30s — halved to reduce pressure on rate limiter)
+    }, 60000)
 
     return () => clearInterval(interval)
-  }, [isInitialized, user, accessToken])
+  }, [isInitialized, user])
 
-  if (!isInitialized) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-blue" />
-      </div>
-    )
-  }
-
+  // 不阻塞渲染：refresh 期间直接展示 children，各页面的 loading.tsx skeleton 承接过渡态。
+  // refresh 完成后若未登录，useEffect 里的跳转逻辑会执行 router.replace('/login')。
   return <>{children}</>
 }

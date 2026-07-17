@@ -1,29 +1,24 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent } from '@/components/ui/card'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
 import { apiPost, ApiError } from '@/lib/api-client'
 import type { AuthResponse, LoginRequest } from '@aigc/types'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import Link from 'next/link'
 
 function KickedMessage() {
   const searchParams = useSearchParams()
   const isKicked = searchParams.get('reason') === 'kicked'
-
   if (!isKicked) return null
-
   return (
-    <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3.5 text-sm">
-      <p className="font-semibold text-yellow-600 dark:text-yellow-500 mb-1">账号已登出</p>
-      <p className="text-muted-foreground leading-relaxed">
+    <div className="mb-5 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-sm">
+      <p className="font-semibold text-yellow-500 mb-1">账号已登出</p>
+      <p className="text-white/40 leading-relaxed">
         您的账号已在其他设备登录。如果这不是您本人的操作，请修改密码。
       </p>
     </div>
@@ -39,11 +34,8 @@ function SsoHandler() {
   useEffect(() => {
     const token = searchParams.get('token')
     if (!token) return
-
     const redirect = searchParams.get('redirect') ?? '/'
-    // Only allow internal paths to prevent open redirect
     const safePath = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
-
     apiPost<AuthResponse>('/auth/sso', { token })
       .then((res) => {
         resetGeneration()
@@ -70,15 +62,12 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!identifier || !password) return
-
     setLoading(true)
     setSuspended(false)
     try {
       const res = await apiPost<AuthResponse>('/auth/login', { identifier, password } satisfies LoginRequest)
       resetGeneration()
       setAuth(res.user, res.access_token)
-
-      // Check if password change is required
       if (res.user.password_change_required) {
         router.replace('/settings?tab=security&change_password=true')
       } else {
@@ -100,33 +89,49 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="w-full max-w-md">
-      {/* Logo and Toby.AI 企业版 - 在卡片外部 */}
-      <div className="flex items-center justify-center gap-3 mb-8">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl gradient-accent shrink-0 shadow-lg">
-          <svg viewBox="0 0 20 20" className="h-6 w-6" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* T crossbar */}
-            <rect x="2" y="2.5" width="16" height="4" rx="1.5" fill="white"/>
-            {/* T stem */}
-            <rect x="7.5" y="6" width="5" height="11.5" rx="1.5" fill="white"/>
-            {/* AI dot */}
-            <circle cx="17" cy="15.5" r="1.5" fill="rgba(255,255,255,0.7)"/>
-          </svg>
-        </div>
-        <h1 className="font-bold text-3xl gradient-accent-text tracking-tight drop-shadow-sm">
-          Toby.AI 企业版
-        </h1>
+    <div className="login-split-layout">
+      {/* ── 左侧品牌面板 ── */}
+      <div className="login-brand-panel" aria-hidden="true">
+        <video
+          className="login-brand-video"
+          src="https://toby-ai-dev.tos-cn-shanghai.volces.com/assets/video/bg.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          disablePictureInPicture
+          controlsList="nodownload nofullscreen noremoteplayback"
+        />
+        <div className="login-brand-video-overlay" />
       </div>
 
-      {/* Login Card - 包含 AIGC 创作平台和表单 */}
-      <Card className="border-border shadow-xl">
-        <CardContent className="pt-8 pb-6 px-8">
-          {/* AIGC 创作平台标题 */}
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-foreground tracking-wide mb-2">
-              AIGC 创作平台
-            </h2>
-            <p className="text-sm text-muted-foreground">登录您的账户</p>
+      {/* ── 右侧表单面板 ── */}
+      <div className="login-form-panel">
+        {/* 背景装饰光晕 */}
+        <div className="login-panel-orb login-panel-orb-1" />
+        <div className="login-panel-orb login-panel-orb-2" />
+        <div className="login-panel-noise" />
+
+        <div className="login-form-inner">
+          {/* Logo + Slogan */}
+          <div className="login-logo-block">
+            <div className="login-logo-icon">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="3" width="20" height="5" rx="2" fill="white" />
+                <rect x="9" y="7.5" width="6" height="13.5" rx="2" fill="white" />
+                <circle cx="20" cy="18" r="2" fill="rgba(200,155,236,0.9)" />
+              </svg>
+            </div>
+            <div className="login-logo-text">
+              <span className="login-logo-name">Toby.AI</span>
+              <span className="login-logo-slogan">让美好，被看见。</span>
+            </div>
+          </div>
+
+          {/* 表单头部 */}
+          <div className="login-form-header">
+            <h2 className="login-form-title">欢迎回来</h2>
+            <p className="login-form-subtitle">登录您的账户，开启 AI 创作之旅</p>
           </div>
 
           <Suspense fallback={null}>
@@ -135,35 +140,31 @@ export default function LoginPage() {
           </Suspense>
 
           {suspended && (
-            <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-sm">
-              <p className="font-semibold text-destructive mb-1">账户已停用</p>
-              <p className="text-muted-foreground leading-relaxed">
+            <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
+              <p className="font-semibold text-red-400 mb-1">账户已停用</p>
+              <p className="text-white/40 leading-relaxed">
                 您已被移出所有团队，账户已自动停用。请联系团队管理员重新发送邀请链接以恢复使用。
               </p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="identifier" className="text-sm font-medium">
-                邮箱 / 手机号
-              </Label>
+          <form onSubmit={handleSubmit} className="login-form">
+            <div className="login-field">
+              <label htmlFor="identifier" className="login-label">手机号</label>
               <Input
                 id="identifier"
                 type="text"
-                placeholder="请输入邮箱或手机号"
+                placeholder="请输入手机号"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 required
                 autoFocus
-                className="h-11"
+                className="login-input"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">
-                密码
-              </Label>
+            <div className="login-field">
+              <label htmlFor="password" className="login-label">密码</label>
               <Input
                 id="password"
                 type="password"
@@ -171,42 +172,39 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="h-11"
+                className="login-input"
               />
             </div>
 
-            <Button
+            <button
               type="submit"
-              className="w-full h-11 text-base font-medium"
-              variant="gradient"
+              className="login-submit-btn"
               disabled={loading}
             >
               {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   登录中...
-                </>
+                </span>
               ) : (
-                '登录'
+                '登 录'
               )}
-            </Button>
+            </button>
           </form>
 
-          <div className="mt-6 text-center space-y-2">
-            <p className="text-sm text-muted-foreground">
-              收到邀请？
-              <Link href="/accept-invite" className="ml-1 text-accent-blue hover:underline font-medium">
-                接受邀请
-              </Link>
-            </p>
-            <p className="text-sm text-muted-foreground">
-              <Link href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">
-                查看使用手册 →
-              </Link>
-            </p>
+          <div className="login-footer-links">
+            <span>登录即代表同意</span>
+            <span className="login-link">《用户协议》</span>
+            <span>和</span>
+            <span className="login-link">《隐私政策》</span>
           </div>
-        </CardContent>
-      </Card>
+          <p className="basis-full text-center" style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.5)' }}>
+            <Link href="/docs/user-guide" className="login-link">
+              《AIGC 用户使用手册》
+            </Link>
+          </p>
+        </div>
+      </div>
     </div>
   )
 }

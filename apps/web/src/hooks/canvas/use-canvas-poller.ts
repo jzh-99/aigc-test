@@ -46,16 +46,25 @@ export function useCanvasPoller(canvasId: string | null) {
       const outputs = await fetchNodeOutputs(canvasId, nodeId, token || undefined)
       if (!outputs.length) return
       const store = useCanvasExecutionStore.getState()
-      for (const row of outputs) {
-        const url = row.output_urls?.[0]
-        if (!url) continue
-        const type: 'video' | 'image' = row.asset_type === 'video'
+      const target = outputs.find((o) => o.is_selected) ?? outputs[0]
+      const url = target.output_urls?.[0]
+      if (url) {
+        const type: 'video' | 'image' | 'audio' = target.asset_type === 'audio'
+          ? 'audio'
+          : target.asset_type === 'video'
           ? 'video'
-          : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
-        store.addNodeOutput(nodeId, { id: row.id, url, type })
+          : /\.(mp3|wav|ogg|aac|flac|m4a)(\?|$)/i.test(url) ? 'audio' : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
+        store.replaceNodeOutput(nodeId, { id: target.id, url, type, thumbnailUrl: target.thumbnail_url ?? undefined })
+      } else if (target.params_snapshot) {
+        // storyboard_splitter 等无 URL 输出的节点，通过 params_snapshot 传递结构化数据
+        store.replaceNodeOutput(nodeId, {
+          id: target.id,
+          url: '',
+          type: 'text',
+          paramsSnapshot: target.params_snapshot as Record<string, unknown>,
+        })
       }
-      const selected = outputs.find((o) => o.is_selected)
-      if (selected) store.selectNodeOutput(nodeId, selected.id)
+      store.selectNodeOutput(nodeId, target.id)
     } catch (e) {
       console.warn('[Canvas Poller] 拉取节点历史失败:', e)
     }
@@ -70,16 +79,26 @@ export function useCanvasPoller(canvasId: string | null) {
       const grouped = await fetchAllNodeOutputs(canvasId, token || undefined)
       const store = useCanvasExecutionStore.getState()
       for (const [nodeId, outputs] of Object.entries(grouped)) {
-        for (const row of outputs) {
-          const url = row.output_urls?.[0]
-          if (!url) continue
-          const type: 'video' | 'image' = row.asset_type === 'video'
+        if (!outputs.length) continue
+        const target = outputs.find((o) => o.is_selected) ?? outputs[outputs.length - 1]
+        const url = target.output_urls?.[0]
+        if (url) {
+          const type: 'video' | 'image' | 'audio' = target.asset_type === 'audio'
+            ? 'audio'
+            : target.asset_type === 'video'
             ? 'video'
-            : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
-          store.addNodeOutput(nodeId, { id: row.id, url, type })
+            : /\.(mp3|wav|ogg|aac|flac|m4a)(\?|$)/i.test(url) ? 'audio' : /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'image'
+          store.replaceNodeOutput(nodeId, { id: target.id, url, type, thumbnailUrl: target.thumbnail_url ?? undefined })
+          store.selectNodeOutput(nodeId, target.id)
+        } else if (target.params_snapshot) {
+          store.replaceNodeOutput(nodeId, {
+            id: target.id,
+            url: '',
+            type: 'text',
+            paramsSnapshot: target.params_snapshot as Record<string, unknown>,
+          })
+          store.selectNodeOutput(nodeId, target.id)
         }
-        const selected = outputs.find((o) => o.is_selected)
-        if (selected) store.selectNodeOutput(nodeId, selected.id)
       }
     } catch (e) {
       console.warn('[Canvas Poller] 批量拉取节点输出失败，回退逐个加载:', e)
@@ -97,7 +116,8 @@ export function useCanvasPoller(canvasId: string | null) {
     try {
       const data = await fetchCanvasActiveTasks(canvasId, token || undefined)
       consecutiveErrorRef.current = 0
-      const hasActiveTasks = data.batches.length > 0
+      const activeBatches = data.batches.filter((batch) => !TERMINAL_STATUSES.has(batch.status))
+      const hasActiveTasks = activeBatches.length > 0
       const versionChanged = data.version !== lastVersion.current
 
       if (versionChanged) {
@@ -117,7 +137,7 @@ export function useCanvasPoller(canvasId: string | null) {
             processing_started_at: batch.processing_started_at,
           })
         }
-        store.reconcileNodes(data.batches.map((b) => b.canvas_node_id))
+        store.reconcileNodes(activeBatches.map((b) => b.canvas_node_id))
 
         // Detect batch terminal transitions → refresh history sidebar
         let anyBatchJustFinished = false
@@ -143,9 +163,18 @@ export function useCanvasPoller(canvasId: string | null) {
         if (prevVersion !== -1 && !loadingAllRef.current) {
           const execState = useCanvasExecutionStore.getState()
           const finishedNodes = Object.entries(execState.nodes)
-            .filter(([, s]) => !s.isGenerating && s.progress === 100 && s.outputs.length === 0)
+            .filter(([, s]) => !s.isGenerating && s.progress === 100)
             .map(([id]) => id)
           await runWithConcurrency(finishedNodes, OUTPUTS_LOAD_CONCURRENCY, loadNodeOutputs)
+        }
+
+        if (anyBatchJustFinished && canvasId && token) {
+          const sidebarStore = useCanvasSidebarDataStore.getState()
+          await Promise.all([
+            sidebarStore.refreshAssets(canvasId, token),
+            sidebarStore.refreshVideoAssets(canvasId, token),
+            sidebarStore.refreshAudioAssets(canvasId, token),
+          ])
         }
       } else if (!hasActiveTasks) {
         idleCountRef.current += 1

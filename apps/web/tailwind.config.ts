@@ -3,7 +3,6 @@ import tailwindAnimate from 'tailwindcss-animate'
 import typography from '@tailwindcss/typography'
 
 const config: Config = {
-  darkMode: ['class'],
   content: [
     './src/**/*.{ts,tsx}',
   ],
@@ -16,6 +15,10 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter Variable', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+        display: ['Syne Variable', 'Inter Variable', 'sans-serif'],
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
@@ -37,6 +40,10 @@ const config: Config = {
         muted: {
           DEFAULT: 'hsl(var(--muted))',
           foreground: 'hsl(var(--muted-foreground))',
+        },
+        lavender: {
+          DEFAULT: 'hsl(var(--lavender))',
+          foreground: 'hsl(var(--lavender-foreground))',
         },
         accent: {
           DEFAULT: 'hsl(var(--accent))',

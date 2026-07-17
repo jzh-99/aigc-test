@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -11,83 +11,39 @@ import { CreditsBadge } from './credits-badge'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { useLayoutStore } from '@/stores/layout-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { useTeamFeatures } from '@/hooks/use-team-features'
-import {
-  LayoutDashboard,
-  Images,
-  PanelLeftClose,
-  PanelLeft,
-  Sparkles,
-  Settings,
-  BookOpen,
-  Users,
-  Shield,
-  Palette,
-  Clapperboard,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-
-interface NavItem {
-  href: string
-  label: string
-  icon: LucideIcon
-  requireTeamRole?: string
-  requireUserRole?: string
-}
-
-const baseNavItems: NavItem[] = [
-  { href: '/', label: '工作台', icon: LayoutDashboard },
-  { href: '/generation', label: '创作生成', icon: Sparkles },
-  { href: '/canvas/gallery', label: '画布', icon: Palette },
-  { href: '/video-studio', label: '视频工坊', icon: Clapperboard },
-  { href: '/assets', label: '资产库', icon: Images },
-]
-
-const roleNavItems: NavItem[] = [
-  { href: '/team', label: '团队管理', icon: Users, requireTeamRole: 'owner' },
-  { href: '/admin', label: '管理后台', icon: Shield, requireUserRole: 'admin' },
-]
-
-const bottomNavItems: NavItem[] = [
-  { href: '/settings', label: '设置', icon: Settings },
-  { href: '/docs', label: '操作手册', icon: BookOpen },
-]
+import { PanelLeftClose, PanelLeft } from 'lucide-react'
+import { isNavItemActive, managementNavItems, type NavItem } from './nav-config'
 
 export function Sidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const query = searchParams.toString()
+  const currentPath = query ? `${pathname}?${query}` : pathname
   const { sidebarCollapsed, toggleSidebar } = useLayoutStore()
-  const { showCanvasTab, showVideoStudioTab } = useTeamFeatures()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
 
-  const visibleBaseItems = baseNavItems.filter((item) => {
-    if (item.href === '/canvas/gallery') return showCanvasTab
-    if (item.href === '/video-studio') return showVideoStudioTab
-    return true
-  })
-
-  const visibleRoleItems = roleNavItems.filter((item) => {
+  const visibleManagementItems = managementNavItems.filter((item) => {
     if (item.requireUserRole && user?.role !== item.requireUserRole) return false
     if (item.requireTeamRole && activeTeam?.role !== item.requireTeamRole) return false
     return true
   })
 
   function renderNavItem(item: NavItem) {
-    const isActive = item.href === '/'
-      ? pathname === '/'
-      : pathname.startsWith(item.href)
+    const isActive = isNavItemActive(item.href, currentPath)
 
     const button = (
       <Button
         key={item.href}
-        variant={isActive ? 'default' : 'ghost'}
+        variant="ghost"
         className={cn(
           'w-full justify-start gap-3',
-          sidebarCollapsed && 'justify-center px-0'
+          sidebarCollapsed && 'justify-center px-0',
+          isActive ? 'nav-item-active' : 'hover:bg-accent'
         )}
         asChild
       >
-        <Link href={item.href}>
+        <Link href={item.href} aria-current={isActive ? 'page' : undefined}>
           <item.icon className="h-4 w-4 shrink-0" />
           {!sidebarCollapsed && <span>{item.label}</span>}
         </Link>
@@ -108,7 +64,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'hidden md:flex flex-col border-r bg-background transition-all duration-300 relative z-30',
+        'hidden lg:flex flex-col border-r bg-background transition-all duration-300 relative z-30',
         sidebarCollapsed ? 'w-16' : 'w-60'
       )}
     >
@@ -141,17 +97,7 @@ export function Sidebar() {
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
         <nav className="flex flex-col gap-1 px-2">
-          {visibleBaseItems.map(renderNavItem)}
-
-          {visibleRoleItems.length > 0 && (
-            <>
-              <Separator className="my-2" />
-              {visibleRoleItems.map(renderNavItem)}
-            </>
-          )}
-
-          <Separator className="my-2" />
-          {bottomNavItems.map(renderNavItem)}
+          {visibleManagementItems.map(renderNavItem)}
         </nav>
       </ScrollArea>
 

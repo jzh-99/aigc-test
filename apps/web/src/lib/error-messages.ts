@@ -17,7 +17,7 @@ export const ERROR_CODE_MAP: Record<string, string> = {
   ALREADY_EXISTS: '资源已存在',
 
   // 业务逻辑
-  INSUFFICIENT_CREDITS: '积分不足，请充值后继续',
+  INSUFFICIENT_CREDITS: 'A豆不足，请充值后继续',
   TOO_MANY_PENDING: '待处理任务过多，请等待完成后再提交',
   RATE_LIMITED: '请求过于频繁，请稍后再试',
   PROMPT_BLOCKED: '提示词包含敏感内容，请修改后重试',
@@ -60,12 +60,12 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /already exists|duplicate/i, message: '资源已存在' },
 
   // 服务器错误
-  { pattern: /internal server error|500/i, message: '服务繁忙，请稍后重试' },
+  { pattern: /internal server error|500/i, message: '服务器处理出错，请稍后重试' },
   { pattern: /service unavailable|503/i, message: '服务暂时不可用，请稍后重试' },
   { pattern: /bad gateway|502/i, message: '网关错误，请稍后重试' },
 
   // 业务逻辑
-  { pattern: /insufficient (credits|balance)/i, message: '积分不足' },
+  { pattern: /insufficient (credits|balance)/i, message: 'A豆不足' },
   { pattern: /quota exceeded|limit exceeded/i, message: '已超出配额限制' },
   { pattern: /rate limit/i, message: '请求过于频繁，请稍后再试' },
 
@@ -110,7 +110,7 @@ const ERROR_KEYWORD_MAP: Array<{ pattern: RegExp; message: string }> = [
 export function translateError(error: unknown): string {
   // 如果已经是中文，直接返回
   if (typeof error === 'string') {
-    if (/[\u4e00-\u9fa5]/.test(error)) {
+    if (/[一-龥]/.test(error)) {
       return error
     }
 
@@ -129,7 +129,7 @@ export function translateError(error: unknown): string {
     const message = error.message
 
     // 如果已经是中文
-    if (/[\u4e00-\u9fa5]/.test(message)) {
+    if (/[一-龥]/.test(message)) {
       return message
     }
 
@@ -156,6 +156,15 @@ export function getErrorMessage(code: string, fallback?: string): string {
   }
   return ERROR_CODE_MAP[code]
 }
+
+// 上游 API 通用中文错误映射（在中文检测之前执行，将上游原始中文替换为更友好的措辞）
+const UPSTREAM_CHINESE_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
+  // 上游 AI 服务过载（火山/千问等返回的“系统繁忙”），属于瞬时故障，提示稍后重试
+  { pattern: /系统繁忙.*请稍后再试/, message: 'AI 服务当前繁忙，请稍后重试' },
+  // 服务器内部错误（500 类），多为后端/上游处理异常
+  { pattern: /服务器内部错误/, message: '服务器处理出错，请稍后重试' },
+  { pattern: /请求过于频繁/, message: '操作过于频繁，请稍后再试' },
+]
 
 // 视频生成 API 特定错误信息映射（精确匹配优先，在通用关键词匹配之前执行）
 const VIDEO_API_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
@@ -204,6 +213,18 @@ const VIDEO_API_ERROR_MAP: Array<{ pattern: RegExp; message: string }> = [
 ]
 
 /**
+ * 清理上游 API 错误中的技术性信息（traceid、requestid 等），只保留用户可读的部分
+ */
+function stripTechnicalInfo(msg: string): string {
+  return msg
+    .replace(/（traceid[:\s][^）]*）/g, '')
+    .replace(/（requestid[:\s][^）]*）/g, '')
+    .replace(/\(traceid[:\s][^)]*\)/g, '')
+    .replace(/\(requestid[:\s][^)]*\)/g, '')
+    .trim()
+}
+
+/**
  * 翻译任务错误信息（用于显示在卡片上）
  */
 export function translateTaskError(errorMessage: string | null | undefined): string {
@@ -216,9 +237,13 @@ export function translateTaskError(errorMessage: string | null | undefined): str
     }
   }
 
-  // 如果已经是中文
-  if (/[\u4e00-\u9fa5]/.test(errorMessage)) {
-    return errorMessage
+  // 如果已经是中文，先清理技术信息再尝试友好映射
+  if (/[一-龥]/.test(errorMessage)) {
+    const cleaned = stripTechnicalInfo(errorMessage)
+    for (const { pattern, message } of UPSTREAM_CHINESE_ERROR_MAP) {
+      if (pattern.test(cleaned)) return message
+    }
+    return cleaned
   }
 
   // 特殊处理 Volcengine API 错误格式: "Volcengine API 400: {...}"
@@ -256,8 +281,14 @@ export function translateTaskError(errorMessage: string | null | undefined): str
       if (errMsg) {
         const translated = translateError(errMsg)
         if (translated !== errMsg) return translated
-        // 如果已是中文直接返回
-        if (/[\u4e00-\u9fa5]/.test(errMsg)) return errMsg
+        // 如果已是中文，清理技术信息后尝试友好映射
+        if (/[一-龥]/.test(errMsg)) {
+          const cleaned = stripTechnicalInfo(errMsg)
+          for (const { pattern, message } of UPSTREAM_CHINESE_ERROR_MAP) {
+            if (pattern.test(cleaned)) return message
+          }
+          return cleaned
+        }
       }
     } catch {
       // 不是 JSON，继续处理
@@ -266,7 +297,7 @@ export function translateTaskError(errorMessage: string | null | undefined): str
     // 根据状态码返回通用提示
     if (statusCode === '422') return '生成失败，请尝试修改提示词'
     if (statusCode === '429') return '请求过于频繁'
-    if (statusCode === '500') return '服务繁忙，请稍后重试'
+    if (statusCode === '500') return '服务器处理出错，请稍后重试'
     if (statusCode === '503') return '服务暂时不可用'
   }
 

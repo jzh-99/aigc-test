@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { X, Loader2, ChevronDown, ImageIcon, Film } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { X, Loader2, ChevronDown, ImageIcon, Film, Music, Download } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { BatchDetail } from '@/components/history/batch-detail'
 import { cn } from '@/lib/utils'
@@ -9,6 +10,9 @@ import { useCanvasSidebarDataStore } from '@/stores/canvas/sidebar-data-store'
 import type { CanvasAssetItem, CanvasHistoryItem } from '@/lib/canvas/canvas-api'
 
 type Tab = 'history' | 'assets'
+type AssetSubTab = 'image' | 'video' | 'audio'
+type PreviewType = 'image' | 'video' | 'audio'
+type HistoryMediaType = 'image' | 'video' | 'audio'
 
 interface Props {
   canvasId: string
@@ -22,19 +26,37 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   failed: { label: '失败', cls: 'bg-red-100 text-red-600' },
 }
 
+const AUDIO_HISTORY_MODULES = new Set(['tts', 'music', 'music_voice_clone'])
+const MEDIA_HISTORY_MODULES = new Set(['image', 'video', ...AUDIO_HISTORY_MODULES])
+
+function getHistoryMediaType(batch: CanvasHistoryItem): HistoryMediaType | null {
+  if (!batch.module) return 'image'
+  if (AUDIO_HISTORY_MODULES.has(batch.module)) return 'audio'
+  if (batch.module === 'video') return 'video'
+  if (batch.module === 'image') return 'image'
+  return null
+}
+
+function getHistoryUnit(type: HistoryMediaType): string {
+  return type === 'image' ? '张' : '条'
+}
+
 export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
+  const router = useRouter()
   const token = useAuthStore((s) => s.accessToken)
   const [tab, setTab] = useState<Tab>('history')
   const [detailBatchId, setDetailBatchId] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<{ url: string; type: 'image' | 'video' } | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; type: PreviewType } | null>(null)
 
   const byCanvas = useCanvasSidebarDataStore((s) => s.byCanvas)
   const refreshHistory = useCanvasSidebarDataStore((s) => s.refreshHistory)
   const refreshAssets = useCanvasSidebarDataStore((s) => s.refreshAssets)
   const refreshVideoAssets = useCanvasSidebarDataStore((s) => s.refreshVideoAssets)
+  const refreshAudioAssets = useCanvasSidebarDataStore((s) => s.refreshAudioAssets)
   const loadMoreHistory = useCanvasSidebarDataStore((s) => s.loadMoreHistory)
   const loadMoreAssets = useCanvasSidebarDataStore((s) => s.loadMoreAssets)
   const loadMoreVideoAssets = useCanvasSidebarDataStore((s) => s.loadMoreVideoAssets)
+  const loadMoreAudioAssets = useCanvasSidebarDataStore((s) => s.loadMoreAudioAssets)
   const setAssetSubTab = useCanvasSidebarDataStore((s) => s.setAssetSubTab)
 
   const bucket = byCanvas[canvasId]
@@ -52,6 +74,10 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
     }
     if (tab === 'assets' && assetSubTab === 'video' && !bucket?.videoAssets.loaded && !bucket?.videoAssets.loading) {
       refreshVideoAssets(canvasId, token)
+      return
+    }
+    if (tab === 'assets' && assetSubTab === 'audio' && !bucket?.audioAssets.loaded && !bucket?.audioAssets.loading) {
+      refreshAudioAssets(canvasId, token)
     }
   }, [
     tab,
@@ -64,16 +90,20 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
     bucket?.assets.loading,
     bucket?.videoAssets.loaded,
     bucket?.videoAssets.loading,
+    bucket?.audioAssets.loaded,
+    bucket?.audioAssets.loading,
     refreshHistory,
     refreshAssets,
     refreshVideoAssets,
+    refreshAudioAssets,
   ])
 
   const historyData = useMemo(() => {
     const fallback = { items: [] as CanvasHistoryItem[], loading: true, loaded: false, nextCursor: null as string | null }
     const section = bucket?.history ?? fallback
+    const items = section.items.filter((item) => !item.module || MEDIA_HISTORY_MODULES.has(item.module))
     return {
-      items: section.items,
+      items,
       loading: token ? section.loading : true,
       loaded: section.loaded,
       hasMore: !!section.nextCursor,
@@ -83,25 +113,35 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
 
   const assetsData = useMemo(() => {
     const fallback = { items: [] as CanvasAssetItem[], loading: true, loaded: false, nextCursor: null as string | null }
-    const section = assetSubTab === 'video' ? (bucket?.videoAssets ?? fallback) : (bucket?.assets ?? fallback)
+    const section = assetSubTab === 'video'
+      ? (bucket?.videoAssets ?? fallback)
+      : assetSubTab === 'audio'
+        ? (bucket?.audioAssets ?? fallback)
+        : (bucket?.assets ?? fallback)
     return {
       subTab: assetSubTab,
       items: section.items,
       loading: token ? section.loading : true,
       loaded: section.loaded,
       hasMore: !!section.nextCursor,
-      loadMore: () => token && (assetSubTab === 'video' ? loadMoreVideoAssets(canvasId, token) : loadMoreAssets(canvasId, token)),
+      loadMore: () => token && (
+        assetSubTab === 'video'
+          ? loadMoreVideoAssets(canvasId, token)
+          : assetSubTab === 'audio'
+            ? loadMoreAudioAssets(canvasId, token)
+            : loadMoreAssets(canvasId, token)
+      ),
     }
-  }, [bucket?.assets, bucket?.videoAssets, assetSubTab, token, loadMoreAssets, loadMoreVideoAssets, canvasId])
+  }, [bucket?.assets, bucket?.videoAssets, bucket?.audioAssets, assetSubTab, token, loadMoreAssets, loadMoreVideoAssets, loadMoreAudioAssets, canvasId])
 
 
   return (
     <>
-      <div className="flex flex-col h-full w-72 border-l bg-white shadow-xl shrink-0">
+      <div className="flex flex-col h-full w-72 border-l bg-background shadow-xl shrink-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-          <span className="text-sm font-semibold text-zinc-800">画布记录</span>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 transition-colors p-0.5 rounded">
+          <span className="text-sm font-semibold text-foreground">画布记录</span>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded">
             <X size={15} />
           </button>
         </div>
@@ -115,7 +155,7 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
               onClick={() => setTab(t)}
               className={cn(
                 'flex-1 py-2 text-xs font-medium transition-colors',
-                tab === t ? 'border-b-2 border-zinc-800 text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'
+                tab === t ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground'
               )}
             >
               {t === 'history' ? '任务记录' : '资产库'}
@@ -146,6 +186,8 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
         onOpenChange={(open) => {
           if (!open) setDetailBatchId(null)
         }}
+        onApplied={() => router.push('/generation')}
+        onReferenceAdded={() => router.push('/generation')}
       />
 
       {/* Lightbox for asset preview */}
@@ -168,6 +210,10 @@ export function CanvasHistorySidebar({ canvasId, onClose }: Props) {
               className="max-w-[90vw] max-h-[90vh] rounded shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />
+          ) : lightbox.type === 'audio' ? (
+            <div className="w-[90vw] max-w-[420px] rounded-lg bg-background p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <audio src={lightbox.url} controls autoPlay className="w-full" />
+            </div>
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -216,18 +262,20 @@ function HistoryTab({
   if (loading && items.length === 0) {
     return (
       <div className="flex justify-center py-10">
-        <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       </div>
     )
   }
   if (loaded && !loading && items.length === 0) {
-    return <div className="text-center py-10 text-xs text-zinc-400">暂无任务记录</div>
+    return <div className="text-center py-10 text-xs text-muted-foreground">暂无任务记录</div>
   }
 
   return (
     <div className="divide-y">
       {items.map((batch) => {
-        const st = STATUS_MAP[batch.status] ?? { label: batch.status, cls: 'bg-zinc-100 text-zinc-500' }
+        const st = STATUS_MAP[batch.status] ?? { label: batch.status, cls: 'bg-muted text-muted-foreground' }
+        const mediaType = getHistoryMediaType(batch)
+        if (!mediaType) return null
         const statusHint = batch.status === 'pending'
           ? typeof batch.queue_position === 'number'
             ? `前方还有 ${batch.queue_position} 个任务`
@@ -240,17 +288,17 @@ function HistoryTab({
             key={batch.id}
             data-testid={`canvas-history-item-${batch.id}`}
             onClick={() => onOpenDetail(batch.id)}
-            className="w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors"
+            className="w-full text-left px-4 py-3 hover:bg-muted transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-zinc-400 font-mono">
+              <span className="text-[10px] text-muted-foreground font-mono">
                 {batch.canvas_node_id ? `节点 …${batch.canvas_node_id.slice(-6)}` : '—'}
               </span>
               <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium', st.cls)}>{st.label}</span>
             </div>
-            <p className="text-xs text-zinc-700 line-clamp-2 mb-1.5">{batch.prompt || '(无提示词)'}</p>
-            <div className="flex items-center gap-2 text-[10px] text-zinc-400">
-              <span>{batch.completed_count}/{batch.quantity} {(batch.module === 'video' || /^(seedance-|veo)/i.test(batch.model || '')) ? '条' : '张'}</span>
+            <p className="text-xs text-foreground line-clamp-2 mb-1.5">{batch.prompt || '(无提示词)'}</p>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span>{batch.completed_count}/{batch.quantity} {getHistoryUnit(mediaType)}</span>
               {statusHint && (
                 <>
                   <span>·</span>
@@ -260,7 +308,7 @@ function HistoryTab({
               {batch.actual_credits != null && (
                 <>
                   <span>·</span>
-                  <span>{batch.actual_credits} 积分</span>
+                  <span>{batch.actual_credits} A豆</span>
                 </>
               )}
               <span className="ml-auto">
@@ -279,7 +327,7 @@ function HistoryTab({
         <button
           onClick={loadMore}
           disabled={loading}
-          className="w-full py-3 text-xs text-zinc-500 hover:text-zinc-700 flex items-center justify-center gap-1 disabled:opacity-50"
+          className="w-full py-3 text-xs text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 disabled:opacity-50"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronDown className="w-3.5 h-3.5" />}
           加载更多
@@ -296,28 +344,28 @@ function AssetsTab({
   onOpenLightbox,
 }: {
   data: {
-    subTab: 'image' | 'video'
+    subTab: AssetSubTab
     items: CanvasAssetItem[]
     loading: boolean
     loaded: boolean
     hasMore: boolean
     loadMore: () => void
   }
-  onSubTabChange: (subTab: 'image' | 'video') => void
+  onSubTabChange: (subTab: AssetSubTab) => void
   onOpenDetail: (id: string) => void
-  onOpenLightbox: (url: string, type: 'image' | 'video') => void
+  onOpenLightbox: (url: string, type: PreviewType) => void
 }) {
   const { subTab, items, loading, loaded, hasMore, loadMore } = data
 
   return (
     <div className="p-3">
-      <div className="mb-3 flex rounded-lg border border-zinc-200 overflow-hidden">
+      <div className="mb-3 flex rounded-lg border border-border overflow-hidden">
         <button
           data-testid="canvas-assets-subtab-image"
           onClick={() => onSubTabChange('image')}
           className={cn(
             'flex-1 py-1.5 text-[11px] font-medium transition-colors',
-            subTab === 'image' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-600 hover:bg-zinc-50'
+            subTab === 'image' ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:bg-muted'
           )}
         >
           图片
@@ -327,45 +375,90 @@ function AssetsTab({
           onClick={() => onSubTabChange('video')}
           className={cn(
             'flex-1 py-1.5 text-[11px] font-medium transition-colors',
-            subTab === 'video' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-600 hover:bg-zinc-50'
+            subTab === 'video' ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:bg-muted'
           )}
         >
           视频
+        </button>
+        <button
+          data-testid="canvas-assets-subtab-audio"
+          onClick={() => onSubTabChange('audio')}
+          className={cn(
+            'flex-1 py-1.5 text-[11px] font-medium transition-colors',
+            subTab === 'audio' ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:bg-muted'
+          )}
+        >
+          音频
         </button>
       </div>
 
       {loading && items.length === 0 ? (
         <div className="flex justify-center py-10">
-          <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       ) : loaded && !loading && items.length === 0 ? (
-        <div className="text-center py-10 text-xs text-zinc-400">{subTab === 'video' ? '暂无视频资产' : '暂无图片资产'}</div>
+        <div className="text-center py-10 text-xs text-muted-foreground">
+          {subTab === 'video' ? '暂无视频资产' : subTab === 'audio' ? '暂无音频资产' : '暂无图片资产'}
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2">
             {items.map((asset) => {
               const url = asset.storage_url || asset.original_url
+              const thumbnailUrl = asset.thumbnail_url || null
               const isVideo = subTab === 'video' || asset.type?.startsWith('video')
+              const isAudio = subTab === 'audio' || asset.type?.startsWith('audio')
               return (
                 <button
                   key={asset.id}
                   data-testid={`canvas-asset-item-${asset.id}`}
-                  onClick={() => (url ? onOpenLightbox(url, isVideo ? 'video' : 'image') : onOpenDetail(asset.batch_id))}
-                  className="group relative rounded-lg overflow-hidden bg-zinc-100 aspect-square focus:outline-none"
+                  draggable
+                  onDragStart={(e) => {
+                    const dragUrl = url || ''
+                    const dragType = isAudio ? 'audio' : isVideo ? 'video' : 'image'
+                    e.dataTransfer.setData('application/x-canvas-asset', JSON.stringify({ url: dragUrl, type: dragType }))
+                    e.dataTransfer.effectAllowed = 'copy'
+                  }}
+                  onClick={() => (url ? onOpenLightbox(url, isAudio ? 'audio' : isVideo ? 'video' : 'image') : onOpenDetail(asset.batch_id))}
+                  className="group relative rounded-lg overflow-hidden bg-muted aspect-square focus:outline-none cursor-grab active:cursor-grabbing"
                 >
                   {url ? (
-                    isVideo ? (
+                    isAudio ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-emerald-50 text-emerald-700">
+                        <Music className="w-6 h-6" />
+                        <span className="text-[10px] font-medium">音频资产</span>
+                      </div>
+                    ) : isVideo && !thumbnailUrl ? (
                       <video src={url} muted preload="metadata" playsInline className="w-full h-full object-cover" />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      <img src={thumbnailUrl ?? url} alt="" className="w-full h-full object-cover" loading="lazy" />
                     )
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      {isVideo ? <Film className="w-5 h-5 text-zinc-300" /> : <ImageIcon className="w-5 h-5 text-zinc-300" />}
+                      {isAudio ? <Music className="w-5 h-5 text-muted-foreground/50" /> : isVideo ? <Film className="w-5 h-5 text-muted-foreground/50" /> : <ImageIcon className="w-5 h-5 text-muted-foreground/50" />}
                     </div>
                   )}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5">
+                    {url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = asset.prompt || 'asset'
+                          a.target = '_blank'
+                          a.rel = 'noopener noreferrer'
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                        }}
+                        className="absolute top-1.5 right-1.5 p-1 rounded bg-black/40 hover:bg-black/70 transition-colors"
+                        title="下载"
+                      >
+                        <Download className="w-3 h-3 text-white" />
+                      </button>
+                    )}
                     <p className="text-[9px] text-white line-clamp-2 text-left">{asset.prompt || '—'}</p>
                     <p className="text-[9px] text-white/60 mt-0.5 text-left">
                       {new Date(asset.created_at).toLocaleString('zh-CN', {
@@ -384,7 +477,7 @@ function AssetsTab({
             <button
               onClick={loadMore}
               disabled={loading}
-              className="w-full mt-3 py-2 text-xs text-zinc-500 hover:text-zinc-700 flex items-center justify-center gap-1 disabled:opacity-50"
+              className="w-full mt-3 py-2 text-xs text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronDown className="w-3.5 h-3.5" />}
               加载更多

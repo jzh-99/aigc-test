@@ -34,7 +34,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn('module', 'varchar(20)', (col) => col.notNull())
     .addColumn('credit_cost', 'integer', (col) => col.notNull())
     .addColumn('params_pricing', 'jsonb', (col) =>
-      col.notNull().defaultTo('{}')
+      col.notNull().defaultTo(sql`'[]'::jsonb`)
     )
     .addColumn('params_schema', 'jsonb', (col) =>
       col.notNull().defaultTo('{}')

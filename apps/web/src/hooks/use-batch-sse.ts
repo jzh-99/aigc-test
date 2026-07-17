@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import type { BatchResponse } from '@aigc/types'
+import { useAuthStore } from '@/stores/auth-store'
+import { waitForAuth } from '@/lib/api-client'
 
 interface UseBatchSSEOptions {
   batchId: string | null
@@ -9,11 +11,26 @@ interface UseBatchSSEOptions {
   enabled?: boolean
 }
 
+function hasPendingAssetTransfers(batch: BatchResponse): boolean {
+  return batch.tasks.some((task) =>
+    task.status === 'completed' &&
+    task.asset?.transfer_status === 'pending'
+  )
+}
+
+function shouldCloseBatchSSE(batch: BatchResponse): boolean {
+  const isTerminal = batch.status === 'completed' || batch.status === 'failed' || batch.status === 'partial_complete'
+  return isTerminal && !hasPendingAssetTransfers(batch)
+}
+
 export function useBatchSSE({ batchId, onUpdate, enabled = true }: UseBatchSSEOptions) {
   const controllerRef = useRef<AbortController | null>(null)
   const retryCountRef = useRef(0)
   const onUpdateRef = useRef(onUpdate)
-  onUpdateRef.current = onUpdate
+
+  useEffect(() => {
+    onUpdateRef.current = onUpdate
+  }, [onUpdate])
 
   const connect = useCallback((id: string) => {
     controllerRef.current?.abort()
@@ -22,8 +39,10 @@ export function useBatchSSE({ batchId, onUpdate, enabled = true }: UseBatchSSEOp
 
     ;(async () => {
       try {
-        // Use access token from auth store for SSE authentication
-        const { useAuthStore } = await import('@/stores/auth-store')
+        // 等待 auth 初始化完成，避免 token 未就绪时发起 SSE 连接
+        await waitForAuth()
+        if (controller.signal.aborted) return
+
         const token = useAuthStore.getState().accessToken
         const headers: Record<string, string> = {}
         if (token) headers['Authorization'] = `Bearer ${token}`
@@ -41,7 +60,7 @@ export function useBatchSSE({ batchId, onUpdate, enabled = true }: UseBatchSSEOp
         const decoder = new TextDecoder()
         let buffer = ''
 
-        while (true) {
+        while (!controller.signal.aborted) {
           const { done, value } = await reader.read()
           if (done) break
 
@@ -56,16 +75,13 @@ export function useBatchSSE({ batchId, onUpdate, enabled = true }: UseBatchSSEOp
             } else if (line.startsWith('data:') && eventName === 'batch_update') {
               try {
                 const batch: BatchResponse = JSON.parse(line.slice(5).trim())
-                console.log('[SSE] Received batch_update:', batch.id, batch.status, batch.completed_count)
                 onUpdateRef.current(batch)
-
-                // Stop if terminal
-                if (batch.status === 'completed' || batch.status === 'failed' || batch.status === 'partial_complete') {
+                if (shouldCloseBatchSSE(batch)) {
                   controller.abort()
                   return
                 }
               } catch {
-                // ignore malformed JSON
+                // 忽略损坏的 JSON 帧
               }
               eventName = ''
             } else if (line === '') {
@@ -76,24 +92,24 @@ export function useBatchSSE({ batchId, onUpdate, enabled = true }: UseBatchSSEOp
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return
 
-        // Exponential backoff reconnect
-        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000)
-        retryCountRef.current++
-        setTimeout(() => {
-          if (!controller.signal.aborted) {
-            connect(id)
-          }
-        }, delay)
+        // 指数退避重连
+        if (!controller.signal.aborted) {
+          const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000)
+          retryCountRef.current++
+          setTimeout(() => {
+            if (!controllerRef.current?.signal.aborted) connect(id)
+          }, delay)
+        }
       }
     })()
   }, [])
 
   useEffect(() => {
-    if (!batchId || !enabled) return
-    connect(batchId)
-
-    return () => {
+    if (!batchId || !enabled) {
       controllerRef.current?.abort()
+      return
     }
+    connect(batchId)
+    return () => { controllerRef.current?.abort() }
   }, [batchId, enabled, connect])
 }

@@ -5,13 +5,16 @@ import { Handle, Position } from 'reactflow'
 import { useNodeExecutionState, useCanvasExecutionStore, useNodeHighlighted } from '@/stores/canvas/execution-store'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useShallow } from 'zustand/react/shallow'
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Check, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { selectNodeOutputForCanvas } from '@/lib/canvas/canvas-api'
 import { toast } from 'sonner'
-import type { CanvasNodeData } from '@/lib/canvas/types'
+import { getCanvasNodeTheme } from '@/lib/canvas/node-theme'
+import type { CanvasNodeData, ImageGenConfig } from '@/lib/canvas/types'
 import { InlineLabel } from './inline-label'
+import { useNodeUpload } from '@/hooks/canvas/use-node-upload'
+import { NodeHandle } from './node-handle'
 
 function nodeWidthFromRatio(w: number, h: number): number {
   const ratio = w / h
@@ -31,7 +34,7 @@ function useElapsedTimer(startedAt: number | null): string {
   return `${elapsed}s`
 }
 
-export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<any> }) {
+export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: string; data: CanvasNodeData<ImageGenConfig> }) {
   const execState = useNodeExecutionState(id)
   const selectNodeOutput = useCanvasExecutionStore((s) => s.selectNodeOutput)
   const removeNodes = useCanvasStructureStore((s) => s.removeNodes)
@@ -58,6 +61,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
     })
   )
   const token = useAuthStore((s) => s.accessToken)
+  const { inputRef, uploading: nodeUploading, triggerUpload, handleChange } = useNodeUpload(id, canvasId ?? '', 'image/*')
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
   const [confirming, setConfirming] = useState(false)
 
@@ -68,6 +72,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
   const currentImageUrl = selectedOutput?.url
   const currentIndex = outputs.findIndex((o) => o.id === selectedOutputId)
   const elapsed = useElapsedTimer(isGenerating ? startedAt : null)
+  const theme = getCanvasNodeTheme('image_gen')
 
   function handlePrev(e: React.MouseEvent) {
     e.stopPropagation()
@@ -87,25 +92,38 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
     try {
       await selectNodeOutputForCanvas(canvasId, id, selectedOutputId, token)
       toast.success('已设为定稿图')
-    } catch (err: any) {
-      toast.error(err?.message ?? '设为定稿失败')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '设为定稿失败')
     } finally {
       setConfirming(false)
     }
+  }
+
+  function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!currentImageUrl) return
+    const a = document.createElement('a')
+    a.href = currentImageUrl
+    a.download = data.label || 'image'
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
   }
 
   return (
     <div
       className={cn(
         'group relative flex flex-col rounded-xl shadow-md border transition-all duration-200',
-        'bg-white',
+        'bg-card',
         isGenerating
           ? 'border-blue-400 shadow-blue-200 ring-1 ring-blue-400'
           : isFailed
           ? 'border-red-400 shadow-red-100 ring-1 ring-red-300'
           : isUpstream
           ? 'border-violet-400 ring-1 ring-violet-300 shadow-violet-100'
-          : 'border-zinc-200 hover:border-zinc-300 hover:shadow-lg',
+          : 'border-border hover:border-border/60 hover:shadow-lg',
         '[transform:translateZ(0)] [backface-visibility:hidden]',
         '[contain:layout_style] [will-change:transform]',
         '[-webkit-font-smoothing:antialiased]',
@@ -115,14 +133,32 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
       {/* Delete button */}
       <button
         onClick={(e) => { e.stopPropagation(); removeNodes([id]) }}
-        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-white text-zinc-400 hover:text-red-500 border-zinc-200"
+        className="absolute -top-2.5 -right-2.5 z-50 p-1 rounded-full shadow border opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100 bg-card text-muted-foreground hover:text-red-500 border-border"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <X size={11} />
       </button>
 
+      {/* 上传按钮 — 顶部居中，hover 显示 */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleChange}
+      />
+      <button
+        onClick={(e) => { e.stopPropagation(); triggerUpload() }}
+        onMouseDown={(e) => e.stopPropagation()}
+        disabled={nodeUploading}
+        className="absolute -top-3 left-1/2 z-50 rounded-full border border-border bg-card p-1 text-muted-foreground opacity-0 shadow transition-opacity -translate-x-1/2 scale-90 hover:scale-100 hover:text-blue-500 group-hover:opacity-100 disabled:opacity-40"
+        title="上传图片"
+      >
+        {nodeUploading ? <Loader2 size={11} className="animate-spin" /> : <span className="text-xs font-bold leading-none">+</span>}
+      </button>
+
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-zinc-100 rounded-t-xl bg-zinc-50 flex items-center justify-between">
+      <div className={cn('px-3 py-1.5 border-b border-border rounded-t-xl flex items-center justify-between', theme.headerClassName)}>
         <InlineLabel nodeId={id} label={data.label} onRename={(nid, val) => updateNodeData(nid, { label: val })} />
         {isGenerating && (
           <div className="flex items-center gap-1">
@@ -133,35 +169,48 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
       </div>
 
       {/* Preview */}
-      <div className="p-2 bg-white">
-        {currentImageUrl ? (
-          <img
-            src={currentImageUrl}
-            alt="Generated"
-            className="w-full h-auto rounded-lg block [transform:translateZ(0)] [backface-visibility:hidden]"
-            loading="lazy"
-            onLoad={(e) => {
-              const img = e.currentTarget
-              setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
-            }}
-          />
-        ) : (
-          <div
-            className="flex flex-col items-center justify-center gap-2 text-zinc-400 rounded-lg bg-zinc-50"
-            style={{ aspectRatio: '4/3' }}
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="font-mono text-[10px] tracking-widest uppercase">
-                  {Math.round(progress)}<span className="text-zinc-300 ml-0.5">%</span>
-                </span>
-              </>
-            ) : (
-              <span className="text-[11px]">点击节点展开参数</span>
-            )}
-          </div>
-        )}
+      <div className="p-2 bg-card">
+        <div className="relative">
+          {currentImageUrl ? (
+            <img
+              src={currentImageUrl}
+              alt="Generated"
+              className="w-full h-auto rounded-lg block [transform:translateZ(0)] [backface-visibility:hidden]"
+              loading="lazy"
+              onLoad={(e) => {
+                const img = e.currentTarget
+                setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
+              }}
+            />
+          ) : (
+            <div
+              className="flex flex-col items-center justify-center gap-2 text-muted-foreground rounded-lg bg-muted"
+              style={{ aspectRatio: '4/3' }}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="font-mono text-[10px] tracking-widest uppercase">
+                    {Math.round(progress)}<span className="text-muted-foreground/50 ml-0.5">%</span>
+                  </span>
+                </>
+              ) : (
+                <span className="text-[11px]">点击节点展开参数</span>
+              )}
+            </div>
+          )}
+          {currentImageUrl && (
+            <button
+              onClick={handleDownload}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="absolute bottom-1.5 right-1.5 z-20 rounded-md bg-black/45 p-1.5 text-white opacity-0 shadow-sm transition-opacity hover:bg-black/70 group-hover:opacity-100"
+              title="下载"
+              aria-label="下载图片"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {warningMessage && (
@@ -181,22 +230,22 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
 
       {/* History pager */}
       {outputs.length > 1 && (
-        <div className="border-t border-zinc-100 px-3 py-1 flex items-center justify-between bg-zinc-50 rounded-b-xl">
+        <div className="border-t border-border px-3 py-1 flex items-center justify-between bg-muted rounded-b-xl">
           <button
             onClick={handlePrev}
             disabled={currentIndex <= 0}
-            className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded transition-colors"
+            className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5 rounded transition-colors"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] text-zinc-400">
+            <span className="font-mono text-[10px] text-muted-foreground">
               {currentIndex + 1} / {outputs.length}
             </span>
             <button
               onClick={handleConfirmSelect}
               disabled={!token || !canvasId || !selectedOutputId || confirming}
-              className="px-1.5 py-0.5 text-[10px] rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 flex items-center gap-1"
+              className="px-1.5 py-0.5 text-[10px] rounded border border-border text-foreground hover:bg-muted disabled:opacity-40 flex items-center gap-1"
             >
               {confirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               设为定稿
@@ -205,7 +254,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           <button
             onClick={handleNext}
             disabled={currentIndex >= outputs.length - 1}
-            className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30 p-0.5 rounded transition-colors"
+            className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5 rounded transition-colors"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
@@ -218,7 +267,7 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           className="absolute flex items-center pointer-events-none"
           style={{ top: '50%', left: 0, transform: 'translate(-100%, -50%)' }}
         >
-          <span className="text-[9px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
+          <span className="text-[9px] font-medium text-muted-foreground bg-card border border-border rounded px-1 py-0.5 mr-1 shadow-sm whitespace-nowrap">
             参×{incomingCount}
           </span>
         </div>
@@ -233,18 +282,19 @@ export const ImageGenNode = memo(function ImageGenNode({ id, data }: { id: strin
           </span>
         </div>
       )}
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         id="any-in"
+        nodeId={id}
         style={{ top: '50%' }}
-        className="!w-2.5 !h-2.5 !bg-zinc-300 !border !border-zinc-400 hover:!bg-blue-400 transition-colors"
       />
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         id="image-out"
-        className="!w-3.5 !h-3.5 !bg-zinc-200 !border !border-zinc-400 !-right-1.5 !rounded-full opacity-0 group-hover:opacity-100 hover:!bg-zinc-600 hover:!border-zinc-500 transition-all"
+        nodeId={id}
+        showOnGroupHover
       />
     </div>
   )

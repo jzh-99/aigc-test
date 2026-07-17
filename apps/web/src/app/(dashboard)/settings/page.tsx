@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useState, useEffect, useRef, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,21 +9,33 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Switch } from '@/components/ui/switch'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
-import { apiPatch, apiPost, ApiError } from '@/lib/api-client'
+import { apiPatch, apiPost, fetchWithAuth, ApiError } from '@/lib/api-client'
+import { SettingsManagementNav } from '@/components/layout/settings-management-nav'
 import type { UserProfile } from '@aigc/types'
 import { toast } from 'sonner'
-import { Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle, LogOut, ImagePlus } from 'lucide-react'
 
-export default function SettingsPage() {
+function SettingsPageContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const user = useAuthStore((s) => s.user)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const updateUser = useAuthStore((s) => s.updateUser)
+  const clearAuth = useAuthStore((s) => s.clearAuth)
   const watermark = useGenerationStore((s) => s.watermark)
   const setWatermark = useGenerationStore((s) => s.setWatermark)
+  const resetGeneration = useGenerationStore((s) => s.reset)
   const [username, setUsername] = useState(user?.username ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url ?? '')
   const [loading, setLoading] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [newPhone, setNewPhone] = useState('')
+  const [phoneCode, setPhoneCode] = useState('')
+  const [phoneCodeCountdown, setPhoneCodeCountdown] = useState(0)
+  const [phoneCodeLoading, setPhoneCodeLoading] = useState(false)
+  const [phoneBindLoading, setPhoneBindLoading] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -34,6 +46,7 @@ export default function SettingsPage() {
     activeTeam?.role === 'owner' || activeTeam?.role === 'admin' || user?.role === 'admin'
 
   const showPasswordWarning = user?.password_change_required || searchParams.get('change_password') === 'true'
+  const accountDisplay = user?.phone ?? user?.email ?? '已登录账号'
 
   // Auto-focus password change section when required
   useEffect(() => {
@@ -42,6 +55,19 @@ export default function SettingsPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }, [showPasswordWarning])
+
+  useEffect(() => {
+    setUsername(user?.username ?? '')
+    setAvatarUrl(user?.avatar_url ?? '')
+  }, [user?.avatar_url, user?.username])
+
+  useEffect(() => {
+    if (phoneCodeCountdown <= 0) return
+    const timer = window.setTimeout(() => {
+      setPhoneCodeCountdown((current) => Math.max(0, current - 1))
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [phoneCodeCountdown])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -57,6 +83,100 @@ export default function SettingsPage() {
       toast.error(err instanceof ApiError ? err.message : '保存失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('请上传图片文件')
+      e.target.value = ''
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('头像图片不能超过 10 MB')
+      e.target.value = ''
+      return
+    }
+
+    setAvatarUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetchWithAuth<{ url: string }>('/avatar/upload', { method: 'POST', body: form })
+      setAvatarUrl(res.url)
+      toast.success('头像已上传，请保存修改')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '头像上传失败')
+    } finally {
+      setAvatarUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleSendPhoneCode() {
+    const phone = newPhone.trim()
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      toast.error('请输入有效的手机号')
+      return
+    }
+    if (phone === user?.phone) {
+      toast.error('新手机号与当前手机号一致')
+      return
+    }
+
+    setPhoneCodeLoading(true)
+    try {
+      const res = await apiPost<{ success: boolean; expires_in: number; dev_code?: string }>('/users/me/phone-code', { phone })
+      setPhoneCodeCountdown(60)
+      toast.success(res.dev_code ? `验证码已生成：${res.dev_code}` : '验证码已发送')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '验证码发送失败')
+    } finally {
+      setPhoneCodeLoading(false)
+    }
+  }
+
+  async function handleBindPhone(e: React.FormEvent) {
+    e.preventDefault()
+    const phone = newPhone.trim()
+    const code = phoneCode.trim()
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      toast.error('请输入有效的手机号')
+      return
+    }
+    if (!code) {
+      toast.error('请输入验证码')
+      return
+    }
+
+    setPhoneBindLoading(true)
+    try {
+      const updated = await apiPost<UserProfile>('/users/me/phone', { phone, code })
+      updateUser(updated)
+      setNewPhone('')
+      setPhoneCode('')
+      setPhoneCodeCountdown(0)
+      toast.success('手机号已换绑')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '手机号换绑失败')
+    } finally {
+      setPhoneBindLoading(false)
+    }
+  }
+
+  async function handleLogout() {
+    if (logoutLoading) return
+    setLogoutLoading(true)
+    try {
+      await apiPost('/auth/logout', {})
+    } catch {
+      // 即使服务端登出失败，也清理本地会话，避免用户被困在当前账号。
+    } finally {
+      resetGeneration()
+      clearAuth()
+      router.replace('/login')
     }
   }
 
@@ -102,11 +222,42 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">个人设置</h1>
-        <p className="text-muted-foreground">管理您的个人信息</p>
+        <p className="text-muted-foreground">管理您的个人信息、账户安全和团队相关入口</p>
       </div>
+
+      <SettingsManagementNav />
+
+      <Card className="border-destructive/25 bg-destructive/[0.03]">
+        <CardHeader>
+          <CardTitle>账户会话</CardTitle>
+          <CardDescription>退出当前账号并返回登录页</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">{user?.username ?? '当前用户'}</p>
+              <p className="text-xs text-muted-foreground">{accountDisplay}</p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleLogout}
+              disabled={logoutLoading}
+              className="w-full sm:w-auto"
+            >
+              {logoutLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="mr-2 h-4 w-4" />
+              )}
+              退出登录
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Password change card - show first if required */}
       {showPasswordWarning && (
@@ -176,7 +327,7 @@ export default function SettingsPage() {
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
               <Label>账户</Label>
-              <Input value={user?.email ?? user?.phone ?? ''} disabled className="bg-muted" />
+              <Input value={accountDisplay} disabled className="bg-muted" />
               <p className="text-xs text-muted-foreground">账户不可修改</p>
             </div>
             <div className="space-y-2">
@@ -190,16 +341,45 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="avatar">头像 URL</Label>
-              <Input
-                id="avatar"
-                value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
-                placeholder="https://example.com/avatar.jpg"
+              <Label>头像</Label>
+              <div className="flex items-center gap-4 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border border-border bg-muted text-muted-foreground">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <ImagePlus className="h-6 w-6" aria-hidden="true" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={avatarUploading}
+                    >
+                      {avatarUploading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <ImagePlus className="mr-2 h-4 w-4" />
+                      )}
+                      上传头像
+                    </Button>
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {avatarUrl ? avatarUrl : '支持 JPG、PNG、WebP，上传后点击保存修改生效'}
+                  </p>
+                </div>
+              </div>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleAvatarUpload}
               />
-              <p className="text-xs text-muted-foreground">输入头像图片链接（文件上传功能后续开放）</p>
             </div>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || avatarUploading}>
               {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               保存修改
             </Button>
@@ -224,7 +404,7 @@ export default function SettingsPage() {
                 <span className="font-medium">{activeTeam.owner.username}</span>
                 <span className="text-muted-foreground ml-2">{activeTeam.owner.email}</span>
               </p>
-              <p className="text-xs text-muted-foreground">如需调整积分配额或权限，请联系团队负责人</p>
+              <p className="text-xs text-muted-foreground">如需调整A豆配额或权限，请联系团队负责人</p>
             </div>
           </CardContent>
         </Card>
@@ -249,6 +429,60 @@ export default function SettingsPage() {
               onCheckedChange={setWatermark}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>手机号换绑</CardTitle>
+          <CardDescription>通过短信验证码更新登录手机号</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleBindPhone} className="space-y-4">
+            <div className="space-y-2">
+              <Label>当前手机号</Label>
+              <Input value={user?.phone ?? '未绑定手机号'} disabled className="bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-phone">新手机号</Label>
+              <Input
+                id="new-phone"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="请输入新的手机号"
+                inputMode="tel"
+                maxLength={11}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone-code">验证码</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="phone-code"
+                  value={phoneCode}
+                  onChange={(e) => setPhoneCode(e.target.value)}
+                  placeholder="请输入验证码"
+                  inputMode="numeric"
+                  maxLength={10}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSendPhoneCode}
+                  disabled={phoneCodeLoading || phoneCodeCountdown > 0 || phoneBindLoading}
+                  className="shrink-0"
+                >
+                  {phoneCodeLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {phoneCodeCountdown > 0 ? `${phoneCodeCountdown}s` : '获取验证码'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">换绑成功后，将使用新的手机号作为登录账户</p>
+            </div>
+            <Button type="submit" disabled={phoneBindLoading || phoneCodeLoading}>
+              {phoneBindLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              确认换绑
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
@@ -301,5 +535,13 @@ export default function SettingsPage() {
         </Card>
       )}
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsPageContent />
+    </Suspense>
   )
 }

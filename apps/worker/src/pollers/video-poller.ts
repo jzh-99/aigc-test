@@ -1,35 +1,63 @@
-import pino_ from 'pino'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { getPubRedis, getRedis } from '../lib/redis.js'
+import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
+import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
 import { Queue } from 'bullmq'
+import { buildLogger } from '../logger.js'
+import { recordProviderPollAudit } from '../lib/provider-poll-audit.js'
+import {
+  classifyVideoPollHttpError,
+  MAX_CONSECUTIVE_VIDEO_POLL_ERRORS,
+  parseTokenhubTaskResponse,
+  parseVolcengineTaskResponse,
+  shouldFailVideoTaskAfterPollError,
+  VIDEO_POLL_INTERVAL_MS,
+  type VideoPollStatus,
+  type VideoPollResult,
+} from './video-poller-result.js'
 
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
   if (!_transferQueue) {
-    _transferQueue = new Queue('transfer-queue', { connection: getRedis() })
+    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _transferQueue
 }
 
-const pino = pino_ as any
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+const logger = buildLogger()
 
 // Track consecutive poll errors per task to detect persistent API failures
 const pollErrorCounts = new Map<string, number>()
-const MAX_CONSECUTIVE_POLL_ERRORS = 5
 let pollTick = 0
 const POLL_CONCURRENCY = 10
+const VIDEO_POLL_REQUEST_TIMEOUT_MS = 30_000
 
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
+const CTYUN_EDGE_API_URL = (process.env.CTYUN_EDGE_API_BASE_URL || 'https://ai.ctaigw.cn/v1').replace(/\/$/, '')
+const CTYUN_EDGE_API_KEY = process.env.CTYUN_EDGE_API_KEY ?? ''
+const TOKENHUB_API_URL = (process.env.TOKENHUB_API_BASE_URL ?? '').replace(/\/$/, '')
+const TOKENHUB_API_KEY = process.env.TOKENHUB_API_KEY ?? ''
 const MAX_VIDEO_AGE_MS = 60 * 60 * 1000 // 1 hour
+const VEO_STATUS_MAP: Record<string, VideoPollStatus> = {
+  SUCCESS: 'SUCCESS',
+  FAILURE: 'FAILURE',
+  NOT_START: 'NOT_START',
+  IN_PROGRESS: 'IN_PROGRESS',
+}
+
+function isAbortOrTimeoutMessage(message?: string | null): boolean {
+  if (!message) return false
+  const normalized = message.toLowerCase()
+  return normalized.includes('aborted') || normalized.includes('abort') || normalized.includes('timeout')
+}
 
 interface VideoTaskRow {
   taskId: string
   batchId: string
   userId: string
   teamId: string
+  workspaceId: string | null
   creditAccountId: string
   estimatedCredits: number
   externalTaskId: string
@@ -37,73 +65,188 @@ interface VideoTaskRow {
   provider: string
   canvasId: string | null
   canvasNodeId: string | null
+  params: unknown
 }
 
-async function checkVeoTask(externalTaskId: string): Promise<{
-  status: string
-  videoUrl?: string
-  failReason?: string
-}> {
+async function checkVeoTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10_000)
+  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const endpoint = `/v2/videos/generations/${externalTaskId}`
+  const startedAt = Date.now()
   try {
-    const res = await fetch(`${VEO_API_URL}/v2/videos/generations/${externalTaskId}`, {
+    const res = await fetch(`${VEO_API_URL}${endpoint}`, {
       headers: { Authorization: `Bearer ${VEO_API_KEY}` },
       signal: controller.signal,
     })
-    if (!res.ok) return { status: 'POLL_ERROR' }
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return {
+        ...classifyVideoPollHttpError(res.status, errorBody),
+        endpoint,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
+    }
     const data = (await res.json()) as { status: string; data?: { output?: string }; fail_reason?: string }
     return {
-      status: data.status,
+      status: VEO_STATUS_MAP[data.status] ?? 'POLL_ERROR',
       videoUrl: data.data?.output,
       failReason: data.fail_reason,
+      endpoint,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
     }
-  } catch {
-    return { status: 'POLL_ERROR' }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true, endpoint, durationMs: Date.now() - startedAt }
   } finally {
     clearTimeout(timer)
   }
 }
 
-async function checkVolcengineTask(externalTaskId: string): Promise<{
-  status: string
-  videoUrl?: string
-  failReason?: string
-}> {
+async function checkVolcengineTask(externalTaskId: string): Promise<VideoPollResult> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10_000)
+  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const endpoint = `/contents/generations/tasks/${externalTaskId}`
+  const startedAt = Date.now()
   try {
     const volcengineApiUrl = 'https://ark.cn-beijing.volces.com/api/v3'
     const volcengineApiKey = process.env.VOLCENGINE_API_KEY ?? ''
-    const res = await fetch(`${volcengineApiUrl}/contents/generations/tasks/${externalTaskId}`, {
+    const res = await fetch(`${volcengineApiUrl}${endpoint}`, {
       headers: { Authorization: `Bearer ${volcengineApiKey}` },
       signal: controller.signal,
     })
-    if (!res.ok) return { status: 'POLL_ERROR' }
-    const data = (await res.json()) as {
-      status: string
-      content?: { video_url?: string }
-      error?: { message?: string }
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return {
+        ...classifyVideoPollHttpError(res.status, errorBody),
+        endpoint,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
     }
-    // Map Volcengine status to internal status
-    const statusMap: Record<string, string> = {
-      succeeded: 'SUCCESS',
-      failed: 'FAILURE',
-      expired: 'FAILURE',
-      queued: 'NOT_START',
-      running: 'IN_PROGRESS',
-      cancelled: 'FAILURE',
-    }
+    const data = await res.json()
     return {
-      status: statusMap[data.status] ?? 'POLL_ERROR',
-      videoUrl: data.content?.video_url,
-      failReason: data.error?.message,
+      ...parseVolcengineTaskResponse(data),
+      endpoint,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
     }
-  } catch {
-    return { status: 'POLL_ERROR' }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true, endpoint, durationMs: Date.now() - startedAt }
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function checkCtyunEdgeTask(externalTaskId: string): Promise<VideoPollResult> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const endpoint = `/contents/generations/tasks/${externalTaskId}`
+  const startedAt = Date.now()
+  try {
+    const res = await fetch(`${CTYUN_EDGE_API_URL}${endpoint}`, {
+      headers: { Authorization: `Bearer ${CTYUN_EDGE_API_KEY}` },
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return {
+        ...classifyVideoPollHttpError(res.status, errorBody),
+        endpoint,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
+    }
+    const data = await res.json()
+    return {
+      ...parseVolcengineTaskResponse(data),
+      endpoint,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true, endpoint, durationMs: Date.now() - startedAt }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function checkTokenhubTask(externalTaskId: string): Promise<VideoPollResult> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const endpoint = `/v1/videos/generations/task/${externalTaskId}`
+  const startedAt = Date.now()
+  try {
+    const res = await fetch(`${TOKENHUB_API_URL}${endpoint}`, {
+      headers: { Authorization: `Bearer ${TOKENHUB_API_KEY}` },
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return {
+        ...classifyVideoPollHttpError(res.status, errorBody),
+        endpoint,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
+    }
+    const data = await res.json()
+    return {
+      ...parseTokenhubTaskResponse(data),
+      endpoint,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true, endpoint, durationMs: Date.now() - startedAt }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function auditVideoPoll(task: VideoTaskRow, result: VideoPollResult): Promise<void> {
+  await recordProviderPollAudit({
+    auditKey: `${task.taskId}:video.query`,
+    batchId: task.batchId,
+    taskId: task.taskId,
+    userId: task.userId,
+    teamId: task.teamId,
+    workspaceId: task.workspaceId,
+    module: 'video',
+    provider: task.provider,
+    model: null,
+    operation: 'video.query',
+    method: 'GET',
+    endpoint: result.endpoint ?? `${task.provider}:query`,
+    requestPayload: result.requestPayload ?? null,
+    responseStatus: result.responseStatus ?? result.httpStatus ?? null,
+    responsePayload: result.responsePayload ?? result,
+    externalTaskId: task.externalTaskId,
+    durationMs: result.durationMs ?? null,
+    status: ['FAILURE', 'POLL_ERROR', 'POLL_AUTH_ERROR'].includes(result.status) ? 'failed' : 'success',
+    errorMessage: result.errorMessage ?? result.failReason ?? null,
+    pollStatus: result.status,
+    keyFields: {
+      status: result.status,
+      video_url: result.videoUrl ?? null,
+      fail_reason: result.failReason ?? null,
+      http_status: result.httpStatus ?? result.responseStatus ?? null,
+      error_message: result.errorMessage ?? null,
+    },
+    final: result.status === 'SUCCESS' || result.status === 'FAILURE' || result.status === 'POLL_AUTH_ERROR',
+  })
 }
 
 async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise<void> {
@@ -144,7 +287,7 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
       type: 'confirm',
       task_id: taskId,
       batch_id: batchId,
-      description: 'Video generation confirmed',
+      description: '视频生成成功',
     }).execute()
 
     // Update batch to completed
@@ -157,12 +300,28 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
       .where('id', '=', batchId).execute()
   })
 
-  await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+  // Publish SSE event
+  const channel = `sse:batch:${batchId}`
+  const publishPayload = JSON.stringify({ event: 'batch_update' })
+  logger.info({ batchId, channel }, '准备发布 SSE 事件')
+  try {
+    const result = await getPubRedis().publish(channel, publishPayload)
+    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+  } catch (err) {
+    logger.error({ batchId, err }, 'SSE 事件发布失败')
+    throw err
+  }
 
   // Write canvas_node_outputs if this task belongs to a canvas node
   if (task.canvasId && task.canvasNodeId) {
     const canvasId = task.canvasId
     const nodeId = task.canvasNodeId
+    const params = task.params as { duration?: unknown } | null | undefined
+    const duration = typeof params?.duration === 'number' && Number.isFinite(params.duration) && params.duration > 0 ? params.duration : undefined
+    const paramsSnapshot = JSON.stringify({
+      params: task.params,
+      ...(duration !== undefined ? { duration } : {}),
+    })
     await db.updateTable('canvas_node_outputs')
       .set({ is_selected: false })
       .where('canvas_id', '=', canvasId)
@@ -174,6 +333,7 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
         node_id: nodeId,
         batch_id: batchId,
         output_urls: sql`ARRAY[${videoUrl}]::text[]`,
+        params_snapshot: sql`${paramsSnapshot}::jsonb`,
         is_selected: true,
       })
       .execute()
@@ -192,9 +352,13 @@ async function handleVideoSuccess(task: VideoTaskRow, videoUrl: string): Promise
   if (assetRow) {
     await getTransferQueue().add('transfer', {
       taskId,
+      batchId,
       assetId: assetRow.id,
       originalUrl: videoUrl,
       assetType: 'video',
+    }, {
+      attempts: 10,
+      backoff: { type: 'exponential', delay: 30_000 }, // 30s → 1m → 2m → ... 最大约 30m，总覆盖 ~2.5h
     })
   }
 
@@ -232,7 +396,7 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
       type: 'refund',
       task_id: taskId,
       batch_id: batchId,
-      description: `Video generation failed: ${errorMessage.slice(0, 200)}`,
+      description: `视频生成失败：${errorMessage.slice(0, 200)}`,
     }).execute()
 
     await trx.updateTable('task_batches')
@@ -240,7 +404,17 @@ async function handleVideoFailure(task: VideoTaskRow, errorMessage: string): Pro
       .where('id', '=', batchId).execute()
   })
 
-  await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+  // Publish SSE event
+  const channel = `sse:batch:${batchId}`
+  const publishPayload = JSON.stringify({ event: 'batch_update' })
+  logger.info({ batchId, channel }, '准备发布 SSE 事件')
+  try {
+    const result = await getPubRedis().publish(channel, publishPayload)
+    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+  } catch (err) {
+    logger.error({ batchId, err }, 'SSE 事件发布失败')
+    throw err
+  }
   logger.warn({ taskId, batchId, errorMessage }, 'Video task failed')
 }
 
@@ -274,9 +448,14 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
       false
     if (skipThisTick) return
 
-    const result = task.provider === 'volcengine'
-      ? await checkVolcengineTask(task.externalTaskId)
-      : await checkVeoTask(task.externalTaskId)
+    const result = task.provider === 'tokenhub'
+      ? await checkTokenhubTask(task.externalTaskId)
+      : task.provider === 'volcengine'
+        ? await checkVolcengineTask(task.externalTaskId)
+        : task.provider === 'ctyun-edge'
+          ? await checkCtyunEdgeTask(task.externalTaskId)
+          : await checkVeoTask(task.externalTaskId)
+    await auditVideoPoll(task, result)
 
     if (result.status === 'SUCCESS' && result.videoUrl) {
       pollErrorCounts.delete(task.taskId)
@@ -284,13 +463,50 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
     } else if (result.status === 'FAILURE') {
       pollErrorCounts.delete(task.taskId)
       await handleVideoFailure(task, result.failReason ?? 'Video generation failed')
+    } else if (result.status === 'POLL_AUTH_ERROR') {
+      pollErrorCounts.delete(task.taskId)
+      logger.error({
+        taskId: task.taskId,
+        batchId: task.batchId,
+        provider: task.provider,
+        externalTaskId: task.externalTaskId,
+        httpStatus: result.httpStatus,
+        errorMessage: result.errorMessage,
+      }, 'Video task poll auth failed, failing task')
+      await handleVideoFailure(task, result.failReason ?? '视频状态查询鉴权失败，请检查服务配置')
     } else if (result.status === 'POLL_ERROR') {
       const count = (pollErrorCounts.get(task.taskId) ?? 0) + 1
       pollErrorCounts.set(task.taskId, count)
-      if (count >= MAX_CONSECUTIVE_POLL_ERRORS) {
+      const pollErrorLogPayload = {
+        taskId: task.taskId,
+        batchId: task.batchId,
+        provider: task.provider,
+        externalTaskId: task.externalTaskId,
+        count,
+        max: MAX_CONSECUTIVE_VIDEO_POLL_ERRORS,
+        httpStatus: result.httpStatus,
+        retryable: result.retryable,
+        errorMessage: result.errorMessage,
+        durationMs: result.durationMs,
+      }
+      const isNoisyRetryableTimeout = result.retryable !== false && isAbortOrTimeoutMessage(result.errorMessage)
+      const shouldWarn = !isNoisyRetryableTimeout
+      if (shouldWarn) {
+        logger.warn(pollErrorLogPayload, 'Video task poll error')
+      } else {
+        logger.debug(pollErrorLogPayload, 'Video task poll retryable timeout')
+      }
+      if (shouldFailVideoTaskAfterPollError({ provider: task.provider, count, maxErrors: MAX_CONSECUTIVE_VIDEO_POLL_ERRORS, retryable: result.retryable })) {
         logger.warn({ taskId: task.taskId, count }, 'Video task exceeded max poll errors, failing task')
         pollErrorCounts.delete(task.taskId)
         await handleVideoFailure(task, '生成过程中出现异常，请重新发起请求')
+      } else if (count === MAX_CONSECUTIVE_VIDEO_POLL_ERRORS || count % MAX_CONSECUTIVE_VIDEO_POLL_ERRORS === 0) {
+        logger.warn({
+          taskId: task.taskId,
+          batchId: task.batchId,
+          count,
+          errorMessage: result.errorMessage,
+        }, 'Video task poll errors reached threshold but remain retryable')
       }
     } else {
       // NOT_START, IN_PROGRESS: still in progress, reset error count
@@ -315,10 +531,12 @@ async function pollVideoTasks(): Promise<void> {
       'tasks.processing_started_at as processingStartedAt',
       'task_batches.team_id as teamId',
       'task_batches.user_id as userId',
+      'task_batches.workspace_id as workspaceId',
       'task_batches.credit_account_id as creditAccountId',
       'task_batches.provider as provider',
       'task_batches.canvas_id as canvasId',
       'task_batches.canvas_node_id as canvasNodeId',
+      'task_batches.params as params',
     ])
     .where('tasks.status', '=', 'processing')
     .where('task_batches.module', '=', 'video')
@@ -337,8 +555,6 @@ async function pollVideoTasks(): Promise<void> {
 }
 
 export function startVideoPoller(): NodeJS.Timeout {
-  const POLL_INTERVAL = 15_000
-
   // Delay first run by 30s to let service warm up
   const initialDelay = setTimeout(() => {
     pollVideoTasks().catch((err) => logger.error({ err }, 'Video poller error'))
@@ -346,7 +562,7 @@ export function startVideoPoller(): NodeJS.Timeout {
 
   const timer = setInterval(() => {
     pollVideoTasks().catch((err) => logger.error({ err }, 'Video poller error'))
-  }, POLL_INTERVAL)
+  }, VIDEO_POLL_INTERVAL_MS)
 
   logger.info('Video poller started (every 15 seconds)')
   return timer

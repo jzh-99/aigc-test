@@ -37,3 +37,13 @@ DROP TRIGGER IF EXISTS trg_canvas_agent_sessions_updated_at ON canvas_agent_sess
 CREATE TRIGGER trg_canvas_agent_sessions_updated_at
   BEFORE UPDATE ON canvas_agent_sessions
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_music_voice_clones_updated_at ON music_voice_clones;
+CREATE TRIGGER trg_music_voice_clones_updated_at
+  BEFORE UPDATE ON music_voice_clones
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_music_tracks_updated_at ON music_tracks;
+CREATE TRIGGER trg_music_tracks_updated_at
+  BEFORE UPDATE ON music_tracks
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();

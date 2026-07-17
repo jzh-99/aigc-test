@@ -1,4 +1,174 @@
-import type { BatchStatus, TaskStatus, TransferStatus, AssetType } from './db.js'
+import type { BatchStatus, TaskStatus, TransferStatus, AssetType, VideoCategory, ImageCategory, TextCategory, CategoryReferenceKey, BatchSource, ModuleType } from './db.js'
+
+export type ReferenceKind = 'image' | 'video' | 'audio' | 'text'
+
+export interface CategoryReferenceLimit {
+  min: number
+  max: number
+}
+
+export interface CategoryReferenceConfig {
+  label: string
+  limits: Record<ReferenceKind, CategoryReferenceLimit>
+}
+
+export type CategoryReferences = Partial<Record<CategoryReferenceKey, CategoryReferenceConfig>>
+export const ACTIVE_IMAGE_CATEGORY: ImageCategory = 'image_to_image'
+export const ACTIVE_TEXT_CATEGORY: TextCategory = 'text_to_text'
+
+export interface VideoReferenceCounts {
+  image: number
+  video: number
+  audio: number
+  text: number
+}
+
+/** 视频自动时长（duration=-1）时的默认预估秒数 */
+export const DEFAULT_VIDEO_AUTO_DURATION_SECS = 5
+
+export interface VideoBillingInput {
+  generatedDuration?: number | null
+  referenceVideoDurations?: number[]
+  unitPrice: number
+}
+
+function normalizePositiveSeconds(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
+export function calculateReferenceVideoDurationSeconds(referenceVideoDurations?: number[]): number {
+  const total = (referenceVideoDurations ?? []).reduce((sum, duration) => sum + normalizePositiveSeconds(duration), 0)
+  return total > 0 ? Math.ceil(total) : 0
+}
+
+export function calculateVideoEstimatedCredits(input: VideoBillingInput): number {
+  const generatedDuration = normalizePositiveSeconds(input.generatedDuration)
+  const referenceDuration = calculateReferenceVideoDurationSeconds(input.referenceVideoDurations)
+  const referenceCredits = referenceDuration * input.unitPrice
+  // 自动时长（duration=-1）时，用默认秒数预估；实际费用在生成完成后确认
+  const generatedCredits = generatedDuration > 0
+    ? generatedDuration * input.unitPrice
+    : input.unitPrice * DEFAULT_VIDEO_AUTO_DURATION_SECS
+
+  return generatedCredits + referenceCredits
+}
+
+export interface VideoLimitValidationResult {
+  valid: boolean
+  message?: string
+}
+
+const REFERENCE_KINDS: ReferenceKind[] = ['image', 'video', 'audio', 'text']
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isLimit(value: unknown): value is CategoryReferenceLimit {
+  if (!isPlainObject(value)) return false
+  const min = value.min
+  const max = value.max
+  return typeof min === 'number' && typeof max === 'number' && Number.isInteger(min) && Number.isInteger(max) && min >= 0 && max >= min
+}
+
+function isCategoryConfig(value: unknown): value is CategoryReferenceConfig {
+  if (!isPlainObject(value) || typeof value.label !== 'string' || !isPlainObject(value.limits)) return false
+  const limits = value.limits
+  return ['image', 'video', 'audio'].every((kind) => isLimit(limits[kind]))
+}
+
+function normalizeCategoryConfig(value: CategoryReferenceConfig): CategoryReferenceConfig {
+  return {
+    ...value,
+    limits: {
+      image: value.limits.image,
+      video: value.limits.video,
+      audio: value.limits.audio,
+      text: isLimit(value.limits.text) ? value.limits.text : { min: 0, max: 0 },
+    },
+  }
+}
+
+export function parseCategoryReferences(raw: unknown): CategoryReferences {
+  const value = typeof raw === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(raw) as unknown
+        } catch {
+          return null
+        }
+      })()
+    : raw
+
+  if (!isPlainObject(value)) return {}
+
+  const out: CategoryReferences = {}
+  if (isCategoryConfig(value.image_to_image)) out.image_to_image = normalizeCategoryConfig(value.image_to_image)
+  if (isCategoryConfig(value.text_to_image)) out.text_to_image = normalizeCategoryConfig(value.text_to_image)
+  if (isCategoryConfig(value.multimodal)) out.multimodal = normalizeCategoryConfig(value.multimodal)
+  if (isCategoryConfig(value.frames)) out.frames = normalizeCategoryConfig(value.frames)
+  if (isCategoryConfig(value.text_to_text)) out.text_to_text = normalizeCategoryConfig(value.text_to_text)
+  return out
+}
+
+export function getVideoCategoryKeys(categoryReferences: CategoryReferences): VideoCategory[] {
+  return (['multimodal', 'frames'] as const).filter((key) => !!categoryReferences[key])
+}
+
+export function getMaxVideoReferenceLimits(categoryReferences: CategoryReferences): VideoReferenceCounts {
+  return getVideoCategoryKeys(categoryReferences).reduce<VideoReferenceCounts>((acc, key) => {
+    const limits = categoryReferences[key]?.limits
+    if (!limits) return acc
+    return {
+      image: Math.max(acc.image, limits.image.max),
+      video: Math.max(acc.video, limits.video.max),
+      audio: Math.max(acc.audio, limits.audio.max),
+      text: Math.max(acc.text, limits.text.max),
+    }
+  }, { image: 0, video: 0, audio: 0, text: 0 })
+}
+
+export function validateCategoryReferenceLimits(
+  categoryReferences: CategoryReferences,
+  category: CategoryReferenceKey,
+  counts: VideoReferenceCounts,
+): VideoLimitValidationResult {
+  const config = categoryReferences[category]
+  if (!config) return { valid: false, message: '当前模型不支持该生成模式' }
+
+  for (const kind of REFERENCE_KINDS) {
+    const count = counts[kind]
+    const limit = config.limits[kind]
+    const label = kind === 'image' ? '图片' : kind === 'video' ? '视频' : kind === 'audio' ? '音频' : '文本'
+    if (count < limit.min) return { valid: false, message: `${config.label}至少需要 ${limit.min} 个${label}参考素材` }
+    if (count > limit.max) return { valid: false, message: `${config.label}最多允许 ${limit.max} 个${label}参考素材` }
+  }
+
+  return { valid: true }
+}
+
+export function validateImageReferenceLimits(
+  categoryReferences: CategoryReferences,
+  category: ImageCategory,
+  imageCount: number,
+): VideoLimitValidationResult {
+  const config = categoryReferences[category]
+  if (!config) return { valid: false, message: '当前模型不支持该图片生成模式' }
+
+  const limit = config.limits.image
+  if (imageCount < limit.min) return { valid: false, message: `${config.label}至少需要 ${limit.min} 张参考图` }
+  if (imageCount > limit.max) return { valid: false, message: `${config.label}最多允许 ${limit.max} 张参考图` }
+
+  return { valid: true }
+}
+
+export function resolveImageGenerationCategory(
+  categoryReferences: CategoryReferences,
+  imageCount: number,
+): ImageCategory {
+  if (imageCount > 0) return 'image_to_image'
+  return categoryReferences.text_to_image ? 'text_to_image' : 'image_to_image'
+}
 
 export interface GenerateImageRequest {
   idempotency_key: string
@@ -28,7 +198,6 @@ export interface AssetResponse {
   type: AssetType
   original_url: string | null
   storage_url: string | null
-  raw_storage_url: string | null
   transfer_status: TransferStatus
   file_size: number | null
   width: number | null
@@ -43,7 +212,8 @@ export interface BatchUser {
 
 export interface BatchResponse {
   id: string
-  module: string
+  source: BatchSource
+  module: ModuleType
   provider: string
   model: string
   prompt: string
@@ -57,6 +227,7 @@ export interface BatchResponse {
   created_at: string
   queue_position?: number | null
   tasks: TaskResponse[]
+  resources?: Array<{ url: string; type: 'image' | 'video' | 'audio' }>
   user?: BatchUser
 }
 
@@ -68,6 +239,13 @@ export interface BatchListResponse {
 export interface BatchSSEEvent {
   event: 'batch_update'
   data: BatchResponse
+}
+
+export interface BatchStatsResponse {
+  total_completed: number
+  total_failed: number
+  /** 成功率百分比（0-100），无数据时为 null */
+  success_rate: number | null
 }
 
 // ─── Auth & User Management ─────────────────────────────────────────────────
@@ -174,12 +352,12 @@ export interface CreateWorkspaceRequest {
   description?: string
 }
 
-export type AigcModule = 'image' | 'video' | 'tts' | 'lipsync' | 'agent' | 'avatar' | 'action_imitation'
+export type AigcModule = ModuleType
 
-/** 参数定价规则：不同分辨率对应不同底层模型和积分单价 */
+/** 参数定价规则：不同业务参数对应不同底层模型和积分单价。音乐模块的 resolution 表示业务计费键。 */
 export interface ParamsPricingRule {
   model: string       // 实际调用的底层模型 code
-  resolution: string  // 分辨率标识，如 "720p"、"1080p"、"4k"
+  resolution: string  // 参数标识，如分辨率 "1080p"，或音乐计费键 "inspiration_song"
   unit_price: number  // 积分单价
 }
 
@@ -189,13 +367,52 @@ export interface ModelItem {
   name: string
   description: string | null
   module: AigcModule
-  video_categories: unknown  // 视频模型支持的模式列表，如 ['frames', 'multimodal']
-  credit_cost: number
+  category_references: CategoryReferences | unknown  // 模型支持的生成模式与参考素材数量限制
   params_pricing: ParamsPricingRule[]
   params_schema: unknown  // JSON Schema for frontend dynamic form rendering
   resolution: string | null
   is_active: boolean
   provider_code: string
+  avatar: string | null
+}
+
+export type SystemCostConfigKey = 'music_voice_clone' | 'video_segment_merge'
+
+export interface SystemCostConfigItem {
+  key: SystemCostConfigKey
+  label: string
+  description: string | null
+  credit_cost: number
+  updated_at: string
+}
+
+export interface SystemVoiceDemoResponse {
+  voice_id: string
+  demo_audio_url: string
+}
+
+export interface SystemVoiceItem {
+  id: string
+  voice_id: string
+  name: string
+  language: string
+  demo_audio_url: string | null
+  provider_code: string
+}
+
+export interface GenerateTtsRequest {
+  idempotency_key?: string
+  workspace_id: string
+  model: string
+  text: string
+  voice_id: string
+  voice_source_id?: string
+  speed?: number
+  volume?: number
+  pitch?: number
+  emotion?: string
+  canvas_id?: string
+  canvas_node_id?: string
 }
 
 export interface TeamModelConfig {

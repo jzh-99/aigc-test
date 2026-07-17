@@ -1,22 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { User, Loader2, RotateCcw, Check, Video, Play, X, EyeOff } from 'lucide-react'
-import type { BatchResponse } from '@aigc/types'
+import { User, Loader2, RotateCcw, Check, Video, X, Trash2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import type { BatchResponse, GenerateImageRequest } from '@aigc/types'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn, generateUUID } from '@/lib/utils'
 import { useGenerationStore } from '@/stores/generation-store'
+import { useAuthStore } from '@/stores/auth-store'
 import { translateTaskError } from '@/lib/error-messages'
-import { apiDelete } from '@/lib/api-client'
+import { apiDelete, apiPost, getRequestErrorMessage } from '@/lib/api-client'
+import { getBatchImagePreviewUrls, getBatchVideoPreviewUrl, getBatchResourceTypes } from './batch-preview'
 
 interface BatchListCardProps {
   batch: BatchResponse & { thumbnail_urls?: string[] }
   onClick?: () => void
   onHide?: (id: string) => void
+  onRegenerateCreated?: (batch: BatchResponse) => void
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'processing' | 'warning' | 'outline' }> = {
@@ -27,6 +31,344 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'succes
   failed: { label: '失败', variant: 'destructive' },
 }
 
+const resourceTypeLabels: Record<string, string> = {
+  image: '图片',
+  video: '视频',
+  audio: '音频',
+}
+
+/** 将 "16:9" 格式的宽高比转为 CSS aspect-ratio 值 "16 / 9" */
+export function parseAspectRatio(ratio?: string): string {
+  if (!ratio) return '1 / 1'
+  const [w, h] = ratio.split(':')
+  if (!w || !h || isNaN(Number(w)) || isNaN(Number(h))) return '1 / 1'
+  return `${w} / ${h}`
+}
+
+function setAssetDragData(e: React.DragEvent, url: string, type: 'image' | 'video') {
+  e.dataTransfer.setData('application/x-aigc-asset-url', url)
+  e.dataTransfer.setData('application/x-aigc-asset-type', type)
+  e.dataTransfer.setData('text/uri-list', url)
+  e.dataTransfer.setData('text/plain', url)
+  e.dataTransfer.effectAllowed = 'copy'
+}
+
+function preventPendingAssetDrag(e: React.DragEvent, type: 'image' | 'video') {
+  e.preventDefault()
+  toast.error(type === 'image' ? '图片加载完成后才能拖拽到参考' : '视频加载完成后才能拖拽到参考')
+}
+
+function setCompactDragPreview(e: React.DragEvent, url: string, type: 'image' | 'video') {
+  const preview = document.createElement('div')
+  preview.style.position = 'fixed'
+  preview.style.left = '-120px'
+  preview.style.top = '-120px'
+  preview.style.width = '96px'
+  preview.style.height = '96px'
+  preview.style.borderRadius = '16px'
+  preview.style.overflow = 'hidden'
+  preview.style.background = 'hsl(var(--muted))'
+  preview.style.border = '1px solid rgba(255,255,255,0.16)'
+  preview.style.boxShadow = '0 14px 34px rgba(0,0,0,0.35)'
+  preview.style.pointerEvents = 'none'
+
+  if (type === 'image') {
+    const image = document.createElement('img')
+    image.src = url
+    image.alt = ''
+    image.style.width = '100%'
+    image.style.height = '100%'
+    image.style.objectFit = 'cover'
+    preview.appendChild(image)
+  } else {
+    preview.innerHTML = '<div style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;background:#050816;color:white;font-size:12px;font-weight:600;">视频</div>'
+  }
+
+  document.body.appendChild(preview)
+  e.dataTransfer.setDragImage(preview, 48, 48)
+  window.setTimeout(() => preview.remove(), 0)
+}
+
+function handleLoadedImageDragStart(e: React.DragEvent<HTMLImageElement>, url: string) {
+  const image = e.currentTarget
+  e.stopPropagation()
+  if (!image.complete || image.naturalWidth <= 0) {
+    preventPendingAssetDrag(e, 'image')
+    return
+  }
+  setAssetDragData(e, url, 'image')
+  setCompactDragPreview(e, url, 'image')
+}
+
+/** 视频预览：16:9 固定比例，进入视野自动静音播放 */
+function VideoPreview({ url }: { url: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          video.play().catch(() => {})
+        } else {
+          video.pause()
+        }
+      },
+      { threshold: 0.4 },
+    )
+    observer.observe(video)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div
+      className={cn(
+        'relative w-full aspect-video rounded-md overflow-hidden bg-black',
+        isReady ? 'cursor-grab active:cursor-grabbing' : 'cursor-wait',
+      )}
+      draggable
+      onDragStart={(e) => {
+        if (!isReady) {
+          preventPendingAssetDrag(e, 'video')
+          return
+        }
+        setAssetDragData(e, url, 'video')
+      }}
+      title={isReady ? '拖拽到视频参考区域' : '视频加载完成后可拖拽'}
+    >
+      <video
+        ref={videoRef}
+        src={url}
+        className="absolute inset-0 w-full h-full object-cover"
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        controls
+        draggable
+        onDragStart={(e) => {
+          if (e.currentTarget.readyState < HTMLMediaElement.HAVE_METADATA) {
+            preventPendingAssetDrag(e, 'video')
+            return
+          }
+          setAssetDragData(e, url, 'video')
+          setCompactDragPreview(e, url, 'video')
+        }}
+        onLoadedMetadata={() => setIsReady(true)}
+      />
+    </div>
+  )
+}
+
+/** 判断是否为竖向比例（高 > 宽） */
+function isPortraitRatio(ratio: string): boolean {
+  const [w, h] = ratio.split(':').map(Number)
+  return !!w && !!h && h > w
+}
+
+/** 图片轮播：
+ *  - 横图（16:9 / 4:3 / 1:1）：固定高度 280px，宽度按比例，一次一张，左右翻页
+ *  - 竖图（9:16 / 3:4）：瀑布流展示所有图，左下角页签点击滚动定位
+ */
+function ImageCarousel({ urls, aspectRatio }: { urls: string[]; aspectRatio: string }) {
+  const [index, setIndex] = useState(0)
+  const [loadedUrls, setLoadedUrls] = useState<Set<string>>(new Set())
+  const isPortrait = isPortraitRatio(aspectRatio)
+  const isMulti = urls.length > 1
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([])
+  const containerRef = useRef<HTMLDivElement>(null)
+  const currentUrl = urls[index]
+  const isCurrentLoaded = loadedUrls.has(currentUrl)
+
+  const markLoaded = (url: string) => {
+    setLoadedUrls((current) => {
+      if (current.has(url)) return current
+      const next = new Set(current)
+      next.add(url)
+      return next
+    })
+  }
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndex((i) => Math.max(0, i - 1))
+  }
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndex((i) => Math.min(urls.length - 1, i + 1))
+  }
+
+  // 竖图：点击页签滚动到对应图片
+  const handleTabClick = (e: React.MouseEvent, i: number) => {
+    e.stopPropagation()
+    setIndex(i)
+    itemRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+
+  // 横图模式
+  if (!isPortrait) {
+    return (
+      <div
+        className="generation-dream-media-frame group relative w-full rounded-2xl overflow-hidden bg-muted flex justify-center"
+      >
+        <div
+          className={cn('relative', isCurrentLoaded ? 'cursor-grab active:cursor-grabbing' : 'cursor-wait')}
+          style={{ height: 400, aspectRatio }}
+          title={isCurrentLoaded ? '拖拽当前图片到参考区域' : '图片加载完成后可拖拽'}
+        >
+          <Image
+            src={currentUrl}
+            alt=""
+            fill
+            className="object-cover"
+            sizes="600px"
+            unoptimized
+            draggable
+            onDragStart={(e) => handleLoadedImageDragStart(e, currentUrl)}
+            onLoad={() => markLoaded(currentUrl)}
+          />
+        </div>
+        {isMulti && (
+          <>
+            <button
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
+                flex items-center justify-center
+                bg-white/20 backdrop-blur-sm border border-white/30
+                text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
+                opacity-0 group-hover:opacity-100 transition-all duration-200
+                hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
+                hover:border-transparent hover:scale-110
+                disabled:opacity-0 disabled:pointer-events-none"
+              onClick={handlePrev}
+              disabled={index === 0}
+            >
+              <ChevronLeft className="h-5 w-5 drop-shadow" />
+            </button>
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full
+                flex items-center justify-center
+                bg-white/20 backdrop-blur-sm border border-white/30
+                text-white shadow-[0_2px_8px_rgba(107,163,245,0.4)]
+                opacity-0 group-hover:opacity-100 transition-all duration-200
+                hover:bg-gradient-to-br hover:from-[#F5A962] hover:via-[#C89BEC] hover:to-[#6BA3F5]
+                hover:border-transparent hover:scale-110
+                disabled:opacity-0 disabled:pointer-events-none"
+              onClick={handleNext}
+              disabled={index === urls.length - 1}
+            >
+              <ChevronRight className="h-5 w-5 drop-shadow" />
+            </button>
+            {/* 左下角页码 */}
+            <div className="absolute bottom-2 left-3 flex items-center gap-1">
+              {urls.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => { e.stopPropagation(); setIndex(i) }}
+                  className="h-5 min-w-[20px] px-1.5 rounded text-[10px] font-medium transition-all duration-200 leading-none"
+                  style={{
+                    background: i === index
+                      ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                      : 'rgba(0,0,0,0.45)',
+                    backdropFilter: 'blur(6px)',
+                    color: i === index ? 'white' : 'rgba(255,255,255,0.85)',
+                    border: i === index ? 'none' : '1px solid rgba(255,255,255,0.5)',
+                  }}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            {/* 底部居中指示点 */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1">
+              {urls.map((_, i) => (
+                <span
+                  key={i}
+                  className="block h-1 rounded-full transition-all duration-300"
+                  style={{
+                    width: i === index ? 16 : 4,
+                    background: i === index
+                      ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                      : 'rgba(255,255,255,0.45)',
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // 竖图模式：瀑布流 + 左下角页签
+  return (
+    <div className="generation-dream-media-frame relative w-full rounded-2xl overflow-hidden bg-muted">
+      <div
+        ref={containerRef}
+        className="columns-2 gap-1.5"
+        style={{ columnFill: 'balance' }}
+      >
+        {urls.map((url, i) => (
+          <div
+            key={i}
+            ref={(el) => { itemRefs.current[i] = el }}
+            className={cn(
+              'break-inside-avoid mb-1.5 overflow-hidden rounded-sm',
+              loadedUrls.has(url) ? 'cursor-grab active:cursor-grabbing' : 'cursor-wait',
+            )}
+            draggable
+            onDragStart={(e) => {
+              if (!loadedUrls.has(url)) {
+                preventPendingAssetDrag(e, 'image')
+                return
+              }
+              setAssetDragData(e, url, 'image')
+            }}
+            title={loadedUrls.has(url) ? '拖拽当前图片到参考区域' : '图片加载完成后可拖拽'}
+          >
+            <Image
+              src={url}
+              alt=""
+              width={0}
+              height={0}
+              sizes="50vw"
+              className="w-full h-auto block"
+              style={{ aspectRatio }}
+              unoptimized
+              draggable
+              onDragStart={(e) => handleLoadedImageDragStart(e, url)}
+              onLoad={() => markLoaded(url)}
+            />
+          </div>
+        ))}
+      </div>
+      {/* 左下角页签 */}
+      {isMulti && (
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 flex-wrap max-w-[60%]">
+          {urls.map((_, i) => (
+            <button
+              key={i}
+              onClick={(e) => handleTabClick(e, i)}
+              className="h-5 min-w-[20px] px-1.5 rounded text-[10px] font-medium transition-all duration-200 leading-none"
+              style={{
+                background: i === index
+                  ? 'linear-gradient(90deg, #F5A962, #C89BEC, #6BA3F5)'
+                  : 'rgba(255,255,255,0.25)',
+                backdropFilter: 'blur(4px)',
+                color: 'white',
+                border: i === index ? 'none' : '1px solid rgba(255,255,255,0.3)',
+              }}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function formatElapsed(ms: number) {
   const seconds = Math.max(0, Math.floor(ms / 1000))
   const minutes = Math.floor(seconds / 60)
@@ -34,12 +376,51 @@ function formatElapsed(ms: number) {
   return minutes > 0 ? `${minutes}分${rest}秒` : `${rest}秒`
 }
 
-export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
+function getBatchParams(batch: BatchResponse): Record<string, unknown> {
+  return batch.params && typeof batch.params === 'object' && !Array.isArray(batch.params)
+    ? batch.params as Record<string, unknown>
+    : {}
+}
+
+async function regenerateBatch(batch: BatchResponse, workspaceId: string): Promise<BatchResponse> {
+  const params = getBatchParams(batch)
+
+  if (batch.module === 'image') {
+    const imageParams = { ...params }
+    if (!imageParams.image && Array.isArray(imageParams.reference_image_urls)) {
+      imageParams.image = imageParams.reference_image_urls
+    }
+    const body: GenerateImageRequest = {
+      idempotency_key: generateUUID(),
+      model: batch.model,
+      prompt: batch.prompt.trim(),
+      quantity: batch.quantity,
+      params: imageParams,
+      workspace_id: workspaceId,
+    }
+    return apiPost<BatchResponse>('/generate/image', body)
+  }
+
+  if (batch.module === 'video') {
+    return apiPost<BatchResponse>('/videos/generate', {
+      workspace_id: workspaceId,
+      model: batch.model,
+      prompt: batch.prompt.trim(),
+      ...params,
+    })
+  }
+
+  throw new Error('当前类型暂不支持从历史记录直接重新生成')
+}
+
+export function BatchListCard({ batch, onClick, onHide, onRegenerateCreated }: BatchListCardProps) {
   const router = useRouter()
   const applyBatch = useGenerationStore((s) => s.applyBatch)
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const [applied, setApplied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [hiding, setHiding] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const status = statusConfig[batch.status] ?? statusConfig.pending
 
@@ -82,8 +463,12 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
     e.stopPropagation()
     applyBatch(batch)
     setApplied(true)
+    navigateToBatchMode()
 
-    // Auto-navigate to appropriate generation page
+    setTimeout(() => setApplied(false), 1500)
+  }
+
+  function navigateToBatchMode() {
     const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
     if ((batch as any).module === 'avatar') {
       router.push('/generation?mode=avatar')
@@ -94,21 +479,43 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
     } else {
       router.push('/generation')
     }
-
-    setTimeout(() => setApplied(false), 1500)
   }
 
-  // Use thumbnail_urls from list API, fall back to tasks data
-  const thumbnails: string[] = (batch as any).thumbnail_urls?.length
-    ? (batch as any).thumbnail_urls
-    : batch.tasks
-        .filter((t) => t.status === 'completed' && (t.asset?.storage_url || t.asset?.original_url))
-        .map((t) => t.asset!.storage_url ?? t.asset!.original_url!)
+  async function handleRegenerate(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (regenerating) return
+    if (!activeWorkspaceId) {
+      toast.error('当前没有可用的工作区')
+      return
+    }
+    if (batch.module !== 'image' && batch.module !== 'video') {
+      toast.error('当前类型暂不支持从历史记录直接重新生成')
+      return
+    }
+    if (!batch.prompt?.trim()) {
+      toast.error('缺少提示词，无法重新生成')
+      return
+    }
+
+    setRegenerating(true)
+    try {
+      applyBatch(batch)
+      navigateToBatchMode()
+      const nextBatch = await regenerateBatch(batch, activeWorkspaceId)
+      onRegenerateCreated?.(nextBatch)
+      toast.success('已提交重新生成')
+    } catch (err) {
+      toast.error(getRequestErrorMessage(err, err instanceof Error ? err.message : '重新生成失败，请稍后重试'))
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  const thumbnails = getBatchImagePreviewUrls(batch)
+  const resourceTypes = getBatchResourceTypes(batch)
 
   const time = new Date(batch.created_at)
-
-  const showLoading = thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing')
-  console.log('[BatchListCard]', batch.id, 'status:', batch.status, 'thumbnails:', thumbnails.length, 'showLoading:', showLoading)
+  const thumbnailAspect = parseAspectRatio((batch as any).params?.aspect_ratio)
 
   // First error message: prefer batch-level field (set by list API), fall back to tasks array
   const firstError: string | null =
@@ -117,11 +524,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
     ?? null
 
   const isVideo = (batch as any).module === 'video' || (batch as any).module === 'avatar' || (batch as any).module === 'action_imitation'
-  const videoUrl = isVideo
-    ? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.storage_url
-      ?? batch.tasks.find((t) => t.status === 'completed' && (t.asset?.storage_url ?? t.asset?.original_url))?.asset?.original_url
-      ?? (batch as any).thumbnail_urls?.[0]  // fallback: list API puts video URL here
-    : undefined
+  const videoUrl = isVideo ? getBatchVideoPreviewUrl(batch) : undefined
   const firstProcessingStartedAt = batch.tasks
     .map((task) => task.processing_started_at)
     .find(Boolean)
@@ -135,7 +538,7 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
 
   return (
     <Card
-      className={cn('cursor-pointer transition-shadow hover:shadow-md w-full', onClick && 'hover:border-primary/50')}
+      className={cn('generation-dream-history-card cursor-pointer transition-shadow hover:shadow-md w-full', onClick && 'hover:border-primary/50')}
       onClick={onClick}
     >
       <CardContent className="p-4 space-y-3 max-w-full overflow-hidden">
@@ -147,6 +550,11 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               <Badge variant={status.variant} className="text-[10px]">
                 {status.label}
               </Badge>
+              {resourceTypes.map((type) => (
+                <Badge key={type} variant="outline" className="text-[10px]">
+                  {resourceTypeLabels[type] ?? type}
+                </Badge>
+              ))}
               <span className="text-xs text-muted-foreground">
                 {batch.completed_count}/{batch.quantity}
               </span>
@@ -164,74 +572,38 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               </span>
             </div>
           </div>
-          <div className="text-right shrink-0">
-            <p className="text-xs text-muted-foreground">积分</p>
-            <p className="text-sm font-medium">{batch.actual_credits || batch.estimated_credits}</p>
-          </div>
         </div>
 
         {/* Thumbnail grid / video preview */}
         {isVideo ? (
           videoUrl ? (
-            <div className="flex gap-2 overflow-hidden">
-              <div className="relative h-16 w-16 shrink-0 rounded-md overflow-hidden bg-muted [transform:translateZ(0)]">
-                <video
-                  src={videoUrl}
-                  className="h-full w-full object-contain"
-                  muted
-                  preload="metadata"
-                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.001 }}
-                />
-                <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5">
-                  <Play className="h-2 w-2 text-white fill-white" />
-                  <span className="text-[9px] text-white font-medium leading-none">视频</span>
-                </div>
-              </div>
-            </div>
+            <VideoPreview url={videoUrl} />
           ) : (batch.status === 'pending' || batch.status === 'processing') ? (
-            <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
+            <div className="generation-dream-media-frame flex h-16 w-16 items-center justify-center rounded-xl bg-muted gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : (batch.status === 'failed' || batch.status === 'partial_complete') && firstError ? (
             <div className="flex h-16 w-full items-center gap-2 rounded-md bg-destructive/10 px-3">
               <Video className="h-4 w-4 shrink-0 text-destructive" />
               <p className="text-xs text-destructive line-clamp-2">
-                {translateTaskError(firstError)}，本次失败任务积分已退还
+                {translateTaskError(firstError)}，本次失败任务A豆已退还
               </p>
             </div>
           ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted gap-2">
+            <div className="generation-dream-media-frame flex h-16 w-16 items-center justify-center rounded-xl bg-muted gap-2">
               <Video className="h-4 w-4 text-muted-foreground" />
             </div>
           )
         ) : (
           <>
-            {/* Image thumbnails */}
+            {/* Image thumbnails — 宽度填满按比例，多图轮播 */}
             {thumbnails.length > 0 && (
-              <div className="flex gap-2 overflow-hidden">
-                {thumbnails.slice(0, 5).map((url, i) => (
-                  <div key={i} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
-                    <Image
-                      src={url}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      sizes="64px"
-                      unoptimized
-                    />
-                  </div>
-                ))}
-                {thumbnails.length > 5 && (
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                    +{thumbnails.length - 5}
-                  </div>
-                )}
-              </div>
+              <ImageCarousel urls={thumbnails} aspectRatio={thumbnailAspect} />
             )}
 
             {/* Loading animation for pending/processing */}
             {thumbnails.length === 0 && (batch.status === 'pending' || batch.status === 'processing') && (
-              <div className="flex h-16 items-center justify-center rounded-md bg-muted">
+              <div className="generation-dream-media-frame flex h-16 items-center justify-center rounded-xl bg-muted">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             )}
@@ -241,11 +613,11 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               (batch.status === 'failed' || batch.status === 'partial_complete') && firstError ? (
                 <div className="flex h-16 w-full items-center gap-2 rounded-md bg-destructive/10 px-3">
                   <p className="text-xs text-destructive line-clamp-2">
-                    {translateTaskError(firstError)}，本次失败任务积分已退还
+                    {translateTaskError(firstError)}，本次失败任务A豆已退还
                   </p>
                 </div>
               ) : (
-                <div className="flex h-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                <div className="generation-dream-media-frame flex h-16 items-center justify-center rounded-xl bg-muted text-xs text-muted-foreground">
                   暂无图片
                 </div>
               )
@@ -266,27 +638,39 @@ export function BatchListCard({ batch, onClick, onHide }: BatchListCardProps) {
               {cancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <><X className="h-3 w-3 mr-1" />取消</>}
             </Button>
           )}
+          <div className="flex h-7 items-center px-2 text-xs font-medium text-muted-foreground">
+            {batch.actual_credits || batch.estimated_credits} A豆
+          </div>
           <Button
             size="sm"
             variant="ghost"
             className={cn(
-              'h-7 px-2 text-xs',
+              'h-7 border border-primary/40 px-2 text-xs text-primary hover:border-primary/70 hover:bg-primary/10 hover:text-primary',
               applied && 'text-green-600'
             )}
             onClick={handleApply}
           >
             {applied ? <><Check className="h-3 w-3 mr-1" />已填入</> : <><RotateCcw className="h-3 w-3 mr-1" />复用</>}
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 border border-primary/40 px-2 text-xs text-primary hover:border-primary/70 hover:bg-primary/10 hover:text-primary"
+            onClick={handleRegenerate}
+            disabled={regenerating}
+          >
+            {regenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <><RefreshCw className="h-3 w-3 mr-1" />重新生成</>}
+          </Button>
           {onHide && (
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              className="h-7 border border-primary/40 px-2 text-xs text-primary hover:border-primary/70 hover:bg-primary/10 hover:text-primary"
               onClick={handleHide}
               disabled={hiding}
-              title="隐藏"
+              title="删除记录"
             >
-              {hiding ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+              {hiding ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Trash2 className="h-3 w-3 mr-1" />删除记录</>}
             </Button>
           )}
         </div>

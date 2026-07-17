@@ -3,7 +3,7 @@
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { useCallback } from 'react'
-import type { BatchResponse, BatchListResponse } from '@aigc/types'
+import type { BatchResponse, BatchListResponse, BatchSource } from '@aigc/types'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiDelete, apiPatch } from '@/lib/api-client'
 
@@ -19,16 +19,17 @@ export async function cancelSeedanceBatch(batchId: string): Promise<void> {
   await apiDelete(`/videos/batches/${batchId}/cancel`)
 }
 
-export function useBatches() {
+export function useBatches(source: BatchSource = 'generation') {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const wsParam = activeWorkspaceId ? `&workspace_id=${activeWorkspaceId}` : ''
 
   const { data, error, size, setSize, isValidating, mutate } = useSWRInfinite<BatchListResponse>(
     (pageIndex, previousPageData) => {
-      if (!activeWorkspaceId) return null
+      if (!isInitialized || !activeWorkspaceId) return null
       if (previousPageData && !previousPageData.cursor) return null
-      if (pageIndex === 0) return `/batches?limit=${PAGE_SIZE}${wsParam}`
-      return `/batches?limit=${PAGE_SIZE}&cursor=${previousPageData!.cursor}${wsParam}`
+      if (pageIndex === 0) return `/batches?limit=${PAGE_SIZE}&source=${source}${wsParam}`
+      return `/batches?limit=${PAGE_SIZE}&source=${source}&cursor=${previousPageData!.cursor}${wsParam}`
     },
     { revalidateFirstPage: false, revalidateOnFocus: true, revalidateOnReconnect: true, dedupingInterval: 10000, focusThrottleInterval: 15000 },
   )
@@ -48,14 +49,12 @@ export function useBatches() {
   }, [mutate])
 
   const updateBatchInList = useCallback((updated: BatchResponse) => {
-    console.log('[useBatches] updateBatchInList called with:', updated.id, updated.status, updated.completed_count)
     mutate((pages) => {
       if (!pages) return pages
       const newPages = pages.map((page) => ({
         ...page,
         data: page.data.map((b) => b.id === updated.id ? { ...b, ...updated } : b),
       }))
-      console.log('[useBatches] mutate completed, new pages:', newPages[0]?.data[0])
       return newPages
     }, { revalidate: false })
   }, [mutate])
@@ -83,16 +82,17 @@ export function useBatches() {
   }
 }
 
-export function useHiddenBatches(enabled: boolean) {
+export function useHiddenBatches(enabled: boolean = true, source: BatchSource = 'generation') {
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const wsParam = activeWorkspaceId ? `&workspace_id=${activeWorkspaceId}` : ''
 
   const { data, error, size, setSize, isValidating, mutate } = useSWRInfinite<BatchListResponse>(
     (pageIndex, previousPageData) => {
-      if (!enabled || !activeWorkspaceId) return null
+      if (!enabled || !isInitialized || !activeWorkspaceId) return null
       if (previousPageData && !previousPageData.cursor) return null
-      if (pageIndex === 0) return `/batches/hidden?limit=${PAGE_SIZE}${wsParam}`
-      return `/batches/hidden?limit=${PAGE_SIZE}&cursor=${previousPageData!.cursor}${wsParam}`
+      if (pageIndex === 0) return `/batches/hidden?limit=${PAGE_SIZE}&source=${source}${wsParam}`
+      return `/batches/hidden?limit=${PAGE_SIZE}&source=${source}&cursor=${previousPageData!.cursor}${wsParam}`
     },
     { revalidateFirstPage: false, revalidateOnFocus: false, revalidateOnReconnect: false },
   )

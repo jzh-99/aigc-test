@@ -16,7 +16,6 @@ interface TeamModelConfigItem {
   code: string
   name: string
   module: string
-  credit_cost: number
   is_active: boolean           // 全局默认值
   effective_is_active: boolean // 合并后的实际值（团队覆盖 > 全局默认）
   has_override: boolean        // 是否有团队级覆盖记录
@@ -164,11 +163,6 @@ function ModelRow({ model, onToggle, onRestore }: ModelRowProps): React.ReactEle
         <span className="font-medium">{model.name}</span>
         <span className="ml-1.5 text-xs text-muted-foreground">{model.code}</span>
       </div>
-
-      {/* 积分消耗 */}
-      <span className="text-xs text-muted-foreground shrink-0">
-        {model.credit_cost} 积分
-      </span>
 
       {/* 已覆盖 Badge + 恢复默认按钮 */}
       {model.has_override && (

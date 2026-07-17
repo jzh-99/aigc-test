@@ -2,12 +2,16 @@ import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
 import { Queue } from 'bullmq'
 import type { GenerationJobData } from '@aigc/types'
-import { getRedis, getPubRedis } from '../lib/redis.js'
+import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
+import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
+import { buildLogger } from '../logger.js'
+
+const logger = buildLogger()
 
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
   if (!_transferQueue) {
-    _transferQueue = new Queue('transfer-queue', { connection: getRedis() })
+    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _transferQueue
 }
@@ -25,6 +29,8 @@ export async function completePipeline(
   const { taskId, batchId, userId, teamId, creditAccountId, estimatedCredits } = jobData
 
   const assetId = await db.transaction().execute<string>(async (trx: any) => {
+    logger.info({ taskId, batchId }, '开始执行完成管线')
+
     // 1. Insert asset row
     const assetResult = await trx
       .insertInto('assets')
@@ -38,6 +44,7 @@ export async function completePipeline(
       })
       .returning('id')
       .executeTakeFirstOrThrow()
+    logger.info({ assetId: assetResult.id, taskId }, '资产记录已创建')
 
     // 2. Confirm credits: frozen -= estimated, balance -= actual, total_spent += actual
     await trx
@@ -73,7 +80,7 @@ export async function completePipeline(
         type: 'confirm',
         task_id: taskId,
         batch_id: batchId,
-        description: 'Image generation confirmed',
+        description: '图片生成成功',
       })
       .execute()
 
@@ -92,8 +99,10 @@ export async function completePipeline(
 
     // If no rows updated, task was already processed — skip remaining
     if (Number((taskUpdate as any)[0]?.numUpdatedRows ?? (taskUpdate as any).numUpdatedRows ?? 0) === 0) {
+      logger.warn({ taskId, batchId }, '任务已处理，跳过后续逻辑（幂等保护触发）')
       return assetResult.id
     }
+    logger.info({ taskId, batchId }, '任务状态已更新为 completed')
 
     // 5. Update batch counts + check terminal (with row lock)
     await trx
@@ -137,7 +146,16 @@ export async function completePipeline(
   })
 
   // 6. Publish SSE event (outside transaction)
-  await getPubRedis().publish(`sse:batch:${batchId}`, JSON.stringify({ event: 'batch_update' }))
+  const channel = `sse:batch:${batchId}`
+  const publishPayload = JSON.stringify({ event: 'batch_update' })
+  logger.info({ batchId, channel }, '准备发布 SSE 事件')
+  try {
+    const result = await getPubRedis().publish(channel, publishPayload)
+    logger.info({ batchId, publishResult: result }, 'SSE 事件发布成功')
+  } catch (err) {
+    logger.error({ batchId, err }, 'SSE 事件发布失败')
+    throw err
+  }
 
   // 6b. Canvas output tracking: write canvas_node_outputs + increment dirty version
   if (jobData.canvasId && jobData.canvasNodeId) {
@@ -171,9 +189,18 @@ export async function completePipeline(
   }
 
   // 7. Enqueue transfer job
-  await getTransferQueue().add('transfer', {
-    taskId,
-    assetId,
-    originalUrl: outputUrl,
-  })
+  try {
+    const transferJob = await getTransferQueue().add('transfer', {
+      taskId,
+      batchId,
+      assetId,
+      originalUrl: outputUrl,
+    }, {
+      attempts: 10,
+      backoff: { type: 'exponential', delay: 30_000 }, // 30s → 1m → 2m → ... 最大约 30m，总覆盖 ~2.5h
+    })
+    logger.info({ transferJobId: transferJob?.id, assetId }, '[transfer] 入队成功')
+  } catch (transferErr) {
+    logger.error({ err: String(transferErr), assetId }, '[transfer] 入队失败')
+  }
 }

@@ -1,24 +1,29 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import * as Popover from '@radix-ui/react-popover'
+import { Check, ChevronDown, ImagePlus, Image as ImageIcon, Search } from 'lucide-react'
+import { resolveMentionPrompt, syncMentionResourceLabels } from '@/components/shared/mention-editor'
+import type { MentionResource } from '@/components/shared/mention-editor'
 import { useGenerationStore } from '@/stores/generation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerate } from '@/hooks/use-generate'
-import { useGenerationDefaults } from '@/hooks/use-generation-defaults'
-import { ImagePlus, Image as ImageIcon, Search, Trash2 } from 'lucide-react'
 import type { BatchResponse } from '@aigc/types'
+import type { ModelItem } from '@aigc/types'
 import { toast } from 'sonner'
 import { getRequestErrorMessage } from '@/lib/api-client'
-import { ReferenceImageUploadCompact } from '../reference-image-upload-compact'
 import { CompanyAImagePicker } from '../company-a-image-picker'
 import { cn, generateUUID } from '@/lib/utils'
-import Image from 'next/image'
+import { ModelBrandIcon } from '../shared/model-brand-icon'
+import { ImmersiveEditor } from '../shared/immersive-editor'
+import type { MediaGridItem } from '../shared/media-grid-types'
+
 import { ImageParams } from './image-params'
 import { isValidImageFile } from '../shared/file-utils'
 import { MAX_REF_IMAGES } from '../shared/constants'
+import { getModelAspectRatios, getModelResolutions, getPriceByResolution } from '../shared/schema-utils'
 import { useModels } from '@/hooks/use-models'
+import { getMaxImageReferenceCount } from '@/lib/image-categories'
 
 interface ImagePanelProps {
   onBatchCreated: (batch: BatchResponse) => void
@@ -33,36 +38,90 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
     resolution, setResolution,
     quantity, setQuantity,
     aspectRatio, setAspectRatio,
-    referenceImages, addReferenceImage, clearReferenceImages,
-    watermark, isGenerating,
-    saveAsDefaults, videoDefaults, avatarDefaults, userDefaults,
+    referenceImages, addReferenceImage,
+    isGenerating,
+    setImageModels,
   } = useGenerationStore()
 
-  const { save: saveDefaults } = useGenerationDefaults()
   const { generate } = useGenerate()
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
   const { models: imageModels, isReady: imageModelsReady } = useModels('image', activeWorkspaceId)
+  const currentImageModel = imageModels.find((m) => m.code === modelType)
+  const maxReferenceImages = currentImageModel ? getMaxImageReferenceCount(currentImageModel) : MAX_REF_IMAGES
+  const estimatedCredits = currentImageModel ? getPriceByResolution(currentImageModel, resolution) * quantity : 0
+  const previousMentionResourcesRef = useRef<MentionResource[] | null>(null)
+
+  /** 将已上传的参考图映射为 @ 提及资源 */
+  const mentionResources = useMemo<MentionResource[]>(() =>
+    referenceImages.map((img, index) => ({
+      id: img.id,
+      mentionLabel: `图片${index + 1}`,
+      sourceLabel: '参考图',
+      kind: 'image',
+    }))
+  , [referenceImages])
+
+  // 模型列表加载完成后缓存到 store，供 use-generate 查 params_pricing
+  useEffect(() => {
+    if (imageModelsReady && imageModels.length > 0) {
+      setImageModels(imageModels)
+    }
+  }, [imageModelsReady, imageModels, setImageModels])
 
   // 模型列表加载完成后，若当前选中的模型不在可用列表中，自动切换到第一个可用模型
   useEffect(() => {
     if (!imageModelsReady || imageModels.length === 0) return
     const isValid = imageModels.some((m) => m.code === modelType)
     if (!isValid) {
-      setModelType(imageModels[0].code as any)
+      const firstModel = imageModels[0].code
+      setModelType(firstModel)
+      // 同步重置为新模型的首个分辨率
+      const resolutions = getModelResolutions(firstModel, imageModels)
+      if (resolutions.length > 0) setResolution(resolutions[0] as typeof resolution)
+      const aspectRatios = getModelAspectRatios(firstModel, imageModels)
+      if (aspectRatios.length > 0) setAspectRatio(aspectRatios[0])
+    } else {
+      // 模型有效，但当前 resolution 可能不在该模型支持列表中，自动修正
+      const resolutions = getModelResolutions(modelType, imageModels)
+      if (resolutions.length > 0 && !resolutions.includes(resolution)) {
+        setResolution(resolutions[0] as typeof resolution)
+      }
+      const aspectRatios = getModelAspectRatios(modelType, imageModels)
+      if (aspectRatios.length > 0 && !aspectRatios.includes(aspectRatio)) {
+        setAspectRatio(aspectRatios[0])
+      }
     }
-  }, [imageModelsReady, imageModels, modelType, setModelType])
+  }, [imageModelsReady, imageModels, modelType, resolution, aspectRatio, setModelType, setResolution, setAspectRatio])
 
-  const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [companyAPickerOpen, setCompanyAPickerOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const dragCounterRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    const previousResources = previousMentionResourcesRef.current
+    previousMentionResourcesRef.current = mentionResources
+    if (!previousResources) return
+    const nextPrompt = syncMentionResourceLabels(prompt, previousResources, mentionResources)
+    if (nextPrompt !== prompt) setPrompt(nextPrompt)
+  }, [mentionResources, prompt, setPrompt])
+
+  /** 将参考图映射为缩略图网格条目 */
+  const gridItems = useMemo<MediaGridItem[]>(() =>
+    referenceImages.map((img, index) => ({
+      id: img.id,
+      kind: 'image' as const,
+      previewUrl: img.previewUrl,
+      label: `图片${index + 1}`,
+    }))
+  , [referenceImages])
+
   const handleImageFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
+    let nextReferenceCount = referenceImages.length
     for (const file of Array.from(files)) {
-      if (referenceImages.length >= MAX_REF_IMAGES) {
-        toast.error(`最多添加 ${MAX_REF_IMAGES} 张参考图`)
+      if (nextReferenceCount >= maxReferenceImages) {
+        toast.error(`当前模型最多添加 ${maxReferenceImages} 张参考图`)
         break
       }
       if (!isValidImageFile(file)) {
@@ -74,18 +133,18 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
         continue
       }
       addReferenceImage({ id: generateUUID(), file, previewUrl: URL.createObjectURL(file) })
+      nextReferenceCount += 1
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
-  }, [referenceImages.length, addReferenceImage])
+  }, [referenceImages.length, maxReferenceImages, addReferenceImage])
 
   const handleSelectCompanyAImage = useCallback(async (url: string) => {
-    if (referenceImages.length >= MAX_REF_IMAGES) {
-      toast.error(`最多添加 ${MAX_REF_IMAGES} 张参考图`)
+    if (referenceImages.length >= maxReferenceImages) {
+      toast.error(`当前模型最多添加 ${maxReferenceImages} 张参考图`)
       return
     }
     addReferenceImage({ id: generateUUID(), previewUrl: url })
-    toast.success('已添加参考图，提交时会自动加载原图')
-  }, [referenceImages.length, addReferenceImage])
+  }, [referenceImages.length, maxReferenceImages, addReferenceImage])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -119,7 +178,8 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
 
   const handleGenerate = async () => {
     try {
-      const batch = await generate()
+      const resolvedPrompt = resolveMentionPrompt(prompt, mentionResources)
+      const batch = await generate(resolvedPrompt)
       if (batch) onBatchCreated(batch)
     } catch (err) {
       toast.error(getRequestErrorMessage(err, '生成请求失败，请稍后重试'))
@@ -130,14 +190,28 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !isGenerating && !disabled) handleGenerate()
   }
 
-  const handleSaveDefaults = () => {
-    saveAsDefaults()
-    saveDefaults({ image: { modelType, resolution, aspectRatio, quantity, watermark }, video: videoDefaults ?? undefined, avatar: avatarDefaults ?? undefined })
-    toast.success('已保存为默认参数')
-  }
+  /** 删除单张参考图 */
+  const handleRemoveReferenceImage = useCallback((id: string) => {
+    useGenerationStore.setState((state) => ({
+      referenceImages: state.referenceImages.filter((img) => img.id !== id),
+    }))
+  }, [])
 
   return (
     <>
+      <ImageModelSelectorRow
+        models={imageModels}
+        modelType={modelType}
+        isDisabled={isGenerating || !!disabled}
+        onModelChange={(v) => {
+          setModelType(v)
+          const resolutions = getModelResolutions(v, imageModels)
+          if (resolutions.length > 0) setResolution(resolutions[0] as typeof resolution)
+          const aspectRatios = getModelAspectRatios(v, imageModels)
+          if (aspectRatios.length > 0) setAspectRatio(aspectRatios[0])
+        }}
+      />
+
       <div
         className={cn(
           'border border-border bg-card p-4 flex-1 flex flex-col min-h-0 relative transition-colors',
@@ -156,97 +230,60 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
           </div>
         )}
         <div className={cn('flex flex-col flex-1 min-h-0 gap-2', isDragging && 'opacity-30 pointer-events-none')}>
-          {/* 参考图区域 */}
-          <div className={cn('shrink-0', isCompanyA ? 'h-[88px]' : 'h-[68px]')}>
-            {referenceImages.length > 0 ? (
-              <div onClick={() => setImageDialogOpen(true)} className="cursor-pointer group h-full">
-                <div className="flex items-center gap-3 h-full">
-                  <div className="relative w-16 h-14 shrink-0">
-                    {referenceImages.slice(0, 3).map((img, index) => (
-                      <div key={img.id} className="absolute rounded-lg border-2 border-background shadow-md overflow-hidden transition-transform group-hover:scale-105"
-                        style={{ width: '44px', height: '44px', left: `${index * 14}px`, top: `${index * 3}px`, zIndex: 3 - index }}>
-                        <Image src={img.previewUrl} alt="" fill className="object-cover" sizes="44px" unoptimized />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{referenceImages.length} 张参考图</div>
-                    <div className="text-xs text-muted-foreground">点击查看和管理</div>
-                  </div>
-                  <ImageIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
-                  {isCompanyA && (
-                    <button onClick={(e) => { e.stopPropagation(); setCompanyAPickerOpen(true) }}
-                      className="h-6 w-6 rounded-md flex items-center justify-center text-blue-500 hover:bg-blue-500/10 transition-colors shrink-0" title="从图库搜索添加">
-                      <Search className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  <button onClick={(e) => { e.stopPropagation(); clearReferenceImages() }}
-                    className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0" title="清空全部参考图">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ) : isCompanyA ? (
-              <div onClick={() => fileInputRef.current?.click()}
-                className="h-full w-full rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all cursor-pointer flex items-center gap-3 px-3">
-                <ImagePlus className="h-6 w-6 text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-primary leading-tight">上传参考图</div>
-                  <div className="text-[11px] text-primary/60 leading-tight mt-0.5">点击或拖拽 · 最多 {MAX_REF_IMAGES} 张</div>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); setCompanyAPickerOpen(true) }}
-                  className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-medium transition-colors mr-2">
-                  <Search className="h-3.5 w-3.5" />图库搜索
-                </button>
-              </div>
-            ) : (
-              <div onClick={() => fileInputRef.current?.click()}
-                className="h-full w-full rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all cursor-pointer flex items-center gap-3 px-3">
-                <ImagePlus className="h-6 w-6 text-primary shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-primary leading-tight">上传参考图</div>
-                  <div className="text-[11px] text-primary/60 leading-tight mt-0.5">最多 {MAX_REF_IMAGES} 张 · 支持拖拽</div>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* CompanyA 图库搜索按钮（在编辑器上方） */}
+          {isCompanyA && (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setCompanyAPickerOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-600 transition-colors"
+              >
+                <Search className="h-3.5 w-3.5" />
+                图库搜索
+              </button>
+            </div>
+          )}
 
-          <div className="flex-1 min-h-0">
-            <Textarea
-              placeholder="描述你想要生成的图片...&#10;&#10;Ctrl+Enter 快速生成"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="h-full resize-none"
-              disabled={isGenerating || disabled}
-            />
-          </div>
+          {/* 沉浸式编辑器（缩略图网格 + 文本输入） */}
+          <ImmersiveEditor
+            gridItems={gridItems}
+            showAddButton={referenceImages.length < maxReferenceImages}
+            onAddClick={() => fileInputRef.current?.click()}
+            addButtonDisabled={isGenerating || disabled}
+            onRemoveItem={handleRemoveReferenceImage}
+            gridEmptyText="点击或拖拽上传参考图"
+            gridEmptyClassName="h-[88px] flex-col justify-center gap-2 text-center"
+            gridEmptyIcon={ImagePlus}
+            onGridEmptyClick={() => fileInputRef.current?.click()}
+            editorValue={prompt}
+            editorOnChange={setPrompt}
+            editorResources={mentionResources}
+            editorPlaceholder={'上传参考图、输入文字或 @ （紫色）参考内容，描述你想生成的图片。'}
+            editorDisabled={isGenerating || disabled}
+            editorMaxLength={null}
+            editorShowCharacterCount={false}
+            editorMentionClassName={() =>
+              'inline-flex items-center gap-1 rounded-md border border-primary/35 bg-primary/12 px-1.5 py-0.5 font-semibold text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_12px_rgba(200,156,236,0.12)] align-baseline'
+            }
+            editorMentionIcon={() => ImageIcon}
+            editorEmptyText="暂无可引用资源，请先上传参考图"
+          />
         </div>
       </div>
 
       <ImageParams
         models={imageModels}
-        modelsReady={imageModelsReady}
         modelType={modelType}
         resolution={resolution}
         aspectRatio={aspectRatio}
         quantity={quantity}
         isGenerating={isGenerating}
         disabled={disabled}
-        onModelChange={(v) => setModelType(v as typeof modelType)}
+        promptEmpty={!prompt.trim()}
         onResolutionChange={(v) => setResolution(v as typeof resolution)}
         onAspectRatioChange={setAspectRatio}
         onQuantityChange={setQuantity}
         onGenerate={handleGenerate}
-        onSaveDefaults={handleSaveDefaults}
       />
-
-      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>参考图片管理</DialogTitle></DialogHeader>
-          <div className="mt-4"><ReferenceImageUploadCompact expanded /></div>
-        </DialogContent>
-      </Dialog>
 
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple className="hidden"
         onChange={(e) => handleImageFiles(e.target.files)} />
@@ -255,5 +292,93 @@ export function ImagePanel({ onBatchCreated, disabled, isCompanyA }: ImagePanelP
         <CompanyAImagePicker open={companyAPickerOpen} onOpenChange={setCompanyAPickerOpen} onSelectPoster={handleSelectCompanyAImage} />
       )}
     </>
+  )
+}
+
+/** 图片模型选择器行 */
+function ImageModelSelectorRow({
+  models,
+  modelType,
+  isDisabled,
+  onModelChange,
+}: {
+  models?: ModelItem[]
+  modelType: string
+  isDisabled: boolean
+  onModelChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const currentModel = models?.find((m) => m.code === modelType)
+
+  return (
+    <div className="shrink-0 my-2">
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'flex w-full items-center gap-3.5 rounded-lg border px-3.5 py-2.5 transition-colors text-left',
+              open
+                ? 'border-primary/40 bg-card'
+                : 'border-border/60 bg-card hover:border-primary/30',
+            )}
+            disabled={isDisabled}
+          >
+            {/* 供应商图标 */}
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted/50 shrink-0">
+              <ModelBrandIcon avatar={currentModel?.avatar} modelCode={currentModel?.code ?? modelType} size={44} />
+            </div>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <div className="text-sm font-medium truncate">{currentModel?.name ?? modelType}</div>
+              {currentModel?.description && (
+                <div className="text-xs text-muted-foreground truncate">{currentModel.description}</div>
+              )}
+            </div>
+            <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            side="bottom"
+            align="start"
+            sideOffset={6}
+            className="z-[120] w-[var(--radix-popover-trigger-width)] rounded-xl border border-white/15 bg-card/40 p-2 shadow-2xl shadow-black/30 backdrop-blur-2xl ring-1 ring-white/10 animate-in fade-in-0 zoom-in-95"
+          >
+            <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">选择模型</div>
+            {(models ?? []).map((m) => {
+              const isActive = m.code === modelType
+              return (
+                <button
+                  key={m.code}
+                  type="button"
+                  onClick={() => { onModelChange(m.code); setOpen(false) }}
+                  disabled={isDisabled}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-popover-foreground hover:bg-muted',
+                    isDisabled && 'opacity-50 cursor-not-allowed',
+                  )}
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/50 shrink-0">
+                    <ModelBrandIcon avatar={m.avatar} modelCode={m.code} size={36} />
+                  </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{m.name}</span>
+                    {m.description && (
+                      <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
+                        {m.description}
+                      </span>
+                    )}
+                  </span>
+                  {isActive && <Check className="h-3 w-3 shrink-0" />}
+                </button>
+              )
+            })}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    </div>
   )
 }

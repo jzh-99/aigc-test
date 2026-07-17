@@ -6,7 +6,8 @@ import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasExecutionStore } from '@/stores/canvas/execution-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGenerationStore } from '@/stores/generation-store'
-import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig, isVideoStitchConfig } from '@/lib/canvas/types'
+import { isAssetConfig, isImageGenConfig, isVideoGenConfig, isScriptWriterConfig, isStoryboardSplitterConfig, isVideoStitchConfig, normalizeStoryboardShots } from '@/lib/canvas/types'
+import { parseCategoryReferences } from '@aigc/types'
 import { callCanvasAgent } from '@/lib/canvas/agent-api'
 import { generateUUID } from '@/lib/utils'
 import {
@@ -35,17 +36,11 @@ import {
   executeCanvasNode,
   executeVideoNode,
   executeScriptWriterNode,
-  executeStoryboardSplitterNode,
+  submitStoryboardSplitterJob,
   startVideoConcatExport,
   getVideoConcatExport,
   CanvasApiError,
 } from '@/lib/canvas/canvas-api'
-import {
-  IMAGE_MODEL_CREDITS,
-  VIDEO_PER_SECOND_CREDITS,
-  VIDEO_FLAT_CREDITS,
-} from '@/lib/credits'
-import { MODEL_CODE_MAP } from '@/components/canvas/panels/panel-constants'
 import { mutate } from 'swr'
 
 // ── Canvas context builder ───────────────────────────────────────────────────
@@ -126,9 +121,9 @@ function buildUserContent(
         parts.push({ type: 'text', text: `[剧本节点「${label}」：尚未生成]` })
       }
     } else if (node.type === 'storyboard_splitter') {
-      const shots = (execNodes[nodeId]?.outputs[0]?.paramsSnapshot as { shots?: Array<{ label?: string; content?: string }> } | undefined)?.shots
-      if (shots?.length) {
-        const shotText = shots.map((shot, index) => `${index + 1}. ${shot.label ?? '分镜'}：${shot.content ?? ''}`).join('\n')
+      const shots = normalizeStoryboardShots((execNodes[nodeId]?.outputs[0]?.paramsSnapshot as { shots?: unknown } | undefined)?.shots)
+      if (shots.length) {
+        const shotText = shots.map((shot, index) => `${index + 1}. ${shot.shotNumber > 0 ? `镜头${shot.shotNumber}` : '分镜'}：${shot.sceneDescription || shot.compositionPrompt || ''}`).join('\n')
         parts.push({ type: 'text', text: `[分镜节点「${label}」：\n${shotText.slice(0, 400)}${shotText.length > 400 ? '…' : ''}]` })
       } else {
         parts.push({ type: 'text', text: `[分镜节点「${label}」：尚未生成]` })
@@ -172,16 +167,11 @@ export function estimateStepCredits(step: AgentStep, params: StepParams): number
     const node = nodes.find((n) => n.id === id)
     if (!node) return total
     if (node.type === 'image_gen' && isImageGenConfig(node.data.config)) {
-      const credits = IMAGE_MODEL_CREDITS[params.modelType ?? 'gemini'] ?? 5
-      return total + credits
+      // A豆从 params_pricing 读取，此处无法访问 DB 模型，返回 0 作为占位
+      return total + 0
     }
     if (node.type === 'video_gen' || node.type === 'video_stitch') {
-      const model = params.videoModel ?? 'seedance-2.0'
-      const perSec = VIDEO_PER_SECOND_CREDITS[model]
-      if (perSec !== undefined) return total + perSec * (params.duration ?? 5)
-      const flat = VIDEO_FLAT_CREDITS[model]
-      if (flat !== undefined) return total + flat
-      return total + 5 * (params.duration ?? 5)
+      return total + 0
     }
     return total
   }, 0)
@@ -206,9 +196,13 @@ async function executeNode(
   try {
     if (node.type === 'image_gen' && isImageGenConfig(node.data.config)) {
       const cfg = node.data.config
-      const modelType = params.modelType ?? cfg.modelType ?? 'gemini'
+      const modelType = params.modelType ?? cfg.modelType
       const resolution = params.resolution ?? cfg.resolution ?? '2k'
-      const modelCode = MODEL_CODE_MAP[modelType]?.[resolution] ?? 'gemini-3.1-flash-image-preview-2k'
+      const imageModels = useGenerationStore.getState().imageModels
+      const dbModel = imageModels.find((m) => m.code === modelType)
+      const modelCode = dbModel?.params_pricing.find((rule) => rule.resolution === resolution)?.model
+        ?? modelType
+        ?? 'gemini-3.1-flash-image-preview-2k'
 
       // Collect upstream image refs
       const upstreamEdges = edges.filter((e) => e.target === nodeId)
@@ -259,6 +253,11 @@ async function executeNode(
       const cfg = node.data.config
       const videoModel = params.videoModel ?? cfg.model ?? 'seedance-2.0'
       const videoMode = cfg.videoMode ?? 'multiref'
+      const categories = parseCategoryReferences(cfg.categoryReferences)
+      const usesReferenceResourceFields = Boolean(
+        (categories.multimodal?.limits.video.max ?? 0) > 0
+          || (categories.multimodal?.limits.audio.max ?? 0) > 0,
+      )
 
       const upstreamEdges = edges.filter((e) => e.target === nodeId)
       const refImages: string[] = []
@@ -310,6 +309,10 @@ async function executeNode(
           videoMode,
           aspectRatio: params.aspectRatio ?? cfg.aspectRatio ?? undefined,
           duration: params.duration ?? cfg.duration ?? undefined,
+          generateAudio: cfg.generateAudio,
+          hasDurationControl: usesReferenceResourceFields,
+          hasAudioControl: usesReferenceResourceFields,
+          usesReferenceResourceFields,
           referenceImages: videoMode === 'multiref' ? refImages : undefined,
           referenceVideos: videoMode === 'multiref' ? refVideos : undefined,
           referenceAudios: videoMode === 'multiref' ? refAudios : undefined,
@@ -348,17 +351,12 @@ async function executeNode(
         }
       }
       const script = scriptParts.join('\n')
-      const result = await executeStoryboardSplitterNode(
-        { script, shotCount: cfg.shotCount },
+      // 提交到队列，结果由 poller 轮询写入，不在此等待
+      await submitStoryboardSplitterJob(
+        { script, shotCount: cfg.shotCount, canvasId, canvasNodeId: nodeId },
         token ?? undefined,
       )
-      execStore.addNodeOutput(nodeId, {
-        id: generateUUID(),
-        url: '',
-        type: 'text',
-        paramsSnapshot: { shots: result.shots },
-      })
-      execStore.setNodeStatus(nodeId, 'completed', { progress: 100 })
+      // 状态设为 pending，poller 检测到完成后会更新为 completed 并写入 outputs
     } else if (node.type === 'video_stitch' && isVideoStitchConfig(node.data.config)) {
       const upstreamEdges = edges.filter((e) => e.target === nodeId && (!e.targetHandle || e.targetHandle === 'video-in'))
       const order = node.data.config.inputOrder ?? []
@@ -403,7 +401,7 @@ async function executeNode(
         execStore.setNodeStatus(nodeId, 'processing', { progress: Math.min(95, 5 + ((i + 1) / 120) * 90) })
 
         if (result.status === 'done' && result.resultUrl) {
-          execStore.addNodeOutput(nodeId, {
+          execStore.replaceNodeOutput(nodeId, {
             id: jobId,
             url: result.resultUrl,
             type: 'video',

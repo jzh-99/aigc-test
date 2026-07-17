@@ -41,14 +41,14 @@ export function InlineLabel({ nodeId, label, onRename, className }: InlineLabelP
         }}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
-        className="text-[11px] font-semibold tracking-wide text-zinc-700 uppercase bg-white border border-blue-400 rounded px-1 outline-none w-full min-w-0"
+        className="text-[11px] font-semibold tracking-wide text-foreground uppercase bg-card border border-blue-400 rounded px-1 outline-none w-full min-w-0"
       />
     )
   }
 
   return (
     <span
-      className={className ?? 'text-[11px] font-semibold tracking-wide text-zinc-500 uppercase cursor-text select-none'}
+      className={className ?? 'text-[11px] font-semibold tracking-wide text-muted-foreground uppercase cursor-text select-none'}
       onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
       title="双击重命名"
     >

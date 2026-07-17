@@ -8,17 +8,17 @@ export interface PricingResult {
 
 /**
  * 根据 params_pricing 规则和请求分辨率解析积分单价。
- * 规则为空数组时回退到 fallbackCreditCost。
+ * 所有模型必须在 provider_models 中配置 params_pricing 规则，
+ * 未配置时视为数据异常，直接抛出错误。
  */
 export function resolveUnitPrice(
   paramsPricing: unknown,
   resolution: string | null | undefined,
-  fallbackCreditCost: number,
 ): PricingResult {
   const rules = parseRules(paramsPricing)
 
   if (rules.length === 0) {
-    return { unitPrice: fallbackCreditCost, resolvedModel: null }
+    throw new Error('params_pricing 未配置，无法确定积分单价。请在 provider_models 中配置 params_pricing 规则。')
   }
 
   // 有 resolution 时精确匹配，否则取第一条规则作为默认

@@ -60,7 +60,7 @@ export function TopupModal({ open, onClose, teamId }: TopupModalProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Coins className="h-5 w-5 text-accent-orange" />
-            {teamId ? '充值团队积分' : '充值个人积分'}
+            {teamId ? '充值A豆' : '充值个人A豆'}
           </DialogTitle>
         </DialogHeader>
 
@@ -105,7 +105,7 @@ export function TopupModal({ open, onClose, teamId }: TopupModalProps) {
                     {p.tag}
                   </Badge>
                 )}
-                <div className="text-sm font-semibold">{p.credits.toLocaleString()} 积分</div>
+                <div className="text-sm font-semibold">{p.credits.toLocaleString()} A豆</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   ¥{(p.amount_fen / 100).toFixed(2)}
                   {p.type === 'monthly' && <span className="ml-0.5">/月</span>}

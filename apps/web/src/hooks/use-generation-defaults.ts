@@ -14,10 +14,9 @@ export interface GenerationDefaults {
   video?: {
     videoModel?: string
     videoAspectRatio?: string
-    videoUpsample?: boolean
+    videoResolution?: string
     videoDuration?: number
     videoGenerateAudio?: boolean
-    videoCameraFixed?: boolean
   }
   avatar?: {
     avatarResolution?: string

@@ -1,7 +1,6 @@
 import { getDb } from '@aigc/db'
-import { DeleteObjectCommand } from '@aws-sdk/client-s3'
 import pino_ from 'pino'
-import { getBucket, getPublicUrl, getS3 } from '../lib/storage.js'
+import { getBucket, getPublicUrl, getTos } from '../lib/storage.js'
 
 const pino = pino_ as any
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
@@ -12,8 +11,13 @@ function extractStorageKey(storageUrl: string | null | undefined): string | null
   if (!storageUrl) return null
   const publicUrl = getPublicUrl()
   if (!publicUrl || !storageUrl.startsWith(publicUrl)) return null
-  const key = storageUrl.slice(publicUrl.length + 1)
-  return key || null
+  const rawKey = storageUrl.slice(publicUrl.length + 1).split(/[?#]/)[0]
+  if (!rawKey) return null
+  try {
+    return decodeURIComponent(rawKey)
+  } catch {
+    return rawKey
+  }
 }
 
 async function deleteStoredUrls(urls: Array<string | null | undefined>) {
@@ -21,8 +25,9 @@ async function deleteStoredUrls(urls: Array<string | null | undefined>) {
     const key = extractStorageKey(url)
     return key ? [key] : []
   })))
-  const s3 = getS3()
-  await Promise.all(keys.map((key) => s3.send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }))))
+  const tos = getTos()
+  const bucket = getBucket()
+  await Promise.all(keys.map((key) => tos.deleteObject({ bucket, key })))
 }
 
 async function purgeCanvasProject(canvasId: string) {

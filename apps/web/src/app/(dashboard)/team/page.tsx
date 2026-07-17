@@ -3,12 +3,13 @@
 import { useAuthStore } from '@/stores/auth-store'
 import { MemberList } from '@/components/team/member-list'
 import { WorkspaceList } from '@/components/team/workspace-list'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { TeamCreditsSettings } from '@/components/team/team-credits-settings'
+import { SettingsManagementNav } from '@/components/layout/settings-management-nav'
 
-export default function TeamPage() {
+function TeamPageContent() {
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
   const activeTeam = useAuthStore((s) => s.activeTeam())
   const isOwner = activeTeam?.role === 'owner'
@@ -25,7 +26,7 @@ export default function TeamPage() {
   const tabs = [
     { key: 'members' as TabKey, label: '成员管理' },
     { key: 'workspaces' as TabKey, label: '工作区管理' },
-    ...(isOwner ? [{ key: 'credits' as TabKey, label: '积分设置' }] : []),
+    ...(isOwner ? [{ key: 'credits' as TabKey, label: 'A豆设置' }] : []),
   ]
 
   if (!activeTeamId) {
@@ -38,6 +39,8 @@ export default function TeamPage() {
         <h1 className="text-2xl font-semibold">团队管理</h1>
         <p className="text-muted-foreground">管理团队成员、配额和工作区</p>
       </div>
+
+      <SettingsManagementNav />
 
       <div className="flex gap-1 border-b">
         {tabs.map((tab) => (
@@ -60,5 +63,13 @@ export default function TeamPage() {
       {activeTab === 'workspaces' && <WorkspaceList teamId={activeTeamId} />}
       {activeTab === 'credits' && isOwner && <TeamCreditsSettings teamId={activeTeamId} />}
     </div>
+  )
+}
+
+export default function TeamPage() {
+  return (
+    <Suspense>
+      <TeamPageContent />
+    </Suspense>
   )
 }

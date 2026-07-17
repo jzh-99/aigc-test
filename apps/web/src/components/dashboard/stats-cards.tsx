@@ -3,8 +3,8 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Coins, ImageIcon, TrendingUp } from 'lucide-react'
-import { useBatches } from '@/hooks/use-batches'
 import { useAuthStore } from '@/stores/auth-store'
+import { useBatchStats } from '@/hooks/use-batch-stats'
 import useSWR from 'swr'
 
 interface TeamMember {
@@ -23,17 +23,11 @@ interface TeamInfo {
 }
 
 export function StatsCards() {
-  const { batches, isLoadingInitial } = useBatches()
+  const { total, totalCompleted, successRate, isLoading: isStatsLoading } = useBatchStats()
   const user = useAuthStore((s) => s.user)
   const activeTeamId = useAuthStore((s) => s.activeTeamId)
   const activeTeam = useAuthStore((s) => s.activeTeam)
-  const { data: teamData } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
-
-  // Compute real stats from batch data
-  const completedImages = batches.reduce((sum, b) => sum + b.completed_count, 0)
-  const failedImages = batches.reduce((sum, b) => sum + b.failed_count, 0)
-  const finishedImages = completedImages + failedImages
-  const successRate = finishedImages > 0 ? Math.round((completedImages / finishedImages) * 100) : 0
+  const { data: teamData, isLoading: isTeamLoading } = useSWR<TeamInfo>(activeTeamId ? `/teams/${activeTeamId}` : null)
 
   const teamRole = activeTeam()?.role
   const isOwnerOrAdmin = teamRole === 'owner' || user?.role === 'admin'
@@ -44,7 +38,7 @@ export function StatsCards() {
   if (isOwnerOrAdmin) {
     const balance = teamData?.credits?.balance ?? 0
     const frozen = teamData?.credits?.frozen_credits ?? 0
-    creditLabel = '可用积分'
+    creditLabel = '可用A豆'
     creditValue = Math.max(0, balance - frozen)
   } else {
     // Editor: show personal remaining = credit_quota - credit_used, min 0
@@ -56,12 +50,13 @@ export function StatsCards() {
       const frozen = teamData?.credits?.frozen_credits ?? 0
       creditValue = Math.max(0, balance - frozen)
     }
-    creditLabel = '可用积分'
+    creditLabel = '可用A豆'
   }
 
   // Editor quota details for subtitle
+  // 必须在 loading 时返回 null，否则首屏 CSR 若命中 SWR 缓存会与 SSR（无数据）不一致，触发 hydration mismatch
   const me = !isOwnerOrAdmin ? teamData?.members?.find((m) => m.user_id === user?.id) : null
-  const hasQuota = me && me.credit_quota !== null && me.credit_quota !== undefined
+  const hasQuota = !isTeamLoading && me && me.credit_quota !== null && me.credit_quota !== undefined
   const creditSubtitle = hasQuota
     ? `配额 ${me.credit_quota!.toLocaleString()} · 已用 ${(me.credit_used ?? 0).toLocaleString()}`
     : null
@@ -69,7 +64,7 @@ export function StatsCards() {
   const stats = [
     {
       label: creditLabel,
-      value: isLoadingInitial ? null : creditValue.toLocaleString(),
+      value: isTeamLoading ? null : creditValue.toLocaleString(),
       subtitle: creditSubtitle,
       icon: Coins,
       color: 'text-accent-orange',
@@ -77,7 +72,7 @@ export function StatsCards() {
     },
     {
       label: '生成次数',
-      value: isLoadingInitial ? null : String(completedImages),
+      value: isStatsLoading ? null : String(total),
       subtitle: null,
       icon: ImageIcon,
       color: 'text-accent-blue',
@@ -85,7 +80,7 @@ export function StatsCards() {
     },
     {
       label: '成功率',
-      value: isLoadingInitial ? null : (finishedImages > 0 ? `${successRate}%` : '-'),
+      value: isStatsLoading ? null : (successRate !== null ? `${successRate}%` : '-'),
       subtitle: null,
       icon: TrendingUp,
       color: 'text-success',

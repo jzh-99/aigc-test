@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 
 // Public routes that skip auth
 const PUBLIC_ROUTES = [
+  '/docs',
   '/api/v1/healthz',
   '/api/v1/auth/login',
   '/api/v1/auth/refresh',
@@ -30,7 +31,8 @@ declare module 'fastify' {
     user: AuthUser
   }
   interface FastifyInstance {
-    redis: import('ioredis').default
+    redis: import('ioredis').Redis
+    redisSub: import('ioredis').Redis  // 专用 Pub/Sub 订阅连接
   }
 }
 

@@ -6,6 +6,9 @@ import remarkGfm from 'remark-gfm'
 import { X, Send, Sparkles, AtSign, RefreshCw, Download, ArrowRight } from 'lucide-react'
 import { useCanvasStructureStore } from '@/stores/canvas/structure-store'
 import { useCanvasAgent } from '@/hooks/canvas/use-canvas-agent'
+import { useAuthStore } from '@/stores/auth-store'
+import { useModels } from '@/hooks/use-models'
+import type { ModelItem } from '@aigc/types'
 import type { AgentMessage, AgentInstruction } from '@/lib/canvas/agent-types'
 import { AskUploadCard } from './agent-instructions/ask-upload-card'
 import { AnnotateAssetsCard } from './agent-instructions/annotate-assets-card'
@@ -94,14 +97,18 @@ function MessageBubble({
   onInstructionAction,
   onConfirmStep,
   onNodeSelectedRef,
+  imageModels,
+  videoModels,
 }: {
   message: Extract<AgentMessage, { role: 'user' | 'assistant' }>
   canvasId: string
-  isActiveStep: boolean  // true only for the current guide_step card
+  isActiveStep: boolean
   isRunning: boolean
   onInstructionAction: (type: string, payload?: unknown) => void
   onConfirmStep: (params: import('@/lib/canvas/agent-types').StepParams) => void
   onNodeSelectedRef?: MutableRefObject<((nodeId: string) => boolean) | null>
+  imageModels?: ModelItem[]
+  videoModels?: ModelItem[]
 }) {
   const isUser = message.role === 'user'
 
@@ -136,7 +143,7 @@ function MessageBubble({
             {renderUserContent(message.content)}
           </>
         ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-full [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_pre]:overflow-x-auto [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto">
+          <div className="prose-invert max-w-full [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_pre]:overflow-x-auto [&_code]:break-all [&_table]:block [&_table]:overflow-x-auto">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {message.content}
             </ReactMarkdown>
@@ -159,6 +166,8 @@ function MessageBubble({
               onConfirm={onConfirmStep}
               disabled={!isActiveStep || isRunning}
               completed={!isActiveStep}
+              imageModels={imageModels}
+              videoModels={videoModels}
             />
           ) : (
             <InstructionWidget
@@ -269,6 +278,9 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
   } = useCanvasAgent(canvasId, kickPoll)
 
   const nodes = useCanvasStructureStore((s) => s.nodes)
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId)
+  const { models: imageModels } = useModels('image', activeWorkspaceId)
+  const { models: videoModels } = useModels('video', activeWorkspaceId)
   const implicitNode = implicitNodeId ? nodes.find((n) => n.id === implicitNodeId) : null
 
   const [input, setInput] = useState('')
@@ -496,6 +508,8 @@ export function CanvasAgentPanel({ canvasId, kickPoll, onClose, onNodeSelectedRe
               onInstructionAction={handleInstructionAction}
               onConfirmStep={handleConfirmStep}
               onNodeSelectedRef={onNodeSelectedRef}
+              imageModels={imageModels}
+              videoModels={videoModels}
             />
           )
         })}

@@ -1,17 +1,20 @@
 import pino_ from 'pino'
 import { getDb } from '@aigc/db'
 import { sql } from 'kysely'
-import { getPubRedis, getRedis } from '../lib/redis.js'
+import { getPubRedis, getBullMQConnection } from '../lib/redis.js'
+import { DEFAULT_JOB_OPTIONS } from '../lib/queue-options.js'
 import { Queue } from 'bullmq'
 import { buildSignedRequest } from '../lib/volcengine-visual-sign.js'
+import { log } from 'node:console'
+import { buildLogger } from '../logger.js'
+import { recordProviderPollAudit } from '../lib/provider-poll-audit.js'
 
-const pino = pino_ as any
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+const logger = buildLogger()
 
 let _transferQueue: Queue | null = null
 function getTransferQueue(): Queue {
   if (!_transferQueue) {
-    _transferQueue = new Queue('transfer-queue', { connection: getRedis() })
+    _transferQueue = new Queue('transfer-queue', { connection: getBullMQConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS })
   }
   return _transferQueue
 }
@@ -28,6 +31,7 @@ interface AvatarTaskRow {
   batchId: string
   userId: string
   teamId: string
+  workspaceId: string | null
   creditAccountId: string
   estimatedCredits: number
   externalTaskId: string
@@ -38,16 +42,36 @@ async function checkAvatarTask(externalTaskId: string): Promise<{
   status: 'SUCCESS' | 'FAILURE' | 'IN_PROGRESS' | 'POLL_ERROR'
   videoUrl?: string
   failReason?: string
+  errorMessage?: string
+  endpoint?: string
+  requestPayload?: unknown
+  responseStatus?: number | null
+  responsePayload?: unknown
+  durationMs?: number | null
 }> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 15_000)
+  const requestPayload = {
+    req_key: OMNI_REQ_KEY,
+    task_id: externalTaskId,
+  }
+  const endpoint = `/?Action=CVGetResult&Version=${OMNI_API_VERSION}`
+  const startedAt = Date.now()
   try {
-    const { url, headers, body } = buildSignedRequest('CVGetResult', OMNI_API_VERSION, {
-      req_key: OMNI_REQ_KEY,
-      task_id: externalTaskId,
-    })
+    const { url, headers, body } = buildSignedRequest('CVGetResult', OMNI_API_VERSION, requestPayload)
     const res = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
-    if (!res.ok) return { status: 'POLL_ERROR' }
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return {
+        status: 'POLL_ERROR',
+        errorMessage: errorBody || `HTTP ${res.status}`,
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
+    }
 
     const json = (await res.json()) as {
       code: number
@@ -58,26 +82,111 @@ async function checkAvatarTask(externalTaskId: string): Promise<{
     if (json.code !== 10000) {
       // Non-retryable errors
       if ([50411, 50412, 50413, 50514].includes(json.code)) {
-        return { status: 'FAILURE', failReason: `审核未通过 (${json.code}): ${json.message}` }
+        return {
+          status: 'FAILURE',
+          failReason: `审核未通过 (${json.code}): ${json.message}`,
+          endpoint,
+          requestPayload,
+          responseStatus: res.status,
+          responsePayload: json,
+          durationMs: Date.now() - startedAt,
+        }
       }
-      return { status: 'POLL_ERROR' }
+      return {
+        status: 'POLL_ERROR',
+        errorMessage: json.message ?? `Volcengine code ${json.code}`,
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: json,
+        durationMs: Date.now() - startedAt,
+      }
     }
 
     const taskStatus = json.data?.status
     if (taskStatus === 'done') {
-      if (json.data?.video_url) return { status: 'SUCCESS', videoUrl: json.data.video_url }
-      return { status: 'FAILURE', failReason: 'Task done but no video_url returned' }
+      if (json.data?.video_url) return {
+        status: 'SUCCESS',
+        videoUrl: json.data.video_url,
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: json,
+        durationMs: Date.now() - startedAt,
+      }
+      return {
+        status: 'FAILURE',
+        failReason: 'Task done but no video_url returned',
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: json,
+        durationMs: Date.now() - startedAt,
+      }
     }
     if (taskStatus === 'not_found' || taskStatus === 'expired') {
-      return { status: 'FAILURE', failReason: `任务状态: ${taskStatus}` }
+      return {
+        status: 'FAILURE',
+        failReason: `任务状态: ${taskStatus}`,
+        endpoint,
+        requestPayload,
+        responseStatus: res.status,
+        responsePayload: json,
+        durationMs: Date.now() - startedAt,
+      }
     }
     // pre_processing, in_queue, generating
-    return { status: 'IN_PROGRESS' }
-  } catch {
-    return { status: 'POLL_ERROR' }
+    return {
+      status: 'IN_PROGRESS',
+      endpoint,
+      requestPayload,
+      responseStatus: res.status,
+      responsePayload: json,
+      durationMs: Date.now() - startedAt,
+    }
+  } catch (error) {
+    return {
+      status: 'POLL_ERROR',
+      errorMessage: error instanceof Error ? error.message : String(error),
+      endpoint,
+      requestPayload,
+      durationMs: Date.now() - startedAt,
+    }
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function auditAvatarPoll(task: AvatarTaskRow, result: Awaited<ReturnType<typeof checkAvatarTask>>): Promise<void> {
+  await recordProviderPollAudit({
+    auditKey: `${task.taskId}:avatar.query`,
+    batchId: task.batchId,
+    taskId: task.taskId,
+    userId: task.userId,
+    teamId: task.teamId,
+    workspaceId: task.workspaceId,
+    module: 'avatar',
+    provider: 'volcengine',
+    model: OMNI_REQ_KEY,
+    operation: 'avatar.query',
+    method: 'POST',
+    endpoint: result.endpoint ?? '/?Action=CVGetResult',
+    requestPayload: result.requestPayload ?? null,
+    responseStatus: result.responseStatus ?? null,
+    responsePayload: result.responsePayload ?? result,
+    externalTaskId: task.externalTaskId,
+    durationMs: result.durationMs ?? null,
+    status: result.status === 'POLL_ERROR' || result.status === 'FAILURE' ? 'failed' : 'success',
+    errorMessage: result.errorMessage ?? result.failReason ?? null,
+    pollStatus: result.status,
+    keyFields: {
+      status: result.status,
+      video_url: result.videoUrl ?? null,
+      fail_reason: result.failReason ?? null,
+      error_message: result.errorMessage ?? null,
+    },
+    final: result.status === 'SUCCESS' || result.status === 'FAILURE',
+  })
 }
 
 async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promise<void> {
@@ -110,7 +219,7 @@ async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promi
       credit_account_id: creditAccountId, user_id: userId,
       amount: -estimatedCredits, type: 'confirm',
       task_id: taskId, batch_id: batchId,
-      description: 'Avatar generation confirmed',
+      description: '数字人生成成功',
     }).execute()
 
     await trx.updateTable('task_batches').set({
@@ -124,10 +233,13 @@ async function handleAvatarSuccess(task: AvatarTaskRow, videoUrl: string): Promi
 
   const assetRow = await db.selectFrom('assets').select('id').where('task_id', '=', taskId).executeTakeFirst()
   if (assetRow) {
-    await getTransferQueue().add('transfer', { taskId, assetId: assetRow.id, originalUrl: videoUrl, assetType: 'video' })
+    await getTransferQueue().add('transfer', { taskId, batchId, assetId: assetRow.id, originalUrl: videoUrl, assetType: 'video' }, {
+      attempts: 10,
+      backoff: { type: 'exponential', delay: 30_000 },
+    })
   }
 
-  logger.info({ taskId, batchId, videoUrl }, 'Avatar task completed')
+  logger.error({ taskId, batchId, videoUrl }, 'Avatar task completed')
 }
 
 async function handleAvatarFailure(task: AvatarTaskRow, errorMessage: string): Promise<void> {
@@ -151,7 +263,7 @@ async function handleAvatarFailure(task: AvatarTaskRow, errorMessage: string): P
       credit_account_id: creditAccountId, user_id: userId,
       amount: estimatedCredits, type: 'refund',
       task_id: taskId, batch_id: batchId,
-      description: `Avatar generation failed: ${errorMessage.slice(0, 200)}`,
+      description: `数字人生成失败：${errorMessage.slice(0, 200)}`,
     }).execute()
     await trx.updateTable('task_batches').set({ status: 'failed', failed_count: sql`failed_count + 1` }).where('id', '=', batchId).execute()
   })
@@ -174,6 +286,7 @@ async function pollAvatarTasks(): Promise<void> {
       'tasks.processing_started_at as processingStartedAt',
       'task_batches.team_id as teamId',
       'task_batches.user_id as userId',
+      'task_batches.workspace_id as workspaceId',
       'task_batches.credit_account_id as creditAccountId',
     ])
     .where('tasks.status', '=', 'processing')
@@ -196,6 +309,7 @@ async function pollAvatarTasks(): Promise<void> {
       }
 
       const result = await checkAvatarTask(task.externalTaskId)
+      await auditAvatarPoll(task, result)
 
       if (result.status === 'SUCCESS' && result.videoUrl) {
         pollErrorCounts.delete(task.taskId)
@@ -208,6 +322,9 @@ async function pollAvatarTasks(): Promise<void> {
         pollErrorCounts.set(task.taskId, count)
         if (count >= MAX_CONSECUTIVE_POLL_ERRORS) {
           pollErrorCounts.delete(task.taskId)
+          
+          logger.error({ taskId: task.taskId, batchId: task.batchId, errorCount: count, result: result }, 'Avatar task polling failed repeatedly, marking as failed');
+          
           await handleAvatarFailure(task, '生成过程中出现异常，请重新发起请求')
         }
       } else {
