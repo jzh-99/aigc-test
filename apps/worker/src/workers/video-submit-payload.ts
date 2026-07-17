@@ -11,6 +11,13 @@ const CTYUN_EDGE_MODEL_ID: Record<string, string> = {
   'ctyun-seedance-2.0-fast': 'cdance2.0-fast-0611',
 }
 
+// TokenHub 视频模型：provider_models 表的 params_pricing 里的 model 字段即为 API model ID
+const TOKENHUB_MODEL_ID: Record<string, string> = {
+  'tokenhub-seedance-2.0': 'doubao-seedance-2-0-260128',
+  'tokenhub-seedance-2.0-mini': 'doubao-seedance-2-0-mini-260615',
+  'tokenhub-seedance-2.0-fast': 'doubao-seedance-2-0-fast-260128',
+}
+
 const BASE_URL = process.env.AVATAR_UPLOAD_BASE_URL ?? process.env.AI_UPLOAD_BASE_URL ?? ''
 
 type ReferenceRole = 'first_frame' | 'last_frame' | 'reference_image' | 'reference_video' | 'reference_audio'
@@ -140,6 +147,17 @@ export function buildCtyunEdgeTaskBody(
   if (!ctyunModel) throw new Error(`未知的天翼云边缘视频模型: ${model}`)
 
   return buildTaskBody(ctyunModel, prompt, params)
+}
+
+export function buildTokenhubTaskBody(
+  model: string,
+  prompt: string,
+  params: Record<string, unknown>,
+): VolcengineTaskBody {
+  const tokenhubModel = TOKENHUB_MODEL_ID[model]
+  if (!tokenhubModel) throw new Error(`未知的 TokenHub 视频模型: ${model}`)
+
+  return buildTaskBody(tokenhubModel, prompt, params)
 }
 
 function buildTaskBody(

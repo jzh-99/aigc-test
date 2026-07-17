@@ -39,7 +39,7 @@ const SIZE_MAP: Record<Resolution, Record<AspectRatio, string>> = {
   },
 }
 
-function resolveSize(aspectRatio: string, resolution: string): string {
+export function resolveImageSize(aspectRatio: string, resolution: string): string {
   const res = (['1k', '2k', '3k', '4k'].includes(resolution) ? resolution : '2k') as Resolution
   const ar = (Object.keys(SIZE_MAP['2k']).includes(aspectRatio) ? aspectRatio : '1:1') as AspectRatio
   return SIZE_MAP[res][ar]
@@ -72,7 +72,7 @@ export function buildCtyunEdgeImageBody(params: {
     model: gatewayModel,
     prompt: params.prompt,
     response_format: 'url',
-    size: resolveSize(aspectRatio, resolution),
+    size: resolveImageSize(aspectRatio, resolution),
     stream: false,
     watermark: params.params.watermark === true,
   }

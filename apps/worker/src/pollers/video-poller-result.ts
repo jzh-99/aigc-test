@@ -20,6 +20,17 @@ const AUTH_HTTP_STATUSES = new Set([401, 403])
 export const VIDEO_POLL_INTERVAL_MS = 15_000
 export const MAX_CONSECUTIVE_VIDEO_POLL_ERRORS = 20
 
+export function shouldFailVideoTaskAfterPollError(input: {
+  provider: string
+  count: number
+  maxErrors: number
+  retryable?: boolean
+}): boolean {
+  // TokenHub 任务不因轮询错误而判定失败，持续轮询至终态或总超时
+  if (input.provider === 'tokenhub') return false
+  return input.count >= input.maxErrors && input.retryable === false
+}
+
 export function classifyVideoPollHttpError(httpStatus: number, bodyText: string): VideoPollResult {
   const errorMessage = bodyText.slice(0, 500) || `HTTP ${httpStatus}`
 
@@ -104,5 +115,43 @@ export function parseVolcengineTaskResponse(data: unknown): VideoPollResult {
     failReason,
     retryable: status == null,
     errorMessage: status == null ? `未知火山任务状态: ${rawStatus ?? 'empty'}` : undefined,
+  }
+}
+
+export function parseTokenhubTaskResponse(data: unknown): VideoPollResult {
+  if (!isObject(data)) {
+    return {
+      status: 'POLL_ERROR',
+      errorMessage: 'Tokenhub 任务响应不是对象',
+      retryable: false,
+    }
+  }
+
+  const output = isObject(data.output) ? data.output : undefined
+  const rawStatus = pickString(output?.task_status) ?? pickString(data.status)
+  const statusMap: Record<string, VideoPollStatus> = {
+    PENDING: 'NOT_START',
+    RUNNING: 'IN_PROGRESS',
+    SUCCEEDED: 'SUCCESS',
+    FAILED: 'FAILURE',
+    pending: 'NOT_START',
+    running: 'IN_PROGRESS',
+    succeeded: 'SUCCESS',
+    failed: 'FAILURE',
+    completed: 'SUCCESS',
+    expired: 'FAILURE',
+    cancelled: 'FAILURE',
+  }
+  const status = rawStatus ? statusMap[rawStatus] : undefined
+  const videoUrl = pickString(output?.video_url) ?? extractVideoUrlFromValue(data)
+  const error = isObject(data.error) ? data.error : undefined
+  const failReason = pickString(output?.message) ?? pickString(error?.message) ?? pickString(data.error)
+
+  return {
+    status: status ?? 'POLL_ERROR',
+    videoUrl,
+    failReason,
+    retryable: status == null || status === 'POLL_ERROR',
+    errorMessage: status == null ? `未知 Tokenhub 任务状态: ${rawStatus ?? 'empty'}` : undefined,
   }
 }

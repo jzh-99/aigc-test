@@ -8,7 +8,9 @@ import { recordProviderPollAudit } from '../lib/provider-poll-audit.js'
 import {
   classifyVideoPollHttpError,
   MAX_CONSECUTIVE_VIDEO_POLL_ERRORS,
+  parseTokenhubTaskResponse,
   parseVolcengineTaskResponse,
+  shouldFailVideoTaskAfterPollError,
   VIDEO_POLL_INTERVAL_MS,
   type VideoPollStatus,
   type VideoPollResult,
@@ -34,6 +36,8 @@ const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
 const VEO_API_KEY = process.env.NANO_BANANA_API_KEY ?? ''
 const CTYUN_EDGE_API_URL = (process.env.CTYUN_EDGE_API_BASE_URL || 'https://ai.ctaigw.cn/v1').replace(/\/$/, '')
 const CTYUN_EDGE_API_KEY = process.env.CTYUN_EDGE_API_KEY ?? ''
+const TOKENHUB_API_URL = (process.env.TOKENHUB_API_BASE_URL ?? '').replace(/\/$/, '')
+const TOKENHUB_API_KEY = process.env.TOKENHUB_API_KEY ?? ''
 const MAX_VIDEO_AGE_MS = 60 * 60 * 1000 // 1 hour
 const VEO_STATUS_MAP: Record<string, VideoPollStatus> = {
   SUCCESS: 'SUCCESS',
@@ -163,6 +167,42 @@ async function checkCtyunEdgeTask(externalTaskId: string): Promise<VideoPollResu
     const data = await res.json()
     return {
       ...parseVolcengineTaskResponse(data),
+      endpoint,
+      responseStatus: res.status,
+      responsePayload: data,
+      durationMs: Date.now() - startedAt,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { status: 'POLL_ERROR', errorMessage: message, retryable: true, endpoint, durationMs: Date.now() - startedAt }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function checkTokenhubTask(externalTaskId: string): Promise<VideoPollResult> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), VIDEO_POLL_REQUEST_TIMEOUT_MS)
+  const endpoint = `/v1/videos/generations/task/${externalTaskId}`
+  const startedAt = Date.now()
+  try {
+    const res = await fetch(`${TOKENHUB_API_URL}${endpoint}`, {
+      headers: { Authorization: `Bearer ${TOKENHUB_API_KEY}` },
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '')
+      return {
+        ...classifyVideoPollHttpError(res.status, errorBody),
+        endpoint,
+        responseStatus: res.status,
+        responsePayload: { body: errorBody },
+        durationMs: Date.now() - startedAt,
+      }
+    }
+    const data = await res.json()
+    return {
+      ...parseTokenhubTaskResponse(data),
       endpoint,
       responseStatus: res.status,
       responsePayload: data,
@@ -408,11 +448,13 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
       false
     if (skipThisTick) return
 
-    const result = task.provider === 'volcengine'
-      ? await checkVolcengineTask(task.externalTaskId)
-      : task.provider === 'ctyun-edge'
-        ? await checkCtyunEdgeTask(task.externalTaskId)
-        : await checkVeoTask(task.externalTaskId)
+    const result = task.provider === 'tokenhub'
+      ? await checkTokenhubTask(task.externalTaskId)
+      : task.provider === 'volcengine'
+        ? await checkVolcengineTask(task.externalTaskId)
+        : task.provider === 'ctyun-edge'
+          ? await checkCtyunEdgeTask(task.externalTaskId)
+          : await checkVeoTask(task.externalTaskId)
     await auditVideoPoll(task, result)
 
     if (result.status === 'SUCCESS' && result.videoUrl) {
@@ -454,7 +496,7 @@ async function processVideoTask(task: VideoTaskRow, tick: number): Promise<void>
       } else {
         logger.debug(pollErrorLogPayload, 'Video task poll retryable timeout')
       }
-      if (count >= MAX_CONSECUTIVE_VIDEO_POLL_ERRORS && result.retryable === false) {
+      if (shouldFailVideoTaskAfterPollError({ provider: task.provider, count, maxErrors: MAX_CONSECUTIVE_VIDEO_POLL_ERRORS, retryable: result.retryable })) {
         logger.warn({ taskId: task.taskId, count }, 'Video task exceeded max poll errors, failing task')
         pollErrorCounts.delete(task.taskId)
         await handleVideoFailure(task, '生成过程中出现异常，请重新发起请求')

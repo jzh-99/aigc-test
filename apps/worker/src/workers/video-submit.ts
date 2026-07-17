@@ -4,13 +4,14 @@ import { sql } from 'kysely'
 import type { VideoSubmitJobData } from '@aigc/types'
 import { getBullMQConnection, getPubRedis } from '../lib/redis.js'
 import { buildLogger } from '../logger.js'
-import { buildCtyunEdgeTaskBody, buildVolcengineTaskBody } from './video-submit-payload.js'
+import { buildCtyunEdgeTaskBody, buildTokenhubTaskBody, buildVolcengineTaskBody } from './video-submit-payload.js'
 
 const logger = buildLogger()
 
 const VOLCENGINE_API_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 const CTYUN_EDGE_API_URL = (process.env.CTYUN_EDGE_API_BASE_URL || 'https://ai.ctaigw.cn/v1').replace(/\/$/, '')
 const VEO_API_URL = process.env.NANO_BANANA_API_URL ?? ''
+const TOKENHUB_API_URL = (process.env.TOKENHUB_API_BASE_URL ?? '').replace(/\/$/, '')
 
 interface VideoSubmitAuditContext {
   taskId: string
@@ -41,6 +42,14 @@ function responseError(data: unknown): string | null {
   if (typeof error?.message === 'string') return error.message
   const message = (data as { message?: unknown }).message
   return typeof message === 'string' ? message : null
+}
+
+function tokenhubResponseTaskId(data: unknown): string | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  const output = (data as { output?: unknown }).output
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return null
+  const taskId = (output as { task_id?: unknown }).task_id
+  return typeof taskId === 'string' ? taskId : null
 }
 
 async function submitVolcengine(
@@ -277,6 +286,83 @@ async function submitVeo(
   }
 }
 
+async function submitTokenhub(
+  model: string,
+  prompt: string,
+  params: Record<string, unknown>,
+  audit: VideoSubmitAuditContext,
+): Promise<string> {
+  const body = buildTokenhubTaskBody(model, prompt, params)
+  const endpoint = '/v1/videos/generations'
+  const apiKey = process.env.TOKENHUB_API_KEY ?? ''
+  const startedAt = Date.now()
+  let responseStatus: number | null = null
+  try {
+    const res = await fetch(`${TOKENHUB_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    })
+    responseStatus = res.status
+    const data = await readJsonResponse(res)
+    const id = tokenhubResponseTaskId(data)
+    if (!res.ok || !id) {
+      const message = responseError(data) ?? `TokenHub API 错误 ${res.status}`
+      await recordProviderApiLog({
+        ...audit,
+        module: 'video',
+        provider: 'tokenhub',
+        model,
+        operation: 'video.submit',
+        method: 'POST',
+        endpoint,
+        requestPayload: body,
+        responseStatus: res.status,
+        responsePayload: data,
+        durationMs: Date.now() - startedAt,
+        status: 'failed',
+        errorMessage: message,
+      })
+      throw new Error(message)
+    }
+    await recordProviderApiLog({
+      ...audit,
+      module: 'video',
+      provider: 'tokenhub',
+      model,
+      operation: 'video.submit',
+      method: 'POST',
+      endpoint,
+      requestPayload: body,
+      responseStatus: res.status,
+      responsePayload: data,
+      externalTaskId: id,
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    })
+    return id
+  } catch (error) {
+    if (responseStatus !== null) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    await recordProviderApiLog({
+      ...audit,
+      module: 'video',
+      provider: 'tokenhub',
+      model,
+      operation: 'video.submit',
+      method: 'POST',
+      endpoint,
+      requestPayload: body,
+      responseStatus,
+      durationMs: Date.now() - startedAt,
+      status: 'failed',
+      errorMessage: message,
+    })
+    throw error
+  }
+}
+
 export const videoSubmitWorker = new Worker<VideoSubmitJobData>(
   'video-queue',
   async (job) => {
@@ -301,11 +387,13 @@ export const videoSubmitWorker = new Worker<VideoSubmitJobData>(
     try {
       // 提交到 AI 提供商，拿到 external_task_id
       const audit = { taskId, batchId, userId, teamId }
-      const externalTaskId = provider === 'volcengine'
-        ? await submitVolcengine(model, prompt, params, audit)
-        : provider === 'ctyun-edge'
-          ? await submitCtyunEdge(model, prompt, params, audit)
-          : await submitVeo(model, prompt, params, audit)
+      const externalTaskId = provider === 'tokenhub'
+        ? await submitTokenhub(model, prompt, params, audit)
+        : provider === 'volcengine'
+          ? await submitVolcengine(model, prompt, params, audit)
+          : provider === 'ctyun-edge'
+            ? await submitCtyunEdge(model, prompt, params, audit)
+            : await submitVeo(model, prompt, params, audit)
 
       // 写入 external_task_id，poller 开始轮询
       await db.updateTable('tasks')

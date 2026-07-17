@@ -566,7 +566,7 @@ async function main() {
         params_pricing: JSON.stringify((m.params_pricing ?? [])),
         params_schema: JSON.stringify(m.params_schema),
         avatar: m.avatar,
-        is_active: true,
+        is_active: false,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
         name: m.name,
@@ -576,7 +576,7 @@ async function main() {
         params_pricing: JSON.stringify(m.params_pricing ?? []),
         params_schema: JSON.stringify(m.params_schema),
         avatar: m.avatar,
-        is_active: true,
+        is_active: false,
       }))
       .execute()
     console.log(`  provider_models seeded (${m.code})`)
@@ -726,6 +726,7 @@ async function main() {
       },
       category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
       avatar: llmAvatar('volcengine'),
+      is_active: false,
     },
     {
       code: 'seedream-4.5',
@@ -742,6 +743,7 @@ async function main() {
       },
       category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
       avatar: llmAvatar('volcengine'),
+      is_active: false,
     },
     {
       code: 'seedream-4.0',
@@ -759,6 +761,7 @@ async function main() {
       },
       category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
       avatar: llmAvatar('volcengine'),
+      is_active: false,
     },
   ]
 
@@ -775,7 +778,7 @@ async function main() {
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
         avatar: m.avatar,
-        is_active: true,
+        is_active: m.is_active,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
         name: m.name,
@@ -785,7 +788,7 @@ async function main() {
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: JSON.stringify(m.params_schema),
         avatar: m.avatar,
-        is_active: true,
+        is_active: m.is_active,
       }))
       .execute()
     console.log(`  provider_models seeded (${m.code})`)
@@ -831,6 +834,7 @@ async function main() {
         video_voice: volcVideoVoiceArr,
         image: [],
       }),
+      is_active: false,
     },
     {
       code: 'seedance-2.0',
@@ -850,6 +854,7 @@ async function main() {
         video_voice: volcVideoVoiceArr,
         image: [],
       }),
+      is_active: false,
     },
     {
       code: 'seedance-2.0-fast',
@@ -868,6 +873,7 @@ async function main() {
         video_voice: volcVideoVoiceArr,
         image: [],
       }),
+      is_active: false,
     },
   ]
 
@@ -884,7 +890,7 @@ async function main() {
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,
         avatar: m.avatar,
-        is_active: true,
+        is_active: m.is_active,
       })
       .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
         name: m.name,
@@ -893,7 +899,7 @@ async function main() {
         params_pricing: JSON.stringify(m.params_pricing),
         params_schema: m.params_schema,
         avatar: m.avatar,
-        is_active: true,
+        is_active: m.is_active,
       }))
       .execute()
     console.log(`  provider_models seeded (${m.code})`)
@@ -962,7 +968,7 @@ async function main() {
       }),
       resolution: '720p',
       avatar: llmAvatar('volcengine'),
-      is_active: true,
+      is_active: false,
     },
     {
       code: 'ctyun-seedance-2.0-fast',
@@ -983,7 +989,7 @@ async function main() {
       }),
       resolution: '720p',
       avatar: llmAvatar('volcengine'),
-      is_active: true,
+      is_active: false,
     },
   ]
 
@@ -1017,6 +1023,179 @@ async function main() {
       .execute()
     console.log(`  provider_models seeded (${m.code})`)
   }
+
+  // 13. TokenHub provider + models
+  const tokenhubResult = await db
+    .insertInto('providers')
+    .values({
+      code: 'tokenhub',
+      name: 'TokenHub',
+      region: 'cn',
+      modules: JSON.stringify(['image', 'video']),
+      is_active: true,
+      config: JSON.stringify({ api_base_url: process.env.TOKENHUB_API_BASE_URL ?? 'https://aigw.telecomjs.com' }),
+    })
+    .onConflict((oc: any) => oc.column('code').doUpdateSet({
+      name: 'TokenHub',
+      region: 'cn',
+      modules: JSON.stringify(['image', 'video']),
+      is_active: true,
+      config: JSON.stringify({ api_base_url: process.env.TOKENHUB_API_BASE_URL ?? 'https://aigw.telecomjs.com' }),
+    }))
+    .returningAll()
+    .execute()
+  const tokenhubProvider = tokenhubResult[0]
+  console.log(`  providers seeded (tokenhub, id=${tokenhubProvider.id})`)
+
+  const tokenhubModels = [
+    {
+      code: 'tokenhub-seedream-5.0-lite',
+      name: 'Seedream 5.0',
+      description: 'TokenHub Doubao-Seedream-5.0-lite 图片生成',
+      module: 'image' as const,
+      category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '2k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+        { resolution: '3k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+        { resolution: '4k', model: 'Doubao-Seedream-5.0-lite', unit_price: 4 },
+      ],
+      params_schema: JSON.stringify({
+        resolution: ['2k', '3k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      }),
+      avatar: llmAvatar('volcengine'),
+      is_active: true,
+    },
+    {
+      code: 'tokenhub-seedream-4.5',
+      name: 'Seedream 4.5',
+      description: 'TokenHub Doubao-seedream-4.5 图片生成',
+      module: 'image' as const,
+      category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '2k', model: 'Doubao-seedream-4.5', unit_price: 4 },
+        { resolution: '4k', model: 'Doubao-seedream-4.5', unit_price: 4 },
+      ],
+      params_schema: JSON.stringify({
+        resolution: ['2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      }),
+      avatar: llmAvatar('volcengine'),
+      is_active: true,
+    },
+    {
+      code: 'tokenhub-seedream-4.0',
+      name: 'Seedream 4.0',
+      description: 'TokenHub Doubao-seedream-4.0 图片生成',
+      module: 'image' as const,
+      category_references: SEEDREAM_IMAGE_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '1k', model: 'Doubao-seedream-4.0', unit_price: 3 },
+        { resolution: '2k', model: 'Doubao-seedream-4.0', unit_price: 3 },
+        { resolution: '4k', model: 'Doubao-seedream-4.0', unit_price: 3 },
+      ],
+      params_schema: JSON.stringify({
+        resolution: ['1k', '2k', '4k'],
+        aspect_ratio: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        image: [],
+      }),
+      avatar: llmAvatar('volcengine'),
+      is_active: true,
+    },
+    {
+      code: 'tokenhub-seedance-2.0',
+      name: 'Seedance 2.0',
+      description: 'TokenHub 全能王者，音视文图均可参考',
+      module: 'video' as const,
+      category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '480p', model: 'doubao-seedance-2-0-260128', unit_price: 7 },
+        { resolution: '720p', model: 'doubao-seedance-2-0-260128', unit_price: 15 },
+        { resolution: '1080p', model: 'doubao-seedance-2-0-260128', unit_price: 35 },
+      ],
+      params_schema: JSON.stringify({
+        aspect_ratio: volcAspectRatioArr,
+        resolution: ['480p', '720p', '1080p'],
+        time_length: volcTimeLengthArr,
+        video_voice: volcVideoVoiceArr,
+        image: [],
+      }),
+      avatar: llmAvatar('volcengine'),
+      is_active: true,
+    },
+    {
+      code: 'tokenhub-seedance-2.0-mini',
+      name: 'Seedance 2.0 Mini',
+      description: 'TokenHub 轻量快速，音视文图均可参考',
+      module: 'video' as const,
+      category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '480p', model: 'doubao-seedance-2-0-mini-260615', unit_price: 5 },
+        { resolution: '720p', model: 'doubao-seedance-2-0-mini-260615', unit_price: 10 },
+      ],
+      params_schema: JSON.stringify({
+        aspect_ratio: volcAspectRatioArr,
+        resolution: ['480p', '720p'],
+        time_length: volcTimeLengthArr,
+        video_voice: volcVideoVoiceArr,
+        image: [],
+      }),
+      avatar: llmAvatar('volcengine'),
+      is_active: true,
+    },
+    {
+      code: 'tokenhub-seedance-2.0-fast',
+      name: 'Seedance 2.0 Fast',
+      description: 'TokenHub 高性价比，音视文图均可参考',
+      module: 'video' as const,
+      category_references: MULTIMODAL_AND_FRAMES_CATEGORY_REFERENCES,
+      params_pricing: [
+        { resolution: '480p', model: 'doubao-seedance-2-0-fast-260128', unit_price: 5 },
+        { resolution: '720p', model: 'doubao-seedance-2-0-fast-260128', unit_price: 12 },
+      ],
+      params_schema: JSON.stringify({
+        aspect_ratio: volcAspectRatioArr,
+        resolution: ['480p', '720p'],
+        time_length: volcTimeLengthArr,
+        video_voice: volcVideoVoiceArr,
+        image: [],
+      }),
+      avatar: llmAvatar('volcengine'),
+      is_active: true,
+    },
+  ]
+
+  for (const m of tokenhubModels) {
+    await db
+      .insertInto('provider_models')
+      .values({
+        provider_id: tokenhubProvider.id,
+        code: m.code,
+        name: m.name,
+        description: m.description,
+        module: m.module,
+        category_references: JSON.stringify(m.category_references),
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: m.params_schema,
+        avatar: m.avatar,
+        is_active: m.is_active,
+      })
+      .onConflict((oc: any) => oc.columns(['provider_id', 'code']).doUpdateSet({
+        name: m.name,
+        description: m.description,
+        module: m.module,
+        category_references: JSON.stringify(m.category_references),
+        params_pricing: JSON.stringify(m.params_pricing),
+        params_schema: m.params_schema,
+        avatar: m.avatar,
+        is_active: m.is_active,
+      }))
+      .execute()
+    console.log(`  provider_models seeded (${m.code})`)
+  }
+  console.log('  TokenHub models seeded')
 
   const volcSingleModels = [
     { code: 'jimeng_realman_avatar_picture_omni_v15', name: '数字人生成', module: 'avatar' as const, params_pricing: [{ resolution: 'default', model: 'jimeng_realman_avatar_picture_omni_v15', unit_price: 50 }] },
